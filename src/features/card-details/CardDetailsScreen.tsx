@@ -3,8 +3,9 @@ import type { PokemonCardSummary } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { PriceBlock } from "../../components/PriceBlock.tsx";
+import { BackRow } from "../../components/BackRow.tsx";
 import { LoadingState } from "../../components/States.tsx";
-import { useFocusList } from "../../hooks/useFocusList.ts";
+import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useCardDetails, useCardPrices } from "../../hooks/useCardDetails.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
@@ -58,7 +59,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
     return list;
   }, [favorited, header, openResults, toggleFavorite, prices]);
 
-  const { focusIndex } = useFocusList({
+  const { backFocused, itemIndex } = useBackableFocus({
     count: actions.length,
     enabled,
     onBack: pop,
@@ -68,6 +69,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   if (!header) {
     return (
       <Screen title="Card" canGoBack>
+        <BackRow focused onActivate={pop} />
         <LoadingState label="Loading card…" />
       </Screen>
     );
@@ -79,6 +81,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
 
   return (
     <Screen title={header.name} canGoBack>
+      <BackRow focused={backFocused} onActivate={pop} />
       <div className={styles.top}>
         <CardImage src={header.imageLarge ?? header.imageSmall} alt={header.name} size="large" />
         <div className={styles.info}>
@@ -119,8 +122,8 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
           <li
             key={action.key}
             role="option"
-            aria-selected={i === focusIndex}
-            className={`${styles.action} ${i === focusIndex ? styles.actionFocused : ""}`}
+            aria-selected={i === itemIndex}
+            className={`${styles.action} ${i === itemIndex ? styles.actionFocused : ""}`}
             onClick={() => action.onSelect()}
           >
             {action.label}

@@ -1,0 +1,18 @@
+.back {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--cl-surface);
+  border: 2px solid transparent;
+  color: var(--cl-fg);
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  cursor: pointer;
+}
+.focused {
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  border-color: var(--cl-accent-strong);
+  box-shadow: var(--cl-focus-glow);
+}

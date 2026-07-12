@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { CardRow } from "../../components/CardRow.tsx";
+import { BackRow } from "../../components/BackRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RarityBar } from "./RarityBar.tsx";
 import { rarityFilterAt } from "./rarityFilters.ts";
-import { useFocusList } from "../../hooks/useFocusList.ts";
+import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useCatalogSearch } from "../../hooks/useCatalogSearch.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
@@ -31,7 +32,7 @@ export function ResultsScreen({ query }: { query: string }) {
 
   const count = phase === "list" ? cards.length : phase === "error" ? 1 : 0;
 
-  const { focusIndex } = useFocusList({
+  const { backFocused, itemIndex } = useBackableFocus({
     count,
     enabled,
     onBack: pop,
@@ -45,10 +46,15 @@ export function ResultsScreen({ query }: { query: string }) {
 
   return (
     <Screen title="Search Cards" subtitle={`“${query}”`} canGoBack>
+      <BackRow focused={backFocused} onActivate={pop} />
       <RarityBar activeKey={rarity.key} />
       {phase === "loading" ? <LoadingState /> : null}
       {phase === "error" ? (
-        <ErrorState message="Couldn’t load cards" onRetry={() => void refetch()} retryFocused />
+        <ErrorState
+          message="Couldn’t load cards"
+          onRetry={() => void refetch()}
+          retryFocused={!backFocused}
+        />
       ) : null}
       {phase === "empty" ? (
         <EmptyState
@@ -59,7 +65,7 @@ export function ResultsScreen({ query }: { query: string }) {
       {phase === "list" ? (
         <FocusList
           items={cards}
-          focusIndex={focusIndex}
+          focusIndex={itemIndex}
           getKey={(c) => c.id}
           ariaLabel={`Results for ${query}, ${rarity.label}`}
           onActivate={(i) => openDetails(cards[i].id, cards[i])}

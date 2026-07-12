@@ -1,7 +1,8 @@
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { MenuRow } from "../../components/MenuRow.tsx";
-import { useFocusList } from "../../hooks/useFocusList.ts";
+import { BackRow } from "../../components/BackRow.tsx";
+import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
 import { useSearchAction } from "../search/useSearchAction.ts";
@@ -14,7 +15,7 @@ export function PopularScreen() {
   const enabled = useScreenInputEnabled();
   const names = POPULAR_POKEMON;
 
-  const { focusIndex } = useFocusList({
+  const { backFocused, itemIndex } = useBackableFocus({
     count: names.length,
     enabled,
     onBack: pop,
@@ -23,9 +24,10 @@ export function PopularScreen() {
 
   return (
     <Screen title="Popular" subtitle="Tap to search — no typing" canGoBack>
+      <BackRow focused={backFocused} onActivate={pop} />
       <FocusList
         items={names as readonly string[] as string[]}
-        focusIndex={focusIndex}
+        focusIndex={itemIndex}
         getKey={(name) => name}
         ariaLabel="Popular Pokémon"
         onActivate={(i) => run(names[i])}

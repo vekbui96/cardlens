@@ -2,8 +2,9 @@ import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { CardRow } from "../../components/CardRow.tsx";
 import { MenuRow } from "../../components/MenuRow.tsx";
+import { BackRow } from "../../components/BackRow.tsx";
 import { EmptyState } from "../../components/States.tsx";
-import { useFocusList } from "../../hooks/useFocusList.ts";
+import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
@@ -34,16 +35,22 @@ export function RecentScreen() {
     else openDetails(item.card.id, item.card);
   };
 
-  const { focusIndex } = useFocusList({ count: items.length, enabled, onBack: pop, onSelect: activate });
+  const { backFocused, itemIndex } = useBackableFocus({
+    count: items.length,
+    enabled,
+    onBack: pop,
+    onSelect: activate,
+  });
 
   return (
     <Screen title="Recent" subtitle="Searches & viewed cards" canGoBack>
+      <BackRow focused={backFocused} onActivate={pop} />
       {items.length === 0 ? (
         <EmptyState title="Nothing recent" hint="Your searches and viewed cards appear here." />
       ) : (
         <FocusList
           items={items}
-          focusIndex={focusIndex}
+          focusIndex={itemIndex}
           getKey={(item) => item.key}
           ariaLabel="Recent searches and cards"
           onActivate={activate}
