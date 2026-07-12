@@ -4,6 +4,8 @@ export interface FetchJsonOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   headers?: Record<string, string>;
+  method?: string;
+  body?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -37,7 +39,12 @@ export async function fetchJson(url: string, options: FetchJsonOptions = {}): Pr
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const { signal, cancel } = withTimeout(options.signal, timeoutMs);
   try {
-    const res = await fetch(url, { signal, headers: options.headers });
+    const res = await fetch(url, {
+      signal,
+      ...(options.method ? { method: options.method } : {}),
+      ...(options.headers ? { headers: options.headers } : {}),
+      ...(options.body !== undefined ? { body: options.body } : {}),
+    });
     if (res.status === 404) throw new ProviderError("Not found", "not-found");
     if (res.status === 429) throw new ProviderError("Rate limited", "rate-limit");
     if (!res.ok) throw new ProviderError(`Request failed (${res.status})`, "network");

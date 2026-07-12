@@ -23,15 +23,30 @@ export class CompanionClient {
     return Boolean(this.base);
   }
 
-  async createSession(signal?: AbortSignal): Promise<CompanionSession> {
-    const json = (await fetchJson(`${this.base}/session`, {
-      signal,
-      timeoutMs: 6000,
-    })) as { sessionId?: string; code?: string; expiresAt?: number };
-    if (!json.sessionId || !json.code || !json.expiresAt) {
-      throw new Error("Invalid session response");
+  /**
+   * Create a session (POST). Retries a few times so a sleeping free-tier server
+   * (cold start can take ~50s) doesn't fail on the first attempt.
+   */
+  async createSession(signal?: AbortSignal, attempts = 5): Promise<CompanionSession> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      try {
+        const json = (await fetchJson(`${this.base}/session`, {
+          method: "POST",
+          signal,
+          timeoutMs: 12000,
+        })) as { sessionId?: string; code?: string; expiresAt?: number };
+        if (!json.sessionId || !json.code || !json.expiresAt) {
+          throw new Error("Invalid session response");
+        }
+        return { sessionId: json.sessionId, code: json.code, expiresAt: json.expiresAt };
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        lastErr = err;
+      }
     }
-    return { sessionId: json.sessionId, code: json.code, expiresAt: json.expiresAt };
+    throw lastErr ?? new Error("Could not create session");
   }
 
   /** Submit text from the phone side (POST). Returns true on success. */

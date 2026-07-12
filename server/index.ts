@@ -45,14 +45,19 @@ export function createApp(store: SessionStore = new SessionStore(SESSION_TTL_MS)
   app.set("trust proxy", true);
   app.use(express.json({ limit: "8kb" }));
   app.use(securityHeaders);
+  // The relay carries only user-typed card names, uses unguessable short-lived
+  // codes, and is rate-limited — so by default we reflect any Origin. This is
+  // important for the Meta glasses WebView, whose fetch may present an unexpected
+  // or `null` Origin that a strict allowlist would reject. Set CORS_STRICT=true to
+  // restrict to ALLOWED_ORIGINS.
+  const strict = process.env.CORS_STRICT === "true" && !ALLOWED_ORIGINS.includes("*");
   app.use(
     cors({
       origin(origin, cb) {
-        // Allow no-origin (curl / same-origin) and configured origins.
-        if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+        if (!strict || !origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
         return cb(null, false);
       },
-      methods: ["GET", "POST"],
+      methods: ["GET", "POST", "OPTIONS"],
     }),
   );
 
