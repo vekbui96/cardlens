@@ -1,4 +1,9 @@
-import type { PokemonCardDetails, PokemonCardSummary, CardPriceResult } from "../../models/cards.ts";
+import type {
+  PokemonCardDetails,
+  PokemonCardSummary,
+  CardPriceResult,
+  PokemonSet,
+} from "../../models/cards.ts";
 import { normalizeQuery } from "../../services/search/normalize.ts";
 import { rankResults } from "../../services/search/rank.ts";
 import { fetchJson } from "../../services/http.ts";
@@ -10,17 +15,19 @@ import {
   type FetchOpts,
   type SearchOpts,
 } from "../providers.ts";
-import { CardListResponseSchema, CardResponseSchema, type RawCard } from "./schema.ts";
-import { buildLuceneQuery } from "./query.ts";
+import { CardListResponseSchema, CardResponseSchema, SetListResponseSchema, type RawCard } from "./schema.ts";
+import { buildLuceneQuery, escapeSetId } from "./query.ts";
 import { byPriceDesc } from "./sort.ts";
-import { toDetails, toRankable, toSummary } from "./map.ts";
+import { toDetails, toRankable, toSet, toSummary } from "./map.ts";
 
 const DEFAULT_BASE_URL = "https://api.pokemontcg.io/v2";
 const PAGE_SIZE = 60;
 const RESULT_LIMIT = 40;
+const SET_PAGE_SIZE = 250;
 
 const SELECT_FIELDS =
   "id,name,supertype,subtypes,number,artist,rarity,nationalPokedexNumbers,set,images,tcgplayer,cardmarket";
+const SET_SELECT_FIELDS = "id,name,series,releaseDate,total,printedTotal,ptcgoCode,images";
 
 /**
  * Real catalog + pricing provider backed by pokemontcg.io v2 (open CORS, keyless).
@@ -59,6 +66,35 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     // When filtering to a chase rarity, the most valuable cards are what matter.
     const ordered = opts?.rarities && opts.rarities.length > 0 ? [...ranked].sort(byPriceDesc) : ranked;
     return ordered.slice(0, RESULT_LIMIT);
+  }
+
+  async listSets(opts?: FetchOpts): Promise<PokemonSet[]> {
+    const url =
+      `${this.baseUrl}/sets?orderBy=-releaseDate` +
+      `&pageSize=${SET_PAGE_SIZE}&select=${encodeURIComponent(SET_SELECT_FIELDS)}`;
+    const json = await fetchJson(url, { signal: opts?.signal, headers: this.headers() });
+    const parsed = SetListResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new ProviderError("Unexpected sets response", "validation", { cause: parsed.error });
+    }
+    return parsed.data.data.map(toSet);
+  }
+
+  async getCardsBySet(setId: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
+    const clauses = [`set.id:${escapeSetId(setId)}`];
+    if (opts?.rarities && opts.rarities.length > 0) {
+      clauses.push(`(${opts.rarities.map((r) => `rarity:"${r}"`).join(" OR ")})`);
+    }
+    const url =
+      `${this.baseUrl}/cards?q=${encodeURIComponent(clauses.join(" "))}` +
+      `&pageSize=${SET_PAGE_SIZE}&select=${encodeURIComponent(SELECT_FIELDS)}`;
+    const json = await fetchJson(url, { signal: opts?.signal, headers: this.headers() });
+    const parsed = CardListResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new ProviderError("Unexpected set-cards response", "validation", { cause: parsed.error });
+    }
+    // Browsing a set: surface the most valuable cards (chase cards) first.
+    return parsed.data.data.map(toSummary).sort(byPriceDesc);
   }
 
   private async fetchRawCard(id: string, opts?: FetchOpts): Promise<RawCard> {

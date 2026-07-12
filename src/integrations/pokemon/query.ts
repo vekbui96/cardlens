@@ -6,6 +6,11 @@ export function escapeLuceneValue(value: string): string {
   return value.replace(/[^a-z0-9 ]/gi, "").trim();
 }
 
+/** Set ids are alphanumeric with hyphens (e.g. "sv3", "swsh7", "base1"). */
+export function escapeSetId(value: string): string {
+  return value.replace(/[^a-z0-9-]/gi, "");
+}
+
 /**
  * Build the `q` parameter for pokemontcg.io from a normalized query. We prefix-
  * match the name, add a collector-number constraint when present, and optionally

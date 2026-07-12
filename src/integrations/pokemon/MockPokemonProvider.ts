@@ -1,4 +1,9 @@
-import type { PokemonCardDetails, PokemonCardSummary, CardPriceResult } from "../../models/cards.ts";
+import type {
+  PokemonCardDetails,
+  PokemonCardSummary,
+  CardPriceResult,
+  PokemonSet,
+} from "../../models/cards.ts";
 import { normalizeQuery } from "../../services/search/normalize.ts";
 import { rankResults } from "../../services/search/rank.ts";
 import { normalizeTcgplayerPricing } from "../pricing/normalize.ts";
@@ -11,7 +16,7 @@ import {
 } from "../providers.ts";
 import { MOCK_CARDS } from "./fixtures.ts";
 import { byPriceDesc } from "./sort.ts";
-import { toDetails, toRankable } from "./map.ts";
+import { toDetails, toRankable, toSet, toSummary } from "./map.ts";
 
 export interface MockBehavior {
   /** Force every call to reject with a network error (DevPanel "Simulate API failure"). */
@@ -67,6 +72,25 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
       results = results.filter((c) => (c.rarity ? set.has(c.rarity) : false)).sort(byPriceDesc);
     }
     return results;
+  }
+
+  async listSets(opts?: FetchOpts): Promise<PokemonSet[]> {
+    await this.gate(opts?.signal);
+    const byId = new Map<string, PokemonSet>();
+    for (const card of MOCK_CARDS) {
+      if (!byId.has(card.set.id)) byId.set(card.set.id, toSet(card.set));
+    }
+    return [...byId.values()].sort((a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""));
+  }
+
+  async getCardsBySet(setId: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
+    await this.gate(opts?.signal);
+    let cards = MOCK_CARDS.filter((c) => c.set.id === setId);
+    if (opts?.rarities && opts.rarities.length > 0) {
+      const set = new Set(opts.rarities);
+      cards = cards.filter((c) => (c.rarity ? set.has(c.rarity) : false));
+    }
+    return cards.map(toSummary).sort(byPriceDesc);
   }
 
   async getCard(id: string, opts?: FetchOpts): Promise<PokemonCardDetails> {

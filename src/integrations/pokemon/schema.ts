@@ -76,3 +76,25 @@ export const CardListResponseSchema = z.object({
 export const CardResponseSchema = z.object({
   data: CardSchema,
 });
+
+/** The /sets endpoint returns richer set objects than the embedded card.set. */
+export const SetListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  series: z.string().optional(),
+  releaseDate: z.string().optional(),
+  total: z.number().optional(),
+  printedTotal: z.number().optional(),
+  ptcgoCode: z.string().optional(),
+  images: z
+    .object({
+      symbol: z.string().optional(),
+      logo: z.string().optional(),
+    })
+    .optional(),
+});
+export type RawSet = z.infer<typeof SetListItemSchema>;
+
+export const SetListResponseSchema = z.object({
+  data: z.array(SetListItemSchema),
+});

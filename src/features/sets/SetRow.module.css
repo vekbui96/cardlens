@@ -1,0 +1,26 @@
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+}
+.info {
+  min-width: 0;
+}
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 700;
+  color: var(--cl-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+.total {
+  flex: 0 0 auto;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}

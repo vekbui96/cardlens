@@ -12,6 +12,8 @@ interface NavigationValue {
   // Convenience navigators used across screens.
   openResults: (query: string) => void;
   openDetails: (cardId: string, summary?: PokemonCardSummary) => void;
+  openSets: () => void;
+  openSet: (setId: string, setName: string) => void;
 }
 
 const NavigationContext = createContext<NavigationValue | null>(null);
@@ -30,6 +32,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       openResults: (query) => dispatch({ type: "PUSH", screen: { name: "results", query } }),
       openDetails: (cardId, summary) =>
         dispatch({ type: "PUSH", screen: { name: "details", cardId, ...(summary ? { summary } : {}) } }),
+      openSets: () => dispatch({ type: "PUSH", screen: { name: "sets" } }),
+      openSet: (setId, setName) => dispatch({ type: "PUSH", screen: { name: "set", setId, setName } }),
     }),
     [state],
   );

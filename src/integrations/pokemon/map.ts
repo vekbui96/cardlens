@@ -1,7 +1,19 @@
-import type { PokemonCardDetails, PokemonCardSummary, CardVariants } from "../../models/cards.ts";
+import type { PokemonCardDetails, PokemonCardSummary, CardVariants, PokemonSet } from "../../models/cards.ts";
 import type { RankableCard } from "../../services/search/rank.ts";
 import { normalizeTcgplayerPricing } from "../pricing/normalize.ts";
-import type { RawCard } from "./schema.ts";
+import type { RawCard, RawSet } from "./schema.ts";
+
+export function toSet(raw: RawSet): PokemonSet {
+  return {
+    id: raw.id,
+    name: raw.name,
+    ...(raw.series ? { series: raw.series } : {}),
+    ...(raw.releaseDate ? { releaseDate: raw.releaseDate } : {}),
+    ...(typeof raw.total === "number" ? { total: raw.total } : {}),
+    ...(raw.images?.symbol ? { symbolImage: raw.images.symbol } : {}),
+    ...(raw.images?.logo ? { logoImage: raw.images.logo } : {}),
+  };
+}
 
 export function toSummary(raw: RawCard): PokemonCardSummary {
   const market = normalizeTcgplayerPricing(raw.tcgplayer).marketPrice;

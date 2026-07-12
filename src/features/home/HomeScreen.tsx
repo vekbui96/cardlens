@@ -35,6 +35,7 @@ export function HomeScreen() {
       onSelect: () => push({ name: "favorites" }),
     },
     { key: "popular", label: "Popular", hint: "Top Pokémon", onSelect: () => push({ name: "popular" }) },
+    { key: "sets", label: "Sets", hint: "Browse by set", onSelect: () => push({ name: "sets" }) },
   ];
 
   const { focusIndex } = useFocusList({

@@ -1,4 +1,4 @@
-import type { PokemonCardSummary, PokemonCardDetails, CardPriceResult } from "../models/cards.ts";
+import type { PokemonCardSummary, PokemonCardDetails, CardPriceResult, PokemonSet } from "../models/cards.ts";
 
 export interface FetchOpts {
   signal?: AbortSignal;
@@ -9,10 +9,14 @@ export interface SearchOpts extends FetchOpts {
   rarities?: string[];
 }
 
-/** Card catalog: search + fetch one card. Backed by pokemontcg.io or mocks. */
+/** Card catalog: search + fetch one card, browse sets. Backed by pokemontcg.io or mocks. */
 export interface CardCatalogProvider {
   searchCards(query: string, opts?: SearchOpts): Promise<PokemonCardSummary[]>;
   getCard(id: string, opts?: FetchOpts): Promise<PokemonCardDetails>;
+  /** All sets, newest first. */
+  listSets(opts?: FetchOpts): Promise<PokemonSet[]>;
+  /** Cards in a set, sorted most-valuable first; optionally rarity-filtered. */
+  getCardsBySet(setId: string, opts?: SearchOpts): Promise<PokemonCardSummary[]>;
 }
 
 /** Normalized pricing for a card. */

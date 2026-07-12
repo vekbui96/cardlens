@@ -20,6 +20,12 @@ const RecentScreen = lazy(() =>
 const PopularScreen = lazy(() =>
   import("../features/popular/PopularScreen.tsx").then((m) => ({ default: m.PopularScreen })),
 );
+const SetsScreen = lazy(() =>
+  import("../features/sets/SetsScreen.tsx").then((m) => ({ default: m.SetsScreen })),
+);
+const SetCardsScreen = lazy(() =>
+  import("../features/sets/SetCardsScreen.tsx").then((m) => ({ default: m.SetCardsScreen })),
+);
 
 export function ScreenRouter() {
   const { screen } = useNavigation();
@@ -53,6 +59,10 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"]) {
       return <RecentScreen />;
     case "popular":
       return <PopularScreen />;
+    case "sets":
+      return <SetsScreen />;
+    case "set":
+      return <SetCardsScreen setId={screen.setId} setName={screen.setName} />;
     default:
       return <HomeScreen />;
   }

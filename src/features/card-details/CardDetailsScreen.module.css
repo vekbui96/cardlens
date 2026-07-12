@@ -4,6 +4,34 @@
   align-items: flex-start;
 }
 
+.imageBtn {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+.imageFocused {
+  border-color: var(--cl-accent-strong);
+  box-shadow: var(--cl-focus-glow);
+}
+.enlarge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--cl-accent-strong);
+  font-size: 16px;
+}
+
 .info {
   flex: 1 1 auto;
   min-width: 0;

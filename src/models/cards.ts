@@ -80,6 +80,17 @@ export const FINISH_LABELS: Record<PriceFinishKey, string> = {
   firstEditionNormal: "1st Edition",
 };
 
+/** A Pokémon TCG set (for the set browser). */
+export interface PokemonSet {
+  id: string;
+  name: string;
+  series?: string;
+  releaseDate?: string;
+  total?: number;
+  symbolImage?: string;
+  logoImage?: string;
+}
+
 /** Game-neutral search result (used by the multi-game seam). */
 export interface CardSearchResult {
   id: string;

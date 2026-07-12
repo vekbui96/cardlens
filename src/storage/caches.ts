@@ -1,5 +1,5 @@
-import type { CardPriceResult, PokemonCardDetails, PokemonCardSummary } from "../models/cards.ts";
-import { CARD_TTL_MS, MINUTE, PRICE_TTL_MS, TtlCache } from "./cache.ts";
+import type { CardPriceResult, PokemonCardDetails, PokemonCardSummary, PokemonSet } from "../models/cards.ts";
+import { CARD_TTL_MS, DAY, MINUTE, PRICE_TTL_MS, TtlCache } from "./cache.ts";
 import { MAX_RECENTLY_VIEWED } from "./repositories.ts";
 
 /** Search-result lists persist for 6h so repeated searches load instantly and
@@ -14,3 +14,7 @@ export const cardCache = new TtlCache<PokemonCardDetails>(
 );
 export const priceCache = new TtlCache<CardPriceResult>("cache:prices", PRICE_TTL_MS, 100);
 export const searchCache = new TtlCache<PokemonCardSummary[]>("cache:search", SEARCH_TTL_MS, 40);
+
+/** Set list (7 days) and per-set card lists (6h) for cached-first browsing. */
+export const setsCache = new TtlCache<PokemonSet[]>("cache:sets", 7 * DAY, 2);
+export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards", SEARCH_TTL_MS, 30);

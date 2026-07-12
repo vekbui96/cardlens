@@ -66,4 +66,29 @@ describe("MockPokemonProvider", () => {
     const provider = new MockPokemonProvider();
     expect(await provider.searchCards("Charizard", { rarities: ["Illustration Rare"] })).toEqual([]);
   });
+
+  it("lists distinct sets newest first", async () => {
+    const provider = new MockPokemonProvider();
+    const sets = await provider.listSets();
+    expect(sets.length).toBeGreaterThan(1);
+    // Obsidian Flames (2023-08) is the newest in the fixtures.
+    expect(sets[0].name).toBe("Obsidian Flames");
+    const ids = sets.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicates
+  });
+
+  it("returns a set's cards sorted by price (most valuable first)", async () => {
+    const provider = new MockPokemonProvider();
+    const cards = await provider.getCardsBySet("sv3");
+    expect(cards.length).toBeGreaterThan(1);
+    expect(cards[0].id).toBe("sv3-223"); // the $58.42 SIR
+    const prices = cards.map((c) => c.marketPrice ?? 0);
+    expect(prices).toEqual([...prices].sort((a, b) => b - a));
+  });
+
+  it("filters a set's cards by rarity", async () => {
+    const provider = new MockPokemonProvider();
+    const cards = await provider.getCardsBySet("sv3", { rarities: ["Special Illustration Rare"] });
+    expect(cards.map((c) => c.id)).toEqual(["sv3-223"]);
+  });
 });

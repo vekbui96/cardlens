@@ -96,6 +96,10 @@ First Playwright run: `npm run e2e:install` (downloads Chromium).
 - **Rarity filter**: on any results screen, **swipe left/right** to cycle
   `All → IR → SIR → Full Art → Hyper/Rainbow` — the chase rarities, sorted by market price (highest
   first). Prices show on every row.
+- **Set browser**: a "Sets" home item lists Pokémon sets (newest first); open one to see its cards
+  **sorted by value** with the same rarity filter — great for "show me the SIRs in the new set".
+- **Full-screen card image**: on the details screen, select the card image to view it large; pinch
+  or swipe-back to close.
 - **Fast card images**: thumbnails load as small WebP from an image CDN (wsrv.nl) instead of the full
   PNGs, with a fallback to the original and a loading shimmer. Set `VITE_IMAGE_PROXY=""` to disable.
 - **Persistent search cache** (localStorage, 6h) — repeated searches load instantly and survive

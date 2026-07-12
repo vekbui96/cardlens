@@ -7,7 +7,9 @@ export type Screen =
   | { name: "details"; cardId: string; summary?: PokemonCardSummary }
   | { name: "favorites" }
   | { name: "recent" }
-  | { name: "popular" };
+  | { name: "popular" }
+  | { name: "sets" }
+  | { name: "set"; setId: string; setName: string };
 
 export type ScreenName = Screen["name"];
 

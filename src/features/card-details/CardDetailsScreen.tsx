@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PokemonCardSummary } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { PriceBlock } from "../../components/PriceBlock.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
+import { ImageFullView } from "../../components/ImageFullView.tsx";
 import { LoadingState } from "../../components/States.tsx";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useCardDetails, useCardPrices } from "../../hooks/useCardDetails.ts";
@@ -28,6 +29,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   const { pop, openResults } = useNavigation();
   const { isFavorite, toggleFavorite, addRecentlyViewed } = useLibrary();
   const enabled = useScreenInputEnabled();
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const { data: card } = useCardDetails(cardId);
   const prices = useCardPrices(cardId);
@@ -59,12 +61,15 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
     return list;
   }, [favorited, header, openResults, toggleFavorite, prices]);
 
+  // Focus ring content: [card image, ...actions]. Selecting the image opens the
+  // full-screen viewer.
   const { backFocused, itemIndex } = useBackableFocus({
-    count: actions.length,
-    enabled,
+    count: actions.length + 1,
+    enabled: enabled && !viewerOpen,
     onBack: pop,
-    onSelect: (i) => actions[i]?.onSelect(),
+    onSelect: (i) => (i === 0 ? setViewerOpen(true) : actions[i - 1]?.onSelect()),
   });
+  const imageFocused = itemIndex === 0;
 
   if (!header) {
     return (
@@ -83,7 +88,18 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
     <Screen title={header.name} canGoBack>
       <BackRow focused={backFocused} onActivate={pop} />
       <div className={styles.top}>
-        <CardImage src={header.imageLarge ?? header.imageSmall} alt={header.name} size="large" />
+        <button
+          type="button"
+          className={`${styles.imageBtn} ${imageFocused ? styles.imageFocused : ""}`}
+          aria-label={`View ${header.name} full screen`}
+          aria-selected={imageFocused}
+          onClick={() => setViewerOpen(true)}
+        >
+          <CardImage src={header.imageLarge ?? header.imageSmall} alt={header.name} size="large" />
+          <span className={styles.enlarge} aria-hidden="true">
+            ⤢
+          </span>
+        </button>
         <div className={styles.info}>
           <div className={styles.set}>{header.setName}</div>
           <div className={styles.number}>{formatCollector(header.collectorNumber)}</div>
@@ -118,18 +134,29 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
       )}
 
       <ul className={styles.actions} role="listbox" aria-label="Card actions">
-        {actions.map((action, i) => (
-          <li
-            key={action.key}
-            role="option"
-            aria-selected={i === itemIndex}
-            className={`${styles.action} ${i === itemIndex ? styles.actionFocused : ""}`}
-            onClick={() => action.onSelect()}
-          >
-            {action.label}
-          </li>
-        ))}
+        {actions.map((action, i) => {
+          const on = itemIndex === i + 1; // slot 0 is the image
+          return (
+            <li
+              key={action.key}
+              role="option"
+              aria-selected={on}
+              className={`${styles.action} ${on ? styles.actionFocused : ""}`}
+              onClick={() => action.onSelect()}
+            >
+              {action.label}
+            </li>
+          );
+        })}
       </ul>
+
+      {viewerOpen ? (
+        <ImageFullView
+          src={header.imageLarge ?? header.imageSmall}
+          alt={header.name}
+          onClose={() => setViewerOpen(false)}
+        />
+      ) : null}
     </Screen>
   );
 }
