@@ -3,27 +3,29 @@ import type { TextInputProvider, TextInputRequest } from "../models/text-input.t
 import {
   BrowserPromptTextInputProvider,
   CompanionPhoneTextInputProvider,
-  UnsupportedTextInputProvider,
+  OnScreenKeyboardTextInputProvider,
   isBrowserTextInputLikely,
   type PromptFn,
 } from "../services/text-input/providers.ts";
 import { CompanionClient } from "../services/companion/client.ts";
 import { TextPromptModal } from "../components/TextPromptModal.tsx";
 import { CompanionModal } from "../components/CompanionModal.tsx";
+import { LetterPickerModal } from "../components/LetterPickerModal.tsx";
 
 interface Pending {
-  kind: "prompt" | "companion";
+  kind: "prompt" | "companion" | "picker";
   request: TextInputRequest;
   resolve: (value: string | null) => void;
 }
 
 interface TextEntryValue {
-  /** Primary text provider (browser modal on desktop/mobile, unsupported on glasses). */
+  /** Primary text provider (browser modal on desktop; on-glasses picker on glasses). */
   provider: TextInputProvider;
   /** Explicit companion provider for the "Use phone" action. */
   companionProvider: TextInputProvider;
   requestText: PromptFn;
   requestCompanion: PromptFn;
+  requestPicker: PromptFn;
   browserSupported: boolean;
   companionSupported: boolean;
   modalOpen: boolean;
@@ -52,25 +54,40 @@ export function TextEntryProvider({ children }: { children: ReactNode }) {
 
   const requestText = useCallback<PromptFn>((req) => open("prompt", req), [open]);
   const requestCompanion = useCallback<PromptFn>((req) => open("companion", req), [open]);
+  const requestPicker = useCallback<PromptFn>((req) => open("picker", req), [open]);
+
+  /** Switch the active modal (e.g. picker -> companion) keeping the same pending promise. */
+  const switchKind = useCallback((kind: Pending["kind"]) => {
+    setPending((p) => (p ? { ...p, kind } : p));
+  }, []);
 
   const companionSupported = useMemo(() => new CompanionClient().configured, []);
-  const browserSupported = useMemo(() => isBrowserTextInputLikely(), []);
+  const browserSupported = useMemo(() => {
+    // ?input=glasses forces the on-screen picker (demo/test on desktop);
+    // ?input=keyboard forces the browser prompt.
+    const forced = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("input");
+    if (forced === "glasses") return false;
+    if (forced === "keyboard") return true;
+    return isBrowserTextInputLikely();
+  }, []);
 
   const value = useMemo<TextEntryValue>(() => {
+    // Desktop/mobile with a keyboard -> browser prompt; glasses -> on-screen picker.
     const provider: TextInputProvider = browserSupported
       ? new BrowserPromptTextInputProvider(requestText)
-      : new UnsupportedTextInputProvider();
+      : new OnScreenKeyboardTextInputProvider(requestPicker);
     const companionProvider = new CompanionPhoneTextInputProvider(requestCompanion, () => companionSupported);
     return {
       provider,
       companionProvider,
       requestText,
       requestCompanion,
+      requestPicker,
       browserSupported,
       companionSupported,
       modalOpen: pending !== null,
     };
-  }, [browserSupported, companionSupported, requestText, requestCompanion, pending]);
+  }, [browserSupported, companionSupported, requestText, requestCompanion, requestPicker, pending]);
 
   return (
     <TextEntryContext.Provider value={value}>
@@ -80,6 +97,14 @@ export function TextEntryProvider({ children }: { children: ReactNode }) {
           request={pending.request}
           onSubmit={(v) => settle(v)}
           onCancel={() => settle(null)}
+        />
+      ) : null}
+      {pending?.kind === "picker" ? (
+        <LetterPickerModal
+          request={pending.request}
+          onSubmit={(v) => settle(v)}
+          onCancel={() => settle(null)}
+          {...(companionSupported ? { onUsePhone: () => switchKind("companion") } : {})}
         />
       ) : null}
       {pending?.kind === "companion" ? (

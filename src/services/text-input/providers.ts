@@ -33,6 +33,22 @@ export class BrowserPromptTextInputProvider implements TextInputProvider {
 }
 
 /**
+ * On-glasses letter picker. No keyboard, no phone — text is spelled/selected on
+ * the glasses themselves via the D-pad. Delegates to an injected flow that shows
+ * the picker modal and resolves with the chosen query.
+ */
+export class OnScreenKeyboardTextInputProvider implements TextInputProvider {
+  readonly id = "on-glasses" as const;
+  constructor(private readonly pickerFn: PromptFn) {}
+  isSupported(): boolean {
+    return true;
+  }
+  requestInput(options: TextInputRequest): Promise<string | null> {
+    return this.pickerFn(options);
+  }
+}
+
+/**
  * Companion-phone bridge. Delegates to an injected flow that shows a session code
  * / QR and resolves when the phone submits text through the relay server.
  */

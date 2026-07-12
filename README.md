@@ -89,7 +89,12 @@ First Playwright run: `npm run e2e:install` (downloads Chromium).
 ## Features
 
 - Search Pokémon cards by name, with `Charizard ex`, `Pikachu 025`, `Charizard 4/102` style queries.
+- **Three ways to search with no keyboard:** an on-glasses **letter picker** (A–Z grid + live Pokémon
+  autocomplete, driven entirely by swipes + pinch), the **phone companion**, and no-typing
+  recent/favorites/popular/browse.
 - Result ranking: exact name → starts-with → collector number → set name → fuzzy → recency.
+- **Persistent search cache** (localStorage, 6h) — repeated searches load instantly and survive
+  reloads, revalidated in the background.
 - Card details: set, collector number, rarity, artist, release date, **finish-labeled** market/low/mid
   pricing with **source** and **updated** time. Absent prices show **Unavailable**, never `$0.00`.
 - **Favorites**, **recent searches** (reopen without retyping), and **recently viewed** cards, all in

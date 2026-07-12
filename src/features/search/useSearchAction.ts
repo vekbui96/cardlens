@@ -13,7 +13,7 @@ const REQUEST = { title: "Search cards", placeholder: "e.g. Charizard ex" };
 export function useSearchAction() {
   const { openResults } = useNavigation();
   const { addRecentSearch } = useLibrary();
-  const { requestText, requestCompanion, browserSupported } = useTextEntry();
+  const { provider, requestCompanion } = useTextEntry();
 
   const run = useCallback(
     (query: string) => {
@@ -25,11 +25,11 @@ export function useSearchAction() {
     [addRecentSearch, openResults],
   );
 
-  /** Primary "Search" action: type on this device, or fall back to phone. */
+  /** Primary "Search" action: browser prompt on desktop, on-glasses picker on glasses. */
   const typeSearch = useCallback(async () => {
-    const value = browserSupported ? await requestText(REQUEST) : await requestCompanion(REQUEST);
+    const value = await provider.requestInput(REQUEST);
     if (value) run(value);
-  }, [browserSupported, requestText, requestCompanion, run]);
+  }, [provider, run]);
 
   /** Explicit "Use phone" action. */
   const phoneSearch = useCallback(async () => {
