@@ -7,8 +7,10 @@ import {
   type CardCatalogProvider,
   type CardPricingProvider,
   type FetchOpts,
+  type SearchOpts,
 } from "../providers.ts";
 import { MOCK_CARDS } from "./fixtures.ts";
+import { byPriceDesc } from "./sort.ts";
 import { toDetails, toRankable } from "./map.ts";
 
 export interface MockBehavior {
@@ -45,19 +47,26 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
     if (failNetwork) throw new ProviderError("Simulated network failure", "network");
   }
 
-  async searchCards(query: string, opts?: FetchOpts): Promise<PokemonCardSummary[]> {
+  async searchCards(query: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
     await this.gate(opts?.signal);
     if (this.behavior.forceEmpty) return [];
     const nq = normalizeQuery(query);
     if (!nq.name && !nq.collectorNumber) return [];
     const rankable = MOCK_CARDS.map(toRankable);
-    return rankResults(query, rankable).filter((c) => {
+    let results = rankResults(query, rankable).filter((c) => {
       // Keep only plausibly-matching cards so mock results feel real.
       const name = c.name.toLowerCase();
       if (nq.name && (name.includes(nq.name) || nq.name.includes(name.split(" ")[0]))) return true;
       if (nq.collectorNumber && c.collectorNumber.replace(/[^\d]/g, "") === nq.collectorNumber) return true;
       return nq.name ? name.startsWith(nq.name.slice(0, 3)) : false;
     });
+
+    const rarities = opts?.rarities;
+    if (rarities && rarities.length > 0) {
+      const set = new Set(rarities);
+      results = results.filter((c) => (c.rarity ? set.has(c.rarity) : false)).sort(byPriceDesc);
+    }
+    return results;
   }
 
   async getCard(id: string, opts?: FetchOpts): Promise<PokemonCardDetails> {

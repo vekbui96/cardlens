@@ -8,9 +8,11 @@ import {
   type CardCatalogProvider,
   type CardPricingProvider,
   type FetchOpts,
+  type SearchOpts,
 } from "../providers.ts";
 import { CardListResponseSchema, CardResponseSchema, type RawCard } from "./schema.ts";
 import { buildLuceneQuery } from "./query.ts";
+import { byPriceDesc } from "./sort.ts";
 import { toDetails, toRankable, toSummary } from "./map.ts";
 
 const DEFAULT_BASE_URL = "https://api.pokemontcg.io/v2";
@@ -37,9 +39,9 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     return this.apiKey ? { "X-Api-Key": this.apiKey } : {};
   }
 
-  async searchCards(query: string, opts?: FetchOpts): Promise<PokemonCardSummary[]> {
+  async searchCards(query: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
     const nq = normalizeQuery(query);
-    const q = buildLuceneQuery(nq);
+    const q = buildLuceneQuery(nq, opts?.rarities);
     if (!q) return [];
 
     const url =
@@ -53,7 +55,10 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     }
 
     const rankable = parsed.data.data.map(toRankable);
-    return rankResults(query, rankable).slice(0, RESULT_LIMIT);
+    const ranked = rankResults(query, rankable);
+    // When filtering to a chase rarity, the most valuable cards are what matter.
+    const ordered = opts?.rarities && opts.rarities.length > 0 ? [...ranked].sort(byPriceDesc) : ranked;
+    return ordered.slice(0, RESULT_LIMIT);
   }
 
   private async fetchRawCard(id: string, opts?: FetchOpts): Promise<RawCard> {

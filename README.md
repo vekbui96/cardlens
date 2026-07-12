@@ -93,6 +93,11 @@ First Playwright run: `npm run e2e:install` (downloads Chromium).
   autocomplete, driven entirely by swipes + pinch), the **phone companion**, and no-typing
   recent/favorites/popular/browse.
 - Result ranking: exact name → starts-with → collector number → set name → fuzzy → recency.
+- **Rarity filter**: on any results screen, **swipe left/right** to cycle
+  `All → IR → SIR → Full Art → Hyper/Rainbow` — the chase rarities, sorted by market price (highest
+  first). Prices show on every row.
+- **Fast card images**: thumbnails load as small WebP from an image CDN (wsrv.nl) instead of the full
+  PNGs, with a fallback to the original and a loading shimmer. Set `VITE_IMAGE_PROXY=""` to disable.
 - **Persistent search cache** (localStorage, 6h) — repeated searches load instantly and survive
   reloads, revalidated in the background.
 - Card details: set, collector number, rarity, artist, release date, **finish-labeled** market/low/mid

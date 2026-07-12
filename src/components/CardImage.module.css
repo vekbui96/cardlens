@@ -28,3 +28,20 @@
   font-size: 28px;
   color: var(--cl-fg-dim);
 }
+
+/* Subtle pulse while the image loads so rows aren't blank. */
+.loading {
+  background: linear-gradient(100deg, #10151c 30%, #1a212b 50%, #10151c 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
+}

@@ -31,6 +31,10 @@ CardLens fetches card data and prices from the public **pokemontcg.io** API (whi
 from TCGplayer/Cardmarket). These requests contain only the card search terms and IDs needed to show
 results — no personal identifiers.
 
+Card images are loaded through a public image-resizing CDN (**wsrv.nl**) so thumbnails download
+quickly on a wearable connection. Only the (non-personal) image URL is sent. Set the image proxy to
+empty in configuration to load images directly from pokemontcg.io instead.
+
 ## Companion-phone input (optional)
 
 If you use the phone companion to type a search:

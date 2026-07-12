@@ -8,18 +8,17 @@ export function escapeLuceneValue(value: string): string {
 
 /**
  * Build the `q` parameter for pokemontcg.io from a normalized query. We prefix-
- * match the name and add a collector-number constraint when present; client-side
- * ranking then orders the results (see services/search/rank.ts).
+ * match the name, add a collector-number constraint when present, and optionally
+ * restrict to a set of rarities; client-side ranking then orders the results
+ * (see services/search/rank.ts).
  */
-export function buildLuceneQuery(nq: NormalizedQuery): string {
+export function buildLuceneQuery(nq: NormalizedQuery, rarities?: string[]): string {
   const clauses: string[] = [];
 
   if (nq.name) {
     const cleaned = escapeLuceneValue(nq.name);
     const tokens = cleaned.split(" ").filter(Boolean);
-    if (tokens.length === 1) {
-      clauses.push(`name:${tokens[0]}*`);
-    } else if (tokens.length > 1) {
+    if (tokens.length >= 1) {
       // Prefix-match the leading token (broad), rank narrows the rest.
       clauses.push(`name:${tokens[0]}*`);
     }
@@ -27,6 +26,11 @@ export function buildLuceneQuery(nq: NormalizedQuery): string {
 
   if (nq.collectorNumber) {
     clauses.push(`number:${nq.collectorNumber}`);
+  }
+
+  if (rarities && rarities.length > 0) {
+    const ors = rarities.map((r) => `rarity:"${r}"`).join(" OR ");
+    clauses.push(`(${ors})`);
   }
 
   return clauses.join(" ");

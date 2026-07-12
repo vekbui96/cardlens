@@ -44,4 +44,26 @@ describe("MockPokemonProvider", () => {
     const provider = new MockPokemonProvider();
     await expect(provider.getCard("does-not-exist")).rejects.toBeInstanceOf(ProviderError);
   });
+
+  it("filters results by rarity", async () => {
+    const provider = new MockPokemonProvider();
+    const results = await provider.searchCards("Charizard", { rarities: ["Special Illustration Rare"] });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((c) => c.rarity === "Special Illustration Rare")).toBe(true);
+  });
+
+  it("sorts rarity-filtered results by market price (highest first)", async () => {
+    const provider = new MockPokemonProvider();
+    // Both Obsidian Flames Charizards are matched, but different rarities; use a
+    // rarity present on multiple cards to observe ordering.
+    const results = await provider.searchCards("Charizard", { rarities: ["Rare Holo V", "Rare Holo VMAX"] });
+    const prices = results.map((c) => c.marketPrice ?? 0);
+    const sorted = [...prices].sort((a, b) => b - a);
+    expect(prices).toEqual(sorted);
+  });
+
+  it("returns nothing when no card matches the rarity", async () => {
+    const provider = new MockPokemonProvider();
+    expect(await provider.searchCards("Charizard", { rarities: ["Illustration Rare"] })).toEqual([]);
+  });
 });

@@ -4,9 +4,14 @@ export interface FetchOpts {
   signal?: AbortSignal;
 }
 
+export interface SearchOpts extends FetchOpts {
+  /** Restrict to these exact pokemontcg.io rarity strings (OR-ed). */
+  rarities?: string[];
+}
+
 /** Card catalog: search + fetch one card. Backed by pokemontcg.io or mocks. */
 export interface CardCatalogProvider {
-  searchCards(query: string, opts?: FetchOpts): Promise<PokemonCardSummary[]>;
+  searchCards(query: string, opts?: SearchOpts): Promise<PokemonCardSummary[]>;
   getCard(id: string, opts?: FetchOpts): Promise<PokemonCardDetails>;
 }
 

@@ -15,4 +15,4 @@
     Referrer-Policy = "no-referrer"
     X-Frame-Options = "DENY"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; img-src 'self' https://images.pokemontcg.io data:; connect-src 'self' https://api.pokemontcg.io; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' https://images.pokemontcg.io https://wsrv.nl data:; connect-src 'self' https://api.pokemontcg.io; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"

@@ -12,17 +12,18 @@ import { searchCache } from "../storage/caches.ts";
  * caching, request cancellation (stale searches abort via `signal`), and retry.
  * The persisted cache is skipped when the DevPanel is simulating a data source.
  */
-export function useCatalogSearch(query: string) {
+export function useCatalogSearch(query: string, rarities?: string[]) {
   const { provider, sourceKey } = useCatalog();
   const normalized = normalizeQuery(query);
   const enabled = Boolean(normalized.name || normalized.collectorNumber);
 
-  const cacheKey = `${normalized.name}|${normalized.collectorNumber ?? ""}`;
+  const rarityKey = rarities && rarities.length > 0 ? rarities.join(",") : "";
+  const cacheKey = `${normalized.name}|${normalized.collectorNumber ?? ""}|${rarityKey}`;
   const cached = sourceKey === "base" ? searchCache.get(cacheKey) : null;
 
   const result = useQuery<PokemonCardSummary[]>({
-    queryKey: ["search", sourceKey, normalized.name, normalized.collectorNumber ?? ""],
-    queryFn: ({ signal }) => provider.searchCards(query, { signal }),
+    queryKey: ["search", sourceKey, normalized.name, normalized.collectorNumber ?? "", rarityKey],
+    queryFn: ({ signal }) => provider.searchCards(query, { signal, ...(rarities ? { rarities } : {}) }),
     enabled,
     staleTime: 5 * 60_000,
     retry: 1,
