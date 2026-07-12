@@ -1,23 +1,26 @@
 # Render Blueprint for the CardLens companion + optional proxy server.
-# The static frontend deploys separately to Vercel/Netlify/Cloudflare Pages.
+# The static frontend deploys separately (GitHub Pages / Vercel / Netlify).
+#
+# Deploy: Render dashboard -> New -> Blueprint -> connect this repo -> Apply.
+# Render injects its own PORT; the server reads process.env.PORT (do NOT hardcode it).
 services:
   - type: web
     name: cardlens-server
     runtime: node
     plan: free
-    buildCommand: npm ci
+    # --include=dev ensures tsx (the TS runner) is installed even under NODE_ENV=production.
+    buildCommand: npm ci --include=dev
     startCommand: npm run server:start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
-        value: "20"
-      - key: PORT
-        value: "8787"
+        value: "22"
       - key: COMPANION_SESSION_TTL_SECONDS
         value: "300"
-      # Set to your deployed frontend origin(s), comma-separated.
+      # The browser Origin of the deployed frontend (path excluded).
+      # GitHub Pages -> https://vekbui96.github.io ; add others comma-separated.
       - key: ALLOWED_ORIGINS
-        value: "https://YOUR-FRONTEND.vercel.app"
+        value: "https://vekbui96.github.io"
       # Optional: server-side pokemontcg.io key (kept OUT of the browser).
       - key: POKEMONTCG_API_KEY
         sync: false

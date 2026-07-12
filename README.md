@@ -184,13 +184,22 @@ plus a strict Content-Security-Policy and secure headers.
 Set `VITE_COMPANION_API_BASE_URL` to your server's HTTPS origin (below). Add that origin to the CSP
 `connect-src` in `vercel.json`/`netlify.toml` if you use the companion feature.
 
-### Server — Render (or any Node host)
+### Server — Render (or any Node host) — enables companion-phone input
 
-[`render.yaml`](render.yaml) is a ready blueprint: start command `npm run server:start`, health check
-`/api/health`. Set `ALLOWED_ORIGINS` to your frontend origin and (optionally) `POKEMONTCG_API_KEY`.
+The core search + pricing works **without** the server. Deploy it only to enable the phone companion
+(or to use a server-side API key).
 
-_(The core search + pricing works without the server. Deploy it only for the companion feature or a
-server-side API key.)_
+1. **Deploy:** Render dashboard → **New → Blueprint** → connect this repo → **Apply**.
+   [`render.yaml`](render.yaml) provisions it: build `npm ci --include=dev`, start `npm run server:start`,
+   health check `/api/health`, `ALLOWED_ORIGINS` preset to the GitHub Pages origin. Copy the resulting
+   URL (e.g. `https://cardlens-server.onrender.com`).
+2. **Wire the frontend to it:** set the GitHub repo **variable** `COMPANION_API_BASE_URL` to
+   `https://<your-server>.onrender.com/api` (repo → Settings → Secrets and variables → Actions →
+   Variables), then re-run the **Deploy to GitHub Pages** workflow. The Pages build bakes that URL in;
+   the phone companion goes live. (Until then it falls back gracefully to "companion unavailable".)
+
+> Render's free tier sleeps when idle, so the first companion request after a lull may be slow
+> (cold start). For always-on, use a paid tier or any always-on Node host.
 
 ---
 

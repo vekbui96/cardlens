@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Build with Pages base path
@@ -34,6 +34,10 @@ jobs:
           VITE_BASE: /cardlens/
           # No companion server on Pages — hide the dev panel for a clean public demo.
           VITE_ENABLE_DEV_PANEL: "false"
+          # Companion relay URL. Set repo variable COMPANION_API_BASE_URL to your
+          # deployed server (e.g. https://cardlens-server.onrender.com/api) to enable
+          # phone input; falls back to "/api" (companion disabled on Pages) otherwise.
+          VITE_COMPANION_API_BASE_URL: ${{ vars.COMPANION_API_BASE_URL || '/api' }}
       - name: SPA fallback (deep links like /privacy, /input/:code)
         run: cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5
