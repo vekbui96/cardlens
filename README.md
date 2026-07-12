@@ -175,6 +175,11 @@ plus a strict Content-Security-Policy and secure headers.
 - **Vercel:** import the repo → build `npm run build`, output `dist` → deploy. HTTPS is automatic.
 - **Netlify:** connect repo (settings are read from `netlify.toml`).
 - **Cloudflare Pages:** build `npm run build`, output `dist` (uses `public/_redirects`).
+- **GitHub Pages:** enable Pages with source **GitHub Actions**; the
+  [`deploy-pages.yml`](.github/workflows/deploy-pages.yml) workflow builds with `VITE_BASE=/cardlens/`,
+  writes a `404.html` SPA fallback, and publishes to `https://<user>.github.io/cardlens/`. The app is
+  base-path aware (`import.meta.env.BASE_URL`), so it works under the `/cardlens/` subpath. Note: Pages
+  can't host the companion server or set custom headers/CSP — core search + pricing still work fully.
 
 Set `VITE_COMPANION_API_BASE_URL` to your server's HTTPS origin (below). Add that origin to the CSP
 `connect-src` in `vercel.json`/`netlify.toml` if you use the companion feature.

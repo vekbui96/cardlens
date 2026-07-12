@@ -53,7 +53,10 @@ export function CompanionModal({ request, onSubmit, onCancel, client }: Companio
     };
   }, [onSubmit, onCancel]);
 
-  const url = typeof window !== "undefined" ? `${window.location.origin}/input/${code}` : `/input/${code}`;
+  const url =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${import.meta.env.BASE_URL}input/${code}`
+      : `/input/${code}`;
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={request.title}>

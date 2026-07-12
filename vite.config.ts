@@ -6,7 +6,12 @@ import { fileURLToPath, URL } from "node:url";
 // In dev we proxy `/api/*` there so the browser talks to one origin (matches production).
 const API_TARGET = process.env.VITE_SERVER_TARGET ?? "http://localhost:8787";
 
+// Base public path. Root by default (Vercel/Netlify/local); set VITE_BASE to the
+// repo subpath for GitHub Pages, e.g. "/cardlens/".
+const BASE = process.env.VITE_BASE ?? "/";
+
 export default defineConfig({
+  base: BASE,
   plugins: [react()],
   resolve: {
     alias: {
