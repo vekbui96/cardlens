@@ -1,0 +1,49 @@
+/*
+ * Design tokens for the Meta Ray-Ban Display additive-light screen.
+ * The display renders BLACK as transparent, so #000 is the true background and
+ * foreground colors must be bright and high-contrast. No color-only meaning.
+ */
+:root {
+  /* Surfaces (black = transparent on-glasses) */
+  --cl-bg: #000000;
+  --cl-surface: #10151c;
+  --cl-surface-raised: #1a212b;
+
+  /* Foreground text — high contrast */
+  --cl-fg: #ffffff;
+  --cl-fg-muted: #aab6c4;
+  --cl-fg-dim: #7d8996;
+
+  /* Accent / focus — bright cyan reads well on the additive display */
+  --cl-accent: #35e0d0;
+  --cl-accent-strong: #66fff0;
+  --cl-on-accent: #001512;
+
+  /* Semantic (paired with icon/label, never color alone) */
+  --cl-price: #7dffb0;
+  --cl-warn: #ffd166;
+  --cl-error: #ff6b6b;
+
+  /* Focus ring */
+  --cl-focus-ring: 3px solid var(--cl-accent-strong);
+  --cl-focus-glow: 0 0 0 3px rgba(102, 255, 240, 0.35);
+
+  /* Type scale — large for readability at a glance */
+  --cl-font: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --cl-fs-title: 34px;
+  --cl-fs-heading: 28px;
+  --cl-fs-body: 22px;
+  --cl-fs-small: 18px;
+  --cl-fs-price: 40px;
+
+  /* Spacing */
+  --cl-gap-xs: 4px;
+  --cl-gap-sm: 8px;
+  --cl-gap: 14px;
+  --cl-gap-lg: 22px;
+
+  --cl-radius: 12px;
+
+  /* The fixed glasses viewport */
+  --cl-viewport: 600px;
+}

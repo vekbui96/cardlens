@@ -1,0 +1,33 @@
+import type { NormalizedQuery } from "../../services/search/normalize.ts";
+
+/** Escape a value for use in a pokemontcg.io Lucene query token. */
+export function escapeLuceneValue(value: string): string {
+  // Keep it conservative: alphanumerics + spaces only for the wildcard token.
+  return value.replace(/[^a-z0-9 ]/gi, "").trim();
+}
+
+/**
+ * Build the `q` parameter for pokemontcg.io from a normalized query. We prefix-
+ * match the name and add a collector-number constraint when present; client-side
+ * ranking then orders the results (see services/search/rank.ts).
+ */
+export function buildLuceneQuery(nq: NormalizedQuery): string {
+  const clauses: string[] = [];
+
+  if (nq.name) {
+    const cleaned = escapeLuceneValue(nq.name);
+    const tokens = cleaned.split(" ").filter(Boolean);
+    if (tokens.length === 1) {
+      clauses.push(`name:${tokens[0]}*`);
+    } else if (tokens.length > 1) {
+      // Prefix-match the leading token (broad), rank narrows the rest.
+      clauses.push(`name:${tokens[0]}*`);
+    }
+  }
+
+  if (nq.collectorNumber) {
+    clauses.push(`number:${nq.collectorNumber}`);
+  }
+
+  return clauses.join(" ");
+}

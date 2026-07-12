@@ -1,0 +1,50 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap);
+}
+
+.info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 700;
+  color: var(--cl-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.set {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.number {
+  font-size: 15px;
+  color: var(--cl-fg-dim);
+}
+
+.price {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+.priceLabel {
+  font-size: 13px;
+  color: var(--cl-fg-dim);
+  text-transform: uppercase;
+}
+.priceValue {
+  font-size: var(--cl-fs-body);
+  font-weight: 800;
+  color: var(--cl-price);
+}

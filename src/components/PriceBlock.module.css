@@ -1,0 +1,76 @@
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+  background: var(--cl-surface);
+  border-radius: var(--cl-radius);
+  padding: var(--cl-gap);
+}
+
+.marketRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+}
+
+.marketLabel {
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.market {
+  font-size: var(--cl-fs-price);
+  font-weight: 800;
+  color: var(--cl-price);
+}
+
+.secondary {
+  display: flex;
+  gap: var(--cl-gap-lg);
+  margin: 0;
+}
+
+.pair {
+  display: flex;
+  flex-direction: column;
+}
+.pair dt {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  text-transform: uppercase;
+}
+.pair dd {
+  margin: 0;
+  font-size: var(--cl-fs-body);
+  font-weight: 700;
+  color: var(--cl-fg);
+}
+
+.meta {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.finish {
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  color: var(--cl-on-accent);
+  background: var(--cl-accent);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.source {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+.updated {
+  font-size: 15px;
+  color: var(--cl-fg-dim);
+}
+.stale {
+  color: var(--cl-warn);
+}

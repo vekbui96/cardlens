@@ -1,0 +1,4 @@
+# SPA fallback for Netlify / Cloudflare Pages.
+# Existing static files (assets) are served first; everything else -> index.html
+# so /input/:code and /privacy load the app.
+/*    /index.html   200

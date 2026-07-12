@@ -1,0 +1,41 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+  overflow-y: auto;
+  scrollbar-width: none;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.list::-webkit-scrollbar {
+  display: none;
+}
+
+.row {
+  padding: var(--cl-gap) var(--cl-gap);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+/* Focus is shown with a bright border + fill + left bar — never color alone. */
+.focused {
+  background: var(--cl-surface-raised);
+  border-color: var(--cl-accent-strong);
+  box-shadow: var(--cl-focus-glow);
+  position: relative;
+}
+.focused::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--cl-accent-strong);
+}

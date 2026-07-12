@@ -1,0 +1,23 @@
+# Render Blueprint for the CardLens companion + optional proxy server.
+# The static frontend deploys separately to Vercel/Netlify/Cloudflare Pages.
+services:
+  - type: web
+    name: cardlens-server
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run server:start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "8787"
+      - key: COMPANION_SESSION_TTL_SECONDS
+        value: "300"
+      # Set to your deployed frontend origin(s), comma-separated.
+      - key: ALLOWED_ORIGINS
+        value: "https://YOUR-FRONTEND.vercel.app"
+      # Optional: server-side pokemontcg.io key (kept OUT of the browser).
+      - key: POKEMONTCG_API_KEY
+        sync: false

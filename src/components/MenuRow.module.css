@@ -1,0 +1,15 @@
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+}
+.label {
+  font-size: var(--cl-fs-heading);
+  font-weight: 800;
+  color: var(--cl-fg);
+}
+.hint {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}

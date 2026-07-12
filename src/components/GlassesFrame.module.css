@@ -1,0 +1,70 @@
+/* Raw surface used on the actual glasses (no chrome). */
+.rawSurface {
+  width: var(--cl-viewport);
+  height: var(--cl-viewport);
+  overflow: hidden;
+  background: var(--cl-bg);
+}
+
+/* Desktop preview stage. */
+.stage {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 28px;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% 30%, #12161d 0%, #05070a 70%);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.label {
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #7d8996;
+}
+
+.bezel {
+  padding: 16px;
+  border-radius: 28px;
+  background: linear-gradient(160deg, #1c222b, #0a0d12);
+  box-shadow:
+    0 0 0 2px #2a3441,
+    0 24px 60px rgba(0, 0, 0, 0.6);
+  transform-origin: top center;
+}
+
+.surface {
+  width: var(--cl-viewport);
+  height: var(--cl-viewport);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--cl-bg);
+  /* Subtle inner ring to suggest the display glass. */
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+.hint {
+  font-size: 13px;
+  color: #566472;
+  max-width: 560px;
+  text-align: center;
+}
+
+.aside {
+  align-self: flex-start;
+}
+
+@media (max-width: 980px) {
+  .stage {
+    flex-direction: column;
+    align-items: center;
+  }
+}
