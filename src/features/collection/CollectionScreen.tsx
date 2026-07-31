@@ -3,7 +3,7 @@ import type { CollectFinish } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
-import { EmptyState, LoadingState } from "../../components/States.tsx";
+import { EmptyState } from "../../components/States.tsx";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
@@ -42,7 +42,13 @@ export function CollectionScreen() {
   } = useLibrary();
   const { provider: textProvider } = useTextEntry();
   const enabled = useScreenInputEnabled();
-  const { data: sets, isLoading } = useSets();
+  /**
+   * Only used to put names and totals on rows. The collection itself is local,
+   * so this screen must never block on it — gating the UI on this query left
+   * the glasses (empty localStorage, flaky network) on a loading state forever,
+   * with no error branch to escape through.
+   */
+  const { data: sets } = useSets();
   const itemIndexRef = useRef(0);
 
   const rows = useMemo<SetProgress[]>(() => {
@@ -127,8 +133,9 @@ export function CollectionScreen() {
         focused={syncFocused}
         onActivate={() => void onSyncSelect()}
       />
-      {isLoading && rows.length === 0 ? <LoadingState label="Loading sets…" /> : null}
-      {rows.length === 0 && !isLoading ? (
+      {/* Derived purely from local rows, so this is immediate and offline-safe.
+          Set names fall back to their id until the set list arrives. */}
+      {rows.length === 0 ? (
         <EmptyState
           title="No cards tracked"
           hint="Open a set, turn on Collect mode, then select cards you own"
