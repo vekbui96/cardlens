@@ -37,7 +37,7 @@ interface OwnedPrinting {
   cardId: string;
   setId: string;
   finish: CollectFinish;
-  at: number;        // when marked owned
+  at: number; // when marked owned
   deletedAt?: number; // set instead of removing the row
 }
 ```
@@ -60,10 +60,10 @@ format (`finishes[]` → one row each, no tombstones).
 New endpoints on the existing `cardlens` Express server (`server/index.ts`,
 already running as a Windows service on :8787):
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/collection?since=<ts>` | rows changed since a watermark |
-| `POST` | `/api/collection/merge` | push rows, apply merge rule, return merged result |
+| Method | Path                         | Purpose                                           |
+| ------ | ---------------------------- | ------------------------------------------------- |
+| `GET`  | `/api/collection?since=<ts>` | rows changed since a watermark                    |
+| `POST` | `/api/collection/merge`      | push rows, apply merge rule, return merged result |
 
 Storage: **SQLite** (`better-sqlite3`) at `D:\services\data\cardlens.db`, one
 table keyed `(card_id, finish)`. Not JSON-on-disk — this is the first stateful

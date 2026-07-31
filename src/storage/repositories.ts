@@ -2,12 +2,7 @@ import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
 import type { TradingCardGame } from "../models/games.ts";
 import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
-import {
-  livePrintings,
-  mergePrintings,
-  pruneTombstones,
-  type OwnedPrinting,
-} from "./printings.ts";
+import { livePrintings, mergePrintings, pruneTombstones, type OwnedPrinting } from "./printings.ts";
 import { VersionedStore } from "./versioned.ts";
 
 /** Spec limits. */

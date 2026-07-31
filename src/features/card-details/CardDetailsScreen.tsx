@@ -57,9 +57,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
     // Held printings come next even when nothing suggested them — that is how a
     // hand-marked Poké Ball stays visible and removable.
     const alsoHeld = held.filter((f) => !suggested.includes(f)).sort(compareFinishes);
-    const extra = ALL_COLLECT_FINISHES.filter(
-      (f) => !suggested.includes(f) && !alsoHeld.includes(f),
-    );
+    const extra = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && !alsoHeld.includes(f));
 
     const list: Action[] = [...suggested, ...alsoHeld, ...extra].map((finish) => ({
       key: `own-${finish}`,

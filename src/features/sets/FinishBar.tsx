@@ -43,11 +43,7 @@ export function FinishBar({
         {choices.map((finish) => {
           const on = finish === active;
           return (
-            <span
-              key={finish}
-              className={`${styles.chip} ${on ? styles.chipOn : ""}`}
-              aria-hidden="true"
-            >
+            <span key={finish} className={`${styles.chip} ${on ? styles.chipOn : ""}`} aria-hidden="true">
               {finishShort(finish)}
             </span>
           );

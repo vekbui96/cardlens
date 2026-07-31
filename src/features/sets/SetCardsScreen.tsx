@@ -131,9 +131,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         ? setFinishIndex((i) => (i - 1 + finishChoices.length) % finishChoices.length)
         : setRarityIndex((i) => i - 1),
     onRight: () =>
-      collectMode
-        ? setFinishIndex((i) => (i + 1) % finishChoices.length)
-        : setRarityIndex((i) => i + 1),
+      collectMode ? setFinishIndex((i) => (i + 1) % finishChoices.length) : setRarityIndex((i) => i + 1),
     onSelect: (i) => {
       if (i === 0) {
         setCollectMode((on) => !on);
@@ -159,8 +157,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const cardProgress = setTotal ? `${ownedCards}/${setTotal}` : `${ownedCards}`;
   // While collecting, printings are the number being worked on; otherwise the
   // card count is the useful one. One short string either way.
-  const headerStatus =
-    collectMode && masterTotal ? `${ownedPrintings}/${masterTotal}` : cardProgress;
+  const headerStatus = collectMode && masterTotal ? `${ownedPrintings}/${masterTotal}` : cardProgress;
 
   return (
     <Screen

@@ -105,9 +105,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const toggleOwned = useCallback(
     (cardId: string, finish: CollectFinish = "normal", setId?: string) => {
-      setCollection(
-        setId ? repo.toggleOwned(cardId, finish, setId) : repo.toggleOwned(cardId, finish),
-      );
+      setCollection(setId ? repo.toggleOwned(cardId, finish, setId) : repo.toggleOwned(cardId, finish));
     },
     [repo],
   );
@@ -176,7 +174,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       const outgoing = pendingRows(local, settings.lastPushedAt);
       const pushedAt = Date.now();
 
-      const result = outgoing.length > 0 ? await client.push(outgoing) : await client.pull(settings.lastPulledAt);
+      const result =
+        outgoing.length > 0 ? await client.push(outgoing) : await client.pull(settings.lastPulledAt);
 
       setCollection(repo.mergeIncoming(result.rows));
       setSync(

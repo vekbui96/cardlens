@@ -1,12 +1,16 @@
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { canonicalFinish } from "../src/models/finishes.ts";
-import {
-  mergePrintings,
-  pruneTombstones,
-  rowStamp,
-  type OwnedPrinting,
-} from "../src/storage/printings.ts";
+import { mergePrintings, pruneTombstones, rowStamp, type OwnedPrinting } from "../src/storage/printings.ts";
 
 /**
  * Server-side collection store: the sync hub between devices.

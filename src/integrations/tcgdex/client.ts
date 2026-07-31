@@ -104,7 +104,11 @@ export class TcgdexClient {
   async getSetPrintings(
     ptcgSetId: string,
     setName: string,
-    opts: { signal?: AbortSignal; concurrency?: number; onProgress?: (done: number, total: number) => void } = {},
+    opts: {
+      signal?: AbortSignal;
+      concurrency?: number;
+      onProgress?: (done: number, total: number) => void;
+    } = {},
   ): Promise<SetPrintings | null> {
     const { signal, concurrency = 6, onProgress } = opts;
     const tcgdexSetId = await this.resolveSetId(ptcgSetId, setName, signal);

@@ -11,7 +11,11 @@ const card = (collectorNumber: string, marketPrice?: number): PokemonCardSummary
   ...(marketPrice === undefined ? {} : { marketPrice }),
 });
 
-const order = (nums: string[]) => nums.map((n) => card(n)).sort(byCollectorNumber).map((c) => c.collectorNumber);
+const order = (nums: string[]) =>
+  nums
+    .map((n) => card(n))
+    .sort(byCollectorNumber)
+    .map((c) => c.collectorNumber);
 
 describe("byCollectorNumber", () => {
   it("orders numerically, not lexically", () => {

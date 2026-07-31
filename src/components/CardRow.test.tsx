@@ -14,9 +14,7 @@ const card = (over: Partial<PokemonCardSummary> = {}): PokemonCardSummary => ({
 
 describe("CardRow printing badges", () => {
   it("labels each printing when a card has several", () => {
-    render(
-      <CardRow card={card()} availableFinishes={["normal", "reverse", "holo"]} showFinishes />,
-    );
+    render(<CardRow card={card()} availableFinishes={["normal", "reverse", "holo"]} showFinishes />);
     expect(screen.getByText("N")).toBeInTheDocument();
     expect(screen.getByText("RH")).toBeInTheDocument();
     expect(screen.getByText("H")).toBeInTheDocument();

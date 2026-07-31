@@ -225,7 +225,9 @@ export function createApp(
    * Fetch once. Separated so the retry policy above it stays readable.
    * Returns null for any 5xx or network failure — both are "try again".
    */
-  async function fetchUpstream(path: string): Promise<{ ok: true; body: unknown } | { ok: false; status: number }> {
+  async function fetchUpstream(
+    path: string,
+  ): Promise<{ ok: true; body: unknown } | { ok: false; status: number }> {
     const headers: Record<string, string> = {};
     if (POKEMONTCG_API_KEY) headers["X-Api-Key"] = POKEMONTCG_API_KEY;
     try {
@@ -287,13 +289,17 @@ export function createApp(
 
     if (cached) {
       const ageSec = Math.round((Date.now() - cached.at) / 1000);
-      console.warn(`[cardlens] upstream ${last.status || "unreachable"} for ${path} — serving ${ageSec}s stale`);
+      console.warn(
+        `[cardlens] upstream ${last.status || "unreachable"} for ${path} — serving ${ageSec}s stale`,
+      );
       res.setHeader("X-Cardlens-Stale", String(ageSec));
       res.json(cached.body);
       return;
     }
 
-    console.warn(`[cardlens] upstream ${last.status || "unreachable"} for ${path} — no cache to fall back on`);
+    console.warn(
+      `[cardlens] upstream ${last.status || "unreachable"} for ${path} — no cache to fall back on`,
+    );
     if (last.status === 0) {
       res.status(502).json({ error: "upstream_unreachable" });
     } else {
