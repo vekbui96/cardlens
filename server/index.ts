@@ -102,26 +102,89 @@ export function createApp(store: SessionStore = new SessionStore(SESSION_TTL_MS)
   const proxyLimiter = rateLimiter(120, 60_000);
   const proxyCache = new Map<string, { at: number; body: unknown }>();
   const PROXY_TTL_MS = 60_000;
+  /**
+   * Entries are now kept past their TTL to serve as a stale fallback, so the
+   * map no longer self-limits by freshness. Bound it: this runs as a service
+   * that stays up for weeks, and every distinct query would otherwise be
+   * retained forever. Oldest insertion is evicted first.
+   */
+  const PROXY_CACHE_MAX = 500;
 
+  function cacheResponse(path: string, body: unknown): void {
+    if (proxyCache.size >= PROXY_CACHE_MAX && !proxyCache.has(path)) {
+      const oldest = proxyCache.keys().next();
+      if (!oldest.done) proxyCache.delete(oldest.value);
+    }
+    proxyCache.set(path, { at: Date.now(), body });
+  }
+
+  /**
+   * Fetch once. Separated so the retry policy above it stays readable.
+   * Returns null for any 5xx or network failure — both are "try again".
+   */
+  async function fetchUpstream(path: string): Promise<{ ok: true; body: unknown } | { ok: false; status: number }> {
+    const headers: Record<string, string> = {};
+    if (POKEMONTCG_API_KEY) headers["X-Api-Key"] = POKEMONTCG_API_KEY;
+    try {
+      const upstream = await fetch(`${POKEMONTCG_BASE}${path}`, { headers });
+      if (!upstream.ok) return { ok: false, status: upstream.status };
+      return { ok: true, body: (await upstream.json()) as unknown };
+    } catch {
+      return { ok: false, status: 0 }; // network error / DNS / timeout
+    }
+  }
+
+  /**
+   * pokemontcg.io returns a 500 on roughly a quarter of requests, at random —
+   * measured, not assumed: 3 of 12 identical queries failed straight from the
+   * command line with no proxy involved. Passing that through means a user sees
+   * an error every fourth search, so this layer absorbs it two ways.
+   *
+   * 1. Retry 5xx and network errors. At a 25% failure rate, two retries take
+   *    the miss rate to ~1.6%.
+   * 2. Fall back to stale cache. A minute-old card list beats an error screen,
+   *    and card data barely changes.
+   *
+   * 4xx is NOT retried: a bad query fails identically however many times it is
+   * sent, and retrying just delays the error.
+   */
   async function proxy(path: string, res: Response): Promise<void> {
     const cached = proxyCache.get(path);
     if (cached && Date.now() - cached.at < PROXY_TTL_MS) {
       res.json(cached.body);
       return;
     }
-    try {
-      const headers: Record<string, string> = {};
-      if (POKEMONTCG_API_KEY) headers["X-Api-Key"] = POKEMONTCG_API_KEY;
-      const upstream = await fetch(`${POKEMONTCG_BASE}${path}`, { headers });
-      if (!upstream.ok) {
-        res.status(upstream.status).json({ error: "upstream_error", status: upstream.status });
+
+    const backoffMs = [150, 400];
+    let last: { ok: false; status: number } = { ok: false, status: 0 };
+
+    for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+      const result = await fetchUpstream(path);
+      if (result.ok) {
+        cacheResponse(path, result.body);
+        res.json(result.body);
         return;
       }
-      const body = (await upstream.json()) as unknown;
-      proxyCache.set(path, { at: Date.now(), body });
-      res.json(body);
-    } catch {
+      last = result;
+      // Client errors are deterministic — stop immediately.
+      if (result.status >= 400 && result.status < 500) break;
+      const delay = backoffMs[attempt];
+      if (delay !== undefined) await new Promise((r) => setTimeout(r, delay));
+    }
+
+    if (cached) {
+      const ageSec = Math.round((Date.now() - cached.at) / 1000);
+      console.warn(`[cardlens] upstream ${last.status || "unreachable"} for ${path} — serving ${ageSec}s stale`);
+      res.setHeader("X-Cardlens-Stale", String(ageSec));
+      res.json(cached.body);
+      return;
+    }
+
+    console.warn(`[cardlens] upstream ${last.status || "unreachable"} for ${path} — no cache to fall back on`);
+    if (last.status === 0) {
       res.status(502).json({ error: "upstream_unreachable" });
+    } else {
+      res.status(last.status).json({ error: "upstream_error", status: last.status });
     }
   }
 
