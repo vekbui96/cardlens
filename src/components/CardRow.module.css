@@ -53,6 +53,13 @@
   color: var(--cl-fg-dim);
 }
 
+/* The pinch target. Outline rather than fill, so it reads clearly whether or
+   not the printing is already held. */
+.finishTarget {
+  outline: 2px solid var(--cl-accent-strong);
+  outline-offset: 1px;
+}
+
 .finishHeld {
   background: var(--cl-price);
   border-color: var(--cl-price);

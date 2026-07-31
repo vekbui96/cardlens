@@ -9,15 +9,32 @@ export function CardRow({
   card,
   ownedFinishes,
   showFinishes = false,
+  highlightFinish,
 }: {
   card: PokemonCardSummary;
   ownedFinishes?: CollectFinish[];
-  /** Collect mode: show every printing, so the gaps are as visible as the holds. */
+  /** Show the printing badges: filled = held, outlined = still missing. */
   showFinishes?: boolean;
+  /** The printing a pinch would mark — outlined so the target is never a guess. */
+  highlightFinish?: CollectFinish;
 }) {
   const held = ownedFinishes ?? [];
   const owned = held.length > 0;
-  const finishes = showFinishes ? availableFinishes(card.variants) : [];
+  // The active finish is always shown even when the data does not list it for
+  // this card: hand-marked printings (Poké Ball, Master Ball) have to be
+  // visible as a target, or they cannot be marked from the list at all.
+  const finishes = showFinishes
+    ? Array.from(
+        new Set([
+          ...availableFinishes(card.variants),
+          ...held,
+          ...(highlightFinish ? [highlightFinish] : []),
+        ]),
+      )
+    : [];
+  // A lone "N" badge on a card that only exists as one printing is noise, so
+  // badges appear once there is genuinely something to compare or track.
+  const showBadges = finishes.length > 1 || held.length > 0;
 
   return (
     <div className={styles.row}>
@@ -34,24 +51,29 @@ export function CardRow({
           {card.name}
         </div>
         <div className={styles.set}>{card.setName}</div>
-        {finishes.length > 0 ? (
+        {/* The number stays visible alongside the badges — with the list sorted
+            by number, it is how you find your place in a binder. */}
+        <div className={styles.number}>
+          {card.collectorNumber}
+          {card.rarity ? ` · ${card.rarity}` : ""}
+        </div>
+        {showBadges ? (
           <div className={styles.finishes}>
             {finishes.map((f) => (
               <span
                 key={f}
-                className={`${styles.finish} ${held.includes(f) ? styles.finishHeld : ""}`}
-                aria-label={`${COLLECT_FINISH_SHORT[f]}${held.includes(f) ? " owned" : " missing"}`}
+                className={`${styles.finish} ${held.includes(f) ? styles.finishHeld : ""} ${
+                  f === highlightFinish ? styles.finishTarget : ""
+                }`}
+                aria-label={`${COLLECT_FINISH_SHORT[f]}${held.includes(f) ? " owned" : " missing"}${
+                  f === highlightFinish ? ", selected" : ""
+                }`}
               >
                 {COLLECT_FINISH_SHORT[f]}
               </span>
             ))}
           </div>
-        ) : (
-          <div className={styles.number}>
-            {card.collectorNumber}
-            {card.rarity ? ` · ${card.rarity}` : ""}
-          </div>
-        )}
+        ) : null}
       </div>
       <div className={styles.price}>
         <span className={styles.priceLabel}>Market</span>

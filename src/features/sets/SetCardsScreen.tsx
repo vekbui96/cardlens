@@ -7,14 +7,20 @@ import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RarityBar } from "../results/RarityBar.tsx";
 import { rarityFilterAt } from "../results/rarityFilters.ts";
-import { availableFinishes, primaryFinish } from "../../models/cards.ts";
+import {
+  ALL_COLLECT_FINISHES,
+  COLLECT_FINISH_LABELS,
+  availableFinishes,
+  type CollectFinish,
+} from "../../models/cards.ts";
+import { byCollectorNumber, byPriceDesc } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
 
-/** Cards in a set, most valuable first, with a swipe left/right rarity filter. */
+/** Cards in a set, in collector-number order, with a swipe rarity filter. */
 export function SetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { openDetails, pop } = useNavigation();
   const { ownedFinishes, toggleOwned, ownedCountsBySet, ownedFinishCountsBySet } = useLibrary();
@@ -25,31 +31,49 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
    * Collect mode repurposes select to mark cards owned instead of opening
    * details. Master-setting a 200-card set is otherwise
    * open → mark → back, ~600 gestures; this makes it one pinch per card.
-   *
-   * It marks the card's PRIMARY finish only. Marking a specific printing needs
-   * a target the four-gesture input can't express, so that lives on the details
-   * screen, one row per finish.
    */
   const [collectMode, setCollectMode] = useState(false);
+  /** Which printing a pinch marks. Cycled with ← → while collecting. */
+  const [finishIndex, setFinishIndex] = useState(0);
+  const [byValue, setByValue] = useState(false);
+
   const rarity = rarityFilterAt(rarityIndex);
   const { data, isLoading, isError, refetch } = useSetCards(setId, rarity.rarities ?? undefined);
 
-  // Set totals come from the (7-day cached) set list, so completion can be shown
-  // even while the current rarity filter is showing a subset.
   const { data: sets } = useSets();
   const setTotal = sets?.find((s) => s.id === setId)?.total;
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
 
-  // The master-set denominator needs every card's finishes, so it comes from the
-  // unfiltered query — the same cache entry the unfiltered view already fills.
   const { data: allCards } = useSetCards(setId);
   const masterTotal = useMemo(
     () => allCards?.reduce((sum, c) => sum + availableFinishes(c.variants).length, 0),
     [allCards],
   );
 
-  const cards = data ?? [];
+  /**
+   * Finishes offered for marking, most relevant first: the ones this set's
+   * pricing data implies, then the rest. The extras have to stay reachable
+   * because Poké Ball and Master Ball patterns never appear in the payload, so
+   * without them those printings could not be recorded at all.
+   */
+  const finishChoices = useMemo<CollectFinish[]>(() => {
+    const inSet = new Set<CollectFinish>();
+    for (const card of allCards ?? []) for (const f of availableFinishes(card.variants)) inSet.add(f);
+    const primary = ALL_COLLECT_FINISHES.filter((f) => inSet.has(f));
+    const rest = ALL_COLLECT_FINISHES.filter((f) => !inSet.has(f));
+    return primary.length > 0 ? [...primary, ...rest] : [...ALL_COLLECT_FINISHES];
+  }, [allCards]);
+
+  const activeFinish = finishChoices[finishIndex % finishChoices.length] ?? "normal";
+
+  // Binder order by default — a set is worked through by number, not by price.
+  const cards = useMemo(() => {
+    const list = [...(data ?? [])];
+    list.sort(byValue ? byPriceDesc : byCollectorNumber);
+    return list;
+  }, [data, byValue]);
+
   const phase: "loading" | "error" | "empty" | "list" = isLoading
     ? "loading"
     : isError
@@ -58,28 +82,42 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         ? "empty"
         : "list";
   const listCount = phase === "list" ? cards.length : phase === "error" ? 1 : 0;
-  // Slot 0 is the collect-mode toggle; cards follow.
-  const count = listCount + 1;
+  // Slots 0 and 1 are the two toggle rows; cards follow.
+  const CHROME_ROWS = 2;
+  const count = listCount + CHROME_ROWS;
 
   const markCard = (index: number) => {
     const card = cards[index];
-    if (card) toggleOwned(card.id, primaryFinish(card.variants), setId);
+    if (card) toggleOwned(card.id, activeFinish, setId);
   };
 
   const { backFocused, itemIndex } = useBackableFocus({
     count,
     enabled,
     onBack: pop,
-    onLeft: () => setRarityIndex((i) => i - 1),
-    onRight: () => setRarityIndex((i) => i + 1),
+    // While collecting, ← → picks the printing being marked; rarity filtering is
+    // a browsing concern and the gesture is worth more here.
+    onLeft: () =>
+      collectMode
+        ? setFinishIndex((i) => (i - 1 + finishChoices.length) % finishChoices.length)
+        : setRarityIndex((i) => i - 1),
+    onRight: () =>
+      collectMode
+        ? setFinishIndex((i) => (i + 1) % finishChoices.length)
+        : setRarityIndex((i) => i + 1),
     onSelect: (i) => {
       if (i === 0) {
         setCollectMode((on) => !on);
         return;
       }
-      const card = cards[i - 1];
+      if (i === 1) {
+        setByValue((v) => !v);
+        return;
+      }
+      const index = i - CHROME_ROWS;
+      const card = cards[index];
       if (phase === "list" && card) {
-        if (collectMode) markCard(i - 1);
+        if (collectMode) markCard(index);
         else openDetails(card.id, card);
       } else if (phase === "error") {
         void refetch();
@@ -87,7 +125,8 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     },
   });
 
-  const toggleFocused = itemIndex === 0;
+  const collectFocused = itemIndex === 0;
+  const sortFocused = itemIndex === 1;
   const cardProgress = setTotal ? `${ownedCards}/${setTotal}` : `${ownedCards}`;
   const subtitle = collectMode
     ? `${cardProgress} cards · ${masterTotal ? `${ownedPrintings}/${masterTotal}` : ownedPrintings} printings`
@@ -97,36 +136,50 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     <Screen title={setName} subtitle={subtitle} canGoBack>
       <BackRow focused={backFocused} onActivate={pop} />
       <ToggleRow
-        label={collectMode ? "✓ Collect mode: on" : "Collect mode: off"}
-        hint={collectMode ? "Select marks owned" : "Select opens card"}
+        label={collectMode ? `✓ Marking: ${COLLECT_FINISH_LABELS[activeFinish]}` : "Collect mode: off"}
+        hint={collectMode ? "← → printing · select marks" : "Select opens card"}
         on={collectMode}
-        focused={toggleFocused}
+        focused={collectFocused}
         onActivate={() => setCollectMode((on) => !on)}
       />
-      <RarityBar activeKey={rarity.key} />
+      <ToggleRow
+        label={byValue ? "Sort: value" : "Sort: number"}
+        hint={byValue ? "Highest first" : "Binder order"}
+        on={byValue}
+        focused={sortFocused}
+        onActivate={() => setByValue((v) => !v)}
+      />
+      {/* Rarity filtering shares ← → with finish selection, so hide the bar
+          while collecting rather than showing a control that does nothing. */}
+      {collectMode ? null : <RarityBar activeKey={rarity.key} />}
       {phase === "loading" ? <LoadingState label="Loading set…" /> : null}
       {phase === "error" ? (
         <ErrorState
           message="Couldn’t load set"
           onRetry={() => void refetch()}
-          retryFocused={!backFocused && !toggleFocused}
+          retryFocused={!backFocused && !collectFocused && !sortFocused}
         />
       ) : null}
       {phase === "empty" ? (
         <EmptyState
           title={rarity.rarities ? `No ${rarity.short} cards` : "No cards"}
-          hint="Swipe ← → to change rarity"
+          hint={collectMode ? "Swipe ← → to change printing" : "Swipe ← → to change rarity"}
         />
       ) : null}
       {phase === "list" ? (
         <FocusList
           items={cards}
-          focusIndex={itemIndex - 1}
+          focusIndex={itemIndex - CHROME_ROWS}
           getKey={(c) => c.id}
           ariaLabel={`${setName} cards, ${rarity.label}`}
           onActivate={(i) => (collectMode ? markCard(i) : openDetails(cards[i].id, cards[i]))}
           renderItem={(card) => (
-            <CardRow card={card} ownedFinishes={ownedFinishes(card.id)} showFinishes={collectMode} />
+            <CardRow
+              card={card}
+              ownedFinishes={ownedFinishes(card.id)}
+              showFinishes
+              {...(collectMode ? { highlightFinish: activeFinish } : {})}
+            />
           )}
         />
       ) : null}
