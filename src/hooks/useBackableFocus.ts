@@ -5,6 +5,7 @@ export interface BackableFocusOptions {
   /** Number of content items (excluding Back). */
   count: number;
   onSelect: (index: number) => void;
+  onSelectHold?: (index: number) => void;
   onBack: () => void;
   onLeft?: (index: number) => void;
   onRight?: (index: number) => void;
@@ -28,7 +29,7 @@ export interface BackableFocusState {
  * loads.
  */
 export function useBackableFocus(options: BackableFocusOptions): BackableFocusState {
-  const { count, onSelect, onBack, onLeft, onRight, enabled = true } = options;
+  const { count, onSelect, onSelectHold, onBack, onLeft, onRight, enabled = true } = options;
 
   const { focusIndex, setFocusIndex } = useFocusList({
     count: count + 1, // slot 0 = Back
@@ -38,6 +39,9 @@ export function useBackableFocus(options: BackableFocusOptions): BackableFocusSt
     ...(onLeft ? { onLeft: (i) => onLeft(i - 1) } : {}),
     ...(onRight ? { onRight: (i) => onRight(i - 1) } : {}),
     onSelect: (i) => (i === 0 ? onBack() : onSelect(i - 1)),
+    // Holding on Back does nothing: destructive-ish bulk actions should never
+    // sit under the control people use to leave.
+    ...(onSelectHold ? { onSelectHold: (i: number) => (i === 0 ? undefined : onSelectHold(i - 1)) } : {}),
   });
 
   // When content first appears (e.g. results finish loading), move focus off Back

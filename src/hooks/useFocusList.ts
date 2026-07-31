@@ -5,6 +5,8 @@ import { useWearableInput } from "./useWearableInput.ts";
 export interface FocusListOptions {
   count: number;
   onSelect: (index: number) => void;
+  /** Optional: index-finger pinch held. Screens that omit it ignore holds. */
+  onSelectHold?: (index: number) => void;
   onBack?: () => void;
   onLeft?: (index: number) => void;
   onRight?: (index: number) => void;
@@ -28,6 +30,7 @@ export function useFocusList(options: FocusListOptions): FocusListState {
   const {
     count,
     onSelect,
+    onSelectHold,
     onBack,
     onLeft,
     onRight,
@@ -78,12 +81,15 @@ export function useFocusList(options: FocusListOptions): FocusListState {
         case "SELECT":
           if (count > 0) onSelect(focusRef.current);
           break;
+        case "SELECT_HOLD":
+          if (count > 0) onSelectHold?.(focusRef.current);
+          break;
         case "BACK":
           onBack?.();
           break;
       }
     },
-    [move, onSelect, onBack, onLeft, onRight, count],
+    [move, onSelect, onSelectHold, onBack, onLeft, onRight, count],
   );
 
   useWearableInput(handle, enabled);

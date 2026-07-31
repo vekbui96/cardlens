@@ -109,6 +109,52 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const FINISH_ROW = 1;
   const count = listCount + CHROME_ROWS;
 
+  /**
+   * Hold: mark every printing of the card, or clear them all if it is already
+   * complete. Aimed at the common cases — a card you own in all its printings,
+   * or one you are correcting wholesale — without cycling the picker.
+   *
+   * Not the only route to this: SELECT_HOLD is derived rather than a documented
+   * gesture, so if the glasses never produce it, the picker still reaches every
+   * printing one at a time.
+   */
+  const markWholeCard = (index: number) => {
+    const card = cards[index];
+    if (!card) return;
+    const available = finishesFor(card.collectorNumber, card.variants);
+    const held = ownedFinishes(card.id);
+    const complete = available.every((f) => held.includes(f));
+    for (const finish of available) {
+      const has = held.includes(finish);
+      // toggleOwned is the only mutation available, so only flip what differs.
+      if (complete ? has : !has) toggleOwned(card.id, finish, setId);
+    }
+  };
+
+  /**
+   * Advance the picker, skipping printings the focused card does not have.
+   *
+   * Cycling onto "Master Ball" while sitting on a card that has no Master Ball
+   * printing wastes a swipe on every card in the set. Falls back to the full
+   * set-level list when nothing is focused or the card has no known printings,
+   * so a printing never becomes unreachable.
+   */
+  const stepFinish = (delta: number, focusedIndex: number) => {
+    const card = cards[focusedIndex - CHROME_ROWS];
+    const available = card ? finishesFor(card.collectorNumber, card.variants) : [];
+    const ring = finishChoices.filter((f) => available.includes(f));
+    const usable = ring.length > 1 ? ring : finishChoices;
+    if (usable.length === 0) return;
+    setFinishIndex((current) => {
+      const currentFinish = finishChoices[current % finishChoices.length];
+      const at = usable.indexOf(currentFinish ?? usable[0]);
+      const nextFinish =
+        usable[((((at < 0 ? 0 : at) + delta) % usable.length) + usable.length) % usable.length];
+      const back = finishChoices.indexOf(nextFinish);
+      return back < 0 ? current : back;
+    });
+  };
+
   const markCard = (index: number) => {
     const card = cards[index];
     if (!card) return;
@@ -126,12 +172,13 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     onBack: pop,
     // While collecting, ← → picks the printing being marked; rarity filtering is
     // a browsing concern and the gesture is worth more here.
-    onLeft: () =>
-      collectMode
-        ? setFinishIndex((i) => (i - 1 + finishChoices.length) % finishChoices.length)
-        : setRarityIndex((i) => i - 1),
-    onRight: () =>
-      collectMode ? setFinishIndex((i) => (i + 1) % finishChoices.length) : setRarityIndex((i) => i + 1),
+    onLeft: (i) => (collectMode ? stepFinish(-1, i) : setRarityIndex((n) => n - 1)),
+    onRight: (i) => (collectMode ? stepFinish(1, i) : setRarityIndex((n) => n + 1)),
+    onSelectHold: (i) => {
+      if (!collectMode) return;
+      const index = i - CHROME_ROWS;
+      if (index >= 0 && phase === "list") markWholeCard(index);
+    },
     onSelect: (i) => {
       if (i === 0) {
         setCollectMode((on) => !on);

@@ -10,6 +10,13 @@ export type WearableInputEvent =
   | { type: "SWIPE_LEFT" }
   | { type: "SWIPE_RIGHT" }
   | { type: "SELECT" }
+  /**
+   * Index-finger pinch held down. NOT a documented platform gesture — the Meta
+   * docs describe keydown only, with no keyup or repeat — so this is derived
+   * defensively from whichever signal the device actually produces, and every
+   * action it triggers must also be reachable another way.
+   */
+  | { type: "SELECT_HOLD" }
   | { type: "BACK" };
 
 export type WearableInputType = WearableInputEvent["type"];
