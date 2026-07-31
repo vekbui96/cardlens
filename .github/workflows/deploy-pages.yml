@@ -38,6 +38,12 @@ jobs:
           # deployed server (e.g. https://cardlens-server.onrender.com/api) to enable
           # phone input; falls back to "/api" (companion disabled on Pages) otherwise.
           VITE_COMPANION_API_BASE_URL: ${{ vars.COMPANION_API_BASE_URL || '/api' }}
+          # Catalog through the self-hosted proxy, which retries pokemontcg.io's
+          # bursty 5xx and serves stale cache when it is down. Unset means the
+          # browser calls pokemontcg.io directly and gets none of that — which is
+          # what shipped, so the resilience existed but nothing used it.
+          # The provider falls back to the public API if the proxy is unreachable.
+          VITE_API_BASE_URL: ${{ vars.CATALOG_API_BASE_URL || '' }}
       - name: SPA fallback (deep links like /privacy, /input/:code)
         run: cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5

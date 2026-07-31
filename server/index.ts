@@ -307,6 +307,15 @@ export function createApp(
     }
   }
 
+  app.get("/api/catalog/sets", proxyLimiter, async (req, res) => {
+    const params = new URLSearchParams();
+    for (const key of ["orderBy", "pageSize", "select", "q"]) {
+      const value = req.query[key];
+      if (typeof value === "string") params.set(key, value);
+    }
+    await proxy(`/sets?${params.toString()}`, res);
+  });
+
   app.get("/api/catalog/cards", proxyLimiter, async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const params = new URLSearchParams();
