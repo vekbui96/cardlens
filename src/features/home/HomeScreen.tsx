@@ -35,7 +35,15 @@ export function HomeScreen() {
   const isWeb = useIsWeb();
   const { data: sets } = useSets();
 
-  const resume = continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet);
+  /**
+   * Web only, deliberately.
+   *
+   * On the glasses the home menu is muscle memory driven by four gestures, and
+   * a row that appears, disappears and renames itself with whatever you last
+   * touched makes the list unpredictable — the one thing that device cannot
+   * afford. A phone has room and a pointer, so the shortcut is free there.
+   */
+  const resume = isWeb ? continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet) : null;
   const setCount = Object.keys(ownedCountsBySet).length;
 
   const items: HomeItem[] = [
@@ -87,9 +95,12 @@ export function HomeScreen() {
 
   // The stat line replaces a generic tagline with the number actually worth
   // seeing on open. Falls back to the tagline before anything is collected.
-  const subtitle = collection.length
-    ? `${collection.length} cards · ${totalFinishesOwned} printings · ${setCount} ${setCount === 1 ? "set" : "sets"}`
-    : "Search Pokémon cards";
+  // The glasses keep the fixed tagline: a subtitle that changes as you collect
+  // is one more thing moving on a screen where the menu should feel constant.
+  const subtitle =
+    isWeb && collection.length
+      ? `${collection.length} cards · ${totalFinishesOwned} printings · ${setCount} ${setCount === 1 ? "set" : "sets"}`
+      : "Search Pokémon cards";
 
   const progress = isWeb ? topProgress(ownedCountsBySet, sets) : [];
 
