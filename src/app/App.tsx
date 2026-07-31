@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { InputProvider, CatalogProvider, RepositoriesProvider } from "./contexts.tsx";
+import { InputProvider, CatalogProvider, RepositoriesProvider, LayoutModeProvider } from "./contexts.tsx";
 import { NavigationProvider } from "./NavigationProvider.tsx";
 import { LibraryProvider } from "./LibraryProvider.tsx";
 import { TextEntryProvider } from "./TextEntryProvider.tsx";
@@ -62,20 +62,22 @@ export function App() {
       <InputProvider>
         <RepositoriesProvider>
           <CatalogProvider>
-            <NavigationProvider>
-              <LibraryProvider>
-                <TextEntryProvider>
-                  <GlassesFrame
-                    chrome={isDesktop}
-                    web={mode === "web"}
-                    scale={scale}
-                    aside={showDevPanel ? <DevPanel onScaleChange={setScale} /> : undefined}
-                  >
-                    <ScreenRouter />
-                  </GlassesFrame>
-                </TextEntryProvider>
-              </LibraryProvider>
-            </NavigationProvider>
+            <LayoutModeProvider mode={mode}>
+              <NavigationProvider>
+                <LibraryProvider>
+                  <TextEntryProvider>
+                    <GlassesFrame
+                      chrome={isDesktop}
+                      web={mode === "web"}
+                      scale={scale}
+                      aside={showDevPanel ? <DevPanel onScaleChange={setScale} /> : undefined}
+                    >
+                      <ScreenRouter />
+                    </GlassesFrame>
+                  </TextEntryProvider>
+                </LibraryProvider>
+              </NavigationProvider>
+            </LayoutModeProvider>
           </CatalogProvider>
         </RepositoriesProvider>
       </InputProvider>

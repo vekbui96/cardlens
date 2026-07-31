@@ -17,6 +17,7 @@ import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
+import { useIsWeb } from "../../app/contexts.tsx";
 
 /**
  * Gap allowed between pinches on one card for them to count as a burst.
@@ -33,7 +34,14 @@ const BURST_COUNT = 3;
 export function SetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { openDetails, pop } = useNavigation();
   const { ownedFinishes, toggleOwned, ownedCountsBySet, ownedFinishCountsBySet } = useLibrary();
-  const enabled = useScreenInputEnabled();
+  const modalClosed = useScreenInputEnabled();
+  const isWeb = useIsWeb();
+  /**
+   * The focus ring is off on web. It preventDefaults arrows and Enter, which
+   * fights native scrolling and form input — the glasses need it because four
+   * gestures are all they have, a phone does not.
+   */
+  const enabled = modalClosed && !isWeb;
 
   const [rarityIndex, setRarityIndex] = useState(0);
   /**
@@ -261,25 +269,31 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       headerRight={headerStatus}
       canGoBack
     >
-      <ToggleRow
-        label={collectMode ? `✓ Marking: ${finishLabel(activeFinish)}` : "Collect mode: off"}
-        {...(collectMode ? {} : { hint: "Select opens card" })}
-        on={collectMode}
-        focused={collectFocused}
-        onActivate={() => setCollectMode((on) => !on)}
-      />
-      {/* Rarity filtering shares ← → with finish selection, so the bar is
-          replaced while collecting rather than left showing a control that does
-          nothing. */}
-      {collectMode ? (
-        <FinishBar
-          choices={finishChoices}
-          active={activeFinish}
-          focused={finishFocused}
-          onActivate={() => setFinishIndex((n) => (n + 1) % finishChoices.length)}
-        />
-      ) : (
-        <RarityBar activeKey={rarity.key} />
+      {/*
+        Glasses-only chrome. On web every printing badge is directly tappable,
+        so a mode that says "what a pinch means" and a picker to choose it are
+        both answering a question a finger does not ask.
+      */}
+      {isWeb ? null : (
+        <>
+          <ToggleRow
+            label={collectMode ? `✓ Marking: ${finishLabel(activeFinish)}` : "Collect mode: off"}
+            {...(collectMode ? {} : { hint: "Select opens card" })}
+            on={collectMode}
+            focused={collectFocused}
+            onActivate={() => setCollectMode((on) => !on)}
+          />
+          {collectMode ? (
+            <FinishBar
+              choices={finishChoices}
+              active={activeFinish}
+              focused={finishFocused}
+              onActivate={() => setFinishIndex((n) => (n + 1) % finishChoices.length)}
+            />
+          ) : (
+            <RarityBar activeKey={rarity.key} />
+          )}
+        </>
       )}
       {phase === "loading" ? <LoadingState label="Loading set…" /> : null}
       {phase === "error" ? (
@@ -308,6 +322,9 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
               ownedFinishes={ownedFinishes(card.id)}
               availableFinishes={finishesFor(card.collectorNumber, card.variants)}
               showFinishes
+              {...(isWeb
+                ? { onToggleFinish: (finish: CollectFinish) => toggleOwned(card.id, finish, setId) }
+                : {})}
               {...(collectMode ? { highlightFinish: activeFinish } : {})}
             />
           )}

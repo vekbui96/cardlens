@@ -94,4 +94,8 @@
   /* dvh, not vh: mobile browser chrome hides and reveals, and vh would leave a
      dead strip under the address bar. */
   height: 100dvh;
+  /* The glasses surface hides overflow because focus scrolls it; a phone
+     scrolls itself, so clipping here would simply lose the rest of the list. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }

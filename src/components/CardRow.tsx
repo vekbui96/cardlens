@@ -1,6 +1,6 @@
 import type { PokemonCardSummary } from "../models/cards.ts";
 import { availableFinishes, type CollectFinish } from "../models/cards.ts";
-import { compareFinishes, finishShort } from "../models/finishes.ts";
+import { compareFinishes, finishLabel, finishShort } from "../models/finishes.ts";
 import { formatUsd } from "../utils/format.ts";
 import { CardImage } from "./CardImage.tsx";
 import styles from "./CardRow.module.css";
@@ -12,6 +12,7 @@ export function CardRow({
   availableFinishes: printingsForCard,
   showFinishes = false,
   highlightFinish,
+  onToggleFinish,
 }: {
   card: PokemonCardSummary;
   ownedFinishes?: CollectFinish[];
@@ -21,6 +22,15 @@ export function CardRow({
   showFinishes?: boolean;
   /** The printing a pinch would mark — outlined so the target is never a guess. */
   highlightFinish?: CollectFinish;
+  /**
+   * Web only: toggle a printing by tapping its badge.
+   *
+   * On the glasses a badge cannot be a target — there is no pointer, so the
+   * picker exists to say which printing a pinch means. With a finger there is
+   * no reason for that indirection, and tapping the thing you mean is both
+   * faster and less to explain.
+   */
+  onToggleFinish?: (finish: CollectFinish) => void;
 }) {
   const held = ownedFinishes ?? [];
   const owned = held.length > 0;
@@ -80,19 +90,32 @@ export function CardRow({
         ) : null}
         {showBadges ? (
           <div className={styles.finishes}>
-            {finishes.map((f) => (
-              <span
-                key={f}
-                className={`${styles.finish} ${held.includes(f) ? styles.finishHeld : ""} ${
-                  f === highlightFinish ? styles.finishTarget : ""
-                }`}
-                aria-label={`${finishShort(f)}${held.includes(f) ? " owned" : " missing"}${
-                  f === highlightFinish ? ", selected" : ""
-                }`}
-              >
-                {finishShort(f)}
-              </span>
-            ))}
+            {finishes.map((f) => {
+              const cls = `${styles.finish} ${held.includes(f) ? styles.finishHeld : ""} ${
+                f === highlightFinish ? styles.finishTarget : ""
+              }`;
+              const label = `${finishLabel(f)}: ${held.includes(f) ? "owned" : "missing"}`;
+              return onToggleFinish ? (
+                <button
+                  key={f}
+                  type="button"
+                  className={`${cls} ${styles.finishTappable}`}
+                  aria-pressed={held.includes(f)}
+                  aria-label={label}
+                  onClick={(e) => {
+                    // The row itself opens the card; a badge must not do both.
+                    e.stopPropagation();
+                    onToggleFinish(f);
+                  }}
+                >
+                  {finishShort(f)}
+                </button>
+              ) : (
+                <span key={f} className={cls} aria-label={label}>
+                  {finishShort(f)}
+                </span>
+              );
+            })}
           </div>
         ) : null}
       </div>

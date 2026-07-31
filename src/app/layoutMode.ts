@@ -27,6 +27,11 @@ export function resolveLayoutMode(width: number, height: number, override?: stri
   return "preview";
 }
 
+/** True when the device has a real pointer and scrollbar — phone or browser. */
+export function isWebMode(mode: LayoutMode): boolean {
+  return mode === "web";
+}
+
 export function layoutOverrideFromLocation(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("ui");

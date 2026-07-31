@@ -1,3 +1,4 @@
+import type { LayoutMode } from "./layoutMode.ts";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import type { WearableInputAdapter } from "../models/input.ts";
 import type { CardCatalogProvider, CardPricingProvider } from "../integrations/providers.ts";
@@ -79,4 +80,25 @@ export function useRepositories(): Repositories {
   const ctx = useContext(RepositoriesContext);
   if (!ctx) throw new Error("useRepositories must be used within RepositoriesProvider");
   return ctx;
+}
+
+/**
+ * Which shell is rendering. Screens read this to decide between the glasses
+ * interaction model (focus ring driven by four gestures) and the web one
+ * (scroll and tap), which are genuinely different rather than one being a
+ * resized version of the other.
+ */
+const LayoutModeContext = createContext<LayoutMode>("glasses");
+
+export function LayoutModeProvider({ mode, children }: { mode: LayoutMode; children: ReactNode }) {
+  return <LayoutModeContext.Provider value={mode}>{children}</LayoutModeContext.Provider>;
+}
+
+export function useLayoutMode(): LayoutMode {
+  return useContext(LayoutModeContext);
+}
+
+/** Web gets native scrolling and tapping; the focus ring would fight both. */
+export function useIsWeb(): boolean {
+  return useContext(LayoutModeContext) === "web";
 }
