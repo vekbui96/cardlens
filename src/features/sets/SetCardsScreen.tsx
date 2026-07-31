@@ -7,12 +7,13 @@ import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RarityBar } from "../results/RarityBar.tsx";
 import { FinishBar } from "./FinishBar.tsx";
-import { rarityFilterAt } from "../results/rarityFilters.ts";
+import { filterByRarity, rarityFilterAt } from "../results/rarityFilters.ts";
 import { availableFinishes, type CollectFinish } from "../../models/cards.ts";
 import { compareFinishes, finishLabel } from "../../models/finishes.ts";
 import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
+import { useSetInformation } from "../../hooks/useSetInformation.ts";
 import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
@@ -54,20 +55,52 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const [finishIndex, setFinishIndex] = useState(0);
 
   const rarity = rarityFilterAt(rarityIndex);
-  const { data, isLoading, isError, refetch } = useSetCards(setId, rarity.rarities ?? undefined);
+
+  /**
+   * One request for the whole screen: every card in the set plus its printings.
+   * The rarity filter then becomes a local operation on data already in hand.
+   */
+  const info = useSetInformation(setId, setName);
+  /**
+   * The path this screen used before that endpoint existed, held in reserve.
+   *
+   * Not optional: the server it aggregates on is a home machine that spends days
+   * at a time powered off, and the catalog provider still degrades to the public
+   * API on its own. Losing the set list with the server would be a worse failure
+   * than the round trips this removes.
+   */
+  const viaCatalog = info.isUnavailable;
+  const fallback = useSetCards(setId, rarity.rarities ?? undefined, { enabled: viaCatalog });
+  const fallbackAll = useSetCards(setId, undefined, { enabled: viaCatalog });
 
   const { data: sets } = useSets();
   const setTotal = sets?.find((s) => s.id === setId)?.total;
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
 
-  const { data: allCards } = useSetCards(setId);
+  const allCards = info.cards ?? fallbackAll.data;
   /**
-   * Real printings from TCGdex — only fetched while collecting, because it
-   * costs one request per card. pokemontcg.io cannot answer this at all for
-   * some sets (Pitch Black returns no variant data whatsoever).
+   * Real printings from TCGdex. They ride along with the aggregate response, so
+   * this only fires when that could not supply them — on its own it costs one
+   * request per card, hence the collect-mode gate. pokemontcg.io cannot answer
+   * this at all for some sets (Pitch Black returns no variant data whatsoever).
    */
-  const { index: printings } = useSetPrintings(setId, setName, collectMode);
+  const { index: fallbackPrintings } = useSetPrintings(setId, setName, collectMode && !info.printings);
+  const printings = info.printings ?? fallbackPrintings;
+
+  const visible = useMemo(
+    () => (info.cards ? filterByRarity(info.cards, rarity.rarities) : fallback.data),
+    [info.cards, fallback.data, rarity.rarities],
+  );
+
+  const isLoading = viaCatalog ? fallback.isLoading : info.isLoading;
+  // Only the fallback can put the screen in an error state — an aggregate
+  // failure is not an error, it is the reason the fallback is running.
+  const isError = viaCatalog && fallback.isError;
+  const refetch = () => {
+    if (viaCatalog) void fallback.refetch();
+    else info.refetch();
+  };
 
   const masterTotal = useMemo(() => {
     if (printings) return printings.packTotal;
@@ -108,7 +141,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
   // Always binder order: a set is worked through by number. Value ordering is
   // a browsing concern and lives on the search results screen.
-  const cards = useMemo(() => [...(data ?? [])].sort(byCollectorNumber), [data]);
+  const cards = useMemo(() => [...(visible ?? [])].sort(byCollectorNumber), [visible]);
 
   const phase: "loading" | "error" | "empty" | "list" = isLoading
     ? "loading"
@@ -250,7 +283,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         if (collectMode) markCard(index);
         else openDetails(card.id, card);
       } else if (phase === "error") {
-        void refetch();
+        refetch();
       }
     },
   });
@@ -299,7 +332,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       {phase === "error" ? (
         <ErrorState
           message="Couldn’t load set"
-          onRetry={() => void refetch()}
+          onRetry={() => refetch()}
           retryFocused={!backFocused && !collectFocused && !finishFocused}
         />
       ) : null}

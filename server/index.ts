@@ -369,7 +369,11 @@ export function createApp(
 
     if (cards === null) return;
     res.setHeader("Cache-Control", "public, max-age=3600");
-    res.json({ setId, cards, printings: printings?.byNumber ?? null });
+    // The whole SetPrintings, same as /api/printings returns, not just its
+    // byNumber map: the client caches this for 30 days and the record names
+    // which TCGdex set it came from. The client accepts either shape, so the two
+    // halves can deploy in either order.
+    res.json({ setId, cards, printings: printings ?? null });
   });
 
   app.get("/api/catalog/sets", proxyLimiter, async (req, res) => {

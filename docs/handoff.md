@@ -30,16 +30,19 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
 `/api/set-information/:setId`, plus the companion relay.
 
-## Immediate next task (half-built, deliberately)
+## Immediate next task
 
-**Wire the client to `/api/set-information/:setId`.** The server half is deployed and verified (120 cards + 219 printings for `me5` in one response); nothing calls it yet.
+**Deploy the `/api/set-information/:setId` wiring.** Written and verified locally
+(`npm run verify` + `npx playwright test` both green), **not yet committed or deployed.**
 
-The set screen currently makes **three** requests: rarity-filtered cards, unfiltered cards for the master-set denominator, and printings. Replace all three:
+`useSetInformation` (`src/hooks/useSetInformation.ts`) now collapses the set screen's three
+requests into one, and `SetCardsScreen` filters by rarity in memory. The fallback to the
+per-query path is kept and covered by tests: it engages when the aggregate errors, when the
+server is unreachable, and when it answers with an empty set.
 
-1. Add `useSetInformation(setId, setName)` calling the endpoint
-2. Use it in `SetCardsScreen` instead of two `useSetCards` calls and `useSetPrintings`
-3. Filter by rarity **in memory** — the full card list is already in the payload
-4. **Keep a fallback** to the existing queries when the server is unreachable. Non-negotiable: that machine spent much of the last week powered off, and the client currently degrades to the public API rather than breaking.
+**Both halves must ship** — `server/index.ts` changed too, so this needs the Pages workflow
+_and_ the server deploy. The client accepts the printings payload in either shape, so the
+order does not matter and a stale server will not break the screen.
 
 Rationale and the rest of the backlog: `docs/performance-plan.md`.
 

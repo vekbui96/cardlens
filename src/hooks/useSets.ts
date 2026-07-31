@@ -26,8 +26,14 @@ export function useSets() {
   return query;
 }
 
-/** Cards in a set (most valuable first), optionally rarity-filtered. Cached-first. */
-export function useSetCards(setId: string, rarities?: string[]) {
+/**
+ * Cards in a set (most valuable first), optionally rarity-filtered. Cached-first.
+ *
+ * `enabled` exists so the set screen can hold this in reserve: it prefers the
+ * server's aggregate endpoint, which answers the same question in one request,
+ * and only asks the catalog directly when that endpoint cannot be reached.
+ */
+export function useSetCards(setId: string, rarities?: string[], opts?: { enabled?: boolean }) {
   const { provider, sourceKey } = useCatalog();
   const rarityKey = rarities && rarities.length > 0 ? rarities.join(",") : "";
   const cacheKey = `${setId}|${rarityKey}`;
@@ -36,7 +42,7 @@ export function useSetCards(setId: string, rarities?: string[]) {
   const query = useQuery<PokemonCardSummary[]>({
     queryKey: ["set-cards", sourceKey, setId, rarityKey],
     queryFn: ({ signal }) => provider.getCardsBySet(setId, { signal, ...(rarities ? { rarities } : {}) }),
-    enabled: Boolean(setId),
+    enabled: Boolean(setId) && (opts?.enabled ?? true),
     staleTime: 30 * 60_000,
     retry: 1,
     ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),

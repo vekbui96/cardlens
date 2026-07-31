@@ -30,3 +30,16 @@ export function rarityFilterAt(index: number): RarityFilter {
   const len = RARITY_FILTERS.length;
   return RARITY_FILTERS[((index % len) + len) % len];
 }
+
+/**
+ * Apply a filter locally, matching what the API does with the same rarity list.
+ *
+ * The set screen holds every card in a set already, so asking upstream to filter
+ * a list it has in hand is a round trip for nothing. Cards with no rarity are
+ * excluded, as they are by a `rarity:"..."` query.
+ */
+export function filterByRarity<T extends { rarity?: string }>(cards: T[], rarities: string[] | null): T[] {
+  if (!rarities || rarities.length === 0) return cards;
+  const wanted = new Set(rarities);
+  return cards.filter((c) => (c.rarity ? wanted.has(c.rarity) : false));
+}

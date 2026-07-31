@@ -2,7 +2,9 @@
 
 Written from measurements taken while building the collection features, not from profiling a running app. Where a number is quoted it was observed; where it is an estimate it says so.
 
-Status: **plan only.**
+Status: **plan, except items 1 and 3** — both are now served by
+`GET /api/set-information/:setId` and the `useSetInformation` hook in front of it. Everything
+else below is still unbuilt.
 
 ---
 
@@ -23,13 +25,13 @@ The glasses reach the network through a tethered phone, so request _count_ matte
 
 ## Downstream calls
 
-### 1. The set-cards query runs twice per set view
+### 1. The set-cards query runs twice per set view — **done**
 
-`SetCardsScreen` calls `useSetCards(setId, rarity)` for the visible list **and** `useSetCards(setId)` unfiltered, purely to compute the master-set denominator. Two separate cache entries, two requests, for one screen.
+`SetCardsScreen` called `useSetCards(setId, rarity)` for the visible list **and** `useSetCards(setId)` unfiltered, purely to compute the master-set denominator. Two separate cache entries, two requests, for one screen.
 
-**Fix:** fetch the set once, unfiltered, and apply the rarity filter in memory. The full list is already needed for totals, and a set is at most a few hundred cards.
+**Fixed by** `useSetInformation`: the set arrives once and unfiltered, and `filterByRarity` applies the swipe filter in memory. With printings riding along in the same payload, a set view is one request rather than three.
 
-**Effect:** halves set-view requests. Highest value for least work.
+Both `useSetCards` calls survive behind `{ enabled: false }` as the fallback path, and the aggregate seeds the same `setCardsCache` entry the fallback reads — so a set fetched while the server was up still paints instantly after it goes down.
 
 ### 2. Catalog responses are cached in memory only
 
@@ -39,11 +41,14 @@ The proxy's `proxyCache` is a `Map`, bounded at 500 entries and lost on restart 
 
 **Effect:** removes most upstream calls entirely, and makes the set list survive both restarts and upstream outages.
 
-### 3. Nothing prefetches
+### 3. Nothing prefetches — **moot on the aggregate path**
 
-Opening a set triggers cards, then printings, sequentially, both on first paint.
+Opening a set triggered cards, then printings, sequentially, both on first paint. They now
+arrive together, so there is no second round trip left to hide.
 
-**Fix:** kick off printings as soon as a set row is _focused_, not selected. On the glasses focus dwells before selection, which is free latency to spend.
+Still open for the **fallback** path, where printings are a separate request gated on collect
+mode: kick them off as soon as a set row is _focused_, not selected. On the glasses focus
+dwells before selection, which is free latency to spend.
 
 ### 4. Client TTLs are shorter than the data's real lifetime
 
@@ -95,7 +100,7 @@ Schemas validate pokemontcg.io responses client-side, but the proxy now sits in 
 
 ## Order
 
-1. **Item 1** — one-line-ish, halves set-view requests
+1. ~~**Item 1**~~ — done; a set view is one request, not three
 2. **Item 5** — the only user-visible slowdown coming
 3. **Item 7** — cheap, helps the tethered device most
 4. **Item 2** — removes upstream dependence for the common path
