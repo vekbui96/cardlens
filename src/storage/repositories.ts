@@ -1,6 +1,12 @@
 import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
 import type { TradingCardGame } from "../models/games.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
+import {
+  livePrintings,
+  mergePrintings,
+  pruneTombstones,
+  type OwnedPrinting,
+} from "./printings.ts";
 import { VersionedStore } from "./versioned.ts";
 
 /** Spec limits. */
@@ -30,14 +36,11 @@ export interface ViewedCard extends PokemonCardSummary {
 }
 
 /**
- * One owned card. Only the id, its set, the finishes held, and when it was
- * added are stored — the card's name, image and price all come back from the
- * catalog cache, so keeping a copy here would just be a second source of truth
- * that goes stale.
+ * A card grouped with the finishes held — the shape the UI reads.
  *
- * `finishes` is the master-set unit: owning the holo and the reverse holo of
- * one card is two entries toward a master set but one card toward the base set,
- * so both numbers are derivable from this shape.
+ * This is a VIEW over the stored (card, finish) rows, not the storage format.
+ * Storage is per-printing with tombstones so that offline devices can merge
+ * (see printings.ts); grouping happens on read because screens think in cards.
  */
 export interface OwnedCard {
   id: string;
@@ -65,6 +68,45 @@ function isCardSummary(value: unknown): value is PokemonCardSummary {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return typeof v.id === "string" && typeof v.name === "string";
+}
+
+/**
+ * Read one stored entry as printing rows, accepting both the current
+ * per-printing shape and the earlier per-card `{ id, setId, finishes[] }` one.
+ *
+ * Migration happens on read rather than as a one-shot upgrade step: it is
+ * total, idempotent, and cannot half-apply if the app is closed mid-write.
+ * Anything unrecognisable yields no rows, so corrupt data degrades to "not
+ * owned" instead of throwing.
+ */
+function toPrintings(value: unknown): OwnedPrinting[] {
+  if (typeof value !== "object" || value === null) return [];
+  const v = value as Record<string, unknown>;
+
+  // Current shape: one row per (card, finish).
+  if (typeof v.cardId === "string" && typeof v.finish === "string") {
+    const row: OwnedPrinting = {
+      cardId: v.cardId,
+      setId: typeof v.setId === "string" ? v.setId : setIdFromCardId(v.cardId),
+      finish: v.finish as CollectFinish,
+      at: typeof v.at === "number" ? v.at : 0,
+      ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
+    };
+    return [row];
+  }
+
+  // Legacy shape: one entry per card, finishes as an array. Pre-finish entries
+  // carried no `finishes` at all and mean a single normal printing.
+  if (typeof v.id === "string") {
+    const setId = typeof v.setId === "string" ? v.setId : setIdFromCardId(v.id);
+    const at = typeof v.at === "number" ? v.at : 0;
+    const finishes = isArray(v.finishes) && v.finishes.length > 0 ? v.finishes : ["normal"];
+    return finishes
+      .filter((f): f is CollectFinish => typeof f === "string")
+      .map((finish) => ({ cardId: v.id as string, setId, finish, at }));
+  }
+
+  return [];
 }
 
 /**
@@ -149,31 +191,49 @@ export class Repositories {
   }
 
   // --- Collection (master-set tracking) -------------------------------------
+  /**
+   * Raw rows including tombstones. This is what syncs; screens want
+   * getCollection() instead.
+   */
+  getPrintings(): OwnedPrinting[] {
+    const rows = this.store.read<unknown[]>("collection", isArray, []);
+    return rows.flatMap(toPrintings);
+  }
+
+  private writePrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
+    const pruned = pruneTombstones(rows).slice(-MAX_COLLECTION);
+    this.store.write("collection", pruned);
+    return pruned;
+  }
+
+  /** Cards owned, each with its held finishes — most recently started last. */
   getCollection(): OwnedCard[] {
-    const raw = this.store.read<OwnedCard[]>(
-      "collection",
-      (v): v is OwnedCard[] =>
-        isArray(v) &&
-        v.every((x) => {
-          const o = x as OwnedCard;
-          return typeof o?.id === "string" && typeof o?.setId === "string";
-        }),
-      [],
-    );
-    // Entries written before finishes existed carry none; read them as a single
-    // normal printing rather than as owning nothing.
-    return raw.map((c) => ({
-      ...c,
-      finishes: isArray(c.finishes) && c.finishes.length > 0 ? c.finishes : ["normal"],
-    }));
+    const byCard = new Map<string, OwnedCard>();
+    for (const row of livePrintings(this.getPrintings())) {
+      const existing = byCard.get(row.cardId);
+      if (existing) {
+        if (!existing.finishes.includes(row.finish)) existing.finishes.push(row.finish);
+        existing.at = Math.min(existing.at, row.at);
+      } else {
+        byCard.set(row.cardId, {
+          id: row.cardId,
+          setId: row.setId,
+          finishes: [row.finish],
+          at: row.at,
+        });
+      }
+    }
+    return [...byCard.values()];
   }
 
   isOwned(id: string): boolean {
-    return this.getCollection().some((c) => c.id === id);
+    return livePrintings(this.getPrintings()).some((r) => r.cardId === id);
   }
 
   ownedFinishes(id: string): CollectFinish[] {
-    return this.getCollection().find((c) => c.id === id)?.finishes ?? [];
+    return livePrintings(this.getPrintings())
+      .filter((r) => r.cardId === id)
+      .map((r) => r.finish);
   }
 
   isOwnedFinish(id: string, finish: CollectFinish): boolean {
@@ -186,36 +246,20 @@ export class Repositories {
     setId = setIdFromCardId(cardId),
     now = Date.now(),
   ): OwnedCard[] {
-    const current = this.getCollection();
-    const existing = current.find((c) => c.id === cardId);
-    if (existing) {
-      if (existing.finishes.includes(finish)) return current;
-      const next = current.map((c) =>
-        c.id === cardId ? { ...c, finishes: [...c.finishes, finish] } : c,
-      );
-      this.store.write("collection", next);
-      return next;
-    }
-    // Oldest-first ordering: a collection is an accumulating record, not a
-    // recency list, and stable order keeps set grouping cheap.
-    const next = [...current, { id: cardId, setId, finishes: [finish], at: now }].slice(-MAX_COLLECTION);
-    this.store.write("collection", next);
-    return next;
+    // Re-marking clears any tombstone by writing a newer `at`, which is exactly
+    // how the merge rule expects a resurrection to be expressed.
+    this.writePrintings(mergePrintings(this.getPrintings(), [{ cardId, setId, finish, at: now }]));
+    return this.getCollection();
   }
 
-  /** Removes one finish, or the whole card when `finish` is omitted. */
-  removeOwned(cardId: string, finish?: CollectFinish): OwnedCard[] {
-    const current = this.getCollection();
-    const next =
-      finish === undefined
-        ? current.filter((c) => c.id !== cardId)
-        : current
-            .map((c) => (c.id === cardId ? { ...c, finishes: c.finishes.filter((f) => f !== finish) } : c))
-            // Dropping the last finish drops the card: an entry with no
-            // finishes would count as owned everywhere it is read.
-            .filter((c) => c.finishes.length > 0);
-    this.store.write("collection", next);
-    return next;
+  /** Removes one finish, or every finish of the card when `finish` is omitted. */
+  removeOwned(cardId: string, finish?: CollectFinish, now = Date.now()): OwnedCard[] {
+    const targets = livePrintings(this.getPrintings()).filter(
+      (r) => r.cardId === cardId && (finish === undefined || r.finish === finish),
+    );
+    const tombstones = targets.map((r) => ({ ...r, deletedAt: now }));
+    this.writePrintings(mergePrintings(this.getPrintings(), tombstones));
+    return this.getCollection();
   }
 
   toggleOwned(
@@ -226,6 +270,12 @@ export class Repositories {
     return this.isOwnedFinish(cardId, finish)
       ? this.removeOwned(cardId, finish)
       : this.addOwned(cardId, finish, setId);
+  }
+
+  /** Merge rows from elsewhere (a sync peer) into local state. */
+  mergeIncoming(rows: OwnedPrinting[]): OwnedCard[] {
+    this.writePrintings(mergePrintings(this.getPrintings(), rows));
+    return this.getCollection();
   }
 
   /** Distinct cards owned per set id — progress against the set's card count. */
