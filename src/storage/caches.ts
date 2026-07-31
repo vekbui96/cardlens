@@ -15,6 +15,18 @@ export const cardCache = new TtlCache<PokemonCardDetails>(
 export const priceCache = new TtlCache<CardPriceResult>("cache:prices", PRICE_TTL_MS, 100);
 export const searchCache = new TtlCache<PokemonCardSummary[]>("cache:search", SEARCH_TTL_MS, 40);
 
-/** Set list (7 days) and per-set card lists (6h) for cached-first browsing. */
-export const setsCache = new TtlCache<PokemonSet[]>("cache:sets", 7 * DAY, 2);
-export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards", SEARCH_TTL_MS, 30);
+/**
+ * Set list (7 days) and per-set card lists (6h) for cached-first browsing.
+ *
+ * The key carries a version suffix. Adding a field to the mapped shape does not
+ * invalidate anything on its own, and these entries are long-lived and treated
+ * as fresh — a device that cached sets before `code` existed, or set cards
+ * before `variants` existed, would render without them for up to a week with no
+ * refetch. Bump the suffix whenever toSet/toSummary gains a field the UI reads.
+ */
+export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v2", 7 * DAY, 2);
+export const setCardsCache = new TtlCache<PokemonCardSummary[]>(
+  "cache:set-cards:v2",
+  SEARCH_TTL_MS,
+  30,
+);
