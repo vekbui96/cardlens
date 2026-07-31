@@ -107,6 +107,57 @@ Schemas validate pokemontcg.io responses client-side, but the proxy now sits in 
 - **Do not cache more aggressively without version keys.** Adding a field to a mapped shape silently serves stale data for the whole TTL; `caches.ts` carries version suffixes for exactly this reason.
 - **Do not batch away the local-first write.** The write to memory must stay synchronous, or a mark can be lost on a device that closes immediately — the property the whole sync design rests on.
 
+---
+
+## Proposed: a task-shaped API on the server
+
+The idea: the server becomes the app's only backend, exposing endpoints named
+for what the app wants (`get-collection`, `update-collection`,
+`retrieve-set-information`) rather than mirroring upstream APIs, and holding
+whatever it needs to answer them.
+
+### Worth doing: one endpoint per screen
+
+`GET /api/set-information/:setId` returning **cards + printings + totals in one
+payload** collapses the three requests a set view currently makes — rarity
+filtered cards, unfiltered cards for the denominator, and printings — into one.
+It fixes items 1 and 3 outright, and the server is already the only place that
+holds both halves.
+
+Collection is effectively this shape already: `GET /api/collection` and
+`POST /api/collection/merge`. Renaming them buys nothing; the merge semantics
+are the interesting part and they are right.
+
+**The rule that matters:** endpoints should be shaped by what a screen needs,
+not by what upstream happens to expose. That is what removes round trips.
+
+### Not worth doing: proxying card images
+
+Storing card art on the server and serving it back would very likely be
+**slower, not faster**.
+
+- Images already come from a CDN built to serve them. The home server is on a
+  residential connection, and its upload is the bottleneck for every device.
+- The glasses do not reach it over the LAN — they go out to the internet and
+  back through the Funnel relay, so there is no local-network shortcut to win.
+- Volume is real: a 300-card set is roughly 10-25 MB of thumbnails, so caching
+  a meaningful slice of the catalog is gigabytes.
+- It makes the box a hard dependency for _visible_ content. Today a server
+  outage costs sync and printings; then it would blank every card image, which
+  is the most obvious possible failure.
+
+**If the goal is offline use, cache on the device, not the server** — a service
+worker caching image responses gives genuinely offline art with no upstream
+cost and no new dependency.
+
+### The constraint any of this must respect
+
+The app currently degrades when the server is off: the catalog falls back to
+the public API. A full backend-for-frontend removes that unless the fallback is
+kept deliberately. Given how much of this week that machine spent powered off,
+**the fallback is not optional** — every new aggregate endpoint needs a
+client-side path that still works without it, even if slower.
+
 ## How to tell if it worked
 
 No profiling has been done. Before optimising, capture: time from set-row select to first card row painted, request count per set view (DevTools, glasses-sized viewport), and `localStorage` write duration at 5,000 rows. Otherwise items 5, 6 and 8 are theory.
