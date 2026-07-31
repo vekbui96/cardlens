@@ -227,11 +227,6 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     // a browsing concern and the gesture is worth more here.
     onLeft: (i) => (collectMode ? stepFinish(-1, i) : setRarityIndex((n) => n - 1)),
     onRight: (i) => (collectMode ? stepFinish(1, i) : setRarityIndex((n) => n + 1)),
-    onSelectHold: (i) => {
-      if (!collectMode) return;
-      const index = i - CHROME_ROWS;
-      if (index >= 0 && phase === "list") markWholeCard(index);
-    },
     onSelect: (i) => {
       if (i === 0) {
         setCollectMode((on) => !on);

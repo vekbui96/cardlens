@@ -38,16 +38,19 @@ The server has been silently stale before, running validation that rejected fini
 
 ### Gestures, and what is actually confirmed on hardware
 
-| Gesture                                  | Status                                                               |
-| ---------------------------------------- | -------------------------------------------------------------------- |
-| Swipes, pinch, middle-pinch              | Documented and working                                               |
-| **Triple-pinch on one card** (bulk mark) | **Confirmed working on the glasses**                                 |
-| Hold ~0.7s                               | Derived from key-up or auto-repeat, neither documented — unconfirmed |
+| Gesture                                  | Status                                             |
+| ---------------------------------------- | -------------------------------------------------- |
+| Swipes, pinch, middle-pinch              | Documented and working                             |
+| **Triple-pinch on one card** (bulk mark) | **Confirmed working on the glasses**               |
+| Hold                                     | **Tried and removed — never fired on the glasses** |
 
-Two rules came out of getting this wrong:
+`keydown` really is all there is: a hold derived from key-up timing and auto-repeat worked on a desktop keyboard and did nothing on the device. Do not reach for it again.
+
+Three rules came out of getting this wrong:
 
 - **Burst detection belongs on the screen, not the input adapter.** The adapter cannot see what is focused, so it had to reset on every other event to avoid firing during rapid marking — and any stray event from the neural band then killed the gesture silently. Keyed on the focused card it is both stricter and more forgiving.
 - **Gesture timings must suit a neural band, not a mouse.** 500ms between pinches was mouse double-click timing and felt broken; 1200ms works.
+- **The viewport meta once hardcoded `width=600, height=600`**, so every device reported a 600×600 layout viewport and a phone was indistinguishable from the glasses in both JS and CSS. It is `width=device-width` now; the glasses report 600 naturally and their surface is a fixed 600px in CSS regardless.
 
 ## Data sources
 

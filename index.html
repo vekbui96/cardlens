@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Meta Ray-Ban Display: fixed 600x600, no user scaling. -->
-    <meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no" />
+    <!--
+      device-width, NOT a hardcoded 600x600. Forcing the layout viewport made
+      every device report 600x600 to JS and CSS, so a phone was indistinguishable
+      from the glasses and got the fixed square shell. The glasses report 600
+      naturally, and the glasses surface is a fixed 600px in CSS regardless.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#000000" />
     <!-- Warm up the image CDN + source host so the first card image loads faster. -->
