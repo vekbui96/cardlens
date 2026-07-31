@@ -155,7 +155,17 @@ export function createApp(store: SessionStore = new SessionStore(SESSION_TTL_MS)
       return;
     }
 
-    const backoffMs = [150, 400];
+    /**
+     * Spread across ~4s rather than ~0.5s. Upstream failures arrive in bursts
+     * lasting seconds, not as independent coin flips: measured umbreon at
+     * 6 successes then 2 consecutive failures 3s apart, while a different query
+     * succeeded in between. Tight retries land inside the same burst and all
+     * fail together — which is exactly what the logs showed.
+     *
+     * The cost is only paid on the failing path, and ~4s to return a result
+     * beats an instant error screen on a device with no keyboard to retype on.
+     */
+    const backoffMs = [300, 1_000, 2_500];
     let last: { ok: false; status: number } = { ok: false, status: 0 };
 
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
