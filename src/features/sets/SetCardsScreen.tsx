@@ -8,7 +8,12 @@ import { LoadingState, ErrorState, EmptyState } from "../../components/States.ts
 import { RarityBar } from "../results/RarityBar.tsx";
 import { FinishBar } from "./FinishBar.tsx";
 import { filterByRarity, rarityFilterAt } from "../results/rarityFilters.ts";
-import { availableFinishes, type CollectFinish } from "../../models/cards.ts";
+import {
+  availableFinishes,
+  knownFinishes,
+  type CardVariants,
+  type CollectFinish,
+} from "../../models/cards.ts";
 import { compareFinishes, finishLabel, finishToMark } from "../../models/finishes.ts";
 import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
@@ -109,11 +114,28 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     return allCards?.reduce((sum, c) => sum + availableFinishes(c.variants).length, 0);
   }, [printings, allCards]);
 
-  /** The printings a given card exists in, preferring real data. */
-  const finishesFor = useMemo(() => {
-    return (collectorNumber: string, variants: Parameters<typeof availableFinishes>[0]) =>
-      printings?.byNumber[collectorNumber] ?? availableFinishes(variants);
+  /**
+   * The printings a card is KNOWN to have, or null when nothing vouches for it.
+   *
+   * Real TCGdex printings first, then what pricing implies, then nothing. The
+   * third case is not hypothetical: on the fallback path printings are fetched
+   * separately and only once collect mode opens, so there is a window — seconds,
+   * or minutes if it is fetching 120 cards direct from TCGdex — where a Pitch
+   * Black card looks normal-only because pricing reports nothing for that set.
+   */
+  const knownFinishesFor = useMemo(() => {
+    return (collectorNumber: string, variants?: CardVariants) => {
+      const real = printings?.byNumber[collectorNumber];
+      if (real && real.length > 0) return real;
+      return knownFinishes(variants);
+    };
   }, [printings]);
+
+  /** The printings to DISPLAY for a card — padded, so a row always shows something. */
+  const finishesFor = useMemo(() => {
+    return (collectorNumber: string, variants?: CardVariants) =>
+      knownFinishesFor(collectorNumber, variants) ?? availableFinishes(variants);
+  }, [knownFinishesFor]);
 
   /**
    * Finishes offered for marking: only the ones this set actually has, plus any
@@ -208,7 +230,10 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const markWholeCard = (index: number) => {
     const card = cards[index];
     if (!card) return;
-    const available = finishesFor(card.collectorNumber, card.variants);
+    // Only printings the card is known to have. With none known there is nothing
+    // to enumerate, so a bulk mark degenerates to the picker's choice rather
+    // than filling in a printing nothing vouches for.
+    const available = knownFinishesFor(card.collectorNumber, card.variants) ?? [activeFinish];
     const before = burstStart.current?.cardId === card.id ? burstStart.current.held : ownedFinishes(card.id);
     const wasComplete = available.length > 0 && available.every((f) => before.includes(f));
     const held = ownedFinishes(card.id);
@@ -252,12 +277,12 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       markWholeCard(index);
       return;
     }
-    const available = finishesFor(card.collectorNumber, card.variants);
-    // Mark a printing the card actually has, whatever the picker says. The
-    // picker is set-wide and only ← → re-resolves it against the focused card,
-    // so moving down onto a card without the active printing must not invent
-    // one — see finishToMark.
-    toggleOwned(card.id, finishToMark(available, activeFinish), setId);
+    // Constrain to the card's printings when they are known — the picker is
+    // set-wide and only ← → re-resolves it against the focused card, so moving
+    // down onto a card without the active printing must not invent one. When
+    // they are not known, finishToMark takes the picker at its word.
+    const finish = finishToMark(knownFinishesFor(card.collectorNumber, card.variants), activeFinish);
+    toggleOwned(card.id, finish, setId);
   };
 
   const { backFocused, itemIndex } = useBackableFocus({

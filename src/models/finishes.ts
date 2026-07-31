@@ -149,9 +149,14 @@ export function compareFinishes(a: Finish, b: Finish): number {
  *
  * Doing nothing was the other option and is worse on the glasses: a pinch that
  * silently no-ops is indistinguishable from hardware that did not register it.
+ *
+ * `available` is null when nothing vouches for the card's printings — see
+ * knownFinishes. Then the picker is the only real signal of intent, and it is
+ * taken at its word: overriding an explicit choice with a padded default is
+ * what wrote `normal` onto holo-only cards.
  */
-export function finishToMark(available: Finish[], active: Finish): Finish {
-  if (available.length === 0) return active;
+export function finishToMark(available: Finish[] | null, active: Finish): Finish {
+  if (!available || available.length === 0) return active;
   if (available.includes(active)) return active;
   const { type } = parseFinish(active);
   const sameType = available.filter((f) => parseFinish(f).type === type);

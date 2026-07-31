@@ -73,6 +73,24 @@ export function availableFinishes(variants?: CardVariants): CollectFinish[] {
   return found.length > 0 ? found : ["normal"];
 }
 
+/**
+ * The printings pricing can actually vouch for, or null when it vouches for none.
+ *
+ * `availableFinishes` answers "what should a row display" and pads to `normal`
+ * so there is always something to show. That padding must never be mistaken for
+ * knowledge. Pitch Black reports no variant data for any of its 120 cards, so
+ * every card in it looks like a normal-only card until TCGdex printings arrive —
+ * and marking against that guess wrote `normal` onto holo-only cards, which is
+ * exactly what an audit of the live collection found.
+ *
+ * Callers that WRITE to the collection must use this and treat null as "ask the
+ * user, do not guess". Callers that only render can keep using the padded list.
+ */
+export function knownFinishes(variants?: CardVariants): CollectFinish[] | null {
+  if (!variants || !Object.values(variants).some(Boolean)) return null;
+  return availableFinishes(variants);
+}
+
 /** The printing a single "I own this" gesture should mean for a card. */
 export function primaryFinish(variants?: CardVariants): CollectFinish {
   return availableFinishes(variants)[0];

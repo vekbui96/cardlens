@@ -140,6 +140,18 @@ describe("finishToMark", () => {
     expect(finishToMark([], "reverse:pokeball")).toBe("reverse:pokeball");
   });
 
+  it("takes the picker at its word when nothing vouches for the card", () => {
+    // null is NOT the same as ["normal"]. Pitch Black reports no variant data
+    // for any card, so before TCGdex printings land every card there looks
+    // normal-only. Overriding an explicit "holo" with that padding is what put
+    // `normal` on holo-only cards — 7 such rows were found in the live
+    // collection, distinct from the picker bug.
+    expect(finishToMark(null, "holo")).toBe("holo");
+    expect(finishToMark(null, "reverse:masterball")).toBe("reverse:masterball");
+    // Contrast: once the card IS known to be normal-only, holo is corrected.
+    expect(finishToMark(["normal"], "holo")).toBe("normal");
+  });
+
   it("is stable regardless of the order printings arrive in", () => {
     // TCGdex returns them in its own order; the result must not depend on it.
     expect(finishToMark(["reverse", "normal"], "holo")).toBe("normal");
