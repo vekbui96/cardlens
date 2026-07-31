@@ -5,6 +5,8 @@ interface GlassesFrameProps {
   children: ReactNode;
   /** Show the desktop preview chrome (bezel + label). Off = raw 600x600 (glasses). */
   chrome?: boolean;
+  /** Responsive shell for a phone or browser window instead of the fixed square. */
+  web?: boolean;
   scale?: number;
   aside?: ReactNode;
 }
@@ -14,7 +16,14 @@ interface GlassesFrameProps {
  * On desktop it adds a bezel, a size label, and an optional side panel (DevPanel)
  * so the whole experience is testable on Windows.
  */
-export function GlassesFrame({ children, chrome = true, scale = 1, aside }: GlassesFrameProps) {
+export function GlassesFrame({ children, chrome = true, web = false, scale = 1, aside }: GlassesFrameProps) {
+  if (web) {
+    // Overrides --cl-viewport rather than restyling every screen: the screens
+    // size themselves from that token, so one variable turns the fixed square
+    // into a fluid column and nothing else has to know.
+    return <div className={styles.webSurface}>{children}</div>;
+  }
+
   if (!chrome) {
     return <div className={styles.rawSurface}>{children}</div>;
   }

@@ -68,3 +68,30 @@
     align-items: center;
   }
 }
+
+/*
+ * Web shell: phone or browser window.
+ *
+ * The screens all size from --cl-viewport, so redefining it here converts the
+ * fixed 600x600 surface into a fluid column without a second set of components
+ * to keep in step. Capped so text does not run to absurd line lengths on a wide
+ * monitor.
+ */
+.webSurface {
+  --cl-viewport: 100%;
+  width: 100%;
+  max-width: 760px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--cl-bg);
+}
+
+.webSurface > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* dvh, not vh: mobile browser chrome hides and reveals, and vh would leave a
+     dead strip under the address bar. */
+  height: 100dvh;
+}

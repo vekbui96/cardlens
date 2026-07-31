@@ -6,6 +6,7 @@ import { LibraryProvider } from "./LibraryProvider.tsx";
 import { TextEntryProvider } from "./TextEntryProvider.tsx";
 import { ScreenRouter } from "./ScreenRouter.tsx";
 import { GlassesFrame } from "../components/GlassesFrame.tsx";
+import { layoutOverrideFromLocation, resolveLayoutMode, type LayoutMode } from "./layoutMode.ts";
 import { DevPanel } from "../components/dev/DevPanel.tsx";
 import { migrateStorage } from "../storage/versioned.ts";
 
@@ -27,20 +28,28 @@ function devPanelEnabled(): boolean {
  * On the glasses the viewport is exactly 600x600, so we render the raw surface.
  * On a larger desktop viewport we show the preview bezel + DevPanel.
  */
-function useIsDesktopPreview(): boolean {
-  const [big, setBig] = useState(() =>
-    typeof window === "undefined" ? true : window.innerWidth >= 720 && window.innerHeight >= 680,
-  );
+function useLayoutMode(): LayoutMode {
+  const read = () =>
+    typeof window === "undefined"
+      ? "preview"
+      : resolveLayoutMode(window.innerWidth, window.innerHeight, layoutOverrideFromLocation());
+
+  const [mode, setMode] = useState<LayoutMode>(read);
   useEffect(() => {
-    const onResize = () => setBig(window.innerWidth >= 720 && window.innerHeight >= 680);
+    const onResize = () => setMode(read());
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, []);
-  return big;
+  return mode;
 }
 
 export function App() {
-  const isDesktop = useIsDesktopPreview();
+  const mode = useLayoutMode();
+  const isDesktop = mode === "preview";
   const [scale, setScale] = useState(1);
   const showDevPanel = isDesktop && devPanelEnabled();
 
@@ -58,6 +67,7 @@ export function App() {
                 <TextEntryProvider>
                   <GlassesFrame
                     chrome={isDesktop}
+                    web={mode === "web"}
                     scale={scale}
                     aside={showDevPanel ? <DevPanel onScaleChange={setScale} /> : undefined}
                   >
