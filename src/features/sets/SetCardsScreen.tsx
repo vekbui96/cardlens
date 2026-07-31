@@ -6,6 +6,7 @@ import { BackRow } from "../../components/BackRow.tsx";
 import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RarityBar } from "../results/RarityBar.tsx";
+import { FinishBar } from "./FinishBar.tsx";
 import { rarityFilterAt } from "../results/rarityFilters.ts";
 import {
   ALL_COLLECT_FINISHES,
@@ -82,8 +83,14 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         ? "empty"
         : "list";
   const listCount = phase === "list" ? cards.length : phase === "error" ? 1 : 0;
-  // Slots 0 and 1 are the two toggle rows; cards follow.
-  const CHROME_ROWS = 2;
+  /**
+   * Focusable rows above the list: collect toggle, sort toggle, and — only
+   * while collecting — the printing picker. It joins the focus ring rather than
+   * living purely on a swipe, because a gesture that changes what every
+   * subsequent pinch does is undiscoverable on a device with nothing to hover.
+   */
+  const CHROME_ROWS = collectMode ? 3 : 2;
+  const FINISH_ROW = 2;
   const count = listCount + CHROME_ROWS;
 
   const markCard = (index: number) => {
@@ -114,6 +121,10 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         setByValue((v) => !v);
         return;
       }
+      if (collectMode && i === FINISH_ROW) {
+        setFinishIndex((n) => (n + 1) % finishChoices.length);
+        return;
+      }
       const index = i - CHROME_ROWS;
       const card = cards[index];
       if (phase === "list" && card) {
@@ -127,6 +138,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
   const collectFocused = itemIndex === 0;
   const sortFocused = itemIndex === 1;
+  const finishFocused = collectMode && itemIndex === FINISH_ROW;
   const cardProgress = setTotal ? `${ownedCards}/${setTotal}` : `${ownedCards}`;
   const subtitle = collectMode
     ? `${cardProgress} cards · ${masterTotal ? `${ownedPrintings}/${masterTotal}` : ownedPrintings} printings`
@@ -137,7 +149,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       <BackRow focused={backFocused} onActivate={pop} />
       <ToggleRow
         label={collectMode ? `✓ Marking: ${COLLECT_FINISH_LABELS[activeFinish]}` : "Collect mode: off"}
-        hint={collectMode ? "← → printing · select marks" : "Select opens card"}
+        hint={collectMode ? "Pick the printing below" : "Select opens card"}
         on={collectMode}
         focused={collectFocused}
         onActivate={() => setCollectMode((on) => !on)}
@@ -149,15 +161,25 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         focused={sortFocused}
         onActivate={() => setByValue((v) => !v)}
       />
-      {/* Rarity filtering shares ← → with finish selection, so hide the bar
-          while collecting rather than showing a control that does nothing. */}
-      {collectMode ? null : <RarityBar activeKey={rarity.key} />}
+      {/* Rarity filtering shares ← → with finish selection, so the bar is
+          replaced while collecting rather than left showing a control that does
+          nothing. */}
+      {collectMode ? (
+        <FinishBar
+          choices={finishChoices}
+          active={activeFinish}
+          focused={finishFocused}
+          onActivate={() => setFinishIndex((n) => (n + 1) % finishChoices.length)}
+        />
+      ) : (
+        <RarityBar activeKey={rarity.key} />
+      )}
       {phase === "loading" ? <LoadingState label="Loading set…" /> : null}
       {phase === "error" ? (
         <ErrorState
           message="Couldn’t load set"
           onRetry={() => void refetch()}
-          retryFocused={!backFocused && !collectFocused && !sortFocused}
+          retryFocused={!backFocused && !collectFocused && !sortFocused && !finishFocused}
         />
       ) : null}
       {phase === "empty" ? (

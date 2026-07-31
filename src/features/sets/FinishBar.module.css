@@ -1,0 +1,54 @@
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: transparent;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.focused {
+  background: var(--cl-surface);
+  border-color: var(--cl-accent-strong);
+  box-shadow: var(--cl-focus-glow);
+}
+
+.arrow {
+  flex: 0 0 auto;
+  font-size: 24px;
+  color: var(--cl-fg-dim);
+  line-height: 1;
+}
+
+.chips {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--cl-surface);
+  border: 2px solid transparent;
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  color: var(--cl-fg-muted);
+  white-space: nowrap;
+}
+
+.chipOn {
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  border-color: var(--cl-accent-strong);
+}
