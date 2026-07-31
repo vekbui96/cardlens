@@ -19,6 +19,9 @@ export interface SyncResult {
   dropped?: number;
 }
 
+/** Long enough for a big first push over a relayed tunnel, short enough to fail. */
+export const REQUEST_TIMEOUT_MS = 20_000;
+
 export class SyncDisabledError extends Error {
   constructor() {
     super("collection sync is not configured on the server");
@@ -54,14 +57,26 @@ export class CollectionSyncClient {
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<SyncResult> {
-    const res = await fetch(`${this.base}${path}`, {
-      ...init,
-      headers: {
-        ...(init.headers ?? {}),
-        authorization: `Bearer ${this.token}`,
-        ...(init.body ? { "content-type": "application/json" } : {}),
-      },
-    });
+    // A hung fetch never settles, which previously left the caller's in-flight
+    // guard stuck true forever — sync would sit on "syncing" and silently
+    // swallow every later attempt, including a manual one. Always time out.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          ...(init.headers ?? {}),
+          authorization: `Bearer ${this.token}`,
+          ...(init.body ? { "content-type": "application/json" } : {}),
+        },
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     // These two are worth distinguishing from a generic failure: they are
     // permanent until the user acts, so retrying silently forever would hide a

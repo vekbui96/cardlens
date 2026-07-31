@@ -41,6 +41,14 @@ export interface SyncStatus {
 
 /** Debounce after an edit: long enough to batch a burst of collect-mode marks. */
 const SYNC_DEBOUNCE_MS = 10_000;
+/** How soon to try again after a failed sync. */
+const SYNC_RETRY_MS = 30_000;
+/**
+ * A run older than this is treated as dead and a new one may start. Belt and
+ * braces alongside the client's own request timeout: without it, one wedged
+ * promise disables sync for the lifetime of the app.
+ */
+const SYNC_STUCK_MS = 60_000;
 
 interface LibraryValue {
   favorites: FavoriteCard[];
@@ -136,8 +144,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     repo.getSyncSettings().token ? "idle" : "off",
   );
   // Guards against overlapping runs: the mount effect, the online listener and
-  // the debounce can all fire within the same second.
-  const syncing = useRef(false);
+  // the debounce can all fire within the same second. Holds the start time
+  // rather than a boolean so a wedged run can expire instead of blocking
+  // everything forever.
+  const syncingSince = useRef(0);
+  // Bumped on every failure to re-arm the retry effect, which otherwise never
+  // fires again: pending and runSync both stay identical after a failure.
+  const [syncAttempt, setSyncAttempt] = useState(0);
 
   const pending = useMemo(
     () => pendingRows(repo.getPrintings(), sync.lastPushedAt).length,
@@ -148,10 +161,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const runSync = useCallback(async () => {
     const settings = repo.getSyncSettings();
-    if (!settings.token || syncing.current) return;
+    if (!settings.token) return;
+    const inFlightFor = syncingSince.current ? Date.now() - syncingSince.current : 0;
+    if (syncingSince.current && inFlightFor < SYNC_STUCK_MS) return;
 
     const client = new CollectionSyncClient(settings.token);
-    syncing.current = true;
+    syncingSince.current = Date.now();
     setSyncState("syncing");
     try {
       // Push before pull so a device that has been offline contributes its work
@@ -178,8 +193,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (err instanceof SyncAuthError) setSyncState("bad-token");
       else if (err instanceof SyncDisabledError) setSyncState("disabled");
       else setSyncState("offline");
+      // Surfaced for diagnosis: the status line deliberately says little, which
+      // previously made a failing sync impossible to investigate.
+      console.warn("[cardlens] sync failed:", err);
+      setSyncAttempt((n) => n + 1);
     } finally {
-      syncing.current = false;
+      syncingSince.current = 0;
     }
   }, [repo]);
 
@@ -208,13 +227,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("online", onOnline);
   }, [runSync]);
 
-  // Debounced after edits. Collect mode produces a burst of marks, and syncing
-  // each one separately would be a request per pinch.
+  // Debounced after edits, and re-armed after a failure. syncAttempt is in the
+  // deps precisely so a failed run schedules the next one — without it, pending
+  // and runSync are unchanged after a failure and the timer never fires again.
   useEffect(() => {
     if (pending === 0) return;
-    const t = setTimeout(() => void runSync(), SYNC_DEBOUNCE_MS);
+    const delay = syncState === "offline" ? SYNC_RETRY_MS : SYNC_DEBOUNCE_MS;
+    const t = setTimeout(() => void runSync(), delay);
     return () => clearTimeout(t);
-  }, [pending, runSync]);
+  }, [pending, runSync, syncAttempt, syncState]);
 
   const syncStatus = useMemo<SyncStatus>(
     () => ({ state: syncState, pending, lastSyncAt: sync.lastSyncAt }),
