@@ -49,14 +49,7 @@ export function buildPrintingIndex(
       // Zero is not a price. Absent means unknown, and a 0 would sum as if the
       // printing were worthless.
       if (typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0) {
-        const finish = makeFinish(p.type, p.foil);
-        prices[`${number}|${finish}`] = p.price;
-        // Store under the canonical (unpadded) form too, so lookups work regardless
-        // of whether the number in the index is padded or not.
-        const canonicalNumber = number.replace(/^0+(?=\d)/, "");
-        if (canonicalNumber !== number) {
-          prices[`${canonicalNumber}|${finish}`] = p.price;
-        }
+        prices[`${number}|${makeFinish(p.type, p.foil)}`] = p.price;
       }
     }
     const canonicalKey = number.replace(/^0+(?=\d)/, "");
@@ -99,6 +92,8 @@ export function printingPrice(
 ): number | undefined {
   if (!index) return undefined;
   return (
-    index.prices[`${collectorNumber}|${finish}`] ?? index.prices[`${unpadded(collectorNumber)}|${finish}`]
+    index.prices[`${collectorNumber}|${finish}`] ??
+    index.prices[`${unpadded(collectorNumber)}|${finish}`] ??
+    index.prices[`${collectorNumber.padStart(3, "0")}|${finish}`]
   );
 }
