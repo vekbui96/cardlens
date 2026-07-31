@@ -32,19 +32,18 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 
 ## Immediate next task
 
-**Deploy the `/api/set-information/:setId` wiring.** Written and verified locally
-(`npm run verify` + `npx playwright test` both green), **not yet committed or deployed.**
+Nothing is half-built. Pick from `docs/performance-plan.md` — **item 5** (every mark rewrites
+the whole collection) is next in its own ordering and the only item there expected to be
+_felt_ as the collection grows.
 
-`useSetInformation` (`src/hooks/useSetInformation.ts`) now collapses the set screen's three
-requests into one, and `SetCardsScreen` filters by rarity in memory. The fallback to the
-per-query path is kept and covered by tests: it engages when the aggregate errors, when the
-server is unreachable, and when it answers with an empty set.
+The set screen now runs on `/api/set-information/:setId` (`3ae8a27`, both halves deployed and
+verified live): 120 cards + 219 printing entries for `me5` in one 86 KB response, 0.66s warm.
+The fallback to the per-query path engages on error, unreachable server, or an empty payload,
+and is off entirely under mocks and `?sim=`.
 
-**Both halves must ship** — `server/index.ts` changed too, so this needs the Pages workflow
-_and_ the server deploy. The client accepts the printings payload in either shape, so the
-order does not matter and a stale server will not break the screen.
-
-Rationale and the rest of the backlog: `docs/performance-plan.md`.
+**Not yet seen on hardware.** Worth confirming on the glasses: the set screen still paints,
+and printing badges now show real TCGdex data outside collect mode rather than what pricing
+implies — that is a deliberate change, but it is a visible one.
 
 ## Unresolved, needs the user's device
 
