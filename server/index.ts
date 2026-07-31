@@ -19,6 +19,14 @@ const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 
+/** Upstream failed with nothing cached to fall back on. */
+class UpstreamError extends Error {
+  constructor(readonly status: number) {
+    super(`upstream failed (${status || "unreachable"})`);
+    this.name = "UpstreamError";
+  }
+}
+
 /** Minimal in-memory fixed-window rate limiter (per IP + route bucket). */
 function rateLimiter(maxPerWindow: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -50,7 +58,7 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction): void
 export function createApp(
   store: SessionStore = new SessionStore(SESSION_TTL_MS),
   collection: CollectionStore = new CollectionStore(COLLECTION_FILE),
-  printings: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
+  printingsStore: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -186,7 +194,7 @@ export function createApp(
       return;
     }
     try {
-      const { value, cached } = await printings.get(setId, setName);
+      const { value, cached } = await printingsStore.get(setId, setName);
       if (!value) {
         res.status(404).json({ error: "set_not_found_upstream" });
         return;
@@ -253,12 +261,16 @@ export function createApp(
    * 4xx is NOT retried: a bad query fails identically however many times it is
    * sent, and retrying just delays the error.
    */
-  async function proxy(path: string, res: Response): Promise<void> {
+  /**
+   * Fetch through the cache and retry policy, returning the body.
+   *
+   * Split out from `proxy` so aggregate endpoints can compose catalog data
+   * instead of only streaming it to a client. Throws when there is nothing to
+   * serve, including no stale copy.
+   */
+  async function loadCatalog(path: string): Promise<unknown> {
     const cached = proxyCache.get(path);
-    if (cached && Date.now() - cached.at < PROXY_TTL_MS) {
-      res.json(cached.body);
-      return;
-    }
+    if (cached && Date.now() - cached.at < PROXY_TTL_MS) return cached.body;
 
     /**
      * Spread across ~4s rather than ~0.5s. Upstream failures arrive in bursts
@@ -277,8 +289,7 @@ export function createApp(
       const result = await fetchUpstream(path);
       if (result.ok) {
         cacheResponse(path, result.body);
-        res.json(result.body);
-        return;
+        return result.body;
       }
       last = result;
       // Client errors are deterministic — stop immediately.
@@ -292,20 +303,74 @@ export function createApp(
       console.warn(
         `[cardlens] upstream ${last.status || "unreachable"} for ${path} — serving ${ageSec}s stale`,
       );
-      res.setHeader("X-Cardlens-Stale", String(ageSec));
-      res.json(cached.body);
-      return;
+      return cached.body;
     }
 
     console.warn(
       `[cardlens] upstream ${last.status || "unreachable"} for ${path} — no cache to fall back on`,
     );
-    if (last.status === 0) {
-      res.status(502).json({ error: "upstream_unreachable" });
-    } else {
-      res.status(last.status).json({ error: "upstream_error", status: last.status });
+    throw new UpstreamError(last.status);
+  }
+
+  /** Stream a catalog path straight to a client. */
+  async function proxy(path: string, res: Response): Promise<void> {
+    try {
+      res.json(await loadCatalog(path));
+    } catch (err) {
+      const status = err instanceof UpstreamError ? err.status : 0;
+      if (status === 0) res.status(502).json({ error: "upstream_unreachable" });
+      else res.status(status).json({ error: "upstream_error", status });
     }
   }
+
+  /**
+   * Everything the set screen needs, in one request.
+   *
+   * The screen previously made three: rarity-filtered cards for the list,
+   * unfiltered cards for the master-set denominator, and printings. All three
+   * are held here, so composing them server-side removes two round trips from a
+   * device on a tethered connection, and the rarity filter becomes a local
+   * operation on data the screen already has.
+   */
+  app.get("/api/set-information/:setId", proxyLimiter, async (req, res) => {
+    const setId = String(req.params.setId ?? "").slice(0, 40);
+    const setName = typeof req.query.name === "string" ? req.query.name.slice(0, 120) : "";
+    if (!setId) {
+      res.status(400).json({ error: "set_id_required" });
+      return;
+    }
+
+    const cardsPath =
+      `/cards?q=${encodeURIComponent(`set.id:${setId}`)}` +
+      `&pageSize=250&orderBy=number&select=${encodeURIComponent(
+        "id,name,number,rarity,images,tcgplayer,set",
+      )}`;
+
+    // Printings are best-effort: a set view without them still works, it just
+    // falls back to what pricing implies. Cards are not optional.
+    const [cards, printings] = await Promise.all([
+      loadCatalog(cardsPath).catch((err: unknown) => {
+        throw err;
+      }),
+      setName
+        ? printingsStore.get(setId, setName).then(
+            (r) => r.value,
+            (err: unknown) => {
+              console.warn(`[cardlens] printings unavailable for ${setId}:`, err);
+              return null;
+            },
+          )
+        : Promise.resolve(null),
+    ]).catch((err: unknown) => {
+      const status = err instanceof UpstreamError ? err.status : 0;
+      res.status(status === 0 ? 502 : status).json({ error: "set_information_unavailable" });
+      return [null, null] as const;
+    });
+
+    if (cards === null) return;
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json({ setId, cards, printings: printings?.byNumber ?? null });
+  });
 
   app.get("/api/catalog/sets", proxyLimiter, async (req, res) => {
     const params = new URLSearchParams();
