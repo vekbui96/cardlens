@@ -25,6 +25,14 @@ export interface Printing {
   type: string;
   /** pokeball, masterball, energy, cosmos, ... when patterned. */
   foil?: string;
+  /**
+   * TCGplayer market price (USD) for THIS printing, when TCGdex reports one.
+   *
+   * Rides on the printing because that is the unit the collection is stored in —
+   * one price per (card, finish) row, no join needed to value it. Absent rather
+   * than zero when unknown, so "no price" never renders as "$0.00".
+   */
+  price?: number;
 }
 
 export interface SetPrintings {
@@ -167,14 +175,51 @@ function numberKeys(card: TcgdexCard): string[] {
   return raw === trimmed ? [raw] : [raw, trimmed];
 }
 
+/**
+ * TCGdex's price keys mapped onto our printing types.
+ *
+ * Verified against live cards rather than guessed: across sampled me05/me03
+ * cards the key counts matched the variant counts exactly (8 `normal` / 8
+ * normal, 8 `reverse-holofoil` / 8 reverse, 2 `holofoil` / 2 holo). Unknown
+ * keys are skipped — a wrong price is worse than a missing one.
+ */
+const PRICE_KEY_TO_TYPE: Record<string, string> = {
+  normal: "normal",
+  holofoil: "holo",
+  "reverse-holofoil": "reverse",
+};
+
+/** Market price per printing type, from TCGdex's tcgplayer block. */
+function marketPricesByType(card: TcgdexCard): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(card.pricing?.tcgplayer ?? {})) {
+    const type = PRICE_KEY_TO_TYPE[key];
+    if (!type || !value || typeof value !== "object") continue;
+    const market = (value as { marketPrice?: unknown }).marketPrice;
+    // Never store 0 as a real price — absent means "unknown", and a 0 would
+    // total up as if the card were worthless rather than unpriced.
+    if (typeof market === "number" && market > 0) out[type] = market;
+  }
+  return out;
+}
+
 function toPrintings(card: TcgdexCard): Printing[] {
   const seen = new Set<string>();
+  const prices = marketPricesByType(card);
   const out: Printing[] = [];
   for (const variant of card.variants_detailed ?? []) {
     const key = `${variant.type}|${variant.foil ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ type: variant.type, ...(variant.foil ? { foil: variant.foil } : {}) });
+    // Only unpatterned printings take a price. TCGdex reports no separate key
+    // for pattern foils, so giving a Poké Ball reverse the plain reverse price
+    // would invent a number — those stay unpriced.
+    const price = variant.foil ? undefined : prices[variant.type];
+    out.push({
+      type: variant.type,
+      ...(variant.foil ? { foil: variant.foil } : {}),
+      ...(price !== undefined ? { price } : {}),
+    });
   }
   return out;
 }

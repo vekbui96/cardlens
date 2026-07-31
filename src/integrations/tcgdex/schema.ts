@@ -24,12 +24,28 @@ export const TcgdexVariantSchema = z.object({
 });
 export type TcgdexVariant = z.infer<typeof TcgdexVariantSchema>;
 
+/**
+ * Prices, keyed by TCGdex's own finish names.
+ *
+ * Deliberately `unknown` values: the map mixes price objects with `unit` and
+ * `updated` strings, and TCGdex adds keys as sets invent printings. Narrowing
+ * happens in the client, where an unrecognised key is skipped rather than
+ * rejected — the same reason `foil` is a free string.
+ */
+export const TcgdexPricingSchema = z
+  .object({
+    tcgplayer: z.record(z.string(), z.unknown()).optional(),
+    cardmarket: z.record(z.string(), z.unknown()).optional(),
+  })
+  .optional();
+
 export const TcgdexCardSchema = z.object({
   id: z.string(),
   localId: z.union([z.string(), z.number()]).optional(),
   name: z.string().optional(),
   rarity: z.string().optional(),
   variants_detailed: z.array(TcgdexVariantSchema).optional(),
+  pricing: TcgdexPricingSchema,
 });
 export type TcgdexCard = z.infer<typeof TcgdexCardSchema>;
 

@@ -34,4 +34,4 @@ export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards
  * difference between a 1.5s background fill and doing it on every visit.
  * Printings for a released set essentially never change.
  */
-export const printingsCache = new TtlCache<SetPrintings>("cache:printings:v1", 30 * DAY, 8);
+export const printingsCache = new TtlCache<SetPrintings>("cache:printings:v2", 30 * DAY, 8);

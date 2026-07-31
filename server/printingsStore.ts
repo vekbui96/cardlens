@@ -18,8 +18,22 @@ import { TcgdexClient, type SetPrintings } from "../src/integrations/tcgdex/clie
 /** Printings for a released set do not change. */
 export const PRINTINGS_TTL_MS = 30 * 24 * 60 * 60_000;
 
+/**
+ * Bump whenever the cached SHAPE gains something callers read.
+ *
+ * The TTL alone cannot do this job: entries are held for 30 days and treated as
+ * fresh, so adding per-printing prices would have served priceless entries for a
+ * month with no way to tell them apart from complete ones. A version mismatch
+ * makes them stale immediately.
+ *
+ * v2 — printings carry a `price`.
+ */
+export const PRINTINGS_CACHE_VERSION = 2;
+
 interface CacheEntry {
   at: number;
+  /** Absent on v1 entries written before this existed. */
+  v?: number;
   value: SetPrintings;
 }
 
@@ -48,6 +62,8 @@ export class PrintingsStore {
     try {
       const parsed = JSON.parse(readFileSync(path, "utf8")) as CacheEntry;
       if (!parsed?.value?.byNumber) return null;
+      // An older shape is not a usable cache, however recently it was written.
+      if (parsed.v !== PRINTINGS_CACHE_VERSION) return null;
       this.memory.set(setId, parsed);
       return parsed;
     } catch {
@@ -89,7 +105,7 @@ export class PrintingsStore {
       .getSetPrintings(setId, setName)
       .then((value) => {
         if (value && Object.keys(value.byNumber).length > 0) {
-          this.write(setId, { at: Date.now(), value });
+          this.write(setId, { at: Date.now(), v: PRINTINGS_CACHE_VERSION, value });
         }
         return value;
       })

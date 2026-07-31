@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { lazy, Suspense, useMemo, useRef } from "react";
 import type { CollectFinish } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
@@ -9,10 +9,15 @@ import { useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
+import { useIsWeb } from "../../app/contexts.tsx";
 import { SetProgressRow } from "./SetProgressRow.tsx";
 import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { useTextEntry } from "../../app/TextEntryProvider.tsx";
 import { syncLine } from "./syncLine.ts";
+
+const ValuePanel = lazy(() =>
+  import("../../web/collection/ValuePanel.tsx").then((m) => ({ default: m.ValuePanel })),
+);
 
 interface SetProgress {
   setId: string;
@@ -42,6 +47,7 @@ export function CollectionScreen() {
   } = useLibrary();
   const { provider: textProvider } = useTextEntry();
   const enabled = useScreenInputEnabled();
+  const isWeb = useIsWeb();
   /**
    * Only used to put names and totals on rows. The collection itself is local,
    * so this screen must never block on it — gating the UI on this query left
@@ -133,6 +139,17 @@ export function CollectionScreen() {
         focused={syncFocused}
         onActivate={() => void onSyncSelect()}
       />
+      {/*
+        Web only, and lazy so the glasses never download it. A table of prices
+        needs a scroll and a column of numbers; on a 600x600 additive display
+        every row of chrome costs two rows of list, and the progress list is
+        what that screen is for.
+      */}
+      {isWeb ? (
+        <Suspense fallback={null}>
+          <ValuePanel />
+        </Suspense>
+      ) : null}
       {/* Derived purely from local rows, so this is immediate and offline-safe.
           Set names fall back to their id until the set list arrives. */}
       {rows.length === 0 ? (
