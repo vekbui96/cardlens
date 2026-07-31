@@ -174,6 +174,8 @@ export const FINISH_LABELS: Record<PriceFinishKey, string> = {
 export interface PokemonSet {
   id: string;
   name: string;
+  /** Short set code (PTCGO), e.g. "PBL" — how collectors refer to sets. */
+  code?: string;
   series?: string;
   releaseDate?: string;
   total?: number;

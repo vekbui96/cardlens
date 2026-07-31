@@ -17,6 +17,9 @@ export function toSet(raw: RawSet): PokemonSet {
   return {
     id: raw.id,
     name: raw.name,
+    // Parsed by the schema but previously dropped here, so the set list had no
+    // way to show the code collectors actually use.
+    ...(raw.ptcgoCode ? { code: raw.ptcgoCode } : {}),
     ...(raw.series ? { series: raw.series } : {}),
     ...(raw.releaseDate ? { releaseDate: raw.releaseDate } : {}),
     ...(typeof raw.total === "number" ? { total: raw.total } : {}),

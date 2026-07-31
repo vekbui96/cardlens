@@ -3,15 +3,14 @@ import styles from "./SetRow.module.css";
 
 export function SetRow({ set }: { set: PokemonSet }) {
   const year = set.releaseDate ? set.releaseDate.slice(0, 4) : "";
+  // Code first: it is the short handle a collector recognises, and it is the
+  // one part of the line that never gets truncated on a narrow row.
+  const meta = [set.code, set.series, year].filter(Boolean).join(" · ");
   return (
     <div className={styles.row}>
       <div className={styles.info}>
         <div className={styles.name}>{set.name}</div>
-        <div className={styles.meta}>
-          {set.series ? `${set.series}` : ""}
-          {set.series && year ? " · " : ""}
-          {year}
-        </div>
+        <div className={styles.meta}>{meta}</div>
       </div>
       {typeof set.total === "number" ? <div className={styles.total}>{set.total} cards</div> : null}
     </div>
