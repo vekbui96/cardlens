@@ -9,11 +9,14 @@ import styles from "./CardRow.module.css";
 export function CardRow({
   card,
   ownedFinishes,
+  availableFinishes: printingsForCard,
   showFinishes = false,
   highlightFinish,
 }: {
   card: PokemonCardSummary;
   ownedFinishes?: CollectFinish[];
+  /** Real printings when the caller has them; otherwise derived from pricing. */
+  availableFinishes?: CollectFinish[];
   /** Show the printing badges: filled = held, outlined = still missing. */
   showFinishes?: boolean;
   /** The printing a pinch would mark — outlined so the target is never a guess. */
@@ -26,7 +29,9 @@ export function CardRow({
   // that has none was noise, so the outline appears only where the printing is
   // genuinely applicable.
   const finishes = showFinishes
-    ? Array.from(new Set([...availableFinishes(card.variants), ...held])).sort(compareFinishes)
+    ? Array.from(new Set([...(printingsForCard ?? availableFinishes(card.variants)), ...held])).sort(
+        compareFinishes,
+      )
     : [];
   // A lone "N" badge on a card that only exists as one printing is noise, so
   // badges appear once there is genuinely something to compare or track.

@@ -1,4 +1,5 @@
 import type { CardPriceResult, PokemonCardDetails, PokemonCardSummary, PokemonSet } from "../models/cards.ts";
+import type { SetPrintings } from "../integrations/tcgdex/client.ts";
 import { CARD_TTL_MS, DAY, MINUTE, PRICE_TTL_MS, TtlCache } from "./cache.ts";
 import { MAX_RECENTLY_VIEWED } from "./repositories.ts";
 
@@ -30,3 +31,11 @@ export const setCardsCache = new TtlCache<PokemonCardSummary[]>(
   SEARCH_TTL_MS,
   30,
 );
+
+/**
+ * Printings per set, from TCGdex. Held for 30 days and kept for only a handful
+ * of sets: assembling one costs a request per card (120-295), so this is the
+ * difference between a 1.5s background fill and doing it on every visit.
+ * Printings for a released set essentially never change.
+ */
+export const printingsCache = new TtlCache<SetPrintings>("cache:printings:v1", 30 * DAY, 8);

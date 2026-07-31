@@ -13,6 +13,7 @@ import { compareFinishes, finishLabel } from "../../models/finishes.ts";
 import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
+import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
@@ -42,10 +43,25 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
 
   const { data: allCards } = useSetCards(setId);
-  const masterTotal = useMemo(
-    () => allCards?.reduce((sum, c) => sum + availableFinishes(c.variants).length, 0),
-    [allCards],
-  );
+  /**
+   * Real printings from TCGdex — only fetched while collecting, because it
+   * costs one request per card. pokemontcg.io cannot answer this at all for
+   * some sets (Pitch Black returns no variant data whatsoever).
+   */
+  const { index: printings } = useSetPrintings(setId, setName, collectMode);
+
+  const masterTotal = useMemo(() => {
+    if (printings) return printings.packTotal;
+    // Fallback: what the pricing payload implies. Undercounts badly — it knows
+    // nothing about pattern reverses.
+    return allCards?.reduce((sum, c) => sum + availableFinishes(c.variants).length, 0);
+  }, [printings, allCards]);
+
+  /** The printings a given card exists in, preferring real data. */
+  const finishesFor = useMemo(() => {
+    return (collectorNumber: string, variants: Parameters<typeof availableFinishes>[0]) =>
+      printings?.byNumber[collectorNumber] ?? availableFinishes(variants);
+  }, [printings]);
 
   /**
    * Finishes offered for marking: only the ones this set actually has, plus any
@@ -59,11 +75,15 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
    */
   const finishChoices = useMemo<CollectFinish[]>(() => {
     const inSet = new Set<CollectFinish>();
-    for (const card of allCards ?? []) for (const f of availableFinishes(card.variants)) inSet.add(f);
+    for (const f of printings?.all ?? []) inSet.add(f);
+    if (inSet.size === 0) {
+      for (const card of allCards ?? []) for (const f of availableFinishes(card.variants)) inSet.add(f);
+    }
+    // Anything already held stays selectable even if the set data omits it.
     for (const card of allCards ?? []) for (const f of ownedFinishes(card.id)) inSet.add(f);
     const choices = [...inSet].sort(compareFinishes);
     return choices.length > 0 ? choices : ["normal"];
-  }, [allCards, ownedFinishes]);
+  }, [printings, allCards, ownedFinishes]);
 
   const activeFinish = finishChoices[finishIndex % finishChoices.length] ?? "normal";
 
@@ -188,6 +208,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
             <CardRow
               card={card}
               ownedFinishes={ownedFinishes(card.id)}
+              availableFinishes={finishesFor(card.collectorNumber, card.variants)}
               showFinishes
               {...(collectMode ? { highlightFinish: activeFinish } : {})}
             />
