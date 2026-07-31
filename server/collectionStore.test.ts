@@ -61,6 +61,13 @@ describe("parseRow", () => {
     expect(parseRow({ ...row(), at: 1, deletedAt: Infinity })).toBeNull();
   });
 
+  it("canonicalises a legacy finish so it cannot become a second row", () => {
+    // The client migrated holofoil -> holo; if the server kept the old key,
+    // one printing would exist twice across the sync boundary.
+    expect(parseRow({ ...row(), finish: "holofoil" })?.finish).toBe("holo");
+    expect(parseRow({ ...row(), finish: "pokeBall" })?.finish).toBe("reverse:pokeball");
+  });
+
   it("accepts a foil it has never heard of", () => {
     // Sets keep inventing foils; an allow-list here would silently drop rows on
     // sync, which looks like nothing happened.

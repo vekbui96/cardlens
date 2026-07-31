@@ -1,5 +1,6 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
+import { canonicalFinish } from "../src/models/finishes.ts";
 import {
   mergePrintings,
   pruneTombstones,
@@ -55,7 +56,11 @@ export function parseRow(value: unknown): OwnedPrinting | null {
   return {
     cardId: v.cardId,
     setId: v.setId,
-    finish: v.finish,
+    // Canonicalised on ingest, matching the client. Without this the store
+    // accumulates "holofoil" AND "holo" as separate OR-Set keys for one
+    // printing, inflating every count on the server side. Applies to rows read
+    // from disk too, so existing legacy rows migrate on load.
+    finish: canonicalFinish(v.finish),
     at: v.at,
     ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
   };
