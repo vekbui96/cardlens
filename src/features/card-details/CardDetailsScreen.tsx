@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PokemonCardSummary } from "../../models/cards.ts";
-import { COLLECT_FINISH_LABELS, availableFinishes } from "../../models/cards.ts";
+import { ALL_COLLECT_FINISHES, COLLECT_FINISH_LABELS, availableFinishes } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { PriceBlock } from "../../components/PriceBlock.tsx";
@@ -47,9 +47,16 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   }, [cardId, Boolean(header)]);
 
   const actions = useMemo<Action[]>(() => {
-    // One row per printing this card actually exists in — that is the unit a
-    // master set is counted in, so each gets its own toggle.
-    const list: Action[] = availableFinishes(header?.variants).map((finish) => ({
+    // Printings the pricing data implies come first, then every other finish a
+    // collector might hold. Poké Ball and Master Ball patterns never appear in
+    // the payload (verified across eight sets), so without the second group
+    // they would be untrackable — but they stay below the suggested ones so the
+    // common case is still the first thing under the thumb.
+    const suggested = availableFinishes(header?.variants);
+    const rest = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && held.includes(f));
+    const extra = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && !held.includes(f));
+
+    const list: Action[] = [...suggested, ...rest, ...extra].map((finish) => ({
       key: `own-${finish}`,
       label: `${held.includes(finish) ? "✓" : "＋"} ${COLLECT_FINISH_LABELS[finish]}`,
       onSelect: () => toggleOwned(cardId, finish),

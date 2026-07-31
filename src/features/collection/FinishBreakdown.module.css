@@ -1,0 +1,28 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.badge {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--cl-surface);
+  border: 1px solid var(--cl-fg-dim);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cl-fg-muted);
+}
+
+.count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cl-fg);
+}

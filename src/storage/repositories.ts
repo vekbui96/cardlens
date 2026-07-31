@@ -49,6 +49,33 @@ export interface OwnedCard {
   at: number;
 }
 
+/**
+ * Per-device sync configuration.
+ *
+ * The token lives here, in localStorage, and NOT in a VITE_ build variable:
+ * this app ships as a static bundle on GitHub Pages, so anything baked in at
+ * build time is readable by anyone who views source. It is entered once per
+ * device instead (companion phone, or the on-glasses picker).
+ *
+ * Watermarks are split because they measure different clocks. `lastPushedAt`
+ * is local time — it selects local rows to send. `lastPulledAt` is the
+ * server's own timestamp, echoed back, so device clock skew cannot cause a
+ * device to skip rows it has never seen.
+ */
+export interface SyncSettings {
+  token: string;
+  lastPushedAt: number;
+  lastPulledAt: number;
+  lastSyncAt: number;
+}
+
+export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  token: "",
+  lastPushedAt: 0,
+  lastPulledAt: 0,
+  lastSyncAt: 0,
+};
+
 export interface Preferences {
   /** Price cache lifetime in minutes (clamped 15–60). */
   priceTtlMinutes: number;
@@ -294,6 +321,28 @@ export class Repositories {
       counts[card.setId] = (counts[card.setId] ?? 0) + card.finishes.length;
     }
     return counts;
+  }
+
+  // --- Sync settings --------------------------------------------------------
+  getSyncSettings(): SyncSettings {
+    const stored = this.store.read<Partial<SyncSettings>>(
+      "sync-settings",
+      (v): v is Partial<SyncSettings> => typeof v === "object" && v !== null,
+      {},
+    );
+    return { ...DEFAULT_SYNC_SETTINGS, ...stored };
+  }
+
+  setSyncSettings(patch: Partial<SyncSettings>): SyncSettings {
+    const next = { ...this.getSyncSettings(), ...patch };
+    this.store.write("sync-settings", next);
+    return next;
+  }
+
+  /** Forget the token and every watermark — the "disconnect this device" path. */
+  clearSync(): SyncSettings {
+    this.store.write("sync-settings", DEFAULT_SYNC_SETTINGS);
+    return DEFAULT_SYNC_SETTINGS;
   }
 
   // --- Preferences ----------------------------------------------------------

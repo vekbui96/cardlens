@@ -39,12 +39,25 @@ export interface CardVariants {
  * printing of a card, not just the card — so the collection is keyed by
  * (card, finish), and these are the finish half of that key.
  *
- * Deliberately the four `CardVariants` keys rather than the five pricing
- * finishes: TCGplayer splits 1st Edition into holo and non-holo price points,
- * but a card is only ever one of those, so collapsing them avoids offering a
- * choice that can't apply.
+ * IMPORTANT: this list is deliberately WIDER than what the data source can
+ * tell us. Surveyed across eight sets, pokemontcg.io's tcgplayer payload only
+ * ever exposes `normal`, `holofoil` and `reverseHolofoil` — Prismatic
+ * Evolutions and 151 report exactly those three despite really having Poké Ball
+ * and Master Ball patterns, and Base Set reports only `holofoil` despite 1st
+ * Edition and Shadowless printings existing.
+ *
+ * Restricting collectors to what the API knows would make those printings
+ * untrackable, so the extras are marked by hand. See availableFinishes (what
+ * the data implies) versus ALL_COLLECT_FINISHES (what a person may record).
  */
-export type CollectFinish = "normal" | "holofoil" | "reverseHolofoil" | "firstEdition";
+export type CollectFinish =
+  | "normal"
+  | "holofoil"
+  | "reverseHolofoil"
+  | "pokeBall"
+  | "masterBall"
+  | "firstEdition"
+  | "shadowless";
 
 /** Priority order: the plainest printing first, specials after. */
 export const COLLECT_FINISHES: readonly CollectFinish[] = [
@@ -54,11 +67,25 @@ export const COLLECT_FINISHES: readonly CollectFinish[] = [
   "firstEdition",
 ];
 
+/** Everything a person can mark by hand, including what pricing never reveals. */
+export const ALL_COLLECT_FINISHES: readonly CollectFinish[] = [
+  "normal",
+  "holofoil",
+  "reverseHolofoil",
+  "pokeBall",
+  "masterBall",
+  "firstEdition",
+  "shadowless",
+];
+
 export const COLLECT_FINISH_LABELS: Record<CollectFinish, string> = {
   normal: "Normal",
   holofoil: "Holofoil",
   reverseHolofoil: "Reverse Holo",
+  pokeBall: "Poké Ball pattern",
+  masterBall: "Master Ball pattern",
   firstEdition: "1st Edition",
+  shadowless: "Shadowless",
 };
 
 /** Compact badges for list rows, where the full labels never fit. */
@@ -66,16 +93,23 @@ export const COLLECT_FINISH_SHORT: Record<CollectFinish, string> = {
   normal: "N",
   holofoil: "H",
   reverseHolofoil: "RH",
+  pokeBall: "PB",
+  masterBall: "MB",
   firstEdition: "1st",
+  shadowless: "SL",
 };
 
 /**
- * Which finishes a card actually exists in. Falls back to `normal` when the
- * pricing payload revealed nothing — better to let someone track a card as a
- * single printing than to show it as untrackable.
+ * Which finishes the pricing payload implies a card exists in. This is the
+ * master-set DENOMINATOR — it can only count what it can enumerate, so
+ * hand-marked extras like Poké Ball pattern are owned printings that no total
+ * accounts for.
+ *
+ * Falls back to `normal` when the payload revealed nothing: better to let
+ * someone track a card as a single printing than to show it as untrackable.
  */
 export function availableFinishes(variants?: CardVariants): CollectFinish[] {
-  const found = COLLECT_FINISHES.filter((f) => variants?.[f]);
+  const found = COLLECT_FINISHES.filter((f) => variants?.[f as keyof CardVariants]);
   return found.length > 0 ? found : ["normal"];
 }
 

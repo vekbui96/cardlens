@@ -24,7 +24,17 @@ import {
 /** Rejects absurd payloads on a publicly reachable endpoint. */
 export const MAX_ROWS_PER_REQUEST = 50_000;
 
-const VALID_FINISHES = new Set(["normal", "holofoil", "reverseHolofoil", "firstEdition"]);
+// Kept in step with ALL_COLLECT_FINISHES: a finish the client can mark but the
+// server rejects would silently drop rows on sync.
+const VALID_FINISHES = new Set([
+  "normal",
+  "holofoil",
+  "reverseHolofoil",
+  "pokeBall",
+  "masterBall",
+  "firstEdition",
+  "shadowless",
+]);
 
 /**
  * Validate an untrusted row. The endpoint is on the public internet, so a

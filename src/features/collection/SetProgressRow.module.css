@@ -51,6 +51,14 @@
   background: var(--cl-price);
 }
 
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+  flex-wrap: wrap;
+}
+
 .percent {
   font-size: 15px;
   color: var(--cl-fg-dim);

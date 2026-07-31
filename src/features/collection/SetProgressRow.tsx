@@ -1,3 +1,5 @@
+import type { CollectFinish } from "../../models/cards.ts";
+import { FinishBreakdown } from "./FinishBreakdown.tsx";
 import styles from "./SetProgressRow.module.css";
 
 /** One set's completion: name, owned/total, and a bar. */
@@ -5,12 +7,14 @@ export function SetProgressRow({
   name,
   owned,
   printings,
+  finishes,
   total,
   ratio,
 }: {
   name: string;
   owned: number;
   printings: number;
+  finishes: Partial<Record<CollectFinish, number>>;
   total?: number;
   ratio?: number;
 }) {
@@ -34,12 +38,15 @@ export function SetProgressRow({
           style={{ width: `${percent ?? 0}%` }}
         />
       </div>
-      <span className={styles.percent}>
-        {percent === undefined ? "" : `${percent}%`}
-        {/* Only worth showing once it diverges from the card count — otherwise
-            it is the same number twice. */}
-        {printings > owned ? `${percent === undefined ? "" : " · "}${printings} printings` : ""}
-      </span>
+      <div className={styles.footer}>
+        <span className={styles.percent}>
+          {percent === undefined ? "" : `${percent}%`}
+          {/* Only worth showing once it diverges from the card count — otherwise
+              it is the same number twice. */}
+          {printings > owned ? `${percent === undefined ? "" : " · "}${printings} printings` : ""}
+        </span>
+        <FinishBreakdown counts={finishes} />
+      </div>
     </div>
   );
 }
