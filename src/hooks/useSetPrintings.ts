@@ -55,8 +55,13 @@ export function useSetPrintings(setId: string, setName: string, enabled = true) 
   });
 
   useEffect(() => {
-    if (query.isSuccess && query.data && Object.keys(query.data.byNumber).length > 0) {
-      printingsCache.set(setId, query.data);
+    // Guard the shape rather than assuming it. The response is untyped JSON from
+    // a server that has been out of step with the client before, and reaching
+    // into a missing `byNumber` here took the whole screen down rather than
+    // degrading to "no printings", which is a state everything else handles.
+    const byNumber = query.data?.byNumber;
+    if (query.isSuccess && byNumber && Object.keys(byNumber).length > 0) {
+      printingsCache.set(setId, query.data as SetPrintings);
     }
   }, [setId, query.isSuccess, query.data]);
 

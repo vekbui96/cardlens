@@ -1,0 +1,133 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/*
+ * Anchored to the bottom: on a phone the top of the screen is the hardest place
+ * to reach one-handed, and marking printings is a repetitive thumb action.
+ */
+.sheet {
+  width: 100%;
+  max-width: 760px;
+  max-height: 85dvh;
+  overflow-y: auto;
+  background: var(--cl-surface);
+  border-radius: var(--cl-radius) var(--cl-radius) 0 0;
+  padding: var(--cl-gap-sm) var(--cl-gap) calc(var(--cl-gap-lg) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap);
+}
+
+.sheet:focus {
+  outline: none;
+}
+
+.grabber {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-fg-dim);
+  margin: var(--cl-gap-xs) auto var(--cl-gap-sm);
+}
+
+.head {
+  display: flex;
+  gap: var(--cl-gap);
+  align-items: flex-start;
+}
+
+.headText {
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: var(--cl-fs-heading);
+  color: var(--cl-fg);
+}
+
+.meta {
+  margin: var(--cl-gap-xs) 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.price {
+  margin: var(--cl-gap-xs) 0 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-price);
+}
+
+.printings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.printing {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap);
+  padding: 0 var(--cl-gap);
+  border-radius: var(--cl-radius);
+  border: 2px solid var(--cl-surface-raised);
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg-muted);
+  font-size: var(--cl-fs-body);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.held {
+  border-color: var(--cl-accent);
+  color: var(--cl-fg);
+}
+
+/* A printing the set data does not list but the user holds anyway. */
+.extra {
+  border-style: dashed;
+}
+
+.box {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  border: 2px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cl-accent);
+  font-size: var(--cl-fs-small);
+}
+
+.printingLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  min-height: 52px;
+  border-radius: var(--cl-radius);
+  border: none;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font-size: var(--cl-fs-body);
+  font-family: inherit;
+  cursor: pointer;
+}

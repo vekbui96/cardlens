@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useNavigation } from "./NavigationProvider.tsx";
+import { useIsWeb } from "./contexts.tsx";
 import { HomeScreen } from "../features/home/HomeScreen.tsx";
 import { LoadingState } from "../components/States.tsx";
 import { Screen } from "../components/Screen.tsx";
@@ -26,12 +27,23 @@ const SetsScreen = lazy(() =>
 const SetCardsScreen = lazy(() =>
   import("../features/sets/SetCardsScreen.tsx").then((m) => ({ default: m.SetCardsScreen })),
 );
+/**
+ * The first screen where the two shells genuinely diverge rather than differing
+ * by a flag: a focus-ring list of text rows on the glasses, a tappable grid of
+ * card art on a phone. Lazy and separate, so neither shell ships the other's
+ * screen. Everything else is still shared and should stay that way until web
+ * actually outgrows it.
+ */
+const WebSetCardsScreen = lazy(() =>
+  import("../web/sets/WebSetCardsScreen.tsx").then((m) => ({ default: m.WebSetCardsScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
 
 export function ScreenRouter() {
   const { screen } = useNavigation();
+  const isWeb = useIsWeb();
 
   return (
     <Suspense
@@ -41,12 +53,12 @@ export function ScreenRouter() {
         </Screen>
       }
     >
-      {renderScreen(screen)}
+      {renderScreen(screen, isWeb)}
     </Suspense>
   );
 }
 
-function renderScreen(screen: ReturnType<typeof useNavigation>["screen"]) {
+function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb: boolean) {
   switch (screen.name) {
     case "home":
       return <HomeScreen />;
@@ -65,7 +77,11 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"]) {
     case "sets":
       return <SetsScreen />;
     case "set":
-      return <SetCardsScreen setId={screen.setId} setName={screen.setName} />;
+      return isWeb ? (
+        <WebSetCardsScreen setId={screen.setId} setName={screen.setName} />
+      ) : (
+        <SetCardsScreen setId={screen.setId} setName={screen.setName} />
+      );
     case "collection":
       return <CollectionScreen />;
     default:

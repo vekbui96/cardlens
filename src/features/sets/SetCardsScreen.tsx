@@ -7,19 +7,12 @@ import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RarityBar } from "../results/RarityBar.tsx";
 import { FinishBar } from "./FinishBar.tsx";
-import { filterByRarity, rarityFilterAt } from "../results/rarityFilters.ts";
-import {
-  availableFinishes,
-  knownFinishes,
-  type CardVariants,
-  type CollectFinish,
-} from "../../models/cards.ts";
+import { rarityFilterAt } from "../results/rarityFilters.ts";
+import { availableFinishes, type CollectFinish } from "../../models/cards.ts";
 import { compareFinishes, finishLabel, finishToMark } from "../../models/finishes.ts";
-import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
-import { useSetCards, useSets } from "../../hooks/useSets.ts";
-import { useSetInformation } from "../../hooks/useSetInformation.ts";
-import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
+import { useSets } from "../../hooks/useSets.ts";
+import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
@@ -61,81 +54,25 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
   const rarity = rarityFilterAt(rarityIndex);
 
-  /**
-   * One request for the whole screen: every card in the set plus its printings.
-   * The rarity filter then becomes a local operation on data already in hand.
-   */
-  const info = useSetInformation(setId, setName);
-  /**
-   * The path this screen used before that endpoint existed, held in reserve.
-   *
-   * Not optional: the server it aggregates on is a home machine that spends days
-   * at a time powered off, and the catalog provider still degrades to the public
-   * API on its own. Losing the set list with the server would be a worse failure
-   * than the round trips this removes.
-   */
-  const viaCatalog = info.isUnavailable;
-  const fallback = useSetCards(setId, rarity.rarities ?? undefined, { enabled: viaCatalog });
-  const fallbackAll = useSetCards(setId, undefined, { enabled: viaCatalog });
+  // Printings cost a request per card on the fallback path, so the glasses only
+  // ask for them once collect mode is open. On the aggregate path they arrive
+  // with the cards regardless and this flag costs nothing.
+  const {
+    cards,
+    allCards,
+    printings,
+    masterTotal,
+    knownFinishesFor,
+    finishesFor,
+    isLoading,
+    isError,
+    refetch,
+  } = useSetView(setId, setName, { rarities: rarity.rarities, wantPrintings: collectMode });
 
   const { data: sets } = useSets();
   const setTotal = sets?.find((s) => s.id === setId)?.total;
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
-
-  const allCards = info.cards ?? fallbackAll.data;
-  /**
-   * Real printings from TCGdex. They ride along with the aggregate response, so
-   * this only fires when that could not supply them — on its own it costs one
-   * request per card, hence the collect-mode gate. pokemontcg.io cannot answer
-   * this at all for some sets (Pitch Black returns no variant data whatsoever).
-   */
-  const { index: fallbackPrintings } = useSetPrintings(setId, setName, collectMode && !info.printings);
-  const printings = info.printings ?? fallbackPrintings;
-
-  const visible = useMemo(
-    () => (info.cards ? filterByRarity(info.cards, rarity.rarities) : fallback.data),
-    [info.cards, fallback.data, rarity.rarities],
-  );
-
-  const isLoading = viaCatalog ? fallback.isLoading : info.isLoading;
-  // Only the fallback can put the screen in an error state — an aggregate
-  // failure is not an error, it is the reason the fallback is running.
-  const isError = viaCatalog && fallback.isError;
-  const refetch = () => {
-    if (viaCatalog) void fallback.refetch();
-    else info.refetch();
-  };
-
-  const masterTotal = useMemo(() => {
-    if (printings) return printings.packTotal;
-    // Fallback: what the pricing payload implies. Undercounts badly — it knows
-    // nothing about pattern reverses.
-    return allCards?.reduce((sum, c) => sum + availableFinishes(c.variants).length, 0);
-  }, [printings, allCards]);
-
-  /**
-   * The printings a card is KNOWN to have, or null when nothing vouches for it.
-   *
-   * Real TCGdex printings first, then what pricing implies, then nothing. The
-   * third case is not hypothetical: on the fallback path printings are fetched
-   * separately and only once collect mode opens, so there is a window — seconds,
-   * or minutes if it is fetching 120 cards direct from TCGdex — where a Pitch
-   * Black card looks normal-only because pricing reports nothing for that set.
-   */
-  const knownFinishesFor = useMemo(() => {
-    return (collectorNumber: string, variants?: CardVariants) => {
-      const real = printings?.byNumber[collectorNumber];
-      if (real && real.length > 0) return real;
-      return knownFinishes(variants);
-    };
-  }, [printings]);
-
-  /** The printings to DISPLAY for a card — padded, so a row always shows something. */
-  const finishesFor = useMemo(() => {
-    return (collectorNumber: string, variants?: CardVariants) =>
-      knownFinishesFor(collectorNumber, variants) ?? availableFinishes(variants);
-  }, [knownFinishesFor]);
 
   /**
    * Finishes offered for marking: only the ones this set actually has, plus any
@@ -160,10 +97,6 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   }, [printings, allCards, ownedFinishes]);
 
   const activeFinish = finishChoices[finishIndex % finishChoices.length] ?? "normal";
-
-  // Always binder order: a set is worked through by number. Value ordering is
-  // a browsing concern and lives on the search results screen.
-  const cards = useMemo(() => [...(visible ?? [])].sort(byCollectorNumber), [visible]);
 
   const phase: "loading" | "error" | "empty" | "list" = isLoading
     ? "loading"
