@@ -65,6 +65,114 @@ describe("favorites", () => {
   });
 });
 
+describe("collection", () => {
+  it("adds, detects, and removes", () => {
+    const r = repo();
+    r.addOwned("base1-4");
+    expect(r.isOwned("base1-4")).toBe(true);
+    r.removeOwned("base1-4");
+    expect(r.isOwned("base1-4")).toBe(false);
+  });
+
+  it("ignores duplicate finishes so re-marking a card is a no-op", () => {
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "holofoil");
+    expect(r.getCollection()).toHaveLength(1);
+    expect(r.ownedFinishes("base1-4")).toEqual(["holofoil"]);
+  });
+
+  it("accumulates finishes on one card entry", () => {
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "reverseHolofoil");
+    expect(r.getCollection()).toHaveLength(1);
+    expect(r.ownedFinishes("base1-4")).toEqual(["holofoil", "reverseHolofoil"]);
+  });
+
+  it("toggles a single finish both ways", () => {
+    const r = repo();
+    r.toggleOwned("base1-4", "holofoil");
+    expect(r.isOwnedFinish("base1-4", "holofoil")).toBe(true);
+    r.toggleOwned("base1-4", "holofoil");
+    expect(r.isOwnedFinish("base1-4", "holofoil")).toBe(false);
+  });
+
+  it("keeps the card when only one of several finishes is removed", () => {
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "reverseHolofoil");
+    r.removeOwned("base1-4", "holofoil");
+    expect(r.isOwned("base1-4")).toBe(true);
+    expect(r.ownedFinishes("base1-4")).toEqual(["reverseHolofoil"]);
+  });
+
+  it("drops the card once its last finish is removed", () => {
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.removeOwned("base1-4", "holofoil");
+    expect(r.isOwned("base1-4")).toBe(false);
+    expect(r.getCollection()).toHaveLength(0);
+  });
+
+  it("removes every finish when no finish is given", () => {
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "reverseHolofoil");
+    r.removeOwned("base1-4");
+    expect(r.getCollection()).toHaveLength(0);
+  });
+
+  it("derives the set id from the card id when not given one", () => {
+    const r = repo();
+    r.addOwned("swsh45sv-SV001");
+    expect(r.getCollection()[0]?.setId).toBe("swsh45sv");
+  });
+
+  it("prefers an explicit set id over the derived one", () => {
+    const r = repo();
+    r.addOwned("weirdcard", "normal", "promo-set");
+    expect(r.getCollection()[0]?.setId).toBe("promo-set");
+  });
+
+  it("counts distinct cards per set", () => {
+    const r = repo();
+    r.addOwned("base1-1");
+    r.addOwned("base1-2", "holofoil");
+    r.addOwned("base1-2", "reverseHolofoil");
+    r.addOwned("swsh1-3");
+    expect(r.getOwnedCountsBySet()).toEqual({ base1: 2, swsh1: 1 });
+  });
+
+  it("counts printings per set separately from cards", () => {
+    const r = repo();
+    r.addOwned("base1-2", "holofoil");
+    r.addOwned("base1-2", "reverseHolofoil");
+    r.addOwned("base1-3", "normal");
+    expect(r.getOwnedFinishCountsBySet()).toEqual({ base1: 3 });
+    expect(r.getOwnedCountsBySet()).toEqual({ base1: 2 });
+  });
+
+  it("keeps insertion order so the record reads oldest-first", () => {
+    const r = repo();
+    r.addOwned("base1-1");
+    r.addOwned("base1-2");
+    expect(r.getCollection().map((c) => c.id)).toEqual(["base1-1", "base1-2"]);
+  });
+
+  it("reads pre-variant entries as a single normal printing", () => {
+    const store = new VersionedStore(createMemoryStorage());
+    store.write("collection", [{ id: "base1-4", setId: "base1", at: 1 }]);
+    expect(new Repositories(store).ownedFinishes("base1-4")).toEqual(["normal"]);
+  });
+
+  it("survives corrupt stored data", () => {
+    const store = new VersionedStore(createMemoryStorage());
+    store.write("collection", [{ nope: true }]);
+    expect(new Repositories(store).getCollection()).toEqual([]);
+  });
+});
+
 describe("preferences", () => {
   it("clamps price TTL to 15–60 minutes", () => {
     const r = repo();

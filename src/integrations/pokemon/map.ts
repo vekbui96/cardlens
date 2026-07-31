@@ -3,6 +3,16 @@ import type { RankableCard } from "../../services/search/rank.ts";
 import { normalizeTcgplayerPricing } from "../pricing/normalize.ts";
 import type { RawCard, RawSet } from "./schema.ts";
 
+function variantsFromPrices(raw: RawCard): CardVariants {
+  const keys = Object.keys(raw.tcgplayer?.prices ?? {});
+  return {
+    normal: keys.includes("normal") || keys.includes("unlimited"),
+    holofoil: keys.includes("holofoil"),
+    reverseHolofoil: keys.includes("reverseHolofoil"),
+    firstEdition: keys.some((k) => k.startsWith("1stEdition")),
+  };
+}
+
 export function toSet(raw: RawSet): PokemonSet {
   return {
     id: raw.id,
@@ -17,6 +27,8 @@ export function toSet(raw: RawSet): PokemonSet {
 
 export function toSummary(raw: RawCard): PokemonCardSummary {
   const market = normalizeTcgplayerPricing(raw.tcgplayer).marketPrice;
+  const variants = variantsFromPrices(raw);
+  const hasVariants = Object.values(variants).some(Boolean);
   return {
     id: raw.id,
     name: raw.name,
@@ -27,6 +39,9 @@ export function toSummary(raw: RawCard): PokemonCardSummary {
     ...(raw.images?.small ? { imageSmall: raw.images.small } : {}),
     ...(raw.images?.large ? { imageLarge: raw.images.large } : {}),
     ...(typeof market === "number" ? { marketPrice: market } : {}),
+    // Omitted entirely when the payload revealed no finishes, so consumers can
+    // tell "no pricing data" apart from "exists only as normal".
+    ...(hasVariants ? { variants } : {}),
   };
 }
 
@@ -35,16 +50,6 @@ export function toRankable(raw: RawCard): RankableCard {
     ...toSummary(raw),
     ...(raw.set.releaseDate ? { releaseDate: raw.set.releaseDate } : {}),
     ...(raw.nationalPokedexNumbers ? { nationalPokedexNumbers: raw.nationalPokedexNumbers } : {}),
-  };
-}
-
-function variantsFromPrices(raw: RawCard): CardVariants {
-  const keys = Object.keys(raw.tcgplayer?.prices ?? {});
-  return {
-    normal: keys.includes("normal") || keys.includes("unlimited"),
-    holofoil: keys.includes("holofoil"),
-    reverseHolofoil: keys.includes("reverseHolofoil"),
-    firstEdition: keys.some((k) => k.startsWith("1stEdition")),
   };
 }
 

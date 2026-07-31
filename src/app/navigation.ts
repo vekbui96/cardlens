@@ -9,7 +9,8 @@ export type Screen =
   | { name: "recent" }
   | { name: "popular" }
   | { name: "sets" }
-  | { name: "set"; setId: string; setName: string };
+  | { name: "set"; setId: string; setName: string }
+  | { name: "collection" };
 
 export type ScreenName = Screen["name"];
 

@@ -26,6 +26,9 @@ const SetsScreen = lazy(() =>
 const SetCardsScreen = lazy(() =>
   import("../features/sets/SetCardsScreen.tsx").then((m) => ({ default: m.SetCardsScreen })),
 );
+const CollectionScreen = lazy(() =>
+  import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
+);
 
 export function ScreenRouter() {
   const { screen } = useNavigation();
@@ -63,6 +66,8 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"]) {
       return <SetsScreen />;
     case "set":
       return <SetCardsScreen setId={screen.setId} setName={screen.setName} />;
+    case "collection":
+      return <CollectionScreen />;
     default:
       return <HomeScreen />;
   }

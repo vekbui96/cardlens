@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PokemonCardSummary } from "../../models/cards.ts";
+import { COLLECT_FINISH_LABELS, availableFinishes } from "../../models/cards.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { PriceBlock } from "../../components/PriceBlock.tsx";
@@ -27,7 +28,7 @@ interface Action {
 
 export function CardDetailsScreen({ cardId, summary }: Props) {
   const { pop, openResults } = useNavigation();
-  const { isFavorite, toggleFavorite, addRecentlyViewed } = useLibrary();
+  const { isFavorite, toggleFavorite, ownedFinishes, toggleOwned, addRecentlyViewed } = useLibrary();
   const enabled = useScreenInputEnabled();
   const [viewerOpen, setViewerOpen] = useState(false);
 
@@ -37,6 +38,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   // Prefer freshly-fetched details; fall back to the summary passed in for instant paint.
   const header = card ?? summary;
   const favorited = isFavorite(cardId);
+  const held = ownedFinishes(cardId);
 
   useEffect(() => {
     if (header) addRecentlyViewed(header);
@@ -45,13 +47,18 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   }, [cardId, Boolean(header)]);
 
   const actions = useMemo<Action[]>(() => {
-    const list: Action[] = [
-      {
-        key: "favorite",
-        label: favorited ? "★ Remove favorite" : "☆ Favorite",
-        onSelect: () => header && toggleFavorite(header),
-      },
-    ];
+    // One row per printing this card actually exists in — that is the unit a
+    // master set is counted in, so each gets its own toggle.
+    const list: Action[] = availableFinishes(header?.variants).map((finish) => ({
+      key: `own-${finish}`,
+      label: `${held.includes(finish) ? "✓" : "＋"} ${COLLECT_FINISH_LABELS[finish]}`,
+      onSelect: () => toggleOwned(cardId, finish),
+    }));
+    list.push({
+      key: "favorite",
+      label: favorited ? "★ Remove favorite" : "☆ Favorite",
+      onSelect: () => header && toggleFavorite(header),
+    });
     if (header?.name) {
       list.push({ key: "printings", label: "Other printings", onSelect: () => openResults(header.name) });
     }
@@ -59,7 +66,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
       list.push({ key: "retry", label: "Try again", onSelect: () => prices.refetch() });
     }
     return list;
-  }, [favorited, header, openResults, toggleFavorite, prices]);
+  }, [favorited, held, cardId, header, openResults, toggleFavorite, toggleOwned, prices]);
 
   // Focus ring content: [card image, ...actions]. Selecting the image opens the
   // full-screen viewer.

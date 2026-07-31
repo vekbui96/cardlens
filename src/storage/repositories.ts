@@ -1,11 +1,19 @@
-import type { PokemonCardSummary } from "../models/cards.ts";
+import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
 import type { TradingCardGame } from "../models/games.ts";
+import { setIdFromCardId } from "../utils/cardId.ts";
 import { VersionedStore } from "./versioned.ts";
 
 /** Spec limits. */
 export const MAX_RECENT_SEARCHES = 20;
 export const MAX_RECENTLY_VIEWED = 50;
 export const MAX_FAVORITES = 100;
+/**
+ * Master-setters own thousands of cards, so this cap is far higher than the
+ * others. Entries are deliberately tiny (three short fields) — a full English
+ * collection lands well under 1MB, leaving room inside the ~5MB localStorage
+ * budget shared with the card caches.
+ */
+export const MAX_COLLECTION = 20_000;
 
 export interface RecentSearch {
   query: string;
@@ -19,6 +27,23 @@ export interface FavoriteCard extends PokemonCardSummary {
 
 export interface ViewedCard extends PokemonCardSummary {
   viewedAt: number;
+}
+
+/**
+ * One owned card. Only the id, its set, the finishes held, and when it was
+ * added are stored — the card's name, image and price all come back from the
+ * catalog cache, so keeping a copy here would just be a second source of truth
+ * that goes stale.
+ *
+ * `finishes` is the master-set unit: owning the holo and the reverse holo of
+ * one card is two entries toward a master set but one card toward the base set,
+ * so both numbers are derivable from this shape.
+ */
+export interface OwnedCard {
+  id: string;
+  setId: string;
+  finishes: CollectFinish[];
+  at: number;
 }
 
 export interface Preferences {
@@ -121,6 +146,104 @@ export class Repositories {
 
   toggleFavorite(card: PokemonCardSummary, game: TradingCardGame = "pokemon"): FavoriteCard[] {
     return this.isFavorite(card.id) ? this.removeFavorite(card.id) : this.addFavorite(card, game);
+  }
+
+  // --- Collection (master-set tracking) -------------------------------------
+  getCollection(): OwnedCard[] {
+    const raw = this.store.read<OwnedCard[]>(
+      "collection",
+      (v): v is OwnedCard[] =>
+        isArray(v) &&
+        v.every((x) => {
+          const o = x as OwnedCard;
+          return typeof o?.id === "string" && typeof o?.setId === "string";
+        }),
+      [],
+    );
+    // Entries written before finishes existed carry none; read them as a single
+    // normal printing rather than as owning nothing.
+    return raw.map((c) => ({
+      ...c,
+      finishes: isArray(c.finishes) && c.finishes.length > 0 ? c.finishes : ["normal"],
+    }));
+  }
+
+  isOwned(id: string): boolean {
+    return this.getCollection().some((c) => c.id === id);
+  }
+
+  ownedFinishes(id: string): CollectFinish[] {
+    return this.getCollection().find((c) => c.id === id)?.finishes ?? [];
+  }
+
+  isOwnedFinish(id: string, finish: CollectFinish): boolean {
+    return this.ownedFinishes(id).includes(finish);
+  }
+
+  addOwned(
+    cardId: string,
+    finish: CollectFinish = "normal",
+    setId = setIdFromCardId(cardId),
+    now = Date.now(),
+  ): OwnedCard[] {
+    const current = this.getCollection();
+    const existing = current.find((c) => c.id === cardId);
+    if (existing) {
+      if (existing.finishes.includes(finish)) return current;
+      const next = current.map((c) =>
+        c.id === cardId ? { ...c, finishes: [...c.finishes, finish] } : c,
+      );
+      this.store.write("collection", next);
+      return next;
+    }
+    // Oldest-first ordering: a collection is an accumulating record, not a
+    // recency list, and stable order keeps set grouping cheap.
+    const next = [...current, { id: cardId, setId, finishes: [finish], at: now }].slice(-MAX_COLLECTION);
+    this.store.write("collection", next);
+    return next;
+  }
+
+  /** Removes one finish, or the whole card when `finish` is omitted. */
+  removeOwned(cardId: string, finish?: CollectFinish): OwnedCard[] {
+    const current = this.getCollection();
+    const next =
+      finish === undefined
+        ? current.filter((c) => c.id !== cardId)
+        : current
+            .map((c) => (c.id === cardId ? { ...c, finishes: c.finishes.filter((f) => f !== finish) } : c))
+            // Dropping the last finish drops the card: an entry with no
+            // finishes would count as owned everywhere it is read.
+            .filter((c) => c.finishes.length > 0);
+    this.store.write("collection", next);
+    return next;
+  }
+
+  toggleOwned(
+    cardId: string,
+    finish: CollectFinish = "normal",
+    setId = setIdFromCardId(cardId),
+  ): OwnedCard[] {
+    return this.isOwnedFinish(cardId, finish)
+      ? this.removeOwned(cardId, finish)
+      : this.addOwned(cardId, finish, setId);
+  }
+
+  /** Distinct cards owned per set id — progress against the set's card count. */
+  getOwnedCountsBySet(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const card of this.getCollection()) {
+      counts[card.setId] = (counts[card.setId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /** Printings owned per set id — progress against a master set. */
+  getOwnedFinishCountsBySet(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const card of this.getCollection()) {
+      counts[card.setId] = (counts[card.setId] ?? 0) + card.finishes.length;
+    }
+    return counts;
   }
 
   // --- Preferences ----------------------------------------------------------

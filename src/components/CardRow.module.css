@@ -18,6 +18,11 @@
   text-overflow: ellipsis;
 }
 
+.owned {
+  color: var(--cl-price);
+  font-weight: 800;
+}
+
 .set {
   font-size: var(--cl-fs-small);
   color: var(--cl-fg-muted);
@@ -29,6 +34,29 @@
 .number {
   font-size: 15px;
   color: var(--cl-fg-dim);
+}
+
+.finishes {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* Outlined = a gap in the master set, filled = held. Shape differs as well as
+   colour so the distinction survives the additive display's washed-out dims. */
+.finish {
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--cl-fg-dim);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cl-fg-dim);
+}
+
+.finishHeld {
+  background: var(--cl-price);
+  border-color: var(--cl-price);
+  color: var(--cl-on-accent);
 }
 
 .price {

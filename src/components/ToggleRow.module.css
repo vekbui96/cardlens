@@ -1,0 +1,47 @@
+.row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--cl-surface);
+  border: 2px solid transparent;
+  color: var(--cl-fg);
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Armed but unfocused still has to read as "on" at a glance — the mode changes
+   what a pinch does, so it must never be ambiguous. */
+.on {
+  border-color: var(--cl-price);
+}
+
+.focused {
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  border-color: var(--cl-accent-strong);
+  box-shadow: var(--cl-focus-glow);
+}
+
+.label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cl-fg-dim);
+}
+
+.focused .hint {
+  color: var(--cl-on-accent);
+}

@@ -1,0 +1,57 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+}
+
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 700;
+  color: var(--cl-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.star {
+  color: var(--cl-price);
+}
+
+.count {
+  flex: 0 0 auto;
+  font-size: var(--cl-fs-small);
+  font-weight: 800;
+  color: var(--cl-fg-muted);
+}
+
+/* 8px tall: thinner than this is hard to read on the 600x600 additive display,
+   where thin dim shapes wash out against a bright background. */
+.track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--cl-surface);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--cl-accent);
+}
+
+.fillComplete {
+  background: var(--cl-price);
+}
+
+.percent {
+  font-size: 15px;
+  color: var(--cl-fg-dim);
+}

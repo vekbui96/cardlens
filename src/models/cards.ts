@@ -19,6 +19,12 @@ export interface PokemonCardSummary {
    * the details screen always re-fetches authoritative pricing.
    */
   marketPrice?: number;
+  /**
+   * Which printings exist, derived from the same pricing payload the market
+   * price comes from. Present on summaries so a set list can show and total
+   * variants without a per-card details fetch.
+   */
+  variants?: CardVariants;
 }
 
 export interface CardVariants {
@@ -26,6 +32,56 @@ export interface CardVariants {
   holofoil?: boolean;
   reverseHolofoil?: boolean;
   firstEdition?: boolean;
+}
+
+/**
+ * The finishes a collector tracks separately. A master set means owning each
+ * printing of a card, not just the card — so the collection is keyed by
+ * (card, finish), and these are the finish half of that key.
+ *
+ * Deliberately the four `CardVariants` keys rather than the five pricing
+ * finishes: TCGplayer splits 1st Edition into holo and non-holo price points,
+ * but a card is only ever one of those, so collapsing them avoids offering a
+ * choice that can't apply.
+ */
+export type CollectFinish = "normal" | "holofoil" | "reverseHolofoil" | "firstEdition";
+
+/** Priority order: the plainest printing first, specials after. */
+export const COLLECT_FINISHES: readonly CollectFinish[] = [
+  "normal",
+  "holofoil",
+  "reverseHolofoil",
+  "firstEdition",
+];
+
+export const COLLECT_FINISH_LABELS: Record<CollectFinish, string> = {
+  normal: "Normal",
+  holofoil: "Holofoil",
+  reverseHolofoil: "Reverse Holo",
+  firstEdition: "1st Edition",
+};
+
+/** Compact badges for list rows, where the full labels never fit. */
+export const COLLECT_FINISH_SHORT: Record<CollectFinish, string> = {
+  normal: "N",
+  holofoil: "H",
+  reverseHolofoil: "RH",
+  firstEdition: "1st",
+};
+
+/**
+ * Which finishes a card actually exists in. Falls back to `normal` when the
+ * pricing payload revealed nothing — better to let someone track a card as a
+ * single printing than to show it as untrackable.
+ */
+export function availableFinishes(variants?: CardVariants): CollectFinish[] {
+  const found = COLLECT_FINISHES.filter((f) => variants?.[f]);
+  return found.length > 0 ? found : ["normal"];
+}
+
+/** The finish a single "I own this" gesture should mean for a card. */
+export function primaryFinish(variants?: CardVariants): CollectFinish {
+  return availableFinishes(variants)[0];
 }
 
 export interface PokemonCardDetails extends PokemonCardSummary {

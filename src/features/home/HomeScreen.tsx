@@ -16,7 +16,7 @@ interface HomeItem {
 
 export function HomeScreen() {
   const { push } = useNavigation();
-  const { favorites, recentSearches, recentlyViewed } = useLibrary();
+  const { favorites, recentSearches, recentlyViewed, collection } = useLibrary();
   const { typeSearch } = useSearchAction();
   const enabled = useScreenInputEnabled();
 
@@ -33,6 +33,12 @@ export function HomeScreen() {
       label: "Favorites",
       hint: favorites.length ? `${favorites.length} saved` : "None yet",
       onSelect: () => push({ name: "favorites" }),
+    },
+    {
+      key: "collection",
+      label: "Collection",
+      hint: collection.length ? `${collection.length} cards` : "Track your sets",
+      onSelect: () => push({ name: "collection" }),
     },
     { key: "popular", label: "Popular", hint: "Top Pokémon", onSelect: () => push({ name: "popular" }) },
     { key: "sets", label: "Sets", hint: "Browse by set", onSelect: () => push({ name: "sets" }) },
