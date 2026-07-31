@@ -33,9 +33,17 @@ export function CardRow({
         compareFinishes,
       )
     : [];
-  // A lone "N" badge on a card that only exists as one printing is noise, so
-  // badges appear once there is genuinely something to compare or track.
-  const showBadges = finishes.length > 1 || held.length > 0;
+  /**
+   * A card with a single printing — most ex and full-art cards — gets a generic
+   * marker rather than a labelled one. "H" on a card that only exists as holo
+   * carries no information: there is nothing to choose between, so naming the
+   * printing is noise dressed up as detail.
+   *
+   * Labelled badges appear only where there is genuinely something to compare.
+   */
+  const singlePrinting = finishes.length === 1;
+  const showBadges = showFinishes && finishes.length > 1;
+  const showGeneric = showFinishes && singlePrinting;
 
   return (
     <div className={styles.row}>
@@ -58,6 +66,18 @@ export function CardRow({
           {card.collectorNumber}
           {card.rarity ? ` · ${card.rarity}` : ""}
         </div>
+        {showGeneric ? (
+          <div className={styles.finishes}>
+            <span
+              className={`${styles.finish} ${owned ? styles.finishHeld : ""} ${
+                highlightFinish ? styles.finishTarget : ""
+              }`}
+              aria-label={owned ? "owned" : "not owned"}
+            >
+              {owned ? "✓" : "—"}
+            </span>
+          </div>
+        ) : null}
         {showBadges ? (
           <div className={styles.finishes}>
             {finishes.map((f) => (

@@ -111,7 +111,13 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
   const markCard = (index: number) => {
     const card = cards[index];
-    if (card) toggleOwned(card.id, activeFinish, setId);
+    if (!card) return;
+    const available = finishesFor(card.collectorNumber, card.variants);
+    // A card with one printing marks THAT printing, whatever the picker says.
+    // Otherwise selecting an ex card while "Reverse Holo" is active would
+    // invent a reverse that does not exist.
+    const finish = available.length === 1 ? available[0] : activeFinish;
+    toggleOwned(card.id, finish, setId);
   };
 
   const { backFocused, itemIndex } = useBackableFocus({
