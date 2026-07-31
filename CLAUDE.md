@@ -4,6 +4,8 @@ CardLens — Pokémon card search, pricing and collection tracking for **Meta Ra
 
 Most of what follows was learned the hard way. Where a claim came from measurement, the number is included so it can be re-checked rather than trusted.
 
+**Starting a session?** `docs/handoff.md` says where things stand right now — what is half-built, what is waiting on the user's device, and what not to re-litigate. This file is the durable knowledge; that one is the current state.
+
 ## Commands
 
 - `npm run verify` — **format:check + typecheck + lint + test.** Run this before every commit; CI runs the same set, and `format:check` was once missing here, so script-applied edits passed locally and failed the deploy.
