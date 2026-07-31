@@ -13,6 +13,14 @@ export interface SetPrintingIndex {
   packTotal: number;
   /** Printings excluded as product exclusives, with the card counts that got them excluded. */
   excluded: { finish: Finish; cards: number }[];
+  /**
+   * `<collectorNumber>|<finish>` -> USD market price.
+   *
+   * Only priced printings appear, so a missing key means "unknown" rather than
+   * "free". Kept as a flat record rather than a method so the index stays plain
+   * data and can be compared and snapshotted in tests.
+   */
+  prices: Record<string, number>;
 }
 
 /**
@@ -28,6 +36,7 @@ export function buildPrintingIndex(
   if (!raw) return null;
 
   const byNumber: Record<string, Finish[]> = {};
+  const prices: Record<string, number> = {};
   const cardsPerFinish = new Map<Finish, number>();
   // Count by card, not by index entry: numbers are indexed twice (padded and
   // unpadded), so counting entries would double every total.
@@ -36,6 +45,20 @@ export function buildPrintingIndex(
   for (const [number, printings] of Object.entries(raw)) {
     const finishes = printings.map((p) => makeFinish(p.type, p.foil));
     byNumber[number] = finishes;
+    for (const p of printings) {
+      // Zero is not a price. Absent means unknown, and a 0 would sum as if the
+      // printing were worthless.
+      if (typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0) {
+        const finish = makeFinish(p.type, p.foil);
+        prices[`${number}|${finish}`] = p.price;
+        // Store under the canonical (unpadded) form too, so lookups work regardless
+        // of whether the number in the index is padded or not.
+        const canonicalNumber = number.replace(/^0+(?=\d)/, "");
+        if (canonicalNumber !== number) {
+          prices[`${canonicalNumber}|${finish}`] = p.price;
+        }
+      }
+    }
     const canonicalKey = number.replace(/^0+(?=\d)/, "");
     if (counted.has(canonicalKey)) continue;
     counted.add(canonicalKey);
@@ -53,5 +76,29 @@ export function buildPrintingIndex(
     else excluded.push({ finish, cards });
   }
 
-  return { byNumber, all, packTotal, excluded };
+  return { byNumber, all, packTotal, excluded, prices };
+}
+
+/** Strip leading zeros from a collector number: "007" -> "7", "001a" -> "1a". */
+function unpadded(collectorNumber: string): string {
+  return collectorNumber.replace(/^0+(?=\d)/, "");
+}
+
+/**
+ * Price for one printing of one card.
+ *
+ * Tries the number as given and then unpadded, because TCGdex pads modern sets
+ * while pokemontcg.io does not and either form can reach here. This lookup was
+ * previously inlined in useCollectionValue; it lives here so the set screen and
+ * the collection total cannot disagree about what a printing is worth.
+ */
+export function printingPrice(
+  index: SetPrintingIndex | null | undefined,
+  collectorNumber: string,
+  finish: Finish,
+): number | undefined {
+  if (!index) return undefined;
+  return (
+    index.prices[`${collectorNumber}|${finish}`] ?? index.prices[`${unpadded(collectorNumber)}|${finish}`]
+  );
 }
