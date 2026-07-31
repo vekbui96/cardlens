@@ -4,6 +4,7 @@ import {
   compareFinishes,
   finishLabel,
   finishShort,
+  finishToMark,
   isLikelyPackPrinting,
   makeFinish,
   parseFinish,
@@ -97,5 +98,51 @@ describe("isLikelyPackPrinting", () => {
 
   it("is safe when the set size is unknown", () => {
     expect(isLikelyPackPrinting(5, 0)).toBe(false);
+  });
+});
+
+describe("finishToMark", () => {
+  it("marks the active printing when the card has it", () => {
+    expect(finishToMark(["normal", "reverse", "holo"], "reverse")).toBe("reverse");
+  });
+
+  it("never marks a printing the card does not have", () => {
+    // The reported bug: sitting on a holo card with the picker on Holofoil,
+    // stepping DOWN to a normal/reverse card, and pinching wrote `holo` onto a
+    // card with no holo printing. Only ← → re-resolves the picker against the
+    // focused card; moving up and down does not.
+    expect(finishToMark(["normal", "reverse"], "holo")).not.toBe("holo");
+    expect(["normal", "reverse"]).toContain(finishToMark(["normal", "reverse"], "holo"));
+  });
+
+  it("falls back to the most basic printing the card has", () => {
+    expect(finishToMark(["normal", "reverse"], "holo")).toBe("normal");
+    expect(finishToMark(["reverse", "holo"], "firstEdition")).toBe("reverse");
+  });
+
+  it("prefers a printing of the same type over the most basic one", () => {
+    // Poké Ball Reverse is unavailable, but a plain Reverse is nearer to what
+    // was asked for than Normal.
+    expect(finishToMark(["normal", "reverse"], "reverse:pokeball")).toBe("reverse");
+    expect(finishToMark(["normal", "holo", "holo:tinsel"], "holo:cosmos")).toBe("holo");
+  });
+
+  it("marks the only printing of a single-printing card whatever the picker says", () => {
+    // ex and full-art cards exist as holo only; this rule predates the bug and
+    // must survive the fix.
+    expect(finishToMark(["holo"], "reverse")).toBe("holo");
+    expect(finishToMark(["normal"], "reverse:masterball")).toBe("normal");
+  });
+
+  it("keeps the caller's choice when the card's printings are unknown", () => {
+    // Nothing to correct against, and refusing to mark would make the pinch
+    // look like hardware that did not register.
+    expect(finishToMark([], "reverse:pokeball")).toBe("reverse:pokeball");
+  });
+
+  it("is stable regardless of the order printings arrive in", () => {
+    // TCGdex returns them in its own order; the result must not depend on it.
+    expect(finishToMark(["reverse", "normal"], "holo")).toBe("normal");
+    expect(finishToMark(["normal", "reverse"], "holo")).toBe("normal");
   });
 });

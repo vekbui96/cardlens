@@ -130,6 +130,35 @@ export function compareFinishes(a: Finish, b: Finish): number {
 }
 
 /**
+ * The printing a single mark should actually write for a card.
+ *
+ * The picker is set-wide but printings are per-card, and moving focus does not
+ * re-resolve it — ← → skips printings the focused card lacks, moving up and down
+ * does not. So sitting on a holo card, stepping down to one that has no holo,
+ * and pinching used to write `holo` onto a card that does not have it.
+ *
+ * That is worse than a display glitch: the phantom row inflates the owned count
+ * past the set's real denominator, syncs to every device, and then joins the
+ * picker's choices for the whole set, because anything already held stays
+ * selectable.
+ *
+ * Prefers the active printing, then one of the same type (Poké Ball Reverse ->
+ * Reverse rather than Normal), then the card's most basic printing. It never
+ * returns something the card does not have, unless nothing is known about the
+ * card at all — in which case the caller's guess is the only thing available.
+ *
+ * Doing nothing was the other option and is worse on the glasses: a pinch that
+ * silently no-ops is indistinguishable from hardware that did not register it.
+ */
+export function finishToMark(available: Finish[], active: Finish): Finish {
+  if (available.length === 0) return active;
+  if (available.includes(active)) return active;
+  const { type } = parseFinish(active);
+  const sameType = available.filter((f) => parseFinish(f).type === type);
+  return [...(sameType.length > 0 ? sameType : available)].sort(compareFinishes)[0];
+}
+
+/**
  * Printings rare enough within a set to be product exclusives rather than pack
  * pulls — measured, not guessed: in White Flare every pack printing appears on
  * 71-105 of 173 cards, while `holo:tinsel` appears on 2.

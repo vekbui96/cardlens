@@ -9,7 +9,7 @@ import { RarityBar } from "../results/RarityBar.tsx";
 import { FinishBar } from "./FinishBar.tsx";
 import { filterByRarity, rarityFilterAt } from "../results/rarityFilters.ts";
 import { availableFinishes, type CollectFinish } from "../../models/cards.ts";
-import { compareFinishes, finishLabel } from "../../models/finishes.ts";
+import { compareFinishes, finishLabel, finishToMark } from "../../models/finishes.ts";
 import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
@@ -253,11 +253,11 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       return;
     }
     const available = finishesFor(card.collectorNumber, card.variants);
-    // A card with one printing marks THAT printing, whatever the picker says.
-    // Otherwise selecting an ex card while "Reverse Holo" is active would
-    // invent a reverse that does not exist.
-    const finish = available.length === 1 ? available[0] : activeFinish;
-    toggleOwned(card.id, finish, setId);
+    // Mark a printing the card actually has, whatever the picker says. The
+    // picker is set-wide and only ← → re-resolves it against the focused card,
+    // so moving down onto a card without the active printing must not invent
+    // one — see finishToMark.
+    toggleOwned(card.id, finishToMark(available, activeFinish), setId);
   };
 
   const { backFocused, itemIndex } = useBackableFocus({
