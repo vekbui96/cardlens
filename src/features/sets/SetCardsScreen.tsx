@@ -168,7 +168,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     >
       <ToggleRow
         label={collectMode ? `✓ Marking: ${finishLabel(activeFinish)}` : "Collect mode: off"}
-        hint={collectMode ? "Pick the printing below" : "Select opens card"}
+        {...(collectMode ? {} : { hint: "Select opens card" })}
         on={collectMode}
         focused={collectFocused}
         onActivate={() => setCollectMode((on) => !on)}
