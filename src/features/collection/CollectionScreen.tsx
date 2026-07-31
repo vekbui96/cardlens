@@ -13,7 +13,6 @@ import { SetProgressRow } from "./SetProgressRow.tsx";
 import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { useTextEntry } from "../../app/TextEntryProvider.tsx";
 import { syncLine } from "./syncLine.ts";
-import { FinishBreakdown } from "./FinishBreakdown.tsx";
 
 interface SetProgress {
   setId: string;
@@ -35,7 +34,6 @@ export function CollectionScreen() {
     ownedCountsBySet,
     ownedFinishCountsBySet,
     totalFinishesOwned,
-    finishTotals,
     finishesBySet,
     syncStatus,
     syncNow,
@@ -129,7 +127,6 @@ export function CollectionScreen() {
         focused={syncFocused}
         onActivate={() => void onSyncSelect()}
       />
-      {collection.length > 0 ? <FinishBreakdown counts={finishTotals} /> : null}
       {isLoading && rows.length === 0 ? <LoadingState label="Loading sets…" /> : null}
       {rows.length === 0 && !isLoading ? (
         <EmptyState
