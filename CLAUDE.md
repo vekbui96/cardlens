@@ -36,6 +36,19 @@ The server has been silently stale before, running validation that rejected fini
 
 **Anything that behaves differently on the glasses than on desktop should be suspected first.** A triple-pinch gesture worked perfectly on a keyboard and never fired on the hardware, because it lived in the input adapter and reset on any stray event the neural band produced.
 
+### Gestures, and what is actually confirmed on hardware
+
+| Gesture                                  | Status                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| Swipes, pinch, middle-pinch              | Documented and working                                               |
+| **Triple-pinch on one card** (bulk mark) | **Confirmed working on the glasses**                                 |
+| Hold ~0.7s                               | Derived from key-up or auto-repeat, neither documented — unconfirmed |
+
+Two rules came out of getting this wrong:
+
+- **Burst detection belongs on the screen, not the input adapter.** The adapter cannot see what is focused, so it had to reset on every other event to avoid firing during rapid marking — and any stray event from the neural band then killed the gesture silently. Keyed on the focused card it is both stricter and more forgiving.
+- **Gesture timings must suit a neural band, not a mouse.** 500ms between pinches was mouse double-click timing and felt broken; 1200ms works.
+
 ## Data sources
 
 ### pokemontcg.io — the catalog, and unreliable
