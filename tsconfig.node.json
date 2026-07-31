@@ -29,6 +29,7 @@
     "playwright.config.ts",
     "server",
     "src/storage/printings.ts",
-    "src/models/cards.ts"
+    "src/models/cards.ts",
+    "src/models/finishes.ts"
   ]
 }

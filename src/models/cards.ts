@@ -1,3 +1,15 @@
+import type { Finish } from "./finishes.ts";
+import { finishLabel, finishShort } from "./finishes.ts";
+
+/** Kept for screens that still need a fixed offering when nothing else is known. */
+const ALL_COLLECT_FINISHES_FALLBACK: readonly Finish[] = [
+  "normal",
+  "reverse",
+  "holo",
+  "firstEdition",
+  "shadowless",
+];
+
 /**
  * Core domain models. Game-neutral types live here so additional trading-card
  * games can reuse them (see docs/adding-new-games.md). Pokémon-specific summary
@@ -35,85 +47,33 @@ export interface CardVariants {
 }
 
 /**
- * The finishes a collector tracks separately. A master set means owning each
- * printing of a card, not just the card — so the collection is keyed by
- * (card, finish), and these are the finish half of that key.
- *
- * IMPORTANT: this list is deliberately WIDER than what the data source can
- * tell us. Surveyed across eight sets, pokemontcg.io's tcgplayer payload only
- * ever exposes `normal`, `holofoil` and `reverseHolofoil` — Prismatic
- * Evolutions and 151 report exactly those three despite really having Poké Ball
- * and Master Ball patterns, and Base Set reports only `holofoil` despite 1st
- * Edition and Shadowless printings existing.
- *
- * Restricting collectors to what the API knows would make those printings
- * untrackable, so the extras are marked by hand. See availableFinishes (what
- * the data implies) versus ALL_COLLECT_FINISHES (what a person may record).
+ * Printings are now modelled in finishes.ts as `type` or `type:foil` keys,
+ * because sets keep inventing foils and a hardcoded union cannot follow them.
+ * These re-exports keep the old name working across the app.
  */
-export type CollectFinish =
-  | "normal"
-  | "holofoil"
-  | "reverseHolofoil"
-  | "pokeBall"
-  | "masterBall"
-  | "firstEdition"
-  | "shadowless";
+export type CollectFinish = Finish;
 
-/** Priority order: the plainest printing first, specials after. */
-export const COLLECT_FINISHES: readonly CollectFinish[] = [
-  "normal",
-  "holofoil",
-  "reverseHolofoil",
-  "firstEdition",
-];
-
-/** Everything a person can mark by hand, including what pricing never reveals. */
-export const ALL_COLLECT_FINISHES: readonly CollectFinish[] = [
-  "normal",
-  "holofoil",
-  "reverseHolofoil",
-  "pokeBall",
-  "masterBall",
-  "firstEdition",
-  "shadowless",
-];
-
-export const COLLECT_FINISH_LABELS: Record<CollectFinish, string> = {
-  normal: "Normal",
-  holofoil: "Holofoil",
-  reverseHolofoil: "Reverse Holo",
-  pokeBall: "Poké Ball pattern",
-  masterBall: "Master Ball pattern",
-  firstEdition: "1st Edition",
-  shadowless: "Shadowless",
-};
-
-/** Compact badges for list rows, where the full labels never fit. */
-export const COLLECT_FINISH_SHORT: Record<CollectFinish, string> = {
-  normal: "N",
-  holofoil: "H",
-  reverseHolofoil: "RH",
-  pokeBall: "PB",
-  masterBall: "MB",
-  firstEdition: "1st",
-  shadowless: "SL",
+export {
+  ALL_COLLECT_FINISHES_FALLBACK as ALL_COLLECT_FINISHES,
+  finishLabel as collectFinishLabel,
+  finishShort as collectFinishShort,
 };
 
 /**
- * Which finishes the pricing payload implies a card exists in. This is the
- * master-set DENOMINATOR — it can only count what it can enumerate, so
- * hand-marked extras like Poké Ball pattern are owned printings that no total
- * accounts for.
- *
- * Falls back to `normal` when the payload revealed nothing: better to let
- * someone track a card as a single printing than to show it as untrackable.
+ * Printings implied by pokemontcg.io's pricing payload. A weak signal — it
+ * reports nothing at all for some sets (Pitch Black) and never reports pattern
+ * foils — so it is only a fallback for when TCGdex printings are unavailable.
  */
 export function availableFinishes(variants?: CardVariants): CollectFinish[] {
-  const found = COLLECT_FINISHES.filter((f) => variants?.[f as keyof CardVariants]);
+  const found: CollectFinish[] = [];
+  if (variants?.normal) found.push("normal");
+  if (variants?.reverseHolofoil) found.push("reverse");
+  if (variants?.holofoil) found.push("holo");
+  if (variants?.firstEdition) found.push("firstEdition");
   return found.length > 0 ? found : ["normal"];
 }
 
-/** The finish a single "I own this" gesture should mean for a card. */
+/** The printing a single "I own this" gesture should mean for a card. */
 export function primaryFinish(variants?: CardVariants): CollectFinish {
   return availableFinishes(variants)[0];
 }

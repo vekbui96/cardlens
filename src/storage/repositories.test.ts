@@ -76,49 +76,49 @@ describe("collection", () => {
 
   it("ignores duplicate finishes so re-marking a card is a no-op", () => {
     const r = repo();
-    r.addOwned("base1-4", "holofoil");
-    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "holo");
+    r.addOwned("base1-4", "holo");
     expect(r.getCollection()).toHaveLength(1);
-    expect(r.ownedFinishes("base1-4")).toEqual(["holofoil"]);
+    expect(r.ownedFinishes("base1-4")).toEqual(["holo"]);
   });
 
   it("accumulates finishes on one card entry", () => {
     const r = repo();
-    r.addOwned("base1-4", "holofoil");
-    r.addOwned("base1-4", "reverseHolofoil");
+    r.addOwned("base1-4", "holo");
+    r.addOwned("base1-4", "reverse");
     expect(r.getCollection()).toHaveLength(1);
-    expect(r.ownedFinishes("base1-4")).toEqual(["holofoil", "reverseHolofoil"]);
+    expect(r.ownedFinishes("base1-4")).toEqual(["holo", "reverse"]);
   });
 
   it("toggles a single finish both ways", () => {
     const r = repo();
-    r.toggleOwned("base1-4", "holofoil");
-    expect(r.isOwnedFinish("base1-4", "holofoil")).toBe(true);
-    r.toggleOwned("base1-4", "holofoil");
-    expect(r.isOwnedFinish("base1-4", "holofoil")).toBe(false);
+    r.toggleOwned("base1-4", "holo");
+    expect(r.isOwnedFinish("base1-4", "holo")).toBe(true);
+    r.toggleOwned("base1-4", "holo");
+    expect(r.isOwnedFinish("base1-4", "holo")).toBe(false);
   });
 
   it("keeps the card when only one of several finishes is removed", () => {
     const r = repo();
-    r.addOwned("base1-4", "holofoil");
-    r.addOwned("base1-4", "reverseHolofoil");
-    r.removeOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "holo");
+    r.addOwned("base1-4", "reverse");
+    r.removeOwned("base1-4", "holo");
     expect(r.isOwned("base1-4")).toBe(true);
-    expect(r.ownedFinishes("base1-4")).toEqual(["reverseHolofoil"]);
+    expect(r.ownedFinishes("base1-4")).toEqual(["reverse"]);
   });
 
   it("drops the card once its last finish is removed", () => {
     const r = repo();
-    r.addOwned("base1-4", "holofoil");
-    r.removeOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "holo");
+    r.removeOwned("base1-4", "holo");
     expect(r.isOwned("base1-4")).toBe(false);
     expect(r.getCollection()).toHaveLength(0);
   });
 
   it("removes every finish when no finish is given", () => {
     const r = repo();
-    r.addOwned("base1-4", "holofoil");
-    r.addOwned("base1-4", "reverseHolofoil");
+    r.addOwned("base1-4", "holo");
+    r.addOwned("base1-4", "reverse");
     r.removeOwned("base1-4");
     expect(r.getCollection()).toHaveLength(0);
   });
@@ -138,16 +138,16 @@ describe("collection", () => {
   it("counts distinct cards per set", () => {
     const r = repo();
     r.addOwned("base1-1");
-    r.addOwned("base1-2", "holofoil");
-    r.addOwned("base1-2", "reverseHolofoil");
+    r.addOwned("base1-2", "holo");
+    r.addOwned("base1-2", "reverse");
     r.addOwned("swsh1-3");
     expect(r.getOwnedCountsBySet()).toEqual({ base1: 2, swsh1: 1 });
   });
 
   it("counts printings per set separately from cards", () => {
     const r = repo();
-    r.addOwned("base1-2", "holofoil");
-    r.addOwned("base1-2", "reverseHolofoil");
+    r.addOwned("base1-2", "holo");
+    r.addOwned("base1-2", "reverse");
     r.addOwned("base1-3", "normal");
     expect(r.getOwnedFinishCountsBySet()).toEqual({ base1: 3 });
     expect(r.getOwnedCountsBySet()).toEqual({ base1: 2 });
@@ -158,6 +158,21 @@ describe("collection", () => {
     r.addOwned("base1-1");
     r.addOwned("base1-2");
     expect(r.getCollection().map((c) => c.id)).toEqual(["base1-1", "base1-2"]);
+  });
+
+  it("treats a legacy finish and its canonical form as one printing", () => {
+    // Reads migrate holofoil -> holo, so writing the raw value would leave two
+    // OR-Set keys for the same printing and both would survive the merge.
+    const r = repo();
+    r.addOwned("base1-4", "holofoil");
+    r.addOwned("base1-4", "holo");
+    expect(r.ownedFinishes("base1-4")).toEqual(["holo"]);
+  });
+
+  it("migrates a legacy pattern value to a type:foil key", () => {
+    const r = repo();
+    r.addOwned("sv08.5-5", "pokeBall");
+    expect(r.ownedFinishes("sv08.5-5")).toEqual(["reverse:pokeball"]);
   });
 
   it("reads pre-variant entries as a single normal printing", () => {

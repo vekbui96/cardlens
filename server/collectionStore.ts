@@ -24,17 +24,16 @@ import {
 /** Rejects absurd payloads on a publicly reachable endpoint. */
 export const MAX_ROWS_PER_REQUEST = 50_000;
 
-// Kept in step with ALL_COLLECT_FINISHES: a finish the client can mark but the
-// server rejects would silently drop rows on sync.
-const VALID_FINISHES = new Set([
-  "normal",
-  "holofoil",
-  "reverseHolofoil",
-  "pokeBall",
-  "masterBall",
-  "firstEdition",
-  "shadowless",
-]);
+/**
+ * Finishes are `type` or `type:foil` keys and CANNOT be an allow-list: sets
+ * keep inventing foils (pokeball, masterball, tinsel, cosmos, energy,
+ * friendball, loveball, quickball, team-rocket across three 2025-26 sets
+ * alone), and a finish the client can mark but the server rejects is silently
+ * dropped on sync — data loss that looks like nothing happened.
+ *
+ * So validate the SHAPE and bound the length instead.
+ */
+const FINISH_PATTERN = /^[A-Za-z][A-Za-z0-9-]{0,29}(:[A-Za-z0-9-]{1,29})?$/;
 
 /**
  * Validate an untrusted row. The endpoint is on the public internet, so a
@@ -47,7 +46,7 @@ export function parseRow(value: unknown): OwnedPrinting | null {
 
   if (typeof v.cardId !== "string" || !v.cardId || v.cardId.length > 100) return null;
   if (typeof v.setId !== "string" || !v.setId || v.setId.length > 100) return null;
-  if (typeof v.finish !== "string" || !VALID_FINISHES.has(v.finish)) return null;
+  if (typeof v.finish !== "string" || !FINISH_PATTERN.test(v.finish)) return null;
   if (typeof v.at !== "number" || !Number.isFinite(v.at) || v.at < 0) return null;
   if (v.deletedAt !== undefined) {
     if (typeof v.deletedAt !== "number" || !Number.isFinite(v.deletedAt) || v.deletedAt < 0) return null;
@@ -56,7 +55,7 @@ export function parseRow(value: unknown): OwnedPrinting | null {
   return {
     cardId: v.cardId,
     setId: v.setId,
-    finish: v.finish as OwnedPrinting["finish"],
+    finish: v.finish,
     at: v.at,
     ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
   };

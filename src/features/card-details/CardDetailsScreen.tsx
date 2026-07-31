@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PokemonCardSummary } from "../../models/cards.ts";
-import { ALL_COLLECT_FINISHES, COLLECT_FINISH_LABELS, availableFinishes } from "../../models/cards.ts";
+import { ALL_COLLECT_FINISHES, availableFinishes } from "../../models/cards.ts";
+import { compareFinishes, finishLabel } from "../../models/finishes.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { PriceBlock } from "../../components/PriceBlock.tsx";
@@ -53,12 +54,16 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
     // they would be untrackable — but they stay below the suggested ones so the
     // common case is still the first thing under the thumb.
     const suggested = availableFinishes(header?.variants);
-    const rest = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && held.includes(f));
-    const extra = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && !held.includes(f));
+    // Held printings come next even when nothing suggested them — that is how a
+    // hand-marked Poké Ball stays visible and removable.
+    const alsoHeld = held.filter((f) => !suggested.includes(f)).sort(compareFinishes);
+    const extra = ALL_COLLECT_FINISHES.filter(
+      (f) => !suggested.includes(f) && !alsoHeld.includes(f),
+    );
 
-    const list: Action[] = [...suggested, ...rest, ...extra].map((finish) => ({
+    const list: Action[] = [...suggested, ...alsoHeld, ...extra].map((finish) => ({
       key: `own-${finish}`,
-      label: `${held.includes(finish) ? "✓" : "＋"} ${COLLECT_FINISH_LABELS[finish]}`,
+      label: `${held.includes(finish) ? "✓" : "＋"} ${finishLabel(finish)}`,
       onSelect: () => toggleOwned(cardId, finish),
     }));
     list.push({

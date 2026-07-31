@@ -8,12 +8,8 @@ import { LoadingState, ErrorState, EmptyState } from "../../components/States.ts
 import { RarityBar } from "../results/RarityBar.tsx";
 import { FinishBar } from "./FinishBar.tsx";
 import { rarityFilterAt } from "../results/rarityFilters.ts";
-import {
-  ALL_COLLECT_FINISHES,
-  COLLECT_FINISH_LABELS,
-  availableFinishes,
-  type CollectFinish,
-} from "../../models/cards.ts";
+import { availableFinishes, type CollectFinish } from "../../models/cards.ts";
+import { compareFinishes, finishLabel } from "../../models/finishes.ts";
 import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
@@ -65,7 +61,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     const inSet = new Set<CollectFinish>();
     for (const card of allCards ?? []) for (const f of availableFinishes(card.variants)) inSet.add(f);
     for (const card of allCards ?? []) for (const f of ownedFinishes(card.id)) inSet.add(f);
-    const choices = ALL_COLLECT_FINISHES.filter((f) => inSet.has(f));
+    const choices = [...inSet].sort(compareFinishes);
     return choices.length > 0 ? choices : ["normal"];
   }, [allCards, ownedFinishes]);
 
@@ -148,7 +144,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       canGoBack
     >
       <ToggleRow
-        label={collectMode ? `✓ Marking: ${COLLECT_FINISH_LABELS[activeFinish]}` : "Collect mode: off"}
+        label={collectMode ? `✓ Marking: ${finishLabel(activeFinish)}` : "Collect mode: off"}
         hint={collectMode ? "Pick the printing below" : "Select opens card"}
         on={collectMode}
         focused={collectFocused}

@@ -27,7 +27,7 @@ afterEach(() => {
 const row = (over: Partial<OwnedPrinting> = {}): OwnedPrinting => ({
   cardId: "base1-4",
   setId: "base1",
-  finish: "holofoil",
+  finish: "holo",
   at: 100,
   ...over,
 });
@@ -46,7 +46,8 @@ describe("parseRow", () => {
     ["null", null],
     ["missing cardId", { setId: "base1", finish: "normal", at: 1 }],
     ["empty cardId", { cardId: "", setId: "base1", finish: "normal", at: 1 }],
-    ["unknown finish", { cardId: "a-1", setId: "a", finish: "sparkly", at: 1 }],
+    ["finish with illegal characters", { cardId: "a-1", setId: "a", finish: "bad finish!", at: 1 }],
+    ["empty finish", { cardId: "a-1", setId: "a", finish: "", at: 1 }],
     ["missing at", { cardId: "a-1", setId: "a", finish: "normal" }],
     ["negative at", { cardId: "a-1", setId: "a", finish: "normal", at: -5 }],
   ])("rejects %s", (_label, value) => {
@@ -58,6 +59,12 @@ describe("parseRow", () => {
     // permanently — the endpoint is public, so this must not be storable.
     expect(parseRow(row({ at: Infinity }))).toBeNull();
     expect(parseRow({ ...row(), at: 1, deletedAt: Infinity })).toBeNull();
+  });
+
+  it("accepts a foil it has never heard of", () => {
+    // Sets keep inventing foils; an allow-list here would silently drop rows on
+    // sync, which looks like nothing happened.
+    expect(parseRow({ ...row(), finish: "reverse:brandnewball" })?.finish).toBe("reverse:brandnewball");
   });
 
   it("rejects absurdly long ids", () => {

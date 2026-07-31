@@ -1,5 +1,6 @@
 import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
 import type { TradingCardGame } from "../models/games.ts";
+import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import {
   livePrintings,
@@ -115,7 +116,9 @@ function toPrintings(value: unknown): OwnedPrinting[] {
     const row: OwnedPrinting = {
       cardId: v.cardId,
       setId: typeof v.setId === "string" ? v.setId : setIdFromCardId(v.cardId),
-      finish: v.finish as CollectFinish,
+      // Legacy values (holofoil, pokeBall, ...) migrate to type:foil keys here,
+      // so no stored row ever has to be rewritten.
+      finish: canonicalFinish(v.finish),
       at: typeof v.at === "number" ? v.at : 0,
       ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
     };
@@ -129,8 +132,8 @@ function toPrintings(value: unknown): OwnedPrinting[] {
     const at = typeof v.at === "number" ? v.at : 0;
     const finishes = isArray(v.finishes) && v.finishes.length > 0 ? v.finishes : ["normal"];
     return finishes
-      .filter((f): f is CollectFinish => typeof f === "string")
-      .map((finish) => ({ cardId: v.id as string, setId, finish, at }));
+      .filter((f): f is string => typeof f === "string")
+      .map((finish) => ({ cardId: v.id as string, setId, finish: canonicalFinish(finish), at }));
   }
 
   return [];
@@ -264,15 +267,19 @@ export class Repositories {
   }
 
   isOwnedFinish(id: string, finish: CollectFinish): boolean {
-    return this.ownedFinishes(id).includes(finish);
+    return this.ownedFinishes(id).includes(canonicalFinish(finish));
   }
 
   addOwned(
     cardId: string,
-    finish: CollectFinish = "normal",
+    rawFinish: CollectFinish = "normal",
     setId = setIdFromCardId(cardId),
     now = Date.now(),
   ): OwnedCard[] {
+    // Canonicalise on WRITE as well as read. Reads migrate legacy values, so a
+    // raw write would put "holofoil" and "holo" in the store as two rows for
+    // one printing — they are different OR-Set keys and both survive the merge.
+    const finish = canonicalFinish(rawFinish);
     // Re-marking clears any tombstone by writing a newer `at`, which is exactly
     // how the merge rule expects a resurrection to be expressed.
     this.writePrintings(mergePrintings(this.getPrintings(), [{ cardId, setId, finish, at: now }]));
@@ -280,7 +287,8 @@ export class Repositories {
   }
 
   /** Removes one finish, or every finish of the card when `finish` is omitted. */
-  removeOwned(cardId: string, finish?: CollectFinish, now = Date.now()): OwnedCard[] {
+  removeOwned(cardId: string, rawFinish?: CollectFinish, now = Date.now()): OwnedCard[] {
+    const finish = rawFinish === undefined ? undefined : canonicalFinish(rawFinish);
     const targets = livePrintings(this.getPrintings()).filter(
       (r) => r.cardId === cardId && (finish === undefined || r.finish === finish),
     );
@@ -291,9 +299,10 @@ export class Repositories {
 
   toggleOwned(
     cardId: string,
-    finish: CollectFinish = "normal",
+    rawFinish: CollectFinish = "normal",
     setId = setIdFromCardId(cardId),
   ): OwnedCard[] {
+    const finish = canonicalFinish(rawFinish);
     return this.isOwnedFinish(cardId, finish)
       ? this.removeOwned(cardId, finish)
       : this.addOwned(cardId, finish, setId);

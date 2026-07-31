@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { COLLECT_FINISH_LABELS, COLLECT_FINISH_SHORT, type CollectFinish } from "../../models/cards.ts";
+import type { CollectFinish } from "../../models/cards.ts";
+import { finishLabel, finishShort } from "../../models/finishes.ts";
 import styles from "./FinishBar.module.css";
 
 /**
@@ -31,7 +32,7 @@ export function FinishBar({
       ref={ref}
       type="button"
       className={`${styles.bar} ${focused ? styles.focused : ""}`}
-      aria-label={`Printing to mark: ${COLLECT_FINISH_LABELS[active]}. Select or swipe to change.`}
+      aria-label={`Printing to mark: ${finishLabel(active)}. Select or swipe to change.`}
       aria-selected={focused}
       onClick={onActivate}
     >
@@ -47,7 +48,7 @@ export function FinishBar({
               className={`${styles.chip} ${on ? styles.chipOn : ""}`}
               aria-hidden="true"
             >
-              {COLLECT_FINISH_SHORT[finish]}
+              {finishShort(finish)}
             </span>
           );
         })}

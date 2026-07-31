@@ -1,5 +1,6 @@
-import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
-import { COLLECT_FINISH_SHORT, availableFinishes } from "../models/cards.ts";
+import type { PokemonCardSummary } from "../models/cards.ts";
+import { availableFinishes, type CollectFinish } from "../models/cards.ts";
+import { compareFinishes, finishShort } from "../models/finishes.ts";
 import { formatUsd } from "../utils/format.ts";
 import { CardImage } from "./CardImage.tsx";
 import styles from "./CardRow.module.css";
@@ -25,7 +26,7 @@ export function CardRow({
   // that has none was noise, so the outline appears only where the printing is
   // genuinely applicable.
   const finishes = showFinishes
-    ? Array.from(new Set([...availableFinishes(card.variants), ...held]))
+    ? Array.from(new Set([...availableFinishes(card.variants), ...held])).sort(compareFinishes)
     : [];
   // A lone "N" badge on a card that only exists as one printing is noise, so
   // badges appear once there is genuinely something to compare or track.
@@ -60,11 +61,11 @@ export function CardRow({
                 className={`${styles.finish} ${held.includes(f) ? styles.finishHeld : ""} ${
                   f === highlightFinish ? styles.finishTarget : ""
                 }`}
-                aria-label={`${COLLECT_FINISH_SHORT[f]}${held.includes(f) ? " owned" : " missing"}${
+                aria-label={`${finishShort(f)}${held.includes(f) ? " owned" : " missing"}${
                   f === highlightFinish ? ", selected" : ""
                 }`}
               >
-                {COLLECT_FINISH_SHORT[f]}
+                {finishShort(f)}
               </span>
             ))}
           </div>

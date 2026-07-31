@@ -1,4 +1,5 @@
-import { ALL_COLLECT_FINISHES, COLLECT_FINISH_SHORT, type CollectFinish } from "../../models/cards.ts";
+import type { CollectFinish } from "../../models/cards.ts";
+import { compareFinishes, finishShort } from "../../models/finishes.ts";
 import styles from "./FinishBreakdown.module.css";
 
 /**
@@ -16,14 +17,18 @@ export function FinishBreakdown({
   counts: Partial<Record<CollectFinish, number>>;
   className?: string;
 }) {
-  const held = ALL_COLLECT_FINISHES.filter((f) => (counts[f] ?? 0) > 0);
+  // Driven by the data rather than a fixed list: foils are open-ended, so any
+  // printing actually held must show even if this build has never heard of it.
+  const held = (Object.keys(counts) as CollectFinish[])
+    .filter((f) => (counts[f] ?? 0) > 0)
+    .sort(compareFinishes);
   if (held.length === 0) return null;
 
   return (
     <div className={`${styles.row} ${className ?? ""}`}>
       {held.map((finish) => (
         <span key={finish} className={styles.item}>
-          <span className={styles.badge}>{COLLECT_FINISH_SHORT[finish]}</span>
+          <span className={styles.badge}>{finishShort(finish)}</span>
           <span className={styles.count}>{counts[finish]}</span>
         </span>
       ))}
