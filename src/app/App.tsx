@@ -63,7 +63,12 @@ export function App() {
         <RepositoriesProvider>
           <CatalogProvider>
             <LayoutModeProvider mode={mode}>
-              <NavigationProvider>
+              {/*
+                Only the web shell gets URL-backed navigation. The glasses have
+                no URL bar and preview deliberately mimics them, so a history
+                stack there would be a second source of truth for nothing.
+              */}
+              <NavigationProvider urlBacked={mode === "web"}>
                 <LibraryProvider>
                   <TextEntryProvider>
                     <GlassesFrame

@@ -19,7 +19,21 @@ export interface NavState {
 }
 
 export type NavAction =
-  { type: "PUSH"; screen: Screen } | { type: "REPLACE"; screen: Screen } | { type: "POP" } | { type: "HOME" };
+  | { type: "PUSH"; screen: Screen }
+  | { type: "REPLACE"; screen: Screen }
+  | { type: "POP" }
+  | { type: "HOME" }
+  /**
+   * Web only: adopt whatever screen the URL now names.
+   *
+   * On the web shell the BROWSER holds the history — its back button, its
+   * entries, its refresh. Keeping a second deep stack in memory alongside it
+   * would be two sources of truth that drift the moment someone hits back twice
+   * or opens a link cold. So the in-memory stack is flattened to at most
+   * [home, screen]: enough for `canGoBack` and an in-app Back control, with the
+   * real depth living where the user can see it.
+   */
+  | { type: "SYNC"; screen: Screen };
 
 export const initialNavState: NavState = { stack: [{ name: "home" }] };
 
@@ -34,6 +48,8 @@ export function navReducer(state: NavState, action: NavAction): NavState {
       return state.stack.length > 1 ? { stack: state.stack.slice(0, -1) } : state;
     case "HOME":
       return initialNavState;
+    case "SYNC":
+      return action.screen.name === "home" ? initialNavState : { stack: [{ name: "home" }, action.screen] };
     default:
       return state;
   }
