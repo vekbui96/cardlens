@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import cors from "cors";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
+import { PrintingsStore } from "./printingsStore.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -16,6 +17,7 @@ const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
 // Forward slashes deliberately: Node accepts them on Windows, and a backslash
 // path in a TS literal silently collapses (\s \d \c are just s, d, c).
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
+const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 
 /** Minimal in-memory fixed-window rate limiter (per IP + route bucket). */
 function rateLimiter(maxPerWindow: number, windowMs: number) {
@@ -48,6 +50,7 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction): void
 export function createApp(
   store: SessionStore = new SessionStore(SESSION_TTL_MS),
   collection: CollectionStore = new CollectionStore(COLLECTION_FILE),
+  printings: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -77,6 +80,10 @@ export function createApp(
 
   // --- Companion session relay ---------------------------------------------
   const companionLimiter = rateLimiter(60, 60_000);
+  // Declared here rather than beside the proxy routes: limiters are resolved
+  // when routes are REGISTERED, so a const defined further down would be in its
+  // temporal dead zone and crash the server on start.
+  const printingsLimiter = rateLimiter(60, 60_000);
 
   app.post("/api/session", companionLimiter, (_req, res) => {
     const session = store.create();
@@ -158,6 +165,40 @@ export function createApp(
     if (dropped > 0) console.warn(`[cardlens] collection merge dropped ${dropped} invalid row(s)`);
     const rows = collection.merge(incoming);
     res.json({ rows, at: Date.now(), dropped });
+  });
+
+  // --- Printings (TCGdex, cached server-side) --------------------------------
+  /**
+   * One request per device instead of one per card.
+   *
+   * Building a set's printings costs 120-295 upstream requests because TCGdex
+   * only exposes variants on the individual card endpoint. Doing that on the
+   * glasses, over a tethered connection, for every set and every device, is the
+   * expensive path this replaces.
+   *
+   * No auth: this is public catalog data, same as the card proxy.
+   */
+  app.get("/api/printings/:setId", printingsLimiter, async (req, res) => {
+    const setId = String(req.params.setId ?? "").slice(0, 40);
+    const setName = typeof req.query.name === "string" ? req.query.name.slice(0, 120) : "";
+    if (!setId || !setName) {
+      res.status(400).json({ error: "set_id_and_name_required" });
+      return;
+    }
+    try {
+      const { value, cached } = await printings.get(setId, setName);
+      if (!value) {
+        res.status(404).json({ error: "set_not_found_upstream" });
+        return;
+      }
+      // Long client cache: printings for a released set do not change.
+      res.setHeader("Cache-Control", "public, max-age=2592000");
+      res.setHeader("X-Cardlens-Cache", cached ? "hit" : "miss");
+      res.json(value);
+    } catch (err) {
+      console.warn(`[cardlens] printings failed for ${setId}:`, err);
+      res.status(502).json({ error: "printings_unavailable" });
+    }
   });
 
   // --- Optional catalog proxy (adds server-side API key + short cache) ------

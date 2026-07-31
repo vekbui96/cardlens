@@ -30,6 +30,9 @@
     "server",
     "src/storage/printings.ts",
     "src/models/cards.ts",
-    "src/models/finishes.ts"
+    "src/models/finishes.ts",
+    "src/integrations/providers.ts",
+    "src/integrations/tcgdex/client.ts",
+    "src/integrations/tcgdex/schema.ts"
   ]
 }

@@ -8,6 +8,36 @@ import { makeFinish } from "../models/finishes.ts";
 /** One client per app: it memoises the 218-entry set list across every set view. */
 const client = new TcgdexClient();
 
+function serverBase(): string {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  return (env?.VITE_COMPANION_API_BASE_URL ?? "/api").replace(/\/$/, "");
+}
+
+/**
+ * Ask our own server first: it caches printings on disk, so this is ONE request
+ * instead of the 120-295 that building a set costs upstream. That difference is
+ * the whole point on glasses tethered to a phone.
+ *
+ * Falls back to fetching TCGdex directly, so the feature still works with the
+ * home server switched off — just expensively.
+ */
+async function loadPrintings(
+  setId: string,
+  setName: string,
+  signal?: AbortSignal,
+): Promise<SetPrintings | null> {
+  try {
+    const url = `${serverBase()}/printings/${encodeURIComponent(setId)}?name=${encodeURIComponent(setName)}`;
+    const res = await fetch(url, { ...(signal ? { signal } : {}) });
+    if (res.ok) return (await res.json()) as SetPrintings;
+    // 404 means the set is genuinely unknown upstream; no point retrying direct.
+    if (res.status === 404) return null;
+  } catch {
+    // Server unreachable — fall through to the direct path.
+  }
+  return client.getSetPrintings(setId, setName, { ...(signal ? { signal } : {}) });
+}
+
 export interface SetPrintingIndex {
   /** Collector number -> the printings that card exists in. */
   byNumber: Record<string, Finish[]>;
@@ -34,7 +64,7 @@ export function useSetPrintings(setId: string, setName: string, enabled = true) 
 
   const query = useQuery<SetPrintings | null>({
     queryKey: ["set-printings", setId],
-    queryFn: ({ signal }) => client.getSetPrintings(setId, setName, { signal }),
+    queryFn: ({ signal }) => loadPrintings(setId, setName, signal),
     enabled: enabled && Boolean(setId && setName),
     staleTime: 30 * 24 * 60 * 60_000,
     retry: 1,
