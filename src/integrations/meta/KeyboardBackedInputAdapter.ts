@@ -8,10 +8,15 @@ import { eventForKey, isEditableTarget } from "./keyMap.ts";
  */
 /** How long SELECT must be held before it counts as a hold. */
 export const SELECT_HOLD_MS = 700;
-/** Gap allowed between pinches for them to count as one burst. */
-export const SELECT_BURST_MS = 500;
-/** Pinches in a burst that trigger the bulk action. */
-export const SELECT_BURST_COUNT = 3;
+/**
+ * Burst (triple-pinch) detection deliberately does NOT live here.
+ *
+ * It did, and it was too fragile: the adapter has no idea what is focused, so
+ * it had to reset on every other event to avoid firing during rapid marking —
+ * which meant any incidental swipe between pinches silently killed the burst.
+ * The screen knows the focused card, so "three pinches on the same card" is
+ * both stricter and more forgiving there.
+ */
 
 export class KeyboardBackedInputAdapter implements WearableInputAdapter {
   private readonly listeners = new Set<(event: WearableInputEvent) => void>();
@@ -29,8 +34,6 @@ export class KeyboardBackedInputAdapter implements WearableInputAdapter {
    * is the timing a hold needs to stay distinct from a tap.
    */
   private keyUpSupported = false;
-  private burstCount = 0;
-  private lastSelectAt = 0;
 
   constructor(private readonly target: EventTarget = window) {}
 
@@ -55,11 +58,6 @@ export class KeyboardBackedInputAdapter implements WearableInputAdapter {
     e.preventDefault();
 
     if (event.type !== "SELECT") {
-      // Any other input ends the burst. Rapid collecting is pinch-swipe-pinch,
-      // and without this, marking three cards quickly would fire the bulk
-      // action on the third — a burst must mean three pinches on ONE card.
-      this.burstCount = 0;
-      this.lastSelectAt = 0;
       this.emit(event);
       return;
     }
@@ -77,20 +75,6 @@ export class KeyboardBackedInputAdapter implements WearableInputAdapter {
     this.selectDownAt = Date.now();
     this.holdFired = false;
     this.clearHoldTimer();
-
-    // Triple-pinch: the only bulk gesture built purely from DOCUMENTED input.
-    // Hold depends on keyup or auto-repeat, neither of which the platform docs
-    // promise, so this is the path that is certain to work on the glasses.
-    const now = Date.now();
-    this.burstCount = now - this.lastSelectAt <= SELECT_BURST_MS ? this.burstCount + 1 : 1;
-    this.lastSelectAt = now;
-    if (this.burstCount >= SELECT_BURST_COUNT) {
-      this.burstCount = 0;
-      this.holdFired = true; // suppress this press's own tap
-      this.clearHoldTimer();
-      this.emit({ type: "SELECT_HOLD" });
-      return;
-    }
 
     // Until key-up is proven, act on press: a working tap matters far more than
     // a clean hold.

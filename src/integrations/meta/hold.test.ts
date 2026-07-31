@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { KeyboardBackedInputAdapter, SELECT_BURST_MS, SELECT_HOLD_MS } from "./KeyboardBackedInputAdapter.ts";
+import { KeyboardBackedInputAdapter, SELECT_HOLD_MS } from "./KeyboardBackedInputAdapter.ts";
 import type { WearableInputEvent } from "../../models/input.ts";
 
 function harness() {
@@ -29,22 +29,9 @@ describe("SELECT hold detection", () => {
   it("keeps working for repeated taps with no key-up at all", () => {
     const { events, down } = harness();
     down("Enter");
-    down("ArrowDown");
     down("Enter");
-    down("ArrowDown");
     down("Enter");
-    expect(events.filter((e) => e === "SELECT")).toHaveLength(3);
-  });
-
-  it("does not treat rapid collecting as a burst", () => {
-    // pinch-swipe-pinch-swipe-pinch is the normal marking rhythm and must never
-    // trigger the bulk action, however fast it is done.
-    const { events, down } = harness();
-    for (let i = 0; i < 5; i++) {
-      down("Enter");
-      down("ArrowDown");
-    }
-    expect(events).not.toContain("SELECT_HOLD");
+    expect(events).toEqual(["SELECT", "SELECT", "SELECT"]);
   });
 
   it("emits SELECT_HOLD once the press passes the threshold", () => {
@@ -96,34 +83,6 @@ describe("SELECT hold detection", () => {
     vi.advanceTimersByTime(SELECT_HOLD_MS + 10);
     down("Enter", true); // repeat while still held
     expect(events.filter((e) => e === "SELECT_HOLD")).toHaveLength(1);
-  });
-
-  it("fires the bulk action on a triple pinch", () => {
-    // Built only from keydown, which is all the platform docs promise — so this
-    // is the bulk gesture that is certain to work on the glasses.
-    const { events, down } = harness();
-    down("Enter");
-    down("Enter");
-    down("Enter");
-    expect(events.filter((e) => e === "SELECT_HOLD")).toHaveLength(1);
-    // The third press does not also count as a tap.
-    expect(events.filter((e) => e === "SELECT")).toHaveLength(2);
-  });
-
-  it("does not fire on slow repeated pinches", () => {
-    const { events, down } = harness();
-    down("Enter");
-    vi.advanceTimersByTime(SELECT_BURST_MS + 50);
-    down("Enter");
-    vi.advanceTimersByTime(SELECT_BURST_MS + 50);
-    down("Enter");
-    expect(events).not.toContain("SELECT_HOLD");
-  });
-
-  it("starts a fresh burst after firing", () => {
-    const { events, down } = harness();
-    for (let i = 0; i < 6; i++) down("Enter");
-    expect(events.filter((e) => e === "SELECT_HOLD")).toHaveLength(2);
   });
 
   it("leaves navigation keys untouched", () => {

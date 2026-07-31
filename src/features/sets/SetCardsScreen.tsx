@@ -18,8 +18,16 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
 
-/** Matches the input adapter's burst window, so both agree what one burst is. */
-const BURST_WINDOW_MS = 500;
+/**
+ * Gap allowed between pinches on one card for them to count as a burst.
+ *
+ * Generous on purpose: a deliberate triple-pinch on a neural band is nowhere
+ * near as fast as a triple-click on a mouse, and being too strict makes the
+ * gesture feel broken rather than unavailable.
+ */
+const BURST_WINDOW_MS = 1200;
+/** Pinches on one card that trigger the bulk action. */
+const BURST_COUNT = 3;
 
 /** Cards in a set, in collector-number order, with a swipe rarity filter. */
 export function SetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
@@ -121,15 +129,31 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
    * look incomplete, and the bulk would refill it instead of clearing. Deciding
    * from the pre-burst snapshot makes triple-pinch symmetric.
    */
-  const burstStart = useRef<{ cardId: string; held: CollectFinish[]; at: number } | null>(null);
+  const burstStart = useRef<{
+    cardId: string;
+    held: CollectFinish[];
+    at: number;
+    count: number;
+  } | null>(null);
 
-  const noteBurst = (cardId: string) => {
+  /**
+   * Record this pinch against the current burst; true means it completes one.
+   *
+   * Keyed on the focused CARD, not on time alone: moving to another card ends
+   * the burst, so the pinch-swipe-pinch rhythm of rapid marking can never
+   * trigger it, while an incidental swipe that leaves focus put is harmless.
+   * That fragility is why this moved out of the input adapter, which cannot see
+   * what is focused and so had to reset on every other event.
+   */
+  const noteBurst = (cardId: string): boolean => {
     const previous = burstStart.current;
     const now = Date.now();
     const sameBurst = previous && previous.cardId === cardId && now - previous.at <= BURST_WINDOW_MS;
-    burstStart.current = sameBurst
-      ? { ...previous, at: now }
-      : { cardId, held: ownedFinishes(cardId), at: now };
+    const next = sameBurst
+      ? { ...previous, at: now, count: previous.count + 1 }
+      : { cardId, held: ownedFinishes(cardId), at: now, count: 1 };
+    burstStart.current = next;
+    return next.count >= BURST_COUNT;
   };
 
   /**
@@ -182,7 +206,11 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const markCard = (index: number) => {
     const card = cards[index];
     if (!card) return;
-    noteBurst(card.id);
+    if (noteBurst(card.id)) {
+      // Third pinch on this card: the bulk action replaces the single toggle.
+      markWholeCard(index);
+      return;
+    }
     const available = finishesFor(card.collectorNumber, card.variants);
     // A card with one printing marks THAT printing, whatever the picker says.
     // Otherwise selecting an ex card while "Reverse Holo" is active would
