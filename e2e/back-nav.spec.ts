@@ -1,8 +1,6 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
-const swipeUp = (p: Page) => p.locator("body").press("ArrowUp");
-const swipeDown = (p: Page) => p.locator("body").press("ArrowDown");
-const select = (p: Page) => p.locator("body").press("Enter");
+import { openFromHome, select, swipeUp } from "./helpers.ts";
 
 // Back must work WITHOUT the middle-finger pinch (the glasses OS reserves it):
 // a visible Back control reachable by swipe-up + index pinch (SELECT).
@@ -12,10 +10,7 @@ test.describe("reliable back navigation", () => {
     await expect(page.getByRole("heading", { name: "CardLens" })).toBeVisible();
 
     // Home -> Popular.
-    await swipeDown(page);
-    await swipeDown(page);
-    await swipeDown(page);
-    await select(page);
+    await openFromHome(page, "Popular");
     await expect(page.getByRole("heading", { name: "Popular" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
 

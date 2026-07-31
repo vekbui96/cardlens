@@ -44,7 +44,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: true,
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // server/ was omitted, so server/sessionStore.test.ts has never actually
+    // run despite existing. The server holds the collection now, so its tests
+    // have to be part of `npm run verify`.
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "server/**/*.{test,spec}.ts"],
     exclude: ["e2e/**", "node_modules/**"],
     coverage: {
       provider: "v8",

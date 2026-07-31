@@ -34,10 +34,12 @@ export function isLive(row: OwnedPrinting): boolean {
   return row.at > (row.deletedAt ?? 0);
 }
 
-/** The row's last write, whichever kind it was. */
-function stamp(row: OwnedPrinting): number {
+/** The row's last write, whichever kind it was. Also the sync watermark. */
+export function rowStamp(row: OwnedPrinting): number {
   return Math.max(row.at, row.deletedAt ?? 0);
 }
+
+const stamp = rowStamp;
 
 /**
  * Pick the winner between two versions of the same (card, finish).

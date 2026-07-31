@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import { SessionStore } from "./sessionStore.ts";
+import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -11,6 +12,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
 const POKEMONTCG_BASE = "https://api.pokemontcg.io/v2";
 const POKEMONTCG_API_KEY = process.env.POKEMONTCG_API_KEY ?? "";
 const MAX_INPUT_LENGTH = 100;
+const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
+// Forward slashes deliberately: Node accepts them on Windows, and a backslash
+// path in a TS literal silently collapses (\s \d \c are just s, d, c).
+const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 
 /** Minimal in-memory fixed-window rate limiter (per IP + route bucket). */
 function rateLimiter(maxPerWindow: number, windowMs: number) {
@@ -40,10 +45,15 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction): void
   next();
 }
 
-export function createApp(store: SessionStore = new SessionStore(SESSION_TTL_MS)) {
+export function createApp(
+  store: SessionStore = new SessionStore(SESSION_TTL_MS),
+  collection: CollectionStore = new CollectionStore(COLLECTION_FILE),
+) {
   const app = express();
   app.set("trust proxy", true);
-  app.use(express.json({ limit: "8kb" }));
+  // 8kb suits the companion relay, but a full collection sync is a few thousand
+  // rows; the route-level row cap is the real bound.
+  app.use(express.json({ limit: "4mb" }));
   app.use(securityHeaders);
   // The relay carries only user-typed card names, uses unguessable short-lived
   // codes, and is rate-limited — so by default we reflect any Origin. This is
@@ -96,6 +106,58 @@ export function createApp(store: SessionStore = new SessionStore(SESSION_TTL_MS)
       return;
     }
     res.json({ ok: true });
+  });
+
+  // --- Collection sync -------------------------------------------------------
+  /**
+   * These endpoints are reachable from the public internet via Tailscale Funnel,
+   * so they are the one part of this service that can be written to by a
+   * stranger. A shared bearer token gates them.
+   *
+   * With no token configured the routes return 503 rather than running open —
+   * failing closed, because the failure mode of the alternative is silent and
+   * permanent.
+   */
+  function requireToken(req: Request, res: Response, next: NextFunction): void {
+    if (!COLLECTION_TOKEN) {
+      res.status(503).json({ error: "collection_sync_disabled" });
+      return;
+    }
+    const header = req.get("authorization") ?? "";
+    const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (presented !== COLLECTION_TOKEN) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    next();
+  }
+
+  const collectionLimiter = rateLimiter(120, 60_000);
+
+  app.get("/api/collection", collectionLimiter, requireToken, (req, res) => {
+    const raw = req.query.since;
+    const since = typeof raw === "string" ? Number(raw) : 0;
+    const rows = Number.isFinite(since) && since > 0 ? collection.since(since) : collection.all();
+    res.json({ rows, at: Date.now() });
+  });
+
+  app.post("/api/collection/merge", collectionLimiter, requireToken, (req, res) => {
+    const body = req.body as { rows?: unknown };
+    if (!Array.isArray(body?.rows)) {
+      res.status(400).json({ error: "invalid_rows" });
+      return;
+    }
+    if (body.rows.length > MAX_ROWS_PER_REQUEST) {
+      res.status(413).json({ error: "too_many_rows", max: MAX_ROWS_PER_REQUEST });
+      return;
+    }
+    // Invalid rows are dropped, not fatal: one malformed row should not reject
+    // a sync carrying hundreds of good ones.
+    const incoming = body.rows.flatMap((r) => parseRow(r) ?? []);
+    const dropped = body.rows.length - incoming.length;
+    if (dropped > 0) console.warn(`[cardlens] collection merge dropped ${dropped} invalid row(s)`);
+    const rows = collection.merge(incoming);
+    res.json({ rows, at: Date.now(), dropped });
   });
 
   // --- Optional catalog proxy (adds server-side API key + short cache) ------

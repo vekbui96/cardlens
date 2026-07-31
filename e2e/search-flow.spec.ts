@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { openFromHome } from "./helpers.ts";
+
 // The glasses emit keyboard events; drive the app exactly the same way. We target
 // <body> explicitly so key events reliably reach the window listener regardless of
 // which element last had focus (e.g. after a text modal closes).
@@ -68,11 +70,7 @@ test.describe("core search-to-favorite flow (keyboard only)", () => {
   test("popular Pokémon search needs no typing", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "CardLens" })).toBeVisible();
-    // Search, Recent, Favorites, Popular -> 3 swipes down.
-    await swipeDown(page);
-    await swipeDown(page);
-    await swipeDown(page);
-    await select(page);
+    await openFromHome(page, "Popular");
     await expect(page.getByRole("heading", { name: "Popular" })).toBeVisible();
     await select(page); // Charizard (first popular)
     await expect(page.getByRole("heading", { name: "Search Cards" })).toBeVisible();

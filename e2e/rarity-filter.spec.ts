@@ -1,9 +1,6 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
-const swipeDown = (p: Page) => p.locator("body").press("ArrowDown");
-const swipeRight = (p: Page) => p.locator("body").press("ArrowRight");
-const swipeLeft = (p: Page) => p.locator("body").press("ArrowLeft");
-const select = (p: Page) => p.locator("body").press("Enter");
+import { openFromHome, select, swipeLeft, swipeRight } from "./helpers.ts";
 
 test.describe("rarity filter on results", () => {
   test("swipe right/left cycles rarity and filters with price", async ({ page }) => {
@@ -11,10 +8,7 @@ test.describe("rarity filter on results", () => {
     await expect(page.getByRole("heading", { name: "CardLens" })).toBeVisible();
 
     // Reach Charizard results via Popular (no typing).
-    await swipeDown(page);
-    await swipeDown(page);
-    await swipeDown(page); // Popular
-    await select(page);
+    await openFromHome(page, "Popular");
     await expect(page.getByRole("heading", { name: "Popular" })).toBeVisible();
     await select(page); // Charizard
     await expect(page.getByRole("heading", { name: "Search Cards" })).toBeVisible();

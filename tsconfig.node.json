@@ -21,5 +21,14 @@
 
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "server"]
+  // The server shares the collection merge rule with the client rather than
+  // reimplementing it — two copies of a convergence rule that drift is how a
+  // sync system loses data. These two files are the shared surface.
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "server",
+    "src/storage/printings.ts",
+    "src/models/cards.ts"
+  ]
 }
