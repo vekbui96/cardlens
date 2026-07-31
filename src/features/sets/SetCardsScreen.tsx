@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { CardRow } from "../../components/CardRow.tsx";
@@ -17,6 +17,9 @@ import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
+
+/** Matches the input adapter's burst window, so both agree what one burst is. */
+const BURST_WINDOW_MS = 500;
 
 /** Cards in a set, in collector-number order, with a swipe rarity filter. */
 export function SetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
@@ -110,25 +113,46 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const count = listCount + CHROME_ROWS;
 
   /**
-   * Hold: mark every printing of the card, or clear them all if it is already
-   * complete. Aimed at the common cases — a card you own in all its printings,
-   * or one you are correcting wholesale — without cycling the picker.
+   * What a card looked like when the current pinch burst began.
    *
-   * Not the only route to this: SELECT_HOLD is derived rather than a documented
-   * gesture, so if the glasses never produce it, the picker still reaches every
-   * printing one at a time.
+   * Needed because each pinch of a triple toggles as it lands, so by the time
+   * the bulk action fires the card no longer reflects the user's intent: on a
+   * complete card the first pinch has already cleared one printing, making it
+   * look incomplete, and the bulk would refill it instead of clearing. Deciding
+   * from the pre-burst snapshot makes triple-pinch symmetric.
+   */
+  const burstStart = useRef<{ cardId: string; held: CollectFinish[]; at: number } | null>(null);
+
+  const noteBurst = (cardId: string) => {
+    const previous = burstStart.current;
+    const now = Date.now();
+    const sameBurst = previous && previous.cardId === cardId && now - previous.at <= BURST_WINDOW_MS;
+    burstStart.current = sameBurst
+      ? { ...previous, at: now }
+      : { cardId, held: ownedFinishes(cardId), at: now };
+  };
+
+  /**
+   * Bulk: set every printing of the card at once — clear it if it was complete
+   * when the burst started, fill it otherwise.
+   *
+   * Reached by triple-pinch (documented input) or by hold where the hardware
+   * supports it. Neither is required: the picker still reaches every printing
+   * one at a time.
    */
   const markWholeCard = (index: number) => {
     const card = cards[index];
     if (!card) return;
     const available = finishesFor(card.collectorNumber, card.variants);
+    const before = burstStart.current?.cardId === card.id ? burstStart.current.held : ownedFinishes(card.id);
+    const wasComplete = available.length > 0 && available.every((f) => before.includes(f));
     const held = ownedFinishes(card.id);
-    const complete = available.every((f) => held.includes(f));
     for (const finish of available) {
       const has = held.includes(finish);
-      // toggleOwned is the only mutation available, so only flip what differs.
-      if (complete ? has : !has) toggleOwned(card.id, finish, setId);
+      // toggleOwned is the only mutation, so flip only what differs from target.
+      if (wasComplete ? has : !has) toggleOwned(card.id, finish, setId);
     }
+    burstStart.current = null;
   };
 
   /**
@@ -158,6 +182,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const markCard = (index: number) => {
     const card = cards[index];
     if (!card) return;
+    noteBurst(card.id);
     const available = finishesFor(card.collectorNumber, card.variants);
     // A card with one printing marks THAT printing, whatever the picker says.
     // Otherwise selecting an ex card while "Reverse Holo" is active would
