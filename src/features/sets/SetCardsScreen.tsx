@@ -14,7 +14,7 @@ import {
   availableFinishes,
   type CollectFinish,
 } from "../../models/cards.ts";
-import { byCollectorNumber, byPriceDesc } from "../../integrations/pokemon/sort.ts";
+import { byCollectorNumber } from "../../integrations/pokemon/sort.ts";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useSetCards, useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
@@ -36,7 +36,6 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const [collectMode, setCollectMode] = useState(false);
   /** Which printing a pinch marks. Cycled with ← → while collecting. */
   const [finishIndex, setFinishIndex] = useState(0);
-  const [byValue, setByValue] = useState(false);
 
   const rarity = rarityFilterAt(rarityIndex);
   const { data, isLoading, isError, refetch } = useSetCards(setId, rarity.rarities ?? undefined);
@@ -53,27 +52,28 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   );
 
   /**
-   * Finishes offered for marking, most relevant first: the ones this set's
-   * pricing data implies, then the rest. The extras have to stay reachable
-   * because Poké Ball and Master Ball patterns never appear in the payload, so
-   * without them those printings could not be recorded at all.
+   * Finishes offered for marking: only the ones this set actually has, plus any
+   * already held in it. Offering all seven everywhere put 1st Edition on a
+   * modern set and Poké Ball on a WotC one, which is noise.
+   *
+   * The trade-off is real: Poké Ball and Master Ball never appear in the
+   * pricing payload, so they are unreachable here until one is marked from a
+   * card's details screen, which still lists every finish. Once marked, the
+   * printing joins this set's choices.
    */
   const finishChoices = useMemo<CollectFinish[]>(() => {
     const inSet = new Set<CollectFinish>();
     for (const card of allCards ?? []) for (const f of availableFinishes(card.variants)) inSet.add(f);
-    const primary = ALL_COLLECT_FINISHES.filter((f) => inSet.has(f));
-    const rest = ALL_COLLECT_FINISHES.filter((f) => !inSet.has(f));
-    return primary.length > 0 ? [...primary, ...rest] : [...ALL_COLLECT_FINISHES];
-  }, [allCards]);
+    for (const card of allCards ?? []) for (const f of ownedFinishes(card.id)) inSet.add(f);
+    const choices = ALL_COLLECT_FINISHES.filter((f) => inSet.has(f));
+    return choices.length > 0 ? choices : ["normal"];
+  }, [allCards, ownedFinishes]);
 
   const activeFinish = finishChoices[finishIndex % finishChoices.length] ?? "normal";
 
-  // Binder order by default — a set is worked through by number, not by price.
-  const cards = useMemo(() => {
-    const list = [...(data ?? [])];
-    list.sort(byValue ? byPriceDesc : byCollectorNumber);
-    return list;
-  }, [data, byValue]);
+  // Always binder order: a set is worked through by number. Value ordering is
+  // a browsing concern and lives on the search results screen.
+  const cards = useMemo(() => [...(data ?? [])].sort(byCollectorNumber), [data]);
 
   const phase: "loading" | "error" | "empty" | "list" = isLoading
     ? "loading"
@@ -84,13 +84,13 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         : "list";
   const listCount = phase === "list" ? cards.length : phase === "error" ? 1 : 0;
   /**
-   * Focusable rows above the list: collect toggle, sort toggle, and — only
-   * while collecting — the printing picker. It joins the focus ring rather than
-   * living purely on a swipe, because a gesture that changes what every
-   * subsequent pinch does is undiscoverable on a device with nothing to hover.
+   * Focusable rows above the list: the collect toggle, plus the printing picker
+   * while collecting. The picker joins the focus ring rather than living purely
+   * on a swipe, because a gesture that changes what every subsequent pinch does
+   * is undiscoverable on a device with nothing to hover.
    */
-  const CHROME_ROWS = collectMode ? 3 : 2;
-  const FINISH_ROW = 2;
+  const CHROME_ROWS = collectMode ? 2 : 1;
+  const FINISH_ROW = 1;
   const count = listCount + CHROME_ROWS;
 
   const markCard = (index: number) => {
@@ -117,10 +117,6 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         setCollectMode((on) => !on);
         return;
       }
-      if (i === 1) {
-        setByValue((v) => !v);
-        return;
-      }
       if (collectMode && i === FINISH_ROW) {
         setFinishIndex((n) => (n + 1) % finishChoices.length);
         return;
@@ -137,29 +133,26 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   });
 
   const collectFocused = itemIndex === 0;
-  const sortFocused = itemIndex === 1;
   const finishFocused = collectMode && itemIndex === FINISH_ROW;
   const cardProgress = setTotal ? `${ownedCards}/${setTotal}` : `${ownedCards}`;
-  const subtitle = collectMode
-    ? `${cardProgress} cards · ${masterTotal ? `${ownedPrintings}/${masterTotal}` : ownedPrintings} printings`
-    : `${cardProgress} cards`;
+  // While collecting, printings are the number being worked on; otherwise the
+  // card count is the useful one. One short string either way.
+  const headerStatus =
+    collectMode && masterTotal ? `${ownedPrintings}/${masterTotal}` : cardProgress;
 
   return (
-    <Screen title={setName} subtitle={subtitle} canGoBack>
-      <BackRow focused={backFocused} onActivate={pop} />
+    <Screen
+      title={setName}
+      headerLeft={<BackRow focused={backFocused} onActivate={pop} />}
+      headerRight={headerStatus}
+      canGoBack
+    >
       <ToggleRow
         label={collectMode ? `✓ Marking: ${COLLECT_FINISH_LABELS[activeFinish]}` : "Collect mode: off"}
         hint={collectMode ? "Pick the printing below" : "Select opens card"}
         on={collectMode}
         focused={collectFocused}
         onActivate={() => setCollectMode((on) => !on)}
-      />
-      <ToggleRow
-        label={byValue ? "Sort: value" : "Sort: number"}
-        hint={byValue ? "Highest first" : "Binder order"}
-        on={byValue}
-        focused={sortFocused}
-        onActivate={() => setByValue((v) => !v)}
       />
       {/* Rarity filtering shares ← → with finish selection, so the bar is
           replaced while collecting rather than left showing a control that does
@@ -179,7 +172,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         <ErrorState
           message="Couldn’t load set"
           onRetry={() => void refetch()}
-          retryFocused={!backFocused && !collectFocused && !sortFocused && !finishFocused}
+          retryFocused={!backFocused && !collectFocused && !finishFocused}
         />
       ) : null}
       {phase === "empty" ? (

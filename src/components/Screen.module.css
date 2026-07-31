@@ -16,6 +16,39 @@
   padding-bottom: var(--cl-gap-sm);
 }
 
+.headerCompact {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap);
+  border-bottom: 2px solid rgba(53, 224, 208, 0.35);
+  padding-bottom: var(--cl-gap-sm);
+}
+
+/* Title yields first: the control and the counter are both fixed-width and
+   more useful than the full set name, which is one screen back anyway. */
+.titleCompact {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--cl-fs-body);
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--cl-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headerStatus {
+  flex: 0 0 auto;
+  font-size: var(--cl-fs-small);
+  font-weight: 800;
+  color: var(--cl-fg-muted);
+  white-space: nowrap;
+}
+
 .title {
   margin: 0;
   font-size: var(--cl-fs-title);

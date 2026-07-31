@@ -20,17 +20,12 @@ export function CardRow({
 }) {
   const held = ownedFinishes ?? [];
   const owned = held.length > 0;
-  // The active finish is always shown even when the data does not list it for
-  // this card: hand-marked printings (Poké Ball, Master Ball) have to be
-  // visible as a target, or they cannot be marked from the list at all.
+  // Only printings this card actually has, plus any already held. The active
+  // target is NOT forced in: showing a Poké Ball badge on every card of a set
+  // that has none was noise, so the outline appears only where the printing is
+  // genuinely applicable.
   const finishes = showFinishes
-    ? Array.from(
-        new Set([
-          ...availableFinishes(card.variants),
-          ...held,
-          ...(highlightFinish ? [highlightFinish] : []),
-        ]),
-      )
+    ? Array.from(new Set([...availableFinishes(card.variants), ...held]))
     : [];
   // A lone "N" badge on a card that only exists as one printing is noise, so
   // badges appear once there is genuinely something to compare or track.
