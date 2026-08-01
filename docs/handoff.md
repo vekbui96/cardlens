@@ -11,6 +11,7 @@ Written at the end of a long session so the next one can start without re-derivi
 It started as card search for Meta Ray-Ban Display glasses. It is now a **collection tracker** for master-set collectors, with:
 
 - Per-**printing** tracking (`normal`, `reverse`, `holo`, `reverse:pokeball`, …), not per-card
+- Per-**printing pricing** — the card sheet prices each printing separately, not once per card
 - Sync to a self-hosted server (`server-pc.tail0e4194.ts.net`) with offline-first semantics
 - Real printing data from TCGdex, since pokemontcg.io cannot supply it
 - Two genuinely different UIs: glasses vs web/phone
@@ -22,9 +23,10 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Frontend          | https://vekbui96.github.io/cardlens/                                |
 | Server (cardlens) | `https://server-pc.tail0e4194.ts.net:8443` via Tailscale Funnel     |
 | Collection data   | `D:/services/data/collection.json` on SERVER-PC                     |
-| Printings cache   | `D:/services/data/printings/` (30-day TTL)                          |
+| Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **2**)     |
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
 | Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
+| Deployed at       | `a033920` — both Pages and server, CI green                         |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
@@ -32,23 +34,25 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 
 ## Immediate next task
 
-Nothing is half-built. Pick from `docs/performance-plan.md` — **item 5** (every mark rewrites
-the whole collection) is next in its own ordering and the only item there expected to be
-_felt_ as the collection grows.
+Nothing is half-built. `docs/performance-plan.md` **item 5** (every mark rewrites the whole
+collection) is still next and is still the only item there expected to be _felt_ as the
+collection grows.
 
-The set screen now runs on `/api/set-information/:setId` (`3ae8a27`, both halves deployed and
-verified live): 120 cards + 219 printing entries for `me5` in one 86 KB response, 0.66s warm.
-The fallback to the per-query path engages on error, unreachable server, or an empty payload,
-and is off entirely under mocks and `?sim=`.
+## What the pricing work actually changed
 
-**Not yet seen on hardware.** Worth confirming on the glasses: the set screen still paints,
-and printing badges now show real TCGdex data outside collect mode rather than what pricing
-implies — that is a deliberate change, but it is a visible one.
+Prices were already arriving from TCGdex and were already valuing the collection total. They
+were lost at exactly one place: `buildPrintingIndex` mapped `Printing[]` to `Finish[]`,
+discarding everything but the key, so the set screen had no prices at all. `useCollectionValue`
+only worked because it bypassed the index and re-read the raw map.
 
-## Unresolved, needs the user's device
+Now: `SetPrintingIndex.prices` carries them, `printingPrice()` is the one lookup (it tries the
+collector number as given, unpadded, and `padStart(3,"0")`), and `SetView` exposes `priceFor`
+and `headlinePriceFor`. `useCollectionValue` was refactored onto the same lookup, so the set
+screen and the collection total cannot disagree about what a printing is worth.
 
-- **"Blue bar" on the glasses Sets screen.** Diagnosed three times wrongly. It is _not_ a loading state — `LoadingState` renders a spinner and text. It is the focused Back control above an **empty list**. `SetsScreen` now has an empty branch that says "No sets loaded · Select to try again", so the next report should distinguish loading / error / empty / list. Ask which text appears before theorising again.
-- **Web shell on a real phone.** Row heights and touch targets were tuned for a 600×600 square. Never seen at 390×844.
+**A card whose set pokemontcg.io cannot price now headlines with its dearest known printing**
+instead of reading "Unavailable". That matters for whole sets: measured live, pokemontcg.io
+prices 0/120 Pitch Black and 0/124 Perfect Order.
 
 ## Confirmed on hardware (do not re-litigate)
 
@@ -56,24 +60,30 @@ implies — that is a deliberate change, but it is a visible one.
 - Hold gesture. **Removed** — never fired; the platform gives `keydown` only.
 - Tapping printing badges on the phone. **Works** (server saw the rows land).
 
+## Unresolved, needs the user's device
+
+- **"Blue bar" on the glasses Sets screen.** Diagnosed three times wrongly. It is _not_ a loading state — `LoadingState` renders a spinner and text. It is the focused Back control above an **empty list**. `SetsScreen` has an empty branch that says "No sets loaded · Select to try again", so the next report should distinguish loading / error / empty / list. Ask which text appears before theorising again.
+- **The web shell on a REAL phone.** It is now proven at 412x839 in Playwright (`--project=phone`, `devices["Pixel 7"]`) — no horizontal overflow, 44px touch targets, the sheet bounded and its Done button reachable. That is emulation, not a device. Nobody has held this in a hand yet.
+- **Per-printing prices on the glasses.** The prices are on `SetView` and the glasses could show them, but only the phone sheet does. Whether a 600x600 additive display has room is a judgement nobody has made on hardware.
+
 ## Things that bit hard this session
 
 Full detail in `CLAUDE.md`; the shortlist:
 
-- The deployed app called pokemontcg.io **directly** for months of code — the resilient proxy existed and nothing used it, because `VITE_API_BASE_URL` was never set in the Pages workflow. Now set via the `CATALOG_API_BASE_URL` repo variable.
-- `index.html` hardcoded `width=600, height=600` in the viewport meta, so **every device** reported a 600×600 viewport and phones were indistinguishable from the glasses.
-- Deploying Pages without deploying the server left stale validation silently dropping synced rows.
-- **Deleting `collection.json` destroyed 9 real rows.** To clear data, write tombstones — deleting leaves device rows stranded, and devices will not re-push them.
-- `npm run verify` did not include `format:check` (CI does), so script-applied edits failed the deploy.
+- **TCGdex does not publish first-edition price keys.** A whole task was planned on the assumption it did. Measured across every card in me05, me03, sv08.5 and base1 — 526 cards — the only keys that exist are `normal`, `holofoil`, `reverse-holofoil`. TCGdex carries 1st Edition as a `stamp` on a `holo` variant with `pricing: null`. The three-key mapping was already complete. **Do not add a price key without measuring for it first.**
+- **A Playwright project with no `testMatch` runs every spec.** Adding a `phone` project silently re-ran all eight glasses specs at 412x839, where the app resolves to the web shell — five failed and CI would have gone red. The project is now scoped to `phone-layout.spec.ts`.
+- **The card sheet's Done button was inside the scrolling region.** With 12 printings it sat at 1098px against an 844px viewport. Fixed by pinning `.close` outside a new `.scroll` wrapper. It was invisible for months because the mock fixtures give each card one printing — **an assertion that cannot be stressed cannot catch anything.**
+- **Prettier does not read `.gitignore`.** Git-ignored scratch directories still fail `format:check` until they are in `.prettierignore`.
+- A cache-version bump is for **shape** changes. Bumping when output is byte-identical costs a full refetch of every set (120–295 requests each) and buys nothing. `PRINTINGS_CACHE_VERSION` is deliberately still 2.
 
 ## Ideas discussed, not started
 
-- **Mobile-first UI from scratch** (user is keen): card-image grid, bottom sheet per card, "missing only" filter, per-printing prices — TCGdex already returns TCGplayer and Cardmarket prices per variant and we discard them.
-- Home screen: web shows a resume row, live counts and progress bars; glasses deliberately keep a fixed menu.
+- Home screen refinements beyond the resume row and progress bars already shipped.
 - **Rejected: proxying card images through the server.** Residential upload is slower than the CDN, the glasses reach it through a relay rather than the LAN, a single set is 10–25 MB of thumbnails, and an outage would blank every image. Cache on the device instead if offline art matters.
 
 ## Housekeeping still open
 
-- `D:/services/data/collection.json` has **no backup**; `D:\services\backups\` exists and is empty.
-- SERVER-PC BIOS: **AC Recovery → Power On** is not set, so it stays off after a power cut.
-- `solid-website-api` deploy key not registered, so the server rebuilds sideloaded source rather than pulling.
+- `D:/services/data/collection.json` has **no backup**; `D:\services\backups\` exists and is empty. This is the only irreplaceable data in the system.
+- SERVER-PC BIOS: **AC Recovery → Power On** is not set, so it stays off after a power cut. It has been found powered off twice.
+- `solid-website-api` deploy key not registered, so that server rebuilds sideloaded source rather than pulling. Does not affect CardLens.
+- `useCollectionValue` still has no direct test, and it computes what the collection is worth. The refactor onto the shared lookup was verified equivalent by review, not by a test.
