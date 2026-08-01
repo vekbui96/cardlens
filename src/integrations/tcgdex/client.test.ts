@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TcgdexClient } from "./client.ts";
+import { TcgdexClient, toPrintings } from "./client.ts";
 import { ProviderError } from "../providers.ts";
 
 const SETS = [
@@ -158,5 +158,62 @@ describe("TcgdexClient.getSetPrintings", () => {
     await expect(new TcgdexClient().getSetPrintings("me5", "Pitch Black")).rejects.toBeInstanceOf(
       ProviderError,
     );
+  });
+});
+
+describe("toPrintings", () => {
+  // Live-measured across 40-card samples of me05, me03, sv08.5 and base1
+  // (159 cards with a tcgplayer block): only normal (103), reverse-holofoil
+  // (96) and holofoil (56) ever appear — see the comment on
+  // PRICE_KEY_TO_TYPE. No other key, including the plausible-looking
+  // "1st-edition-holofoil", was observed.
+  it("maps every measured tcgplayer price key onto a printing type", () => {
+    const card = {
+      id: "me05-001",
+      localId: "001",
+      variants_detailed: [{ type: "normal" }, { type: "holo" }, { type: "reverse" }],
+      pricing: {
+        tcgplayer: {
+          normal: { marketPrice: 5 },
+          holofoil: { marketPrice: 250 },
+          "reverse-holofoil": { marketPrice: 12 },
+          unit: "USD",
+          updated: "2026-07-31",
+        },
+      },
+    };
+
+    const printings = toPrintings(card);
+
+    expect(printings).toContainEqual({ type: "normal", price: 5 });
+    expect(printings).toContainEqual({ type: "holo", price: 250 });
+    expect(printings).toContainEqual({ type: "reverse", price: 12 });
+  });
+
+  it("skips an unrecognised price key rather than guessing a type", () => {
+    // A wrong price is worse than a missing one. This key was never observed
+    // in live measurement, so it must not be mapped however plausible it
+    // looks.
+    const card = {
+      id: "x-1",
+      localId: "1",
+      variants_detailed: [{ type: "normal" }],
+      pricing: { tcgplayer: { "some-future-foil": { marketPrice: 9 } } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "normal" }]);
+  });
+
+  it("never prices a patterned foil off the plain finish's key", () => {
+    // TCGdex publishes no separate key for reverse:pokeball etc.; giving it
+    // the plain reverse price would fabricate a number.
+    const card = {
+      id: "me05-014",
+      localId: "014",
+      variants_detailed: [{ type: "reverse", foil: "pokeball" }],
+      pricing: { tcgplayer: { "reverse-holofoil": { marketPrice: 12 } } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "reverse", foil: "pokeball" }]);
   });
 });
