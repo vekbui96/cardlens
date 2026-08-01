@@ -62,10 +62,12 @@ export interface SetView {
 ### Task 1: Carry prices through the printing index
 
 **Files:**
+
 - Modify: `src/models/printingIndex.ts:1-57`
 - Test: `src/models/printingIndex.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Printing` from `src/integrations/tcgdex/client.ts` (already has optional `price?: number`).
 - Produces: `SetPrintingIndex.prices` and `printingPrice()` exactly as in the Shared Interface Contract above.
 
@@ -77,7 +79,10 @@ Add to `src/models/printingIndex.test.ts`:
 describe("printingPrice", () => {
   it("indexes a price per number and finish", () => {
     const index = buildPrintingIndex({
-      "001": [{ type: "normal", price: 1.5 }, { type: "reverse", price: 4.25 }],
+      "001": [
+        { type: "normal", price: 1.5 },
+        { type: "reverse", price: 4.25 },
+      ],
     });
 
     expect(printingPrice(index, "001", "normal")).toBe(1.5);
@@ -150,28 +155,28 @@ export interface SetPrintingIndex {
 Inside `buildPrintingIndex`, declare the map alongside `byNumber` and fill it in the same loop:
 
 ```ts
-  const byNumber: Record<string, Finish[]> = {};
-  const prices: Record<string, number> = {};
+const byNumber: Record<string, Finish[]> = {};
+const prices: Record<string, number> = {};
 ```
 
 Replace the body of the `for (const [number, printings] of ...)` loop's first two lines with:
 
 ```ts
-    const finishes = printings.map((p) => makeFinish(p.type, p.foil));
-    byNumber[number] = finishes;
-    for (const p of printings) {
-      // Zero is not a price. Absent means unknown, and a 0 would sum as if the
-      // printing were worthless.
-      if (typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0) {
-        prices[`${number}|${makeFinish(p.type, p.foil)}`] = p.price;
-      }
-    }
+const finishes = printings.map((p) => makeFinish(p.type, p.foil));
+byNumber[number] = finishes;
+for (const p of printings) {
+  // Zero is not a price. Absent means unknown, and a 0 would sum as if the
+  // printing were worthless.
+  if (typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0) {
+    prices[`${number}|${makeFinish(p.type, p.foil)}`] = p.price;
+  }
+}
 ```
 
 Return it:
 
 ```ts
-  return { byNumber, all, packTotal, excluded, prices };
+return { byNumber, all, packTotal, excluded, prices };
 ```
 
 Then append the lookup helper at the end of the file:
@@ -196,7 +201,9 @@ export function printingPrice(
   finish: Finish,
 ): number | undefined {
   if (!index) return undefined;
-  return index.prices[`${collectorNumber}|${finish}`] ?? index.prices[`${unpadded(collectorNumber)}|${finish}`];
+  return (
+    index.prices[`${collectorNumber}|${finish}`] ?? index.prices[`${unpadded(collectorNumber)}|${finish}`]
+  );
 }
 ```
 
@@ -217,10 +224,12 @@ git commit -m "Keep per-printing prices in the set printing index"
 ### Task 2: Expose prices on SetView
 
 **Files:**
+
 - Modify: `src/hooks/useSetView.ts:1-120`
 - Test: `src/hooks/useSetView.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `printingPrice`, `SetPrintingIndex.prices` from Task 1.
 - Produces: `SetView.priceFor` and `SetView.headlinePriceFor` exactly as in the Shared Interface Contract.
 
@@ -331,22 +340,22 @@ export function headlinePrice(
 Add both members to the `SetView` interface, after `finishesFor`:
 
 ```ts
-  /** USD market price for one printing of one card, or undefined when unpriced. */
-  priceFor: (collectorNumber: string, finish: Finish) => number | undefined;
-  /** Best single price to headline a card: catalog price, else the dearest known printing. */
-  headlinePriceFor: (card: PokemonCardSummary) => number | undefined;
+/** USD market price for one printing of one card, or undefined when unpriced. */
+priceFor: (collectorNumber: string, finish: Finish) => number | undefined;
+/** Best single price to headline a card: catalog price, else the dearest known printing. */
+headlinePriceFor: (card: PokemonCardSummary) => number | undefined;
 ```
 
 Inside the hook, after the existing `finishesFor` memo:
 
 ```ts
-  const priceFor = useMemo(() => {
-    return (collectorNumber: string, finish: Finish) => printingPrice(printings, collectorNumber, finish);
-  }, [printings]);
+const priceFor = useMemo(() => {
+  return (collectorNumber: string, finish: Finish) => printingPrice(printings, collectorNumber, finish);
+}, [printings]);
 
-  const headlinePriceFor = useMemo(() => {
-    return (card: PokemonCardSummary) => headlinePrice(card, printings);
-  }, [printings]);
+const headlinePriceFor = useMemo(() => {
+  return (card: PokemonCardSummary) => headlinePrice(card, printings);
+}, [printings]);
 ```
 
 And add both to the returned object, after `finishesFor,`:
@@ -380,11 +389,13 @@ git commit -m "Expose per-printing and headline prices on the set view"
 ### Task 3: Use the headline price wherever a card price is shown
 
 **Files:**
+
 - Modify: `src/web/sets/WebSetCardsScreen.tsx:132-140`
 - Modify: `src/web/sets/CardSheet.tsx:20-68`
 - Test: `src/web/sets/WebSetCardsScreen.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `SetView.headlinePriceFor` from Task 2.
 - Produces: `CardSheet` accepts a new required prop `headlinePrice?: number`.
 
@@ -400,7 +411,12 @@ it("headlines a card with its dearest printing when the catalog has no price", a
   // absent and the sheet used to read "Unavailable" on a card TCGdex prices.
   renderScreen({
     cards: [{ id: "me5-007", name: "Test Card", collectorNumber: "007", marketPrice: undefined }],
-    printings: { "007": [{ type: "normal", price: 1.5 }, { type: "reverse", price: 4.25 }] },
+    printings: {
+      "007": [
+        { type: "normal", price: 1.5 },
+        { type: "reverse", price: 4.25 },
+      ],
+    },
   });
 
   await userEvent.click(await screen.findByRole("button", { name: /Test Card/ }));
@@ -442,20 +458,20 @@ export function CardSheet({
 Replace the price line:
 
 ```tsx
-            <p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
+<p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
 ```
 
 In `src/web/sets/WebSetCardsScreen.tsx`, pass it:
 
 ```tsx
-        <CardSheet
-          card={openCard}
-          finishes={view.finishesFor(openCard.collectorNumber, openCard.variants)}
-          owned={ownedFinishes(openCard.id)}
-          headlinePrice={view.headlinePriceFor(openCard)}
-          onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
-          onClose={() => setOpenCardId(null)}
-        />
+<CardSheet
+  card={openCard}
+  finishes={view.finishesFor(openCard.collectorNumber, openCard.variants)}
+  owned={ownedFinishes(openCard.id)}
+  headlinePrice={view.headlinePriceFor(openCard)}
+  onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
+  onClose={() => setOpenCardId(null)}
+/>
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -475,11 +491,13 @@ git commit -m "Headline a card with its dearest printing when the catalog cannot
 ### Task 4: Widen TCGdex price-key coverage, measured not guessed
 
 **Files:**
+
 - Modify: `src/integrations/tcgdex/client.ts:186-204`
 - Modify: `server/printingsStore.ts:31`
 - Test: `src/integrations/tcgdex/client.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: no new exports. Widens `PRICE_KEY_TO_TYPE` and bumps `PRINTINGS_CACHE_VERSION` to `3`.
 
@@ -629,10 +647,12 @@ curl -s "https://server-pc.tail0e4194.ts.net:8443/api/printings/me5?name=Pitch%2
 ### Task 5: Delete the duplicated price lookup in useCollectionValue
 
 **Files:**
+
 - Modify: `src/hooks/useCollectionValue.ts:11-23,84-95`
 - Test: existing `src/models/printingIndex.test.ts` covers the shared helper.
 
 **Interfaces:**
+
 - Consumes: `buildPrintingIndex`, `printingPrice` from Task 1.
 - Produces: no new exports. `indexPrices` and the local `PriceIndex` type are removed.
 
@@ -651,24 +671,24 @@ Remove the now-unused `makeFinish` import.
 Replace the `prices` map construction and the `valueCollection` call body:
 
 ```ts
-    const prices = new Map<string, SetPrintingIndex | null>();
-    let pending = 0;
-    let failed = 0;
+const prices = new Map<string, SetPrintingIndex | null>();
+let pending = 0;
+let failed = 0;
 
-    setIds.forEach((setId, i) => {
-      const q = queries[i];
-      if (!q) return;
-      if (q.isPending) pending += 1;
-      if (q.isError) failed += 1;
-      prices.set(setId, buildPrintingIndex(q.data?.byNumber));
-    });
+setIds.forEach((setId, i) => {
+  const q = queries[i];
+  if (!q) return;
+  if (q.isPending) pending += 1;
+  if (q.isError) failed += 1;
+  prices.set(setId, buildPrintingIndex(q.data?.byNumber));
+});
 
-    const value = valueCollection(rows, (row) => {
-      // Collector number is the tail of the card id — the same join the rest of
-      // the app makes, because TCGdex keys printings by number, not by card id.
-      const number = row.cardId.slice(row.cardId.indexOf("-") + 1);
-      return printingPrice(prices.get(row.setId), number, row.finish);
-    });
+const value = valueCollection(rows, (row) => {
+  // Collector number is the tail of the card id — the same join the rest of
+  // the app makes, because TCGdex keys printings by number, not by card id.
+  const number = row.cardId.slice(row.cardId.indexOf("-") + 1);
+  return printingPrice(prices.get(row.setId), number, row.finish);
+});
 ```
 
 - [ ] **Step 2: Verify the totals did not move**

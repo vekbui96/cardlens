@@ -62,12 +62,14 @@ export interface SetView {
 ### Task 1: Show a price on every printing row
 
 **Files:**
+
 - Modify: `src/web/sets/CardSheet.tsx:20-120`
 - Modify: `src/web/sets/CardSheet.module.css`
 - Modify: `src/web/sets/WebSetCardsScreen.tsx:132-140`
 - Test: `src/web/sets/CardSheet.test.tsx` (create)
 
 **Interfaces:**
+
 - Consumes: `SetView.priceFor` and `SetView.headlinePriceFor` from the Shared Interface Contract.
 - Produces: `CardSheet` gains two props — `headlinePrice?: number` and `priceFor: (finish: CollectFinish) => number | undefined`. The caller binds the collector number, so the sheet never has to know it.
 
@@ -171,34 +173,38 @@ export function CardSheet({
 Replace the header price line:
 
 ```tsx
-            <p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
+<p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
 ```
 
 Add the owned total just above the `<ul className={styles.printings}>`, inside the sheet:
 
 ```tsx
-        {/* Only what is actually held, and only when something priced is held:
+{
+  /* Only what is actually held, and only when something priced is held:
             a "$0.00" line under an empty collection reads as a valuation, not
-            as an absence. */}
-        {ownedValue !== undefined ? (
-          <p className={styles.ownedValue} data-testid="sheet-owned-value">
-            You own {formatUsd(ownedValue)}
-          </p>
-        ) : null}
+            as an absence. */
+}
+{
+  ownedValue !== undefined ? (
+    <p className={styles.ownedValue} data-testid="sheet-owned-value">
+      You own {formatUsd(ownedValue)}
+    </p>
+  ) : null;
+}
 ```
 
 Compute it at the top of the component body, before the `useEffect`:
 
 ```tsx
-  const ownedValue = useMemo(() => {
-    let total: number | undefined;
-    for (const finish of owned) {
-      const price = priceFor(finish);
-      if (price === undefined) continue;
-      total = (total ?? 0) + price;
-    }
-    return total;
-  }, [owned, priceFor]);
+const ownedValue = useMemo(() => {
+  let total: number | undefined;
+  for (const finish of owned) {
+    const price = priceFor(finish);
+    if (price === undefined) continue;
+    total = (total ?? 0) + price;
+  }
+  return total;
+}, [owned, priceFor]);
 ```
 
 Add `useMemo` to the React import:
@@ -210,18 +216,18 @@ import { useEffect, useMemo, useRef } from "react";
 Give each printing row its price. Replace the button's children in the **first** `<ul className={styles.printings}>` map:
 
 ```tsx
-                <button
-                  type="button"
-                  className={`${styles.printing} ${held ? styles.held : ""}`}
-                  aria-pressed={held}
-                  onClick={() => onToggle(finish)}
-                >
-                  <span className={styles.box} aria-hidden="true">
-                    {held ? "✓" : ""}
-                  </span>
-                  <span className={styles.printingLabel}>{finishLabel(finish)}</span>
-                  <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
-                </button>
+<button
+  type="button"
+  className={`${styles.printing} ${held ? styles.held : ""}`}
+  aria-pressed={held}
+  onClick={() => onToggle(finish)}
+>
+  <span className={styles.box} aria-hidden="true">
+    {held ? "✓" : ""}
+  </span>
+  <span className={styles.printingLabel}>{finishLabel(finish)}</span>
+  <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
+</button>
 ```
 
 Do the same for the second list (the hand-marked extras), which uses the same row shape:
@@ -260,15 +266,15 @@ Confirm `.printing` is already `display: flex; align-items: center;` — `margin
 In `src/web/sets/WebSetCardsScreen.tsx`:
 
 ```tsx
-        <CardSheet
-          card={openCard}
-          finishes={view.finishesFor(openCard.collectorNumber, openCard.variants)}
-          owned={ownedFinishes(openCard.id)}
-          headlinePrice={view.headlinePriceFor(openCard)}
-          priceFor={(finish) => view.priceFor(openCard.collectorNumber, finish)}
-          onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
-          onClose={() => setOpenCardId(null)}
-        />
+<CardSheet
+  card={openCard}
+  finishes={view.finishesFor(openCard.collectorNumber, openCard.variants)}
+  owned={ownedFinishes(openCard.id)}
+  headlinePrice={view.headlinePriceFor(openCard)}
+  priceFor={(finish) => view.priceFor(openCard.collectorNumber, finish)}
+  onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
+  onClose={() => setOpenCardId(null)}
+/>
 ```
 
 - [ ] **Step 6: Run the tests to verify they pass**
@@ -288,10 +294,12 @@ git commit -m "Price each printing in the card sheet, and total what is owned"
 ### Task 2: Render the shell at real phone dimensions
 
 **Files:**
+
 - Modify: `playwright.config.ts:22-26`
 - Test: `e2e/phone-layout.spec.ts` (create)
 
 **Interfaces:**
+
 - Consumes: nothing from Task 1.
 - Produces: a `phone` Playwright project at 390x844. Later tasks and future e2e specs can target it with `test.describe.configure` or by project name.
 
@@ -332,7 +340,10 @@ test.describe("web shell at phone size", () => {
 
   test("the set grid does not scroll sideways", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("button", { name: /Pitch Black/ }).first().click();
+    await page
+      .getByRole("button", { name: /Pitch Black/ })
+      .first()
+      .click();
     await expect(page.getByRole("list")).toBeVisible();
 
     const overflow = await page.evaluate(
@@ -343,7 +354,10 @@ test.describe("web shell at phone size", () => {
 
   test("every filter chip is a 44px touch target", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("button", { name: /Pitch Black/ }).first().click();
+    await page
+      .getByRole("button", { name: /Pitch Black/ })
+      .first()
+      .click();
 
     const chips = page.getByRole("group", { name: "Filter by rarity" }).getByRole("button");
     const count = await chips.count();
@@ -358,8 +372,14 @@ test.describe("web shell at phone size", () => {
 
   test("the card sheet fits on screen and its printing rows are tappable", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("button", { name: /Pitch Black/ }).first().click();
-    await page.getByRole("button", { name: /printings owned/ }).first().click();
+    await page
+      .getByRole("button", { name: /Pitch Black/ })
+      .first()
+      .click();
+    await page
+      .getByRole("button", { name: /printings owned/ })
+      .first()
+      .click();
 
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible();
@@ -422,10 +442,12 @@ git commit -m "Test the web shell at phone size, and fix what that exposed
 ### Task 3: Sort a set by value on the phone
 
 **Files:**
+
 - Modify: `src/web/sets/WebSetCardsScreen.tsx:30-58,66-88`
 - Test: `src/web/sets/WebSetCardsScreen.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `SetView.headlinePriceFor` from the Shared Interface Contract.
 - Produces: no new exports.
 
@@ -472,33 +494,33 @@ Expected: FAIL — no "By value" control exists.
 Add the state beside `missingOnly`:
 
 ```tsx
-  /** Binder order is the default; value order answers a different question. */
-  const [byValue, setByValue] = useState(false);
+/** Binder order is the default; value order answers a different question. */
+const [byValue, setByValue] = useState(false);
 ```
 
 Replace the `cards` memo:
 
 ```tsx
-  const cards = useMemo(() => {
-    const visible = missingOnly ? view.cards.filter((c) => !isComplete(c)) : view.cards;
-    if (!byValue) return visible;
-    // Copy before sorting: view.cards is memoised upstream and sorting in place
-    // would mutate the cached binder order everything else reads.
-    return [...visible].sort((a, b) => (view.headlinePriceFor(b) ?? 0) - (view.headlinePriceFor(a) ?? 0));
-  }, [view, missingOnly, isComplete, byValue]);
+const cards = useMemo(() => {
+  const visible = missingOnly ? view.cards.filter((c) => !isComplete(c)) : view.cards;
+  if (!byValue) return visible;
+  // Copy before sorting: view.cards is memoised upstream and sorting in place
+  // would mutate the cached binder order everything else reads.
+  return [...visible].sort((a, b) => (view.headlinePriceFor(b) ?? 0) - (view.headlinePriceFor(a) ?? 0));
+}, [view, missingOnly, isComplete, byValue]);
 ```
 
 Add the control next to the missing-only chip:
 
 ```tsx
-        <button
-          type="button"
-          className={`${styles.chip} ${byValue ? styles.chipOn : ""}`}
-          aria-pressed={byValue}
-          onClick={() => setByValue((on) => !on)}
-        >
-          By value
-        </button>
+<button
+  type="button"
+  className={`${styles.chip} ${byValue ? styles.chipOn : ""}`}
+  aria-pressed={byValue}
+  onClick={() => setByValue((on) => !on)}
+>
+  By value
+</button>
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -532,4 +554,4 @@ git commit -m "Let the phone sort a set by value as well as by binder order"
 
 ## Known open item, not scheduled here
 
-`docs/performance-plan.md` **item 5** — every mark rewrites the whole collection — is called out in `docs/handoff.md` as the next thing likely to be *felt* as the collection grows. It is a storage concern, not a UI one, so it is not in this plan; schedule it separately.
+`docs/performance-plan.md` **item 5** — every mark rewrites the whole collection — is called out in `docs/handoff.md` as the next thing likely to be _felt_ as the collection grows. It is a storage concern, not a UI one, so it is not in this plan; schedule it separately.
