@@ -21,12 +21,15 @@ export function CardSheet({
   card,
   finishes,
   owned,
+  headlinePrice,
   onToggle,
   onClose,
 }: {
   card: PokemonCardSummary;
   finishes: CollectFinish[];
   owned: CollectFinish[];
+  /** Resolved by the caller from SetView.headlinePriceFor — the catalog price is not always the best one. */
+  headlinePrice?: number;
   onToggle: (finish: CollectFinish) => void;
   onClose: () => void;
 }) {
@@ -63,7 +66,7 @@ export function CardSheet({
               {card.collectorNumber}
               {card.rarity ? ` · ${card.rarity}` : ""}
             </p>
-            <p className={styles.price}>{formatUsd(card.marketPrice)}</p>
+            <p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
           </div>
         </div>
 

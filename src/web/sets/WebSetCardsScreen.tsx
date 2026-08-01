@@ -134,6 +134,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           card={openCard}
           finishes={view.finishesFor(openCard.collectorNumber, openCard.variants)}
           owned={ownedFinishes(openCard.id)}
+          headlinePrice={view.headlinePriceFor(openCard)}
           onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
           onClose={() => setOpenCardId(null)}
         />
