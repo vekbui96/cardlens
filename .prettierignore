@@ -4,3 +4,6 @@ playwright-report
 test-results
 node_modules
 package-lock.json
+# Git-ignored scratch for plan execution. Prettier does not read .gitignore, so
+# without this every generated brief and report fails format:check.
+.superpowers
