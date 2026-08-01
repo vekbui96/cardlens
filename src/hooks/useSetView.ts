@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { PokemonCardSummary } from "../models/cards.ts";
 import { availableFinishes, knownFinishes, type CardVariants, type CollectFinish } from "../models/cards.ts";
-import type { SetPrintingIndex } from "../models/printingIndex.ts";
+import { printingPrice, type SetPrintingIndex } from "../models/printingIndex.ts";
+import type { Finish } from "../models/finishes.ts";
 import { byCollectorNumber } from "../integrations/pokemon/sort.ts";
 import { filterByRarity } from "../features/results/rarityFilters.ts";
 import { useSetCards } from "./useSets.ts";
@@ -20,9 +21,41 @@ export interface SetView {
   knownFinishesFor: (collectorNumber: string, variants?: CardVariants) => CollectFinish[] | null;
   /** Printings to DISPLAY for a card — padded, so a row always shows something. */
   finishesFor: (collectorNumber: string, variants?: CardVariants) => CollectFinish[];
+  /** USD market price for one printing of one card, or undefined when unpriced. */
+  priceFor: (collectorNumber: string, finish: Finish) => number | undefined;
+  /** Best single price to headline a card: catalog price, else the dearest known printing. */
+  headlinePriceFor: (card: PokemonCardSummary) => number | undefined;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
+}
+
+/**
+ * The single price to headline a card with.
+ *
+ * The catalog price wins when present: it is what search results already sort
+ * by, and two different headline numbers for one card would be worse than a
+ * missing one. Otherwise the dearest known printing stands in — measured live,
+ * pokemontcg.io prices 0/120 Pitch Black and 0/124 Perfect Order cards while
+ * TCGdex prices both, so without this whole sets read "Unavailable".
+ *
+ * Dearest rather than cheapest because the headline answers "what is this card
+ * worth", and a collector reads that as the good copy.
+ */
+export function headlinePrice(
+  card: PokemonCardSummary,
+  index: SetPrintingIndex | null | undefined,
+): number | undefined {
+  const catalog = card.marketPrice;
+  if (typeof catalog === "number" && Number.isFinite(catalog) && catalog > 0) return catalog;
+
+  const finishes = index?.byNumber[card.collectorNumber] ?? [];
+  let best: number | undefined;
+  for (const finish of finishes) {
+    const price = printingPrice(index, card.collectorNumber, finish);
+    if (price !== undefined && (best === undefined || price > best)) best = price;
+  }
+  return best;
 }
 
 /**
@@ -101,6 +134,14 @@ export function useSetView(
       knownFinishesFor(collectorNumber, variants) ?? availableFinishes(variants);
   }, [knownFinishesFor]);
 
+  const priceFor = useMemo(() => {
+    return (collectorNumber: string, finish: Finish) => printingPrice(printings, collectorNumber, finish);
+  }, [printings]);
+
+  const headlinePriceFor = useMemo(() => {
+    return (card: PokemonCardSummary) => headlinePrice(card, printings);
+  }, [printings]);
+
   return {
     cards,
     allCards,
@@ -108,6 +149,8 @@ export function useSetView(
     masterTotal,
     knownFinishesFor,
     finishesFor,
+    priceFor,
+    headlinePriceFor,
     isLoading: viaCatalog ? fallback.isLoading : info.isLoading,
     // Only the fallback can put a screen in an error state — an aggregate
     // failure is not an error, it is the reason the fallback is running.
