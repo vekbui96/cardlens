@@ -40,6 +40,14 @@ const WebSetCardsScreen = lazy(() =>
 const WebSetsScreen = lazy(() =>
   import("../web/sets/WebSetsScreen.tsx").then((m) => ({ default: m.WebSetsScreen })),
 );
+/**
+ * Web Home is a dashboard, not a menu: the destinations the glasses Home lists
+ * live in the app bar here, so repeating them down the page would make Home a
+ * worse copy of a menu the user already has.
+ */
+const WebHomeScreen = lazy(() =>
+  import("../web/home/WebHomeScreen.tsx").then((m) => ({ default: m.WebHomeScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -64,7 +72,7 @@ export function ScreenRouter() {
 function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb: boolean) {
   switch (screen.name) {
     case "home":
-      return <HomeScreen />;
+      return isWeb ? <WebHomeScreen /> : <HomeScreen />;
     case "results":
       return <ResultsScreen query={screen.query} />;
     case "details":
@@ -88,6 +96,6 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
     case "collection":
       return <CollectionScreen />;
     default:
-      return <HomeScreen />;
+      return isWeb ? <WebHomeScreen /> : <HomeScreen />;
   }
 }

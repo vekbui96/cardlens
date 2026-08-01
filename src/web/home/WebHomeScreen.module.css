@@ -1,0 +1,235 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  padding: var(--cl-gap-lg) 0 0;
+}
+
+.stats {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.statNumber {
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg);
+  font-weight: 600;
+}
+
+/*
+ * The one thing Home exists to answer. Given the accent wash rather than a
+ * border so it reads as the primary action without needing to be large.
+ */
+.resume {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: calc(100% - 2 * var(--cl-gap));
+  margin: 0 var(--cl-gap);
+  padding: var(--cl-gap);
+  border: 1px solid color-mix(in srgb, var(--cl-accent) 45%, transparent);
+  border-radius: var(--cl-radius);
+  background: color-mix(in srgb, var(--cl-accent) 12%, var(--cl-surface));
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .resume:hover {
+    background: color-mix(in srgb, var(--cl-accent) 18%, var(--cl-surface));
+  }
+}
+
+.resumeLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-accent-strong);
+}
+
+.resumeName {
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.resumeMeta {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.group {
+  margin: var(--cl-gap-lg) var(--cl-gap) var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-fg-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.row {
+  width: 100%;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px var(--cl-gap);
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+.rowName {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  color: var(--cl-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  grid-column: 1;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.rowProgress {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cl-gap-xs);
+}
+
+.bar {
+  width: 84px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cl-accent);
+}
+
+.barDone .fill {
+  background: var(--cl-gold);
+}
+
+.pct {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+}
+
+.pctDone {
+  color: var(--cl-gold);
+}
+
+.empty {
+  margin: var(--cl-gap-lg) var(--cl-gap);
+  padding: var(--cl-gap-lg);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.emptyHint {
+  margin: 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.emptyActions {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  margin-top: var(--cl-gap-sm);
+}
+
+.primary,
+.secondary {
+  min-height: 44px;
+  padding: 0 var(--cl-gap-lg);
+  border-radius: var(--cl-radius-sm);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.secondary {
+  border: var(--cl-border-strong);
+  background: none;
+  color: var(--cl-fg);
+}
+
+@media (min-width: 1000px) {
+  .stats,
+  .group {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+
+  .resume {
+    width: calc(100% - 2 * var(--cl-gap-lg));
+    margin: 0 var(--cl-gap-lg);
+  }
+
+  .list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--cl-gap);
+    padding: 0 var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+
+  .empty {
+    margin: var(--cl-gap-lg);
+  }
+}
