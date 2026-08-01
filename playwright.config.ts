@@ -23,6 +23,12 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 600, height: 600 } } },
+    /**
+     * A real phone shape. The glasses are small AND square; a phone is small and
+     * tall, and layoutMode branches on exactly that difference — so this project
+     * is the only one that exercises the web shell's own code path.
+     */
+    { name: "phone", use: { ...devices["Pixel 7"] } },
   ],
   webServer: [
     {
