@@ -27,8 +27,13 @@ export default defineConfig({
      * A real phone shape. The glasses are small AND square; a phone is small and
      * tall, and layoutMode branches on exactly that difference — so this project
      * is the only one that exercises the web shell's own code path.
+     *
+     * Scoped to phone-layout.spec.ts only: every other e2e spec assumes the
+     * glasses shell (600x600, focus ring, ScreenRouter's glasses screens). Left
+     * unscoped, this project would also run those specs at the Pixel 7 viewport,
+     * where they resolve to the web shell instead and fail.
      */
-    { name: "phone", use: { ...devices["Pixel 7"] } },
+    { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /phone-layout\.spec\.ts/ },
   ],
   webServer: [
     {
