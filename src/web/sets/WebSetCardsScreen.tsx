@@ -30,6 +30,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   const [rarityKey, setRarityKey] = useState("all");
   /** Master-setting is mostly "what am I still missing", so it gets a real control. */
   const [missingOnly, setMissingOnly] = useState(false);
+  /** Binder order is the default; value order answers a different question. */
+  const [byValue, setByValue] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
 
   const rarity = RARITY_FILTERS.find((f) => f.key === rarityKey) ?? RARITY_FILTERS[0];
@@ -45,10 +47,13 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     };
   }, [view, ownedFinishes]);
 
-  const cards = useMemo(
-    () => (missingOnly ? view.cards.filter((c) => !isComplete(c)) : view.cards),
-    [view.cards, missingOnly, isComplete],
-  );
+  const cards = useMemo(() => {
+    const visible = missingOnly ? view.cards.filter((c) => !isComplete(c)) : view.cards;
+    if (!byValue) return visible;
+    // Copy before sorting: view.cards is memoised upstream and sorting in place
+    // would mutate the cached binder order everything else reads.
+    return [...visible].sort((a, b) => (view.headlinePriceFor(b) ?? 0) - (view.headlinePriceFor(a) ?? 0));
+  }, [view, missingOnly, isComplete, byValue]);
 
   const openCard = openCardId ? (view.cards.find((c) => c.id === openCardId) ?? null) : null;
 
@@ -84,6 +89,14 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           onClick={() => setMissingOnly((on) => !on)}
         >
           Missing only
+        </button>
+        <button
+          type="button"
+          className={`${styles.chip} ${byValue ? styles.chipOn : ""}`}
+          aria-pressed={byValue}
+          onClick={() => setByValue((on) => !on)}
+        >
+          By value
         </button>
       </div>
 

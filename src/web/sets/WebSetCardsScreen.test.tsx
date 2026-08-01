@@ -217,4 +217,46 @@ describe("WebSetCardsScreen", () => {
     // The reverse printing row also shows $4.25, so scope to the headline specifically.
     expect(await screen.findByTestId("sheet-headline-price")).toHaveTextContent("$4.25");
   });
+
+  it("orders by value when asked, and returns to binder order", async () => {
+    const user = userEvent.setup();
+    const cards: RawCard[] = [
+      {
+        id: "sv3-301",
+        name: "Cheap Card",
+        number: "301",
+        set: { id: SET_ID, name: SET_NAME },
+        tcgplayer: { prices: { normal: { market: 1 } } },
+      },
+      {
+        id: "sv3-302",
+        name: "Dear Card",
+        number: "302",
+        set: { id: SET_ID, name: SET_NAME },
+        tcgplayer: { prices: { normal: { market: 50 } } },
+      },
+    ];
+    const printings = {
+      tcgdexSetId: "sv03",
+      byNumber: {
+        "301": [{ type: "normal", price: 1 }],
+        "302": [{ type: "normal", price: 50 }],
+      } as Record<string, { type: string; foil?: string; price?: number }[]>,
+    };
+    serveCustom(cards, printings);
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    const binderOrder = await screen.findAllByRole("button", { name: /printings owned/ });
+    expect(binderOrder[0]).toHaveAccessibleName(/Cheap Card/);
+
+    await user.click(screen.getByRole("button", { name: "By value" }));
+
+    const valueOrder = await screen.findAllByRole("button", { name: /printings owned/ });
+    expect(valueOrder[0]).toHaveAccessibleName(/Dear Card/);
+
+    await user.click(screen.getByRole("button", { name: "By value" }));
+
+    const restored = await screen.findAllByRole("button", { name: /printings owned/ });
+    expect(restored[0]).toHaveAccessibleName(/Cheap Card/);
+  });
 });
