@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
@@ -21,13 +21,10 @@ import styles from "./WebHeader.module.css";
 interface Destination {
   label: string;
   hint: string;
-  screen?: Screen;
-  /** Search has no screen of its own — it opens text entry, then results. */
-  action?: "search";
+  screen: Screen;
 }
 
 const DESTINATIONS: Destination[] = [
-  { label: "Search", hint: "Find a card by name", action: "search" },
   { label: "Sets", hint: "Browse and track sets", screen: { name: "sets" } },
   { label: "Collection", hint: "What you own, and what it is worth", screen: { name: "collection" } },
   { label: "Favorites", hint: "Cards you starred", screen: { name: "favorites" } },
@@ -38,8 +35,9 @@ const DESTINATIONS: Destination[] = [
 export function WebHeader() {
   const { push, home, screen } = useNavigation();
   const { collection, favorites } = useLibrary();
-  const { typeSearch } = useSearchAction();
+  const { run } = useSearchAction();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const panel = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
 
@@ -59,15 +57,23 @@ export function WebHeader() {
 
   /** Counts, but only where there is something to count. A "0" is not news. */
   const countFor = (d: Destination): string | null => {
-    if (d.screen?.name === "collection" && collection.length > 0) return String(collection.length);
-    if (d.screen?.name === "favorites" && favorites.length > 0) return String(favorites.length);
+    if (d.screen.name === "collection" && collection.length > 0) return String(collection.length);
+    if (d.screen.name === "favorites" && favorites.length > 0) return String(favorites.length);
     return null;
   };
 
   const go = (d: Destination) => {
     setOpen(false);
-    if (d.action === "search") void typeSearch();
-    else if (d.screen) push(d.screen);
+    push(d.screen);
+  };
+
+  const search = (e: FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    setOpen(false);
+    setQuery("");
+    run(q);
   };
 
   return (
@@ -91,32 +97,53 @@ export function WebHeader() {
 
       {open ? (
         <div className={styles.scrim} onClick={() => setOpen(false)} role="presentation">
-          <div
-            ref={panel}
-            className={styles.panel}
-            role="menu"
-            aria-label="Go to"
-            tabIndex={-1}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {DESTINATIONS.map((d) => {
-              const count = countFor(d);
-              const current = d.screen?.name === screen.name;
-              return (
-                <button
-                  key={d.label}
-                  type="button"
-                  role="menuitem"
-                  className={`${styles.item} ${current ? styles.itemCurrent : ""}`}
-                  {...(current ? { "aria-current": "page" as const } : {})}
-                  onClick={() => go(d)}
-                >
-                  <span className={styles.itemLabel}>{d.label}</span>
-                  {count ? <span className={styles.itemCount}>{count}</span> : null}
-                  <span className={styles.itemHint}>{d.hint}</span>
-                </button>
-              );
-            })}
+          <div ref={panel} className={styles.panel} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+            {/*
+              Search is a field here, not a row that opens a modal. The panel is
+              already open and already covering the screen, so sending the user
+              to a second overlay to type one word is a step that buys nothing.
+
+              Deliberately not autofocused: opening the menu to reach Collection
+              should not raise the keyboard over the destinations you came for.
+            */}
+            <form className={styles.search} onSubmit={search} role="search">
+              <input
+                className={styles.searchInput}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search cards"
+                aria-label="Search cards"
+                enterKeyHint="search"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <button type="submit" className={styles.searchGo} disabled={!query.trim()}>
+                Search
+              </button>
+            </form>
+
+            <div className={styles.destinations} role="menu" aria-label="Go to">
+              {DESTINATIONS.map((d) => {
+                const count = countFor(d);
+                const current = d.screen.name === screen.name;
+                return (
+                  <button
+                    key={d.label}
+                    type="button"
+                    role="menuitem"
+                    className={`${styles.item} ${current ? styles.itemCurrent : ""}`}
+                    {...(current ? { "aria-current": "page" as const } : {})}
+                    onClick={() => go(d)}
+                  >
+                    <span className={styles.itemLabel}>{d.label}</span>
+                    {count ? <span className={styles.itemCount}>{count}</span> : null}
+                    <span className={styles.itemHint}>{d.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : null}

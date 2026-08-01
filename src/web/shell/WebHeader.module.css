@@ -116,6 +116,65 @@
   outline: none;
 }
 
+/*
+ * Full width above the destinations: it is the thing most likely to be wanted,
+ * and a field is the one control that cannot be a grid cell without shrinking.
+ */
+.search {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+  font-family: inherit;
+  /* 16px or larger, or iOS Safari zooms the page on focus. */
+  font-size: 16px;
+}
+
+.searchInput::placeholder {
+  color: var(--cl-fg-dim);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--cl-accent);
+}
+
+.searchGo {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 var(--cl-gap);
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.searchGo:disabled {
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg-dim);
+  cursor: default;
+}
+
+.destinations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+}
+
 .item {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -172,6 +231,11 @@
     padding: var(--cl-gap-sm) var(--cl-gap-lg) var(--cl-gap);
     /* Wide screens have room to show the destinations at once rather than as a
        column the eye has to travel down. */
+    display: block;
+  }
+
+  /* The field spans the panel; the destinations sit in three columns beneath. */
+  .destinations {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: var(--cl-gap-sm);

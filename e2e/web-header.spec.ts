@@ -23,9 +23,36 @@ test.describe("web app bar", () => {
 
     const menu = page.getByRole("menu", { name: "Go to" });
     await expect(menu).toBeVisible();
-    for (const label of ["Search", "Sets", "Collection", "Favorites", "Recent", "Popular"]) {
+    for (const label of ["Sets", "Collection", "Favorites", "Recent", "Popular"]) {
       await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
+    // Search is a field in the panel, not a destination that opens a modal.
+    await expect(page.getByRole("searchbox", { name: "Search cards" })).toBeVisible();
+  });
+
+  test("searches from the panel without opening another overlay", async ({ page }) => {
+    await page.goto("/?ui=web#/");
+    await page.getByRole("button", { name: "Open menu" }).click();
+
+    // Scoped to the form: Home's empty state also offers a "Search" button.
+    const form = page.getByRole("search");
+    await form.getByRole("searchbox", { name: "Search cards" }).fill("charizard");
+    await form.getByRole("button", { name: "Search" }).click();
+
+    await expect(page).toHaveURL(/#\/search\/charizard$/);
+    // The panel closes and no text-entry modal is raised on the way.
+    await expect(page.getByRole("menu")).toBeHidden();
+    await expect(page.getByRole("dialog")).toBeHidden();
+  });
+
+  test("will not search on an empty field", async ({ page }) => {
+    await page.goto("/?ui=web#/");
+    await page.getByRole("button", { name: "Open menu" }).click();
+
+    const form = page.getByRole("search");
+    await expect(form.getByRole("button", { name: "Search" })).toBeDisabled();
+    await form.getByRole("searchbox", { name: "Search cards" }).fill("   ");
+    await expect(form.getByRole("button", { name: "Search" })).toBeDisabled();
   });
 
   test("navigates, and the URL follows", async ({ page }) => {
