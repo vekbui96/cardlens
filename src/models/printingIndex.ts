@@ -1,5 +1,6 @@
 import type { Printing } from "../integrations/tcgdex/client.ts";
 import { isLikelyPackPrinting, makeFinish, type Finish } from "./finishes.ts";
+import type { EurAverages } from "./movement.ts";
 
 export interface SetPrintingIndex {
   /** Collector number -> the printings that card exists in. */
@@ -21,6 +22,14 @@ export interface SetPrintingIndex {
    * data and can be compared and snapshotted in tests.
    */
   prices: Record<string, number>;
+  /**
+   * `<collectorNumber>|<finish>` -> Cardmarket rolling averages, in **EUR**.
+   *
+   * Separate from `prices` (USD) rather than merged into one record, because the
+   * two currencies must never be summed together and a shared shape would make
+   * that mistake easy. Used only in aggregate — see models/movement.ts.
+   */
+  eur: Record<string, EurAverages>;
 }
 
 /**
@@ -37,6 +46,7 @@ export function buildPrintingIndex(
 
   const byNumber: Record<string, Finish[]> = {};
   const prices: Record<string, number> = {};
+  const eur: Record<string, EurAverages> = {};
   const cardsPerFinish = new Map<Finish, number>();
   // Count by card, not by index entry: numbers are indexed twice (padded and
   // unpadded), so counting entries would double every total.
@@ -51,6 +61,7 @@ export function buildPrintingIndex(
       if (typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0) {
         prices[`${number}|${makeFinish(p.type, p.foil)}`] = p.price;
       }
+      if (p.eur) eur[`${number}|${makeFinish(p.type, p.foil)}`] = p.eur;
     }
     const canonicalKey = number.replace(/^0+(?=\d)/, "");
     if (counted.has(canonicalKey)) continue;
@@ -69,7 +80,7 @@ export function buildPrintingIndex(
     else excluded.push({ finish, cards });
   }
 
-  return { byNumber, all, packTotal, excluded, prices };
+  return { byNumber, all, packTotal, excluded, prices, eur };
 }
 
 /** Strip leading zeros from a collector number: "007" -> "7", "001a" -> "1a". */
@@ -95,5 +106,25 @@ export function printingPrice(
     index.prices[`${collectorNumber}|${finish}`] ??
     index.prices[`${unpadded(collectorNumber)}|${finish}`] ??
     index.prices[`${collectorNumber.padStart(3, "0")}|${finish}`]
+  );
+}
+
+/**
+ * Cardmarket rolling averages (EUR) for one printing.
+ *
+ * Same number-form fallbacks as printingPrice, for the same reason. Only ever
+ * consumed in aggregate — a single card's change at these prices is a rounding
+ * step, not a movement.
+ */
+export function printingEur(
+  index: SetPrintingIndex | null | undefined,
+  collectorNumber: string,
+  finish: Finish,
+): EurAverages | undefined {
+  if (!index) return undefined;
+  return (
+    index.eur[`${collectorNumber}|${finish}`] ??
+    index.eur[`${unpadded(collectorNumber)}|${finish}`] ??
+    index.eur[`${collectorNumber.padStart(3, "0")}|${finish}`]
   );
 }

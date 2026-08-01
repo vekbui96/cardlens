@@ -28,6 +28,30 @@
   color: var(--cl-fg-muted);
 }
 
+.movement {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cl-gap-sm);
+  font-size: var(--cl-fs-body);
+}
+
+/* Paired with a sign and a label, never colour alone — the glasses palette
+   rules apply here too, and colour-blind users read the "+"/"−". */
+.up {
+  color: var(--cl-price);
+  font-variant-numeric: tabular-nums;
+}
+
+.down {
+  color: var(--cl-error);
+  font-variant-numeric: tabular-nums;
+}
+
+.movementLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
 /* Stated, not hidden: a total that silently omits half the collection while
    looking authoritative is worse than no total. */
 .note {

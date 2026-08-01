@@ -216,4 +216,61 @@ describe("toPrintings", () => {
 
     expect(toPrintings(card)).toEqual([{ type: "reverse", foil: "pokeball" }]);
   });
+
+  it("takes the base cardmarket series for normal and the -holo one for foils", () => {
+    // Cardmarket splits a card into two series only and has no concept of our
+    // printing keys. Ordering checked live on me05-001: base EUR 0.03 under
+    // holo EUR 0.08, mirroring TCGplayer's normal 0.09 under reverse 0.18.
+    const card = {
+      id: "me05-001",
+      localId: "001",
+      variants_detailed: [{ type: "normal" }, { type: "reverse" }],
+      pricing: {
+        cardmarket: {
+          unit: "EUR",
+          avg1: 0.04,
+          avg7: 0.03,
+          avg30: 0.03,
+          "avg1-holo": 0.09,
+          "avg7-holo": 0.08,
+          "avg30-holo": 0.07,
+        },
+      },
+    };
+
+    const printings = toPrintings(card);
+
+    expect(printings).toContainEqual({ type: "normal", eur: { avg1: 0.04, avg7: 0.03, avg30: 0.03 } });
+    expect(printings).toContainEqual({ type: "reverse", eur: { avg1: 0.09, avg7: 0.08, avg30: 0.07 } });
+  });
+
+  it("drops a partial cardmarket series rather than defaulting a leg to zero", () => {
+    // A missing avg7 silently becoming 0 would report the holding as a 100%
+    // gain against nothing.
+    const card = {
+      id: "x-2",
+      localId: "2",
+      variants_detailed: [{ type: "normal" }],
+      pricing: { cardmarket: { unit: "EUR", avg1: 0.04, avg30: 0.03 } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "normal" }]);
+  });
+
+  it("keeps the USD price and the EUR series apart on one printing", () => {
+    // The field names are the guardrail against these ever being summed.
+    const card = {
+      id: "me05-001",
+      localId: "001",
+      variants_detailed: [{ type: "normal" }],
+      pricing: {
+        tcgplayer: { normal: { marketPrice: 0.09 }, unit: "USD" },
+        cardmarket: { unit: "EUR", avg1: 0.04, avg7: 0.03, avg30: 0.03 },
+      },
+    };
+
+    expect(toPrintings(card)).toEqual([
+      { type: "normal", price: 0.09, eur: { avg1: 0.04, avg7: 0.03, avg30: 0.03 } },
+    ]);
+  });
 });

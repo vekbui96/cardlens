@@ -33,6 +33,19 @@ export interface Printing {
    * than zero when unknown, so "no price" never renders as "$0.00".
    */
   price?: number;
+  /**
+   * Cardmarket rolling averages, in **EUR**, for movement only.
+   *
+   * Named for its currency on purpose. `price` above is TCGplayer USD, and these
+   * two must never be added together — the field name is the guardrail.
+   *
+   * Only useful in aggregate. Cardmarket rounds to the cent, and most of this
+   * catalogue trades at EUR 0.02-0.04, so a single card's week-on-week change is
+   * a one-cent rounding step reported as ±33% or ±50%. Summed across a few
+   * hundred holdings that error largely cancels; per card it is noise pretending
+   * to be a signal. See models/movement.ts.
+   */
+  eur?: { avg1: number; avg7: number; avg30: number };
 }
 
 export interface SetPrintings {
@@ -214,6 +227,32 @@ function marketPricesByType(card: TcgdexCard): Record<string, number> {
   return out;
 }
 
+/**
+ * Cardmarket's rolling averages for a printing type.
+ *
+ * Cardmarket splits a card into two series only: the base fields and `-holo`
+ * suffixed ones. It has no concept of our printing keys, so `normal` takes the
+ * base series and every foiled printing takes `-holo`. Checked against
+ * TCGplayer on me05-001, where the ordering agrees — base EUR 0.03 under
+ * holo EUR 0.08, mirroring normal USD 0.09 under reverse USD 0.18.
+ */
+function eurAverages(card: TcgdexCard, type: string): Printing["eur"] {
+  const cm = card.pricing?.cardmarket;
+  if (!cm) return undefined;
+  const suffix = type === "normal" ? "" : "-holo";
+  const read = (key: string): number | undefined => {
+    const v = cm[`${key}${suffix}`];
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined;
+  };
+  const avg1 = read("avg1");
+  const avg7 = read("avg7");
+  const avg30 = read("avg30");
+  // All three or nothing: a partial series cannot produce a comparison, and a
+  // missing leg silently defaulting to zero would read as a 100% crash.
+  if (avg1 === undefined || avg7 === undefined || avg30 === undefined) return undefined;
+  return { avg1, avg7, avg30 };
+}
+
 export function toPrintings(card: TcgdexCard): Printing[] {
   const seen = new Set<string>();
   const prices = marketPricesByType(card);
@@ -226,10 +265,12 @@ export function toPrintings(card: TcgdexCard): Printing[] {
     // for pattern foils, so giving a Poké Ball reverse the plain reverse price
     // would invent a number — those stay unpriced.
     const price = variant.foil ? undefined : prices[variant.type];
+    const eur = eurAverages(card, variant.type);
     out.push({
       type: variant.type,
       ...(variant.foil ? { foil: variant.foil } : {}),
       ...(price !== undefined ? { price } : {}),
+      ...(eur ? { eur } : {}),
     });
   }
   return out;

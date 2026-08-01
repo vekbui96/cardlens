@@ -27,8 +27,12 @@ export const PRINTINGS_TTL_MS = 30 * 24 * 60 * 60_000;
  * makes them stale immediately.
  *
  * v2 — printings carry a `price`.
+ * v3 — printings carry `eur` rolling averages for movement.
+ *
+ * Only bump for a SHAPE change. Bumping when the output is byte-identical costs
+ * a full refetch of every set (120-295 upstream requests each) and buys nothing.
  */
-export const PRINTINGS_CACHE_VERSION = 2;
+export const PRINTINGS_CACHE_VERSION = 3;
 
 interface CacheEntry {
   at: number;

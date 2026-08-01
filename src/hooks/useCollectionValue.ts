@@ -1,6 +1,12 @@
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { buildPrintingIndex, printingPrice, type SetPrintingIndex } from "../models/printingIndex.ts";
+import {
+  buildPrintingIndex,
+  printingEur,
+  printingPrice,
+  type SetPrintingIndex,
+} from "../models/printingIndex.ts";
+import { aggregateMovement, type Movement } from "../models/movement.ts";
 import { valueCollection, type CollectionValue, type ValuableRow } from "../models/value.ts";
 import { printingsCache } from "../storage/caches.ts";
 import { companionBase } from "../services/companionApi.ts";
@@ -17,6 +23,14 @@ export interface CollectionValueResult extends CollectionValue {
   pending: number;
   /** Sets whose prices could not be loaded at all. */
   failed: number;
+  /**
+   * Portfolio movement from Cardmarket's EUR averages, as a percentage.
+   *
+   * A percentage rather than an amount because the series is EUR while the total
+   * is USD — a percentage is currency-free, so it can describe the portfolio
+   * without either figure being converted. Aggregate only; see models/movement.ts.
+   */
+  movement: Movement;
 }
 
 /**
@@ -66,14 +80,19 @@ export function useCollectionValue(
       prices.set(setId, buildPrintingIndex(q.data?.byNumber));
     });
 
-    const value = valueCollection(rows, (row) => {
-      // Collector number is the tail of the card id — the same join the rest of
-      // the app makes, because TCGdex keys printings by number, not by card id.
-      const number = row.cardId.slice(row.cardId.indexOf("-") + 1);
-      return printingPrice(prices.get(row.setId), number, row.finish);
-    });
+    // Collector number is the tail of the card id — the same join the rest of
+    // the app makes, because TCGdex keys printings by number, not by card id.
+    const numberOf = (cardId: string) => cardId.slice(cardId.indexOf("-") + 1);
 
-    return { ...value, pending, failed };
+    const value = valueCollection(rows, (row) =>
+      printingPrice(prices.get(row.setId), numberOf(row.cardId), row.finish),
+    );
+
+    const movement = aggregateMovement(
+      rows.map((row) => printingEur(prices.get(row.setId), numberOf(row.cardId), row.finish)),
+    );
+
+    return { ...value, pending, failed, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
   }, [rows, setIds, queries.map((q) => q.dataUpdatedAt).join(",")]);
 }

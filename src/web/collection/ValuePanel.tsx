@@ -3,6 +3,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useCollectionValue } from "../../hooks/useCollectionValue.ts";
 import type { ValuableRow } from "../../models/value.ts";
+import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
 import styles from "./ValuePanel.module.css";
 
@@ -40,6 +41,8 @@ export function ValuePanel() {
   }, [sets]);
 
   const value = useCollectionValue(rows, setNames);
+  const movement7 = value.movement.pct7;
+  const movement30 = value.movement.pct30;
 
   if (rows.length === 0) return null;
 
@@ -53,6 +56,21 @@ export function ValuePanel() {
             : `${value.priced} of ${value.printings} printings priced`}
         </span>
       </div>
+
+      {/*
+        Movement is a percentage, never an amount: the series behind it is
+        Cardmarket EUR while the total above is TCGplayer USD, and a percentage
+        is the one figure that describes both without converting either.
+      */}
+      {movement7 !== undefined ? (
+        <div className={styles.movement} data-testid="movement">
+          <span className={movement7 >= 0 ? styles.up : styles.down}>{formatPct(movement7)}</span>
+          <span className={styles.movementLabel}>
+            past week
+            {movement30 !== undefined ? ` · ${formatPct(movement30)} past month` : ""}
+          </span>
+        </div>
+      ) : null}
 
       {value.unpriced > 0 && value.pending === 0 ? (
         <p className={styles.note}>
