@@ -17,6 +17,43 @@ import styles from "./CardSheet.module.css";
  * entry per card would bury the back gesture under a card the user only glanced
  * at. Escape and the backdrop both close it.
  */
+
+/**
+ * One printing row, shared by the known-printings list and the "extras" list
+ * below it (a hand-marked finish the set data does not know about). `extra`
+ * only changes the dashed border; held state and behaviour are identical.
+ */
+function PrintingRow({
+  finish,
+  held,
+  extra = false,
+  priceFor,
+  onToggle,
+}: {
+  finish: CollectFinish;
+  held: boolean;
+  extra?: boolean;
+  priceFor: (finish: CollectFinish) => number | undefined;
+  onToggle: (finish: CollectFinish) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className={`${styles.printing} ${held ? styles.held : ""} ${extra ? styles.extra : ""}`}
+        aria-pressed={held}
+        onClick={() => onToggle(finish)}
+      >
+        <span className={styles.box} aria-hidden="true">
+          {held ? "✓" : ""}
+        </span>
+        <span className={styles.printingLabel}>{finishLabel(finish)}</span>
+        <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
+      </button>
+    </li>
+  );
+}
+
 export function CardSheet({
   card,
   finishes,
@@ -47,6 +84,9 @@ export function CardSheet({
     }
     return total;
   }, [owned, priceFor]);
+
+  /** A hand-marked finish the set data does not list — must stay visible and removable. */
+  const extras = useMemo(() => owned.filter((f) => !finishes.includes(f)), [owned, finishes]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -86,7 +126,7 @@ export function CardSheet({
                 {card.rarity ? ` · ${card.rarity}` : ""}
               </p>
               <p className={styles.price} data-testid="sheet-headline-price">
-                {formatUsd(headlinePrice ?? card.marketPrice)}
+                {formatUsd(headlinePrice)}
               </p>
             </div>
           </div>
@@ -101,48 +141,30 @@ export function CardSheet({
           ) : null}
 
           <ul className={styles.printings}>
-            {finishes.map((finish) => {
-              const held = owned.includes(finish);
-              return (
-                <li key={finish}>
-                  <button
-                    type="button"
-                    className={`${styles.printing} ${held ? styles.held : ""}`}
-                    aria-pressed={held}
-                    onClick={() => onToggle(finish)}
-                  >
-                    <span className={styles.box} aria-hidden="true">
-                      {held ? "✓" : ""}
-                    </span>
-                    <span className={styles.printingLabel}>{finishLabel(finish)}</span>
-                    <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
-                  </button>
-                </li>
-              );
-            })}
+            {finishes.map((finish) => (
+              <PrintingRow
+                key={finish}
+                finish={finish}
+                held={owned.includes(finish)}
+                priceFor={priceFor}
+                onToggle={onToggle}
+              />
+            ))}
           </ul>
           {/* Anything held that the set data does not list — a hand-marked pattern
               foil — must stay visible and removable, or it becomes unreachable. */}
-          {owned.filter((f) => !finishes.includes(f)).length > 0 ? (
+          {extras.length > 0 ? (
             <ul className={styles.printings}>
-              {owned
-                .filter((f) => !finishes.includes(f))
-                .map((finish) => (
-                  <li key={finish}>
-                    <button
-                      type="button"
-                      className={`${styles.printing} ${styles.held} ${styles.extra}`}
-                      aria-pressed
-                      onClick={() => onToggle(finish)}
-                    >
-                      <span className={styles.box} aria-hidden="true">
-                        ✓
-                      </span>
-                      <span className={styles.printingLabel}>{finishLabel(finish)}</span>
-                      <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
-                    </button>
-                  </li>
-                ))}
+              {extras.map((finish) => (
+                <PrintingRow
+                  key={finish}
+                  finish={finish}
+                  held
+                  extra
+                  priceFor={priceFor}
+                  onToggle={onToggle}
+                />
+              ))}
             </ul>
           ) : null}
         </div>

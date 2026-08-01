@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { CardSheet } from "./CardSheet.tsx";
 import type { PokemonCardSummary } from "../../models/cards.ts";
 
@@ -53,5 +53,22 @@ describe("CardSheet prices", () => {
     renderSheet({ owned: [] });
 
     expect(screen.queryByTestId("sheet-owned-value")).not.toBeInTheDocument();
+  });
+});
+
+describe("CardSheet extras", () => {
+  it("keeps a hand-marked finish the set data does not list visible, pressed, and removable", () => {
+    const onToggle = vi.fn();
+    renderSheet({
+      finishes: ["normal", "reverse"],
+      owned: ["reverse:masterball"],
+      onToggle,
+    });
+
+    const extra = screen.getByRole("button", { name: /Master Ball Reverse/ });
+    expect(extra).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(extra);
+    expect(onToggle).toHaveBeenCalledWith("reverse:masterball");
   });
 });
