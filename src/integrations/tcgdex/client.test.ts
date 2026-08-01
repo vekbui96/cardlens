@@ -162,9 +162,9 @@ describe("TcgdexClient.getSetPrintings", () => {
 });
 
 describe("toPrintings", () => {
-  // Live-measured across 40-card samples of me05, me03, sv08.5 and base1
-  // (159 cards with a tcgplayer block): only normal (103), reverse-holofoil
-  // (96) and holofoil (56) ever appear — see the comment on
+  // Live-measured against every card in me05, me03, sv08.5 and base1 (526
+  // cards, 525 with a tcgplayer block): only normal (296), reverse-holofoil
+  // (253) and holofoil (229) ever appear — see the comment on
   // PRICE_KEY_TO_TYPE. No other key, including the plausible-looking
   // "1st-edition-holofoil", was observed.
   it("maps every measured tcgplayer price key onto a printing type", () => {

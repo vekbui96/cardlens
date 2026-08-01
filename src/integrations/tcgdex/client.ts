@@ -183,14 +183,16 @@ function numberKeys(card: TcgdexCard): string[] {
  * normal, 8 `reverse-holofoil` / 8 reverse, 2 `holofoil` / 2 holo). Unknown
  * keys are skipped — a wrong price is worse than a missing one.
  *
- * Re-measured across 40-card samples of me05, me03, sv08.5 and base1 (159
- * cards with a tcgplayer block): the only keys present were these three plus
- * the non-price `unit`/`updated` fields — `normal` 103, `reverse-holofoil`
- * 96, `holofoil` 56. `1st-edition-holofoil` / `1st-edition`, a plausible
- * candidate, never appeared; a spot check of base1-4 (Charizard) shows 1st
- * Edition is carried as a `stamp` on a `holo` variant with `pricing: null`,
- * not as a separate tcgplayer key. Nothing new to map — do not add it back
- * without a fresh measurement that actually observes it.
+ * Re-measured against every card (not a sample) in me05, me03, sv08.5 and
+ * base1 — 120 + 124 + 180 + 102 = 526 cards, 525 with a tcgplayer block: the
+ * only keys present were these three plus the non-price `unit`/`updated`
+ * fields — `normal` 296, `reverse-holofoil` 253, `holofoil` 229.
+ * `1st-edition-holofoil` / `1st-edition`, a plausible candidate, never
+ * appeared even once across the full sets; a spot check of base1-4
+ * (Charizard) shows 1st Edition is carried as a `stamp` on a `holo` variant
+ * with `pricing: null`, not as a separate tcgplayer key. Nothing new to
+ * map — do not add it back without a fresh measurement that actually
+ * observes it.
  */
 const PRICE_KEY_TO_TYPE: Record<string, string> = {
   normal: "normal",
