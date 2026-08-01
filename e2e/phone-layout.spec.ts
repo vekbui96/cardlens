@@ -6,9 +6,9 @@ import { test, expect } from "@playwright/test";
  * large enough to hit. Both were tuned against a 600x600 square and have never
  * been checked at 390x844.
  *
- * The sets list (src/features/sets/SetsScreen.tsx) is shared with the glasses
- * and renders role="option" rows, not buttons — see e2e/sets.spec.ts for the
- * established pattern. "Obsidian Flames" is the newest set in the mock
+ * The web shell has its own sets screen (src/web/sets/WebSetsScreen.tsx) whose
+ * rows are buttons; the glasses list renders role="option" instead — see
+ * e2e/sets.spec.ts for that pattern. "Obsidian Flames" is the newest set in the mock
  * fixtures (src/integrations/pokemon/fixtures.ts); "Pitch Black" does not
  * exist there.
  */
@@ -22,7 +22,10 @@ test.describe("web shell at phone size", () => {
 
   test("the set grid does not scroll sideways", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
     await expect(page.getByRole("list")).toBeVisible();
 
     const overflow = await page.evaluate(
@@ -33,7 +36,10 @@ test.describe("web shell at phone size", () => {
 
   test("every filter chip is a 44px touch target", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
 
     // WebSetCardsScreen is lazy-loaded (see ScreenRouter.tsx); wait for it to
     // mount before counting chips, since .count() does not auto-retry like
@@ -91,7 +97,10 @@ test.describe("web shell at phone size", () => {
     });
 
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
     await page
       .getByRole("button", { name: /printings owned/ })
       .first()

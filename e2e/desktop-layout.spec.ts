@@ -33,7 +33,10 @@ test.describe("web shell at desktop size", () => {
 
   test("the set grid uses the width with more than one column", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
 
     const tiles = page.getByRole("button", { name: /printings owned/ });
     await expect(tiles.first()).toBeVisible();
@@ -55,7 +58,10 @@ test.describe("web shell at desktop size", () => {
     await page.route("**/images.pokemontcg.io/**", (r) => r.abort());
 
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
 
     const tile = page.getByRole("button", { name: /printings owned/ }).first();
     await expect(tile).toBeVisible();
@@ -66,7 +72,10 @@ test.describe("web shell at desktop size", () => {
 
   test("no horizontal overflow at desktop width", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
     await expect(page.getByRole("list")).toBeVisible();
 
     const overflow = await page.evaluate(
@@ -104,7 +113,10 @@ test.describe("web shell at desktop size", () => {
     });
 
     await page.goto("/?ui=web#/sets");
-    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+    await page
+      .getByRole("button", { name: /Obsidian Flames/ })
+      .first()
+      .click();
     await page
       .getByRole("button", { name: /printings owned/ })
       .first()

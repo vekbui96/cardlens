@@ -37,6 +37,9 @@ const SetCardsScreen = lazy(() =>
 const WebSetCardsScreen = lazy(() =>
   import("../web/sets/WebSetCardsScreen.tsx").then((m) => ({ default: m.WebSetCardsScreen })),
 );
+const WebSetsScreen = lazy(() =>
+  import("../web/sets/WebSetsScreen.tsx").then((m) => ({ default: m.WebSetsScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -75,7 +78,7 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
     case "popular":
       return <PopularScreen />;
     case "sets":
-      return <SetsScreen />;
+      return isWeb ? <WebSetsScreen /> : <SetsScreen />;
     case "set":
       return isWeb ? (
         <WebSetCardsScreen setId={screen.setId} setName={screen.setName} />

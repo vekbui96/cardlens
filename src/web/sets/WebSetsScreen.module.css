@@ -1,0 +1,144 @@
+.group {
+  margin: var(--cl-gap-lg) var(--cl-gap) var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-fg-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.row {
+  width: 100%;
+  /* Comfortably past the 44px thumb minimum: this is the screen you scan. */
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+  gap: var(--cl-gap);
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--cl-surface-raised);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+}
+
+/* The logo is the fastest thing to recognise, so it leads the row. */
+.logo {
+  width: 72px;
+  height: 40px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.logoFallback {
+  width: 72px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  color: var(--cl-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+/* Set codes and counts are catalogue data, so they align like the rest of it. */
+.code,
+.count {
+  font-family: var(--cl-font-data);
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cl-gap-xs);
+  min-width: 84px;
+}
+
+.bar {
+  width: 84px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cl-accent);
+}
+
+/* Gold is completion, everywhere it appears. */
+.barDone .fill {
+  background: var(--cl-gold);
+}
+
+.pct {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+}
+
+.pctDone {
+  color: var(--cl-gold);
+}
+
+@media (min-width: 1000px) {
+  /* Two columns of rows: the list is long and mostly short text, so a single
+     1180px-wide column would be a lot of whitespace per set. */
+  .list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--cl-gap);
+    padding: 0 var(--cl-gap-lg) var(--cl-gap);
+  }
+
+  .group {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+}
