@@ -121,6 +121,22 @@
   white-space: nowrap;
 }
 
+/* Pushed to the trailing edge so the labels stay left-aligned and scannable
+   down the column; the price is the secondary read. */
+.printingPrice {
+  margin-left: auto;
+  padding-left: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.ownedValue {
+  margin: 0 0 0.5rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
 .close {
   min-height: 52px;
   border-radius: var(--cl-radius);

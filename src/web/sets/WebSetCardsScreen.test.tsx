@@ -140,8 +140,9 @@ describe("WebSetCardsScreen", () => {
     const sheet = screen.getByRole("dialog");
     // Tapping the printing itself — no collect mode, no picker. Those exist on
     // the glasses only because a pinch must be told which printing it means.
-    await user.click(within(sheet).getByRole("button", { name: "Reverse Holo" }));
-    expect(within(sheet).getByRole("button", { name: "Reverse Holo" })).toHaveAttribute(
+    // The button's accessible name also carries its price, so match loosely.
+    await user.click(within(sheet).getByRole("button", { name: /Reverse Holo/ }));
+    expect(within(sheet).getByRole("button", { name: /Reverse Holo/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -157,8 +158,8 @@ describe("WebSetCardsScreen", () => {
     await user.click(await findTile("223"));
     const sheet = screen.getByRole("dialog");
 
-    expect(within(sheet).getByRole("button", { name: "Holofoil" })).toBeInTheDocument();
-    expect(within(sheet).queryByRole("button", { name: "Reverse Holo" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: /Holofoil/ })).toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: /Reverse Holo/ })).toBeNull();
   });
 
   it("hides completed cards behind the missing-only filter", async () => {
@@ -168,7 +169,7 @@ describe("WebSetCardsScreen", () => {
     // Complete 223 — its single holo printing.
     await user.click(await findTile("223"));
     const sheet = screen.getByRole("dialog");
-    await user.click(within(sheet).getByRole("button", { name: "Holofoil" }));
+    await user.click(within(sheet).getByRole("button", { name: /Holofoil/ }));
     await user.click(within(sheet).getByRole("button", { name: "Done" }));
     expect(tile("223")).toHaveAccessibleName(/1 of 1 printings owned/);
 
@@ -213,6 +214,7 @@ describe("WebSetCardsScreen", () => {
 
     await user.click(await screen.findByRole("button", { name: /Test Card/ }));
 
-    expect(await screen.findByText("$4.25")).toBeInTheDocument();
+    // The reverse printing row also shows $4.25, so scope to the headline specifically.
+    expect(await screen.findByTestId("sheet-headline-price")).toHaveTextContent("$4.25");
   });
 });

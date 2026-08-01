@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CardImage } from "../../components/CardImage.tsx";
 import { finishLabel } from "../../models/finishes.ts";
 import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
@@ -22,6 +22,7 @@ export function CardSheet({
   finishes,
   owned,
   headlinePrice,
+  priceFor,
   onToggle,
   onClose,
 }: {
@@ -30,10 +31,22 @@ export function CardSheet({
   owned: CollectFinish[];
   /** Resolved by the caller from SetView.headlinePriceFor — the catalog price is not always the best one. */
   headlinePrice?: number;
+  /** Price for one printing of THIS card. The caller binds the collector number. */
+  priceFor: (finish: CollectFinish) => number | undefined;
   onToggle: (finish: CollectFinish) => void;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+
+  const ownedValue = useMemo(() => {
+    let total: number | undefined;
+    for (const finish of owned) {
+      const price = priceFor(finish);
+      if (price === undefined) continue;
+      total = (total ?? 0) + price;
+    }
+    return total;
+  }, [owned, priceFor]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,9 +79,20 @@ export function CardSheet({
               {card.collectorNumber}
               {card.rarity ? ` · ${card.rarity}` : ""}
             </p>
-            <p className={styles.price}>{formatUsd(headlinePrice ?? card.marketPrice)}</p>
+            <p className={styles.price} data-testid="sheet-headline-price">
+              {formatUsd(headlinePrice ?? card.marketPrice)}
+            </p>
           </div>
         </div>
+
+        {/* Only what is actually held, and only when something priced is held:
+            a "$0.00" line under an empty collection reads as a valuation, not
+            as an absence. */}
+        {ownedValue !== undefined ? (
+          <p className={styles.ownedValue} data-testid="sheet-owned-value">
+            You own {formatUsd(ownedValue)}
+          </p>
+        ) : null}
 
         <ul className={styles.printings}>
           {finishes.map((finish) => {
@@ -85,6 +109,7 @@ export function CardSheet({
                     {held ? "✓" : ""}
                   </span>
                   <span className={styles.printingLabel}>{finishLabel(finish)}</span>
+                  <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
                 </button>
               </li>
             );
@@ -108,6 +133,7 @@ export function CardSheet({
                       ✓
                     </span>
                     <span className={styles.printingLabel}>{finishLabel(finish)}</span>
+                    <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
                   </button>
                 </li>
               ))}
