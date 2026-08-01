@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { WebHeader } from "../web/shell/WebHeader.tsx";
 import styles from "./GlassesFrame.module.css";
 
 interface GlassesFrameProps {
@@ -28,6 +29,9 @@ export function GlassesFrame({ children, chrome = true, web = false, scale = 1, 
     // cascade never reaches them. See e2e/shell-isolation.spec.ts.
     return (
       <div className={styles.webSurface} data-shell="web">
+        {/* Global navigation lives in the shell, not in a screen: it must
+            survive every screen change and be reachable from all of them. */}
+        <WebHeader />
         {children}
       </div>
     );

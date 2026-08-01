@@ -1,0 +1,179 @@
+.bar {
+  flex: 0 0 auto;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--cl-gap);
+  border-bottom: var(--cl-border);
+  background: var(--cl-bg);
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+
+.brand {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+  cursor: pointer;
+}
+
+.menuButton {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menuButton:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+/*
+ * Three rules drawn from one element, so the open state is a transform rather
+ * than a swap to a different glyph — the control stays the same object.
+ */
+.bars,
+.bars::before,
+.bars::after {
+  content: "";
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--cl-fg);
+  transition: transform var(--cl-transition, 140ms ease);
+}
+
+.bars::before {
+  transform: translateY(-6px);
+}
+
+.bars::after {
+  transform: translateY(4px);
+}
+
+.barsOpen {
+  background: transparent;
+}
+
+.barsOpen::before {
+  transform: translateY(1px) rotate(45deg);
+}
+
+.barsOpen::after {
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  background: rgba(4, 6, 10, 0.6);
+  display: flex;
+  justify-content: center;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .scrim {
+    backdrop-filter: blur(6px);
+  }
+}
+
+/*
+ * Drops from under the bar rather than sliding in from an edge: the control
+ * that opened it is at the top, and the panel should appear to come from there.
+ */
+.panel {
+  margin-top: 52px;
+  width: 100%;
+  max-width: 760px;
+  align-self: flex-start;
+  padding: var(--cl-gap-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+  background: var(--cl-surface);
+  border-bottom: var(--cl-border-strong);
+  border-radius: 0 0 var(--cl-radius) var(--cl-radius);
+  box-shadow: var(--cl-shadow-lg);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--cl-gap);
+  min-height: 56px;
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .item:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+/* Where you already are, marked so the menu answers "where am I" too. */
+.itemCurrent {
+  background: color-mix(in srgb, var(--cl-accent) 14%, transparent);
+}
+
+.itemLabel {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+}
+
+.itemCount {
+  grid-row: span 2;
+  align-self: center;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+}
+
+.itemHint {
+  grid-column: 1;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+@media (min-width: 1000px) {
+  .bar {
+    padding: 0 var(--cl-gap-lg);
+  }
+
+  .panel {
+    max-width: 1180px;
+    padding: var(--cl-gap-sm) var(--cl-gap-lg) var(--cl-gap);
+    /* Wide screens have room to show the destinations at once rather than as a
+       column the eye has to travel down. */
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--cl-gap-sm);
+  }
+}

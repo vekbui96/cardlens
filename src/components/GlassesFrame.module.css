@@ -102,12 +102,20 @@
   }
 }
 
-.webSurface > * {
+/*
+ * The screen, and only the screen.
+ *
+ * Screen renders a <section>, so this targets it by name. A :not(header) rule
+ * looked equivalent and was not: it also caught the menu's fixed scrim, which
+ * inherited a height 52px short of the viewport and left a dead strip along the
+ * bottom that swallowed taps meant to dismiss the menu.
+ */
+.webSurface > section {
   flex: 1 1 auto;
   min-height: 0;
   /* dvh, not vh: mobile browser chrome hides and reveals, and vh would leave a
      dead strip under the address bar. */
-  height: 100dvh;
+  height: calc(100dvh - 52px);
   /* The glasses surface hides overflow because focus scrolls it; a phone
      scrolls itself, so clipping here would simply lose the rest of the list. */
   overflow-y: auto;
