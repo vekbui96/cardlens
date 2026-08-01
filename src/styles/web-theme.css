@@ -1,0 +1,146 @@
+/*
+ * Web theme — phone and desktop only.
+ *
+ * Everything here is scoped to [data-shell="web"], which GlassesFrame puts on
+ * the web surface and nothing else. That is the whole isolation mechanism: the
+ * glasses and preview shells carry data-shell="glasses" / "preview", so the
+ * cascade cannot reach them and tokens.css remains the only thing styling the
+ * device. Proven in e2e/shell-isolation.spec.ts rather than trusted.
+ *
+ * Why the device cannot simply share this:
+ *
+ * - The Meta display is ADDITIVE. Black is transparent, so #000 is the real
+ *   background there and any "elevated dark surface" would glow as a grey
+ *   rectangle floating in the wearer's vision. On a phone, pure black with no
+ *   elevation is what makes an interface look flat and dated.
+ * - Its type scale is sized to be read at a glance, hands-free, on a 600x600
+ *   surface. 22px body text on a phone held at reading distance is enormous.
+ * - Shadows and blur do not render meaningfully on an additive display; on a
+ *   phone they are most of what reads as depth.
+ *
+ * So this is not a skin. The two targets genuinely want opposite things.
+ */
+
+/*
+ * Declared at the root so the page behind the shell can use it too. The shell
+ * is a centred column, and on a wide screen it would otherwise sit on the
+ * glasses' pure black with a visible seam down each side.
+ */
+:root {
+  --cl-web-bg: #0a0c10;
+}
+
+html:has([data-shell="web"]),
+body:has([data-shell="web"]) {
+  background: var(--cl-web-bg);
+}
+
+[data-shell="web"] {
+  /* Surfaces: near-black rather than pure, so elevation has somewhere to go. */
+  --cl-bg: var(--cl-web-bg);
+  --cl-surface: #12151d;
+  --cl-surface-raised: #1b2029;
+
+  /* Slightly off-white: pure #fff on near-black is harsh at reading distance. */
+  --cl-fg: #eef2f7;
+  --cl-fg-muted: #98a2b3;
+  --cl-fg-dim: #69727f;
+
+  --cl-accent: #2dd4bf;
+  --cl-accent-strong: #5eead4;
+  --cl-on-accent: #04211d;
+
+  --cl-price: #4ade80;
+  --cl-warn: #fbbf24;
+  --cl-error: #f87171;
+
+  /*
+   * A 3px ring is right when the ring IS the cursor. With a real pointer it is
+   * heavy, and :focus-visible means it only ever appears for keyboard users.
+   */
+  --cl-focus-ring: 2px solid var(--cl-accent-strong);
+  --cl-focus-glow: 0 0 0 3px rgba(94, 234, 212, 0.25);
+
+  --cl-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Reading distance, not glance distance. */
+  --cl-fs-title: 22px;
+  --cl-fs-heading: 18px;
+  --cl-fs-body: 15px;
+  --cl-fs-small: 13px;
+  --cl-fs-price: 32px;
+
+  --cl-gap-xs: 4px;
+  --cl-gap-sm: 8px;
+  --cl-gap: 12px;
+  --cl-gap-lg: 20px;
+
+  --cl-radius: 14px;
+
+  /* Web-only. Nothing in tokens.css defines these, and nothing else uses them. */
+  --cl-radius-sm: 10px;
+  --cl-border: 1px solid rgba(255, 255, 255, 0.07);
+  --cl-border-strong: 1px solid rgba(255, 255, 255, 0.12);
+  --cl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --cl-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --cl-transition: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  color: var(--cl-fg);
+  font-size: var(--cl-fs-body);
+  letter-spacing: -0.006em;
+}
+
+/*
+ * The shell paints its own background. body still carries the glasses' pure
+ * black from tokens.css, which would otherwise show as a hard seam either side
+ * of the 1180px column on a wide screen.
+ */
+[data-shell="web"] {
+  background: var(--cl-bg);
+}
+
+/*
+ * Undo the glasses' shouty headings.
+ *
+ * components/Screen.module.css sets uppercase + 1px letter-spacing + weight 800
+ * on every screen title. That is a legibility decision for glanceable text on a
+ * 600x600 additive display, and it is the single most dated-looking thing when
+ * the same markup renders on a phone. Targeted by element rather than by class
+ * because CSS module names are hashed and cannot be reached from a global sheet.
+ */
+[data-shell="web"] h1,
+[data-shell="web"] h2 {
+  text-transform: none;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+
+/*
+ * The header rule is a 2px teal line on the glasses, where a bright edge is how
+ * you separate regions on an additive display. On a screen with real contrast a
+ * hairline does the same job without shouting.
+ */
+[data-shell="web"] header {
+  border-bottom: var(--cl-border) !important;
+}
+
+/*
+ * Pointer affordances. The glasses have no pointer at all, so none of this can
+ * apply there — and hover states that only exist on web are exactly the kind of
+ * thing that has to be scoped rather than guarded with a flag in JS.
+ */
+@media (hover: hover) and (pointer: fine) {
+  [data-shell="web"] button:not(:disabled) {
+    transition:
+      background-color var(--cl-transition),
+      border-color var(--cl-transition),
+      transform var(--cl-transition),
+      opacity var(--cl-transition);
+  }
+
+  [data-shell="web"] button:not(:disabled):active {
+    transform: translateY(1px);
+  }
+}

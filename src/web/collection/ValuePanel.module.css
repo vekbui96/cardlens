@@ -1,8 +1,14 @@
 .panel {
   margin: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap);
-  padding: var(--cl-gap);
+  padding: var(--cl-gap-lg) var(--cl-gap);
   border-radius: var(--cl-radius);
-  background: var(--cl-surface);
+  border: var(--cl-border);
+  /* A very slight accent wash at the top, so the headline figure reads as the
+     primary object on the screen rather than one more flat panel. */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cl-accent) 7%, transparent) 0%, transparent 120px),
+    var(--cl-surface);
+  box-shadow: var(--cl-shadow);
   display: flex;
   flex-direction: column;
   gap: var(--cl-gap-sm);
@@ -18,9 +24,11 @@
 
 .total {
   font-size: var(--cl-fs-price);
-  color: var(--cl-price);
+  color: var(--cl-fg);
+  font-weight: 650;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
 .caption {
@@ -75,7 +83,7 @@
   align-items: baseline;
   gap: var(--cl-gap);
   padding: var(--cl-gap-sm) 0;
-  border-top: 1px solid var(--cl-surface-raised);
+  border-top: var(--cl-border);
   font-size: var(--cl-fs-body);
 }
 

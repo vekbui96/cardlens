@@ -122,7 +122,9 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
               <li key={card.id}>
                 <button
                   type="button"
-                  className={`${styles.tile} ${held.length > 0 ? styles.tileOwned : ""}`}
+                  className={`${styles.tile} ${held.length > 0 ? styles.tileOwned : ""} ${
+                    complete ? styles.tileDone : ""
+                  }`}
                   onClick={() => setOpenCardId(card.id)}
                   aria-label={`${card.name}, ${card.collectorNumber}, ${held.length} of ${available.length} printings owned`}
                 >

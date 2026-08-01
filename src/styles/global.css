@@ -1,4 +1,10 @@
 @import "./tokens.css";
+/*
+ * Must come after tokens.css: it overrides the same custom properties, scoped
+ * to the web shell only. See the header of web-theme.css for why the two
+ * targets cannot share a palette or a type scale.
+ */
+@import "./web-theme.css";
 
 *,
 *::before,

@@ -21,15 +21,28 @@ export function GlassesFrame({ children, chrome = true, web = false, scale = 1, 
     // Overrides --cl-viewport rather than restyling every screen: the screens
     // size themselves from that token, so one variable turns the fixed square
     // into a fluid column and nothing else has to know.
-    return <div className={styles.webSurface}>{children}</div>;
+    //
+    // data-shell is the isolation seam for the web theme (styles/web-theme.css).
+    // Scoping the overrides to this attribute means the glasses and preview
+    // shells cannot inherit them by construction, not by discipline — the
+    // cascade never reaches them. See e2e/shell-isolation.spec.ts.
+    return (
+      <div className={styles.webSurface} data-shell="web">
+        {children}
+      </div>
+    );
   }
 
   if (!chrome) {
-    return <div className={styles.rawSurface}>{children}</div>;
+    return (
+      <div className={styles.rawSurface} data-shell="glasses">
+        {children}
+      </div>
+    );
   }
 
   return (
-    <div className={styles.stage}>
+    <div className={styles.stage} data-shell="preview">
       <div className={styles.column}>
         <div className={styles.label}>Meta Ray-Ban Display · 600 × 600 preview</div>
         <div className={styles.bezel} style={{ transform: `scale(${scale})` }}>

@@ -2,10 +2,16 @@
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(4, 6, 10, 0.62);
   display: flex;
   align-items: flex-end;
   justify-content: center;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .backdrop {
+    backdrop-filter: blur(6px);
+  }
 }
 
 /*
@@ -21,7 +27,9 @@
   max-width: 760px;
   max-height: 85dvh;
   background: var(--cl-surface);
-  border-radius: var(--cl-radius) var(--cl-radius) 0 0;
+  border-radius: calc(var(--cl-radius) + 6px) calc(var(--cl-radius) + 6px) 0 0;
+  border-top: var(--cl-border-strong);
+  box-shadow: var(--cl-shadow-lg);
   padding: var(--cl-gap-sm) var(--cl-gap) calc(var(--cl-gap-lg) + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -74,7 +82,11 @@
     max-width: 440px;
     max-height: 100dvh;
     border-radius: 0;
-    padding: var(--cl-gap-lg) var(--cl-gap-lg) var(--cl-gap-lg);
+    /* The panel meets the screen edge, so the only edge that needs defining is
+       the one facing the grid. */
+    border-top: none;
+    border-left: var(--cl-border-strong);
+    padding: var(--cl-gap-lg);
   }
 
   /* A drag affordance for a gesture a mouse does not make. */
@@ -122,13 +134,15 @@
 
 .printing {
   width: 100%;
+  /* Thumb-sized. Asserted in e2e/phone-layout.spec.ts, so this floor holds
+     regardless of the type scale. */
   min-height: 56px;
   display: flex;
   align-items: center;
   gap: var(--cl-gap);
   padding: 0 var(--cl-gap);
-  border-radius: var(--cl-radius);
-  border: 2px solid var(--cl-surface-raised);
+  border-radius: var(--cl-radius-sm);
+  border: var(--cl-border);
   background: var(--cl-surface-raised);
   color: var(--cl-fg-muted);
   font-size: var(--cl-fs-body);
@@ -137,8 +151,18 @@
   cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .printing:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--cl-fg);
+  }
+}
+
+/* Tinted fill as well as a border: at a glance down a column of twelve rows,
+   held vs missing has to read from the block of colour, not the outline. */
 .held {
-  border-color: var(--cl-accent);
+  border-color: color-mix(in srgb, var(--cl-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--cl-accent) 12%, var(--cl-surface-raised));
   color: var(--cl-fg);
 }
 

@@ -3,20 +3,43 @@
  * glasses screens never needed to care about because they have no pointer.
  */
 
+/*
+ * Two rows on a phone, one on a desktop.
+ *
+ * Sharing a single row clipped the rarity chips mid-chip: .chips scrolls
+ * horizontally, so it shrank to whatever the toggles left over and cut "Full
+ * Art" and "Hyper" in half. A partly-visible pill reads as broken rather than
+ * as scrollable, and the toggles are not rarities anyway.
+ */
 .filters {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--cl-gap-sm);
   padding: var(--cl-gap-sm) var(--cl-gap);
   position: sticky;
   top: 0;
   z-index: 2;
+  /* Translucent + blurred so the grid reads as passing underneath rather than
+     disappearing behind an opaque bar. Falls back to the solid colour where
+     backdrop-filter is unsupported. */
   background: var(--cl-bg);
+  border-bottom: var(--cl-border);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .filters {
+    background: color-mix(in srgb, var(--cl-bg) 80%, transparent);
+    backdrop-filter: blur(12px) saturate(1.4);
+  }
 }
 
 .chips {
   display: flex;
   gap: var(--cl-gap-sm);
+  /* Full width so the toggles wrap below rather than eating into the scroll
+     region. Reverted to sharing a row at desktop, where everything fits. */
+  flex: 1 1 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -27,21 +50,40 @@
 
 .chip {
   flex: 0 0 auto;
+  /* 44px is the touch minimum and is asserted in e2e/phone-layout.spec.ts —
+     it is a hit-target floor, not a visual choice, so it stays whatever the
+     type scale does. */
   min-height: 44px;
   padding: 0 var(--cl-gap);
   border-radius: 999px;
-  border: 2px solid var(--cl-surface-raised);
+  border: var(--cl-border-strong);
   background: var(--cl-surface);
   color: var(--cl-fg-muted);
   font-size: var(--cl-fs-small);
+  font-weight: 550;
   font-family: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover {
+    color: var(--cl-fg);
+    background: var(--cl-surface-raised);
+  }
+}
+
 .chipOn {
-  border-color: var(--cl-accent);
+  border-color: transparent;
   color: var(--cl-on-accent);
   background: var(--cl-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chipOn:hover {
+    color: var(--cl-on-accent);
+    background: var(--cl-accent-strong);
+  }
 }
 
 .missing {
@@ -75,8 +117,10 @@
   gap: var(--cl-gap-xs);
   /* Missing cards read as dimmed art rather than as gaps: a grid with holes in
      it is much harder to scan than a grid that is uniformly laid out. */
-  opacity: 0.45;
-  transition: opacity 120ms ease;
+  opacity: 0.4;
+  transition:
+    opacity var(--cl-transition),
+    transform var(--cl-transition);
 }
 
 .tileOwned {
@@ -87,7 +131,28 @@
 .tile > div {
   width: 100%;
   height: auto;
-  border-radius: var(--cl-radius);
+  border-radius: var(--cl-radius-sm);
+  /* Card art is busy and full-bleed; without a hairline the tiles bleed into
+     each other and into the background at small sizes. */
+  box-shadow:
+    var(--cl-shadow),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Complete cards get a ring, not just a tick — the state should be legible
+   from the art alone while scanning, before reading any number. */
+.tileDone img,
+.tileDone > div {
+  box-shadow:
+    var(--cl-shadow),
+    inset 0 0 0 2px var(--cl-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 .tileMeta {
@@ -96,10 +161,12 @@
   justify-content: space-between;
   gap: var(--cl-gap-xs);
   font-size: var(--cl-fs-small);
+  padding: 0 2px;
 }
 
 .tileNumber {
   color: var(--cl-fg-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .tick {
@@ -127,5 +194,10 @@
 
   .filters {
     padding: var(--cl-gap) var(--cl-gap-lg);
+    flex-wrap: nowrap;
+  }
+
+  .chips {
+    flex: 0 1 auto;
   }
 }
