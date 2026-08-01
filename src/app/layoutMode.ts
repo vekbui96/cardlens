@@ -23,8 +23,18 @@ export function resolveLayoutMode(width: number, height: number, override?: stri
   // tall. Checking size alone would put the phone in the fixed 600x600 shell,
   // which overflows a narrow screen — the bug this fixes.
   if (looksLikeGlasses(width, height)) return "glasses";
-  if (width < 720 || height < 680) return "web";
-  return "preview";
+  /**
+   * Everything else is a browser — phone, tablet, laptop or desktop — and gets
+   * the real app.
+   *
+   * A large window used to default to `preview`, the 600x600 bezel mock. That
+   * made sense while the desktop was only somewhere to develop the glasses UI,
+   * but web is a first-class target now, and it meant anyone opening the site on
+   * a laptop was shown a picture of a pair of glasses instead of the app.
+   *
+   * The preview is still there, as the development tool it always was: `?ui=preview`.
+   */
+  return "web";
 }
 
 /** True when the device has a real pointer and scrollbar — phone or browser. */

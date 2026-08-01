@@ -17,12 +17,23 @@ describe("resolveLayoutMode", () => {
     expect(resolveLayoutMode(844, 390)).toBe("web");
   });
 
-  it("uses the desktop preview on a large window", () => {
-    expect(resolveLayoutMode(1440, 900)).toBe("preview");
+  it("gives a desktop or laptop browser the real app, not the preview bezel", () => {
+    // Reported: "the webpage seems to lock to the visual of glasses". Every
+    // window at or above 720x680 fell through to the 600x600 bezel mock, so
+    // opening the site on a laptop showed a picture of the glasses instead of
+    // the app. The preview is a development tool and is now opt-in.
+    expect(resolveLayoutMode(1440, 900)).toBe("web");
+    expect(resolveLayoutMode(1280, 720)).toBe("web");
+    expect(resolveLayoutMode(900, 700)).toBe("web");
+    expect(resolveLayoutMode(1920, 1080)).toBe("web");
   });
 
   it("falls back to web on a short desktop window", () => {
     expect(resolveLayoutMode(1200, 500)).toBe("web");
+  });
+
+  it("still reaches the preview on request", () => {
+    expect(resolveLayoutMode(1440, 900, "preview")).toBe("preview");
   });
 
   it("honours an explicit override", () => {
@@ -32,6 +43,6 @@ describe("resolveLayoutMode", () => {
   });
 
   it("ignores an unknown override", () => {
-    expect(resolveLayoutMode(1440, 900, "banana")).toBe("preview");
+    expect(resolveLayoutMode(1440, 900, "banana")).toBe("web");
   });
 });
