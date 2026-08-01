@@ -55,6 +55,34 @@
   margin: var(--cl-gap-xs) auto var(--cl-gap-sm);
 }
 
+/*
+ * Desktop: a side panel, not a bottom sheet.
+ *
+ * Bottom anchoring is a thumb-reach decision and nothing else. With a mouse the
+ * bottom edge is the FURTHEST point from where the cursor already is, and a
+ * short sheet across a 1440px screen wastes the height it could use for the
+ * printing list. The panel keeps the same internal structure, so Done stays
+ * pinned outside the scrolling region either way.
+ */
+@media (min-width: 1000px) {
+  .backdrop {
+    align-items: stretch;
+    justify-content: flex-end;
+  }
+
+  .sheet {
+    max-width: 440px;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: var(--cl-gap-lg) var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+
+  /* A drag affordance for a gesture a mouse does not make. */
+  .grabber {
+    display: none;
+  }
+}
+
 .head {
   display: flex;
   gap: var(--cl-gap);

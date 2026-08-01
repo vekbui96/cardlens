@@ -88,6 +88,20 @@
   background: var(--cl-bg);
 }
 
+/*
+ * Desktop is a real target, not a wide phone.
+ *
+ * 760px is a sensible reading width and stays the cap for text-shaped screens,
+ * but the set grid is the screen people spend time in and it was letterboxing a
+ * 1440px display into a phone column. Widening the shell lets the grid's
+ * auto-fill do the work without a per-screen breakpoint.
+ */
+@media (min-width: 1000px) {
+  .webSurface {
+    max-width: 1180px;
+  }
+}
+
 .webSurface > * {
   flex: 1 1 auto;
   min-height: 0;

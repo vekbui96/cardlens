@@ -110,3 +110,22 @@
 .tickDone {
   color: var(--cl-accent);
 }
+
+/*
+ * Desktop: bigger tiles, not merely more of them.
+ *
+ * The phone minimum is 104px because a 390px screen has to fit three columns of
+ * recognisable art. With room, the art is the point — at 104px on a 27" monitor
+ * a card is a stamp, and recognising art at a glance is what the grid is for.
+ */
+@media (min-width: 1000px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: var(--cl-gap-lg);
+    padding: var(--cl-gap) var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+
+  .filters {
+    padding: var(--cl-gap) var(--cl-gap-lg);
+  }
+}

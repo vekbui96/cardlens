@@ -34,6 +34,16 @@ export default defineConfig({
      * where they resolve to the web shell instead and fail.
      */
     { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /phone-layout\.spec\.ts/ },
+    /**
+     * A laptop. Same reason the phone project is scoped: every other spec
+     * assumes the 600x600 glasses shell and would resolve to the web shell here
+     * and fail.
+     */
+    {
+      name: "desktop",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      testMatch: /desktop-layout\.spec\.ts/,
+    },
   ],
   webServer: [
     {
