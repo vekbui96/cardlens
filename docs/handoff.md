@@ -34,9 +34,14 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 
 ## Immediate next task
 
-Nothing is half-built. `docs/performance-plan.md` **item 5** (every mark rewrites the whole
-collection) is still next and is still the only item there expected to be _felt_ as the
-collection grows.
+Nothing is half-built. Two plans compete for what comes next:
+
+- **`docs/web-plan.md`** — the phone/desktop client. Search is the biggest gap (one prefix
+  token, 40-result cap, no way to search your own collection), then a real collection
+  dashboard with price movement. Start here if the phone is the client that gets used.
+- **`docs/performance-plan.md` item 5** — every mark rewrites the whole collection. Still the
+  only item there expected to be _felt_ as the collection grows, and the web sheet makes
+  marking fast enough to hit it sooner.
 
 ## What the pricing work actually changed
 
