@@ -1,8 +1,4 @@
-import { useMemo } from "react";
-import { useLibrary } from "../../app/LibraryProvider.tsx";
-import { useSets } from "../../hooks/useSets.ts";
-import { useCollectionValue } from "../../hooks/useCollectionValue.ts";
-import type { ValuableRow } from "../../models/value.ts";
+import { useLibraryValue } from "../../hooks/useLibraryValue.ts";
 import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
 import styles from "./ValuePanel.module.css";
@@ -19,32 +15,12 @@ import styles from "./ValuePanel.module.css";
  * collection while looking authoritative is worse than no total at all.
  */
 export function ValuePanel() {
-  const { collection } = useLibrary();
-  const { data: sets } = useSets();
-
-  const rows = useMemo<ValuableRow[]>(
-    () =>
-      collection.flatMap((card) =>
-        card.finishes.map((finish) => ({
-          cardId: card.id,
-          setId: card.setId ?? card.id.slice(0, card.id.lastIndexOf("-")),
-          finish,
-        })),
-      ),
-    [collection],
-  );
-
-  const setNames = useMemo(() => {
-    const names: Record<string, string> = {};
-    for (const s of sets ?? []) names[s.id] = s.name;
-    return names;
-  }, [sets]);
-
-  const value = useCollectionValue(rows, setNames);
+  const value = useLibraryValue();
+  const setNames = value.setNames;
   const movement7 = value.movement.pct7;
   const movement30 = value.movement.pct30;
 
-  if (rows.length === 0) return null;
+  if (value.holdings === 0) return null;
 
   return (
     <section className={styles.panel} aria-label="Collection value">

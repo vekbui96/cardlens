@@ -3,6 +3,9 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
 import { continueTarget, topProgress } from "../../features/home/continueSet.ts";
+import { useLibraryValue } from "../../hooks/useLibraryValue.ts";
+import { formatPct } from "../../models/movement.ts";
+import { formatUsd } from "../../utils/format.ts";
 import styles from "./WebHomeScreen.module.css";
 
 /**
@@ -23,6 +26,7 @@ export function WebHomeScreen() {
     useLibrary();
   const { data: sets } = useSets();
   const { typeSearch } = useSearchAction();
+  const value = useLibraryValue();
 
   const resume = continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet);
   const progress = topProgress(ownedCountsBySet, sets);
@@ -60,6 +64,34 @@ export function WebHomeScreen() {
             <span className={styles.statNumber}>{totalFinishesOwned}</span> printings ·{" "}
             <span className={styles.statNumber}>{setCount}</span> {setCount === 1 ? "set" : "sets"}
           </p>
+
+          {/*
+            The headline number, and a tap through to the per-set breakdown.
+            Movement is a percentage because the series behind it is Cardmarket
+            EUR while the total is TCGplayer USD -- see models/movement.ts.
+          */}
+          <button
+            type="button"
+            className={styles.value}
+            onClick={() => push({ name: "collection" })}
+            aria-label="Collection value, open collection"
+          >
+            <span className={styles.valueLabel}>Collection value</span>
+            <span className={styles.valueRow}>
+              <span className={styles.valueTotal}>{formatUsd(value.total)}</span>
+              {value.movement.pct7 !== undefined ? (
+                <span className={value.movement.pct7 >= 0 ? styles.up : styles.down}>
+                  {formatPct(value.movement.pct7)}
+                  <span className={styles.valueWindow}> 7d</span>
+                </span>
+              ) : null}
+            </span>
+            <span className={styles.valueMeta}>
+              {value.pending > 0
+                ? `pricing ${value.pending} set${value.pending === 1 ? "" : "s"}…`
+                : `${value.priced} of ${value.printings} printings priced`}
+            </span>
+          </button>
 
           {resume ? (
             <button

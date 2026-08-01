@@ -18,6 +18,83 @@
 }
 
 /*
+ * The headline figure. Gold, because gold means completion or money everywhere
+ * in this app and those are the same good news here.
+ */
+.value {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: calc(100% - 2 * var(--cl-gap));
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  padding: var(--cl-gap-lg) var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cl-gold) 8%, transparent) 0%, transparent 96px),
+    var(--cl-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .value:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+}
+
+.valueLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.valueRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cl-gap);
+}
+
+.valueTotal {
+  font-size: var(--cl-fs-display);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg);
+  line-height: 1.05;
+}
+
+/* Signed and labelled, never colour alone. */
+.up {
+  color: var(--cl-price);
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.down {
+  color: var(--cl-error);
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.valueWindow {
+  color: var(--cl-fg-dim);
+}
+
+.valueMeta {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+@media (min-width: 1000px) {
+  .value {
+    width: calc(100% - 2 * var(--cl-gap-lg));
+    margin: 0 var(--cl-gap-lg) var(--cl-gap);
+  }
+}
+
+/*
  * The one thing Home exists to answer. Given the accent wash rather than a
  * border so it reads as the primary action without needing to be large.
  */
