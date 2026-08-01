@@ -11,12 +11,15 @@
 /*
  * Anchored to the bottom: on a phone the top of the screen is the hardest place
  * to reach one-handed, and marking printings is a repetitive thumb action.
+ *
+ * The sheet itself does not scroll — .scroll below does. Done is a sibling
+ * after .scroll, so a long printing list scrolls internally while Done stays
+ * pinned at the bottom of the sheet, never past the edge of the screen.
  */
 .sheet {
   width: 100%;
   max-width: 760px;
   max-height: 85dvh;
-  overflow-y: auto;
   background: var(--cl-surface);
   border-radius: var(--cl-radius) var(--cl-radius) 0 0;
   padding: var(--cl-gap-sm) var(--cl-gap) calc(var(--cl-gap-lg) + env(safe-area-inset-bottom, 0px));
@@ -27,6 +30,21 @@
 
 .sheet:focus {
   outline: none;
+}
+
+/*
+ * flex: 1 1 auto + min-height: 0 is what lets this shrink below its content
+ * size inside the bounded .sheet, so overflow-y: auto actually gets a
+ * constrained box to scroll within rather than pushing .sheet (and .close)
+ * past 85dvh.
+ */
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap);
 }
 
 .grabber {

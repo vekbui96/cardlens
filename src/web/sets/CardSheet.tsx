@@ -70,75 +70,82 @@ export function CardSheet({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={styles.grabber} aria-hidden="true" />
-        <div className={styles.head}>
-          <CardImage src={card.imageSmall} alt="" size="thumb" />
-          <div className={styles.headText}>
-            <h2 className={styles.name}>{card.name}</h2>
-            <p className={styles.meta}>
-              {card.collectorNumber}
-              {card.rarity ? ` · ${card.rarity}` : ""}
-            </p>
-            <p className={styles.price} data-testid="sheet-headline-price">
-              {formatUsd(headlinePrice ?? card.marketPrice)}
-            </p>
+        {/*
+         * Done must stay reachable without scrolling, so only this wrapper
+         * scrolls — the grabber, head and printing lists can run past the
+         * sheet's max-height, but the close affordance below it never does.
+         */}
+        <div className={styles.scroll}>
+          <div className={styles.grabber} aria-hidden="true" />
+          <div className={styles.head}>
+            <CardImage src={card.imageSmall} alt="" size="thumb" />
+            <div className={styles.headText}>
+              <h2 className={styles.name}>{card.name}</h2>
+              <p className={styles.meta}>
+                {card.collectorNumber}
+                {card.rarity ? ` · ${card.rarity}` : ""}
+              </p>
+              <p className={styles.price} data-testid="sheet-headline-price">
+                {formatUsd(headlinePrice ?? card.marketPrice)}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Only what is actually held, and only when something priced is held:
-            a "$0.00" line under an empty collection reads as a valuation, not
-            as an absence. */}
-        {ownedValue !== undefined ? (
-          <p className={styles.ownedValue} data-testid="sheet-owned-value">
-            You own {formatUsd(ownedValue)}
-          </p>
-        ) : null}
+          {/* Only what is actually held, and only when something priced is held:
+              a "$0.00" line under an empty collection reads as a valuation, not
+              as an absence. */}
+          {ownedValue !== undefined ? (
+            <p className={styles.ownedValue} data-testid="sheet-owned-value">
+              You own {formatUsd(ownedValue)}
+            </p>
+          ) : null}
 
-        <ul className={styles.printings}>
-          {finishes.map((finish) => {
-            const held = owned.includes(finish);
-            return (
-              <li key={finish}>
-                <button
-                  type="button"
-                  className={`${styles.printing} ${held ? styles.held : ""}`}
-                  aria-pressed={held}
-                  onClick={() => onToggle(finish)}
-                >
-                  <span className={styles.box} aria-hidden="true">
-                    {held ? "✓" : ""}
-                  </span>
-                  <span className={styles.printingLabel}>{finishLabel(finish)}</span>
-                  <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        {/* Anything held that the set data does not list — a hand-marked pattern
-            foil — must stay visible and removable, or it becomes unreachable. */}
-        {owned.filter((f) => !finishes.includes(f)).length > 0 ? (
           <ul className={styles.printings}>
-            {owned
-              .filter((f) => !finishes.includes(f))
-              .map((finish) => (
+            {finishes.map((finish) => {
+              const held = owned.includes(finish);
+              return (
                 <li key={finish}>
                   <button
                     type="button"
-                    className={`${styles.printing} ${styles.held} ${styles.extra}`}
-                    aria-pressed
+                    className={`${styles.printing} ${held ? styles.held : ""}`}
+                    aria-pressed={held}
                     onClick={() => onToggle(finish)}
                   >
                     <span className={styles.box} aria-hidden="true">
-                      ✓
+                      {held ? "✓" : ""}
                     </span>
                     <span className={styles.printingLabel}>{finishLabel(finish)}</span>
                     <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
                   </button>
                 </li>
-              ))}
+              );
+            })}
           </ul>
-        ) : null}
+          {/* Anything held that the set data does not list — a hand-marked pattern
+              foil — must stay visible and removable, or it becomes unreachable. */}
+          {owned.filter((f) => !finishes.includes(f)).length > 0 ? (
+            <ul className={styles.printings}>
+              {owned
+                .filter((f) => !finishes.includes(f))
+                .map((finish) => (
+                  <li key={finish}>
+                    <button
+                      type="button"
+                      className={`${styles.printing} ${styles.held} ${styles.extra}`}
+                      aria-pressed
+                      onClick={() => onToggle(finish)}
+                    >
+                      <span className={styles.box} aria-hidden="true">
+                        ✓
+                      </span>
+                      <span className={styles.printingLabel}>{finishLabel(finish)}</span>
+                      <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
 
         <button type="button" className={styles.close} onClick={onClose}>
           Done
