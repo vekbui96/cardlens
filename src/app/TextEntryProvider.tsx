@@ -8,6 +8,7 @@ import {
   type PromptFn,
 } from "../services/text-input/providers.ts";
 import { CompanionClient } from "../services/companion/client.ts";
+import { useIsWeb } from "./contexts.tsx";
 import { TextPromptModal } from "../components/TextPromptModal.tsx";
 import { CompanionModal } from "../components/CompanionModal.tsx";
 import { LetterPickerModal } from "../components/LetterPickerModal.tsx";
@@ -61,6 +62,7 @@ export function TextEntryProvider({ children }: { children: ReactNode }) {
     setPending((p) => (p ? { ...p, kind } : p));
   }, []);
 
+  const isWeb = useIsWeb();
   const companionSupported = useMemo(() => new CompanionClient().configured, []);
   const browserSupported = useMemo(() => {
     // ?input=glasses forces the on-screen picker (demo/test on desktop);
@@ -68,8 +70,19 @@ export function TextEntryProvider({ children }: { children: ReactNode }) {
     const forced = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("input");
     if (forced === "glasses") return false;
     if (forced === "keyboard") return true;
+    /**
+     * The shell already knows. Web means a phone or a browser window, and both
+     * have a keyboard — a phone's is on the screen, but it is a real keyboard.
+     *
+     * The pointer heuristic below cannot answer this: a touchscreen reports
+     * `pointer: coarse`, not `fine`, so it sent every phone to the glasses
+     * letter picker — a D-pad speller built for a device with no keyboard at
+     * all, on a device holding one. layoutMode's glasses-vs-phone decision is
+     * made on shape and is the signal everything else in the app already trusts.
+     */
+    if (isWeb) return true;
     return isBrowserTextInputLikely();
-  }, []);
+  }, [isWeb]);
 
   const value = useMemo<TextEntryValue>(() => {
     // Desktop/mobile with a keyboard -> browser prompt; glasses -> on-screen picker.

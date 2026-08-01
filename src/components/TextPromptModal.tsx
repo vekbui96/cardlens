@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { TextInputRequest } from "../models/text-input.ts";
+import { useIsWeb } from "../app/contexts.tsx";
 import styles from "./Modal.module.css";
 
 interface TextPromptModalProps {
@@ -16,6 +17,7 @@ interface TextPromptModalProps {
  */
 export function TextPromptModal({ request, onSubmit, onCancel }: TextPromptModalProps) {
   const [value, setValue] = useState(request.initialValue ?? "");
+  const isWeb = useIsWeb();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,6 +41,15 @@ export function TextPromptModal({ request, onSubmit, onCancel }: TextPromptModal
           value={value}
           placeholder={request.placeholder}
           aria-label={request.placeholder}
+          /*
+           * Phone keyboard behaviour. Autocorrect is actively harmful here —
+           * it "fixes" Pokémon names and set codes into English words — and the
+           * return key should say Search rather than Go.
+           */
+          enterKeyHint="search"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -50,7 +61,10 @@ export function TextPromptModal({ request, onSubmit, onCancel }: TextPromptModal
             }
           }}
         />
-        <p className={styles.hint}>Type a Pokémon name. Enter to search, Esc to cancel.</p>
+        {/* A touchscreen has no Escape key, so naming one is noise. */}
+        <p className={styles.hint}>
+          {isWeb ? "Type a Pokémon name." : "Type a Pokémon name. Enter to search, Esc to cancel."}
+        </p>
         <div className={styles.actions}>
           <button type="button" className={styles.btn} onClick={onCancel}>
             Cancel

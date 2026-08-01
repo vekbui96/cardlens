@@ -174,3 +174,11 @@ body:has([data-shell="web"]) {
     transform: translateY(1px);
   }
 }
+
+/*
+ * Modal controls are shared with the glasses, where a "button" is a focus-ring
+ * target and size is irrelevant. With a thumb it is not.
+ */
+[data-shell="web"] [role="dialog"] button {
+  min-height: 44px;
+}
