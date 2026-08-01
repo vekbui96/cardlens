@@ -48,6 +48,22 @@ test.describe("web shell at desktop size", () => {
     expect(second!.x, "second tile should be to the right of the first").toBeGreaterThan(first!.x);
   });
 
+  test("a card tile keeps its shape when the art fails to load", async ({ page }) => {
+    // Found by screenshot: a 404 left the tile as a floating number and tick
+    // with no box, because the placeholder has no intrinsic height. Two cells
+    // of a nine-card page collapsed and the row lost its shape.
+    await page.route("**/images.pokemontcg.io/**", (r) => r.abort());
+
+    await page.goto("/?ui=web#/sets");
+    await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();
+
+    const tile = page.getByRole("button", { name: /printings owned/ }).first();
+    await expect(tile).toBeVisible();
+
+    const box = await tile.boundingBox();
+    expect(box!.height, "tile collapsed when its image failed").toBeGreaterThan(100);
+  });
+
   test("no horizontal overflow at desktop width", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
     await page.getByRole("option").filter({ hasText: "Obsidian Flames" }).first().click();

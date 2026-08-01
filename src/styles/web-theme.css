@@ -27,7 +27,10 @@
  * glasses' pure black with a visible seam down each side.
  */
 :root {
-  --cl-web-bg: #0a0c10;
+  /* Card-back blue-black. Not neutral: it gives nine pieces of card art a cooler
+     surround than pure black, and it is derived from the material collectors
+     actually look at all day. */
+  --cl-web-bg: #080b13;
 }
 
 html:has([data-shell="web"]),
@@ -38,39 +41,65 @@ body:has([data-shell="web"]) {
 [data-shell="web"] {
   /* Surfaces: near-black rather than pure, so elevation has somewhere to go. */
   --cl-bg: var(--cl-web-bg);
-  --cl-surface: #12151d;
-  --cl-surface-raised: #1b2029;
+  --cl-surface: #111726;
+  --cl-surface-raised: #1a2133;
 
-  /* Slightly off-white: pure #fff on near-black is harsh at reading distance. */
-  --cl-fg: #eef2f7;
-  --cl-fg-muted: #98a2b3;
-  --cl-fg-dim: #69727f;
+  /* Slightly cool off-white: pure #fff on near-black is harsh at reading distance. */
+  --cl-fg: #e9edf7;
+  --cl-fg-muted: #8a94ad;
+  --cl-fg-dim: #5c667d;
 
-  --cl-accent: #2dd4bf;
-  --cl-accent-strong: #5eead4;
-  --cl-on-accent: #04211d;
+  /*
+   * Two accents with disjoint meanings, and nothing else is coloured.
+   *
+   * Blue means "you can act on this" — selected chip, focus, a held printing.
+   * Gold means "finished, or worth something", which in this hobby is one idea
+   * rather than two: a complete page and a market price are the same kind of
+   * good news. Anything that is neither stays greyscale.
+   *
+   * Blue and gold sit on the blue-yellow axis, preserved under the common
+   * red-green deficiencies. State is still always paired with a glyph or label.
+   */
+  --cl-accent: #5b8cff;
+  --cl-accent-strong: #86a9ff;
+  --cl-on-accent: #05102b;
 
-  --cl-price: #4ade80;
-  --cl-warn: #fbbf24;
-  --cl-error: #f87171;
+  --cl-gold: #f2b544;
+  --cl-gold-dim: rgba(242, 181, 68, 0.16);
+
+  --cl-price: var(--cl-gold);
+  --cl-warn: #f2b544;
+  --cl-error: #ff7a7a;
 
   /*
    * A 3px ring is right when the ring IS the cursor. With a real pointer it is
    * heavy, and :focus-visible means it only ever appears for keyboard users.
    */
   --cl-focus-ring: 2px solid var(--cl-accent-strong);
-  --cl-focus-glow: 0 0 0 3px rgba(94, 234, 212, 0.25);
+  --cl-focus-glow: 0 0 0 3px rgba(91, 140, 255, 0.3);
 
   --cl-font:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto,
     "Helvetica Neue", Arial, sans-serif;
 
+  /*
+   * Catalogue data — collector numbers, ratios, prices — is set in mono so it
+   * aligns down a column, exactly as it does in a binder index. The numbers are
+   * ragged-width identifiers (101a, TG01, SV001), not prose.
+   *
+   * A display webfont was costed and rejected: the Bricolage Grotesque latin
+   * variable subset measures 77KB, against a 130KB entry bundle, to style three
+   * text elements. The personality is spent on the binder page instead.
+   */
+  --cl-font-data: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+
   /* Reading distance, not glance distance. */
-  --cl-fs-title: 22px;
+  --cl-fs-display: 30px;
+  --cl-fs-title: 20px;
   --cl-fs-heading: 18px;
   --cl-fs-body: 15px;
   --cl-fs-small: 13px;
-  --cl-fs-price: 32px;
+  --cl-fs-price: var(--cl-fs-display);
 
   --cl-gap-xs: 4px;
   --cl-gap-sm: 8px;
@@ -81,6 +110,7 @@ body:has([data-shell="web"]) {
 
   /* Web-only. Nothing in tokens.css defines these, and nothing else uses them. */
   --cl-radius-sm: 10px;
+  --cl-radius-art: 6px;
   --cl-border: 1px solid rgba(255, 255, 255, 0.07);
   --cl-border-strong: 1px solid rgba(255, 255, 255, 0.12);
   --cl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);

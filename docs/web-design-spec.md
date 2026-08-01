@@ -199,7 +199,7 @@ An action keeps its name across the flow. Empty states say what to do next; erro
 - `src/styles/tokens.css` is the glasses' palette and scale and is **not edited by this spec**.
 - Everything here lands in `src/styles/web-theme.css` under `[data-shell="web"]`, or in `src/web/**`.
 - `GlassesFrame` stamps `data-shell` as `web` / `glasses` / `preview`; the cascade cannot reach the other two.
-- `e2e/shell-isolation.spec.ts` asserts the glasses keep `#000000` and the 22px scale, and that no web-only token resolves there. **Extend it with the new tokens (`--cl-gold`, `--cl-fs-display`, `--cl-line`) before shipping any of this.**
+- `e2e/shell-isolation.spec.ts` asserts the glasses keep `#000000` and the 22px scale, and that no web-only token resolves there. Extended with `--cl-gold`, `--cl-gold-dim`, `--cl-font-data`, `--cl-fs-display` and `--cl-radius-art`. **Any future web-only token goes in that list too.**
 
 Why they cannot share: the Meta display is additive. Black is transparent, so an elevated surface glows as a grey rectangle in the wearer's vision; shadows and blur do not render; the type scale is sized for glance distance, hands-free. Opposite requirements, not a skin.
 
@@ -211,9 +211,15 @@ Responsive to 360px with no horizontal overflow · visible keyboard focus on eve
 
 ---
 
-## 10. Decisions this spec is asking for
+## 10. Decisions — settled 2026-08-01
 
-1. **Webfonts, or system stack?** Estimated 30–45 KB. The layout works either way.
-2. **Gold for completion** — or keep a single accent and express completion with weight and glyph only?
-3. **Nine-column desktop** locks card art fairly small at 1440px (≈120px). One binder page per row is the point; the alternative is a free-flowing grid that abandons the signature at desktop.
-4. Page markers are suppressed under any filter (§5). Acceptable, or should filtered views get a different structure?
+1. **System stack, no webfont.** The estimate above was wrong: the Bricolage Grotesque latin variable subset **measures 77 KB**, not 30–45, against a 130 KB entry bundle — to style three text elements. Rejected. Personality is spent on the binder page; `ui-monospace` does the alignment work for free.
+2. **Gold for completion — yes.** Two accents with disjoint meanings, as specified.
+3. **Nine columns at desktop — yes.** Art lands near 120px at 1440px and that trade is accepted.
+4. **Filtered views get a count line**, not a different structure. Page markers are suppressed and a single "22 cards · most valuable first" line replaces them, so a filtered screen still says what it is showing without pretending to be a binder.
+
+### Built, and what it cost
+
+Shipped as specified. One defect the screenshots caught and the code review would not have: **a card tile collapsed to 19px when its art 404'd**, because the placeholder has no intrinsic height — two cells of a nine-card page rendered as a floating number and tick. Fixed with `aspect-ratio: 5/7` on the art box, which also closes `performance-plan.md` item 7 (layout shift from images with no dimensions). Guarded by an e2e test confirmed to fail at 19px without it.
+
+Still not done: the value panel and card sheet inherit the new palette but have not been redesigned against §6, and no part of this has been seen on a real phone.

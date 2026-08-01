@@ -4,6 +4,7 @@ import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RARITY_FILTERS } from "../../features/results/rarityFilters.ts";
+import { binderPages } from "../../models/binder.ts";
 import type { PokemonCardSummary, CollectFinish } from "../../models/cards.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
@@ -55,7 +56,53 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     return [...visible].sort((a, b) => (view.headlinePriceFor(b) ?? 0) - (view.headlinePriceFor(a) ?? 0));
   }, [view, missingOnly, isComplete, byValue]);
 
+  /**
+   * Binder pages are only honest over an unbroken run in collector order. A
+   * "Page 3" drawn over a rarity-filtered subset, a missing-only list or a
+   * value sort names something that does not exist, so those modes get a flat
+   * grid and a plain count instead.
+   */
+  const inBinderOrder = rarity.rarities === null && !missingOnly && !byValue;
+  const pages = useMemo(
+    () =>
+      inBinderOrder
+        ? binderPages(
+            cards.map((c) => ({ collectorNumber: c.collectorNumber, complete: isComplete(c), card: c })),
+          )
+        : [],
+    [inBinderOrder, cards, isComplete],
+  );
+
   const openCard = openCardId ? (view.cards.find((c) => c.id === openCardId) ?? null) : null;
+
+  /** One tile, shared by the binder-page and flat-grid paths. */
+  const renderTile = (card: PokemonCardSummary) => {
+    const available = view.finishesFor(card.collectorNumber, card.variants);
+    const held = ownedFinishes(card.id);
+    const complete = available.length > 0 && available.every((f) => held.includes(f));
+    return (
+      <li key={card.id}>
+        <button
+          type="button"
+          className={`${styles.tile} ${held.length > 0 ? styles.tileOwned : ""} ${
+            complete ? styles.tileDone : ""
+          }`}
+          onClick={() => setOpenCardId(card.id)}
+          aria-label={`${card.name}, ${card.collectorNumber}, ${held.length} of ${available.length} printings owned`}
+        >
+          <CardImage src={card.imageSmall} alt="" size="thumb" />
+          {/* Dim rather than hide what is missing: a grid of greyed art is
+              readable at a glance, a grid with holes in it is not. */}
+          <span className={styles.tileMeta}>
+            <span className={styles.tileNumber}>{card.collectorNumber}</span>
+            <span className={complete ? styles.tickDone : styles.tick} aria-hidden="true">
+              {complete ? "✓" : `${held.length}/${available.length}`}
+            </span>
+          </span>
+        </button>
+      </li>
+    );
+  };
 
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
@@ -112,37 +159,32 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
         />
       ) : null}
 
-      {cards.length > 0 ? (
-        <ul className={styles.grid}>
-          {cards.map((card) => {
-            const available = view.finishesFor(card.collectorNumber, card.variants);
-            const held = ownedFinishes(card.id);
-            const complete = available.every((f) => held.includes(f));
-            return (
-              <li key={card.id}>
-                <button
-                  type="button"
-                  className={`${styles.tile} ${held.length > 0 ? styles.tileOwned : ""} ${
-                    complete ? styles.tileDone : ""
-                  }`}
-                  onClick={() => setOpenCardId(card.id)}
-                  aria-label={`${card.name}, ${card.collectorNumber}, ${held.length} of ${available.length} printings owned`}
-                >
-                  <CardImage src={card.imageSmall} alt="" size="thumb" />
-                  {/* Dim rather than hide what is missing: a grid of greyed art is
-                      readable at a glance, a grid with holes in it is not. */}
-                  <span className={styles.tileMeta}>
-                    <span className={styles.tileNumber}>{card.collectorNumber}</span>
-                    <span className={complete ? styles.tickDone : styles.tick} aria-hidden="true">
-                      {complete ? "✓" : `${held.length}/${available.length}`}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {/* Filtered views are not binder pages, so they say what they are instead. */}
+      {cards.length > 0 && !inBinderOrder ? (
+        <p className={styles.summary}>
+          <span className={styles.summaryCount}>{cards.length}</span> {cards.length === 1 ? "card" : "cards"}
+          {byValue ? " · most valuable first" : ""}
+        </p>
       ) : null}
+
+      {cards.length > 0 && !inBinderOrder ? <ul className={styles.grid}>{cards.map(renderTile)}</ul> : null}
+
+      {pages.map((page) => (
+        <section key={page.index} className={styles.page}>
+          <h2 className={`${styles.pageMarker} ${page.full ? styles.pageFull : ""}`}>
+            <span className={styles.pageName}>
+              {page.full ? "✦ " : ""}Page {page.index}
+            </span>
+            <span className={styles.pageRange}>
+              {page.from}–{page.to}
+            </span>
+            <span className={styles.pageCount}>
+              {page.complete}/{page.cards.length}
+            </span>
+          </h2>
+          <ul className={styles.grid}>{page.cards.map((p) => renderTile(p.card))}</ul>
+        </section>
+      ))}
 
       {openCard ? (
         <CardSheet

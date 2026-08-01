@@ -84,9 +84,19 @@ test.describe("web theme isolation", () => {
     const leaked = await page.locator("[data-shell]").evaluate((el) => {
       const s = getComputedStyle(el);
       // Declared only in web-theme.css. Any value here means the scope broke.
-      return ["--cl-shadow-lg", "--cl-border", "--cl-transition", "--cl-radius-sm"].filter(
-        (t) => s.getPropertyValue(t).trim() !== "",
-      );
+      return [
+        "--cl-shadow-lg",
+        "--cl-border",
+        "--cl-transition",
+        "--cl-radius-sm",
+        // Added with the binder-page design: gold, the mono data face, and the
+        // display scale are all web-only vocabulary.
+        "--cl-gold",
+        "--cl-gold-dim",
+        "--cl-font-data",
+        "--cl-fs-display",
+        "--cl-radius-art",
+      ].filter((t) => s.getPropertyValue(t).trim() !== "");
     });
 
     expect(leaked, `web-only tokens visible on the glasses: ${leaked.join(", ")}`).toEqual([]);

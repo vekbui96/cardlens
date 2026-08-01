@@ -92,16 +92,87 @@
 }
 
 /*
- * auto-fill with a minimum, not a fixed column count: the same grid has to work
- * at 390px and on a 760px shell without a breakpoint per device.
+ * Three columns, because a binder page is three across.
+ *
+ * A fixed column count rather than auto-fill: the grid is a binder page, and a
+ * page that reflows to four or five columns depending on the viewport is not
+ * one. Nine cards read as three rows of three at every width below the desktop
+ * breakpoint.
  */
 .grid {
   list-style: none;
   margin: 0;
-  padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap-lg);
+  padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--cl-gap);
+}
+
+.page {
+  display: contents;
+}
+
+/*
+ * The page marker. Structure, not decoration: it names a real object the
+ * collector owns, and the range is how they find their place.
+ */
+.pageMarker {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cl-gap-sm);
+  margin: 0;
+  padding: var(--cl-gap-lg) var(--cl-gap) var(--cl-gap-xs);
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-fg-muted);
+  border-bottom: var(--cl-border);
+}
+
+.pageName {
+  flex: 0 0 auto;
+}
+
+.pageRange {
+  flex: 1 1 auto;
+  font-family: var(--cl-font-data);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--cl-fg-dim);
+}
+
+.pageCount {
+  flex: 0 0 auto;
+  font-family: var(--cl-font-data);
+  font-size: 11px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-dim);
+}
+
+/* A filled page is the thing master-setting is actually for. It is the only
+   place gold appears outside money, and the only celebratory moment in the app. */
+.pageFull {
+  color: var(--cl-gold);
+  border-bottom-color: color-mix(in srgb, var(--cl-gold) 40%, transparent);
+}
+
+.pageFull .pageCount {
+  color: var(--cl-gold);
+}
+
+.summary {
+  margin: 0;
+  padding: var(--cl-gap) var(--cl-gap) 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.summaryCount {
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg);
 }
 
 .tile {
@@ -127,11 +198,21 @@
   opacity: 1;
 }
 
+/*
+ * A card is 5:7, and the box holds that shape whether or not the art arrives.
+ *
+ * Without it the tile collapses to nothing when an image 404s — found by
+ * screenshotting, where two cells in a nine-card page rendered as a floating
+ * number and tick with no box at all. It also fixes the layout shift every tile
+ * caused while loading, which performance-plan.md item 7 lists separately.
+ */
 .tile img,
 .tile > div {
   width: 100%;
   height: auto;
-  border-radius: var(--cl-radius-sm);
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: var(--cl-radius-art);
   /* Card art is busy and full-bleed; without a hairline the tiles bleed into
      each other and into the background at small sizes. */
   box-shadow:
@@ -139,13 +220,13 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* Complete cards get a ring, not just a tick — the state should be legible
+/* Complete cards get a gold ring, not just a tick — the state should be legible
    from the art alone while scanning, before reading any number. */
 .tileDone img,
 .tileDone > div {
   box-shadow:
     var(--cl-shadow),
-    inset 0 0 0 2px var(--cl-accent);
+    inset 0 0 0 2px var(--cl-gold);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -164,18 +245,22 @@
   padding: 0 2px;
 }
 
+/* Mono: collector numbers are ragged-width catalogue identifiers (101a, TG01,
+   SV001) that have to align down the column, as in a binder index. */
 .tileNumber {
   color: var(--cl-fg-dim);
+  font-family: var(--cl-font-data);
   font-variant-numeric: tabular-nums;
 }
 
 .tick {
   color: var(--cl-fg-muted);
+  font-family: var(--cl-font-data);
   font-variant-numeric: tabular-nums;
 }
 
 .tickDone {
-  color: var(--cl-accent);
+  color: var(--cl-gold);
 }
 
 /*
@@ -185,11 +270,24 @@
  * recognisable art. With room, the art is the point — at 104px on a 27" monitor
  * a card is a stamp, and recognising art at a glance is what the grid is for.
  */
+/*
+ * Desktop: nine columns, so one binder page IS one row.
+ *
+ * This is where the structure stops being a metaphor. It costs card size — art
+ * lands near 120px at 1440px — and that trade is the point: a free-flowing grid
+ * would show bigger art and abandon the one idea the screen is built around.
+ */
 @media (min-width: 1000px) {
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-    gap: var(--cl-gap-lg);
-    padding: var(--cl-gap) var(--cl-gap-lg) var(--cl-gap-lg);
+    grid-template-columns: repeat(9, 1fr);
+    gap: var(--cl-gap);
+    padding: var(--cl-gap-sm) var(--cl-gap-lg) var(--cl-gap);
+  }
+
+  .pageMarker,
+  .summary {
+    padding-left: var(--cl-gap-lg);
+    padding-right: var(--cl-gap-lg);
   }
 
   .filters {
