@@ -1,0 +1,161 @@
+/*
+ * The trigger has to read as the screen title first and a control second — it
+ * IS the title. So the type matches what Screen.module.css would have set, and
+ * only the caret says it opens.
+ */
+.heading {
+  margin: 0;
+  min-width: 0;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-xs);
+  /* 44px is the touch floor for anything a finger is meant to hit. */
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 var(--cl-gap-sm);
+  margin-left: calc(var(--cl-gap-sm) * -1);
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--cl-fs-title);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caret {
+  flex: 0 0 auto;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  transition: transform var(--cl-transition);
+}
+
+.caretOpen {
+  transform: rotate(180deg);
+  color: var(--cl-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    transition: none;
+  }
+}
+
+/*
+ * Fixed rather than absolute so nothing between here and the viewport can clip
+ * it, and below the app bar's z-index so the menu button stays reachable.
+ */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+}
+
+.menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + var(--cl-gap-sm));
+  left: 0;
+  /* Wider than the title slot, capped so it never runs off a phone. */
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 2 * var(--cl-gap)));
+  /* Long collections scroll inside the panel instead of past the fold. */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--cl-gap-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--cl-surface);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  box-shadow: var(--cl-shadow-lg);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--cl-gap-sm);
+  min-height: 44px;
+  padding: var(--cl-gap-sm);
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .item:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+.itemCurrent {
+  background: var(--cl-surface-raised);
+}
+
+.itemName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+
+.itemCurrent .itemName {
+  color: var(--cl-accent);
+}
+
+.itemCount {
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+  white-space: nowrap;
+}
+
+.bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cl-accent);
+}
+
+/* A destination, not a set: separated so it cannot be mistaken for one. */
+.itemAll {
+  margin-top: var(--cl-gap-xs);
+  border-top: var(--cl-border);
+  border-radius: 0 0 var(--cl-radius-sm) var(--cl-radius-sm);
+  color: var(--cl-fg-muted);
+}

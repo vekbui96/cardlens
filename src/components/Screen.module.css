@@ -41,6 +41,14 @@
   text-overflow: ellipsis;
 }
 
+/* Takes the title's place in the flex row without its clipping: a panel opened
+   from the control has to be able to hang below the header. */
+.titleSlot {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
 .headerStatus {
   flex: 0 0 auto;
   font-size: var(--cl-fs-small);

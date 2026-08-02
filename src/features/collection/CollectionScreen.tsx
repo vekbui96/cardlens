@@ -1,11 +1,10 @@
-import { lazy, Suspense, useMemo, useRef } from "react";
-import type { CollectFinish } from "../../models/cards.ts";
+import { lazy, Suspense, useRef } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { EmptyState } from "../../components/States.tsx";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
-import { useSets } from "../../hooks/useSets.ts";
+import { useCollectedSets } from "../../hooks/useCollectedSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
@@ -19,63 +18,17 @@ const ValuePanel = lazy(() =>
   import("../../web/collection/ValuePanel.tsx").then((m) => ({ default: m.ValuePanel })),
 );
 
-interface SetProgress {
-  setId: string;
-  setName: string;
-  owned: number;
-  /** Printings held in this set — can exceed `owned` when variants are tracked. */
-  printings: number;
-  finishes: Partial<Record<CollectFinish, number>>;
-  total?: number;
-  /** 0–1, or undefined when the set's size isn't known yet. */
-  ratio?: number;
-}
-
 /** Every set you own cards from, closest to complete first — the master-set view. */
 export function CollectionScreen() {
   const { push, pop } = useNavigation();
-  const {
-    collection,
-    ownedCountsBySet,
-    ownedFinishCountsBySet,
-    totalFinishesOwned,
-    finishesBySet,
-    syncStatus,
-    syncNow,
-    setSyncToken,
-    disconnectSync,
-  } = useLibrary();
+  const { collection, totalFinishesOwned, syncStatus, syncNow, setSyncToken, disconnectSync } = useLibrary();
   const { provider: textProvider } = useTextEntry();
   const enabled = useScreenInputEnabled();
   const isWeb = useIsWeb();
-  /**
-   * Only used to put names and totals on rows. The collection itself is local,
-   * so this screen must never block on it — gating the UI on this query left
-   * the glasses (empty localStorage, flaky network) on a loading state forever,
-   * with no error branch to escape through.
-   */
-  const { data: sets } = useSets();
   const itemIndexRef = useRef(0);
 
-  const rows = useMemo<SetProgress[]>(() => {
-    const byId = new Map((sets ?? []).map((s) => [s.id, s]));
-    return Object.entries(ownedCountsBySet)
-      .map(([setId, owned]) => {
-        const set = byId.get(setId);
-        const total = set?.total;
-        return {
-          setId,
-          printings: ownedFinishCountsBySet[setId] ?? owned,
-          finishes: finishesBySet[setId] ?? {},
-          // A set can be missing from the list (new release, or a cache miss);
-          // its id is still a better label than dropping the row entirely.
-          setName: set?.name ?? setId,
-          owned,
-          ...(total ? { total, ratio: Math.min(1, owned / total) } : {}),
-        };
-      })
-      .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.owned - a.owned);
-  }, [sets, ownedCountsBySet, ownedFinishCountsBySet, finishesBySet]);
+  // Same rows, same order as the set switcher on web — see useCollectedSets.
+  const rows = useCollectedSets();
 
   const completed = rows.filter((r) => r.ratio === 1).length;
 

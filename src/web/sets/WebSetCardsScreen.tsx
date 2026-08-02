@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
@@ -10,6 +10,7 @@ import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { CardSheet } from "./CardSheet.tsx";
+import { SetSwitcher } from "./SetSwitcher.tsx";
 import styles from "./WebSetCardsScreen.module.css";
 
 /**
@@ -34,6 +35,14 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   /** Binder order is the default; value order answers a different question. */
   const [byValue, setByValue] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+
+  /**
+   * The switcher swaps sets under a screen that stays mounted, so anything
+   * naming a specific card has to go. The filters deliberately do not: "missing
+   * only" is a question asked of set after set. An open sheet would otherwise
+   * survive on an id the new set does not contain.
+   */
+  useEffect(() => setOpenCardId(null), [setId]);
 
   const rarity = RARITY_FILTERS.find((f) => f.key === rarityKey) ?? RARITY_FILTERS[0];
   // Printings are wanted up front here: there is no collect mode to gate them
@@ -113,6 +122,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       title={setName}
       headerLeft={<BackRow focused={false} onActivate={pop} />}
       headerRight={progress}
+      titleControl={<SetSwitcher setId={setId} setName={setName} />}
       canGoBack
     >
       <div className={styles.filters}>
