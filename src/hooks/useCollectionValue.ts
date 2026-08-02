@@ -13,6 +13,23 @@ import { companionBase } from "../services/companionApi.ts";
 import { fetchJson } from "../services/http.ts";
 import { toSetPrintings } from "./useSetInformation.ts";
 
+/**
+ * Query options for one set's printings.
+ *
+ * Exported so every consumer uses the SAME queryKey. useOwnedCards needs the
+ * identical data for prices, and a second key would mean a second fetch of a
+ * 120-295 card set and two caches that can disagree about what a printing costs.
+ */
+export function printingsQuery(setId: string, setName: string) {
+  return {
+    queryKey: ["printings-value", setId] as const,
+    queryFn: ({ signal }: { signal?: AbortSignal }) => loadPrintings(setId, setName, signal),
+    enabled: Boolean(setName),
+    staleTime: 30 * 24 * 60 * 60_000,
+    retry: 1,
+  };
+}
+
 async function loadPrintings(setId: string, setName: string, signal?: AbortSignal) {
   const url = `${companionBase()}/printings/${encodeURIComponent(setId)}?name=${encodeURIComponent(setName)}`;
   return toSetPrintings(await fetchJson(url, { ...(signal ? { signal } : {}) }));
@@ -56,12 +73,7 @@ export function useCollectionValue(
     queries: setIds.map((setId) => {
       const cached = printingsCache.get(setId);
       return {
-        queryKey: ["printings-value", setId],
-        queryFn: ({ signal }: { signal?: AbortSignal }) =>
-          loadPrintings(setId, setNames[setId] ?? "", signal),
-        enabled: Boolean(setNames[setId]),
-        staleTime: 30 * 24 * 60 * 60_000,
-        retry: 1,
+        ...printingsQuery(setId, setNames[setId] ?? ""),
         ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),
       };
     }),

@@ -48,6 +48,16 @@ const WebSetsScreen = lazy(() =>
 const WebHomeScreen = lazy(() =>
   import("../web/home/WebHomeScreen.tsx").then((m) => ({ default: m.WebHomeScreen })),
 );
+/**
+ * Web only, and lazy so the glasses never download it: a flat, sortable list of
+ * every printing held. The shared Collection screen answers per-set progress,
+ * which is the only shape that fits 600x600 — this answers what a single
+ * printing is worth, which needs a price column and a sort the glasses cannot
+ * drive with four gestures.
+ */
+const WebOwnedCardsScreen = lazy(() =>
+  import("../web/collection/WebOwnedCardsScreen.tsx").then((m) => ({ default: m.WebOwnedCardsScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -95,6 +105,10 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       );
     case "collection":
       return <CollectionScreen />;
+    // Reachable on the glasses only via a shared URL, which they have no way to
+    // open — but falling back to Collection beats rendering nothing if it ever is.
+    case "owned":
+      return isWeb ? <WebOwnedCardsScreen /> : <CollectionScreen />;
     default:
       return isWeb ? <WebHomeScreen /> : <HomeScreen />;
   }

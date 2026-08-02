@@ -10,7 +10,9 @@ export type Screen =
   | { name: "popular" }
   | { name: "sets" }
   | { name: "set"; setId: string; setName: string }
-  | { name: "collection" };
+  | { name: "collection" }
+  /** Web only: every printing held, as one sortable list. See ScreenRouter. */
+  | { name: "owned" };
 
 export type ScreenName = Screen["name"];
 

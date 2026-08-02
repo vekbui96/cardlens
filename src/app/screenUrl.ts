@@ -30,7 +30,7 @@ export function screenToPath(screen: Screen): string {
   }
 }
 
-const SIMPLE = new Set(["favorites", "recent", "popular", "sets", "collection"]);
+const SIMPLE = new Set(["favorites", "recent", "popular", "sets", "collection", "owned"]);
 
 /**
  * The screen a path names, or null when it names nothing we have.

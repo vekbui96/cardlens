@@ -1,0 +1,208 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  padding: var(--cl-gap-lg) 0 0;
+}
+
+.head {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.count {
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg);
+  font-weight: 600;
+}
+
+.total {
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-gold);
+  font-weight: 600;
+}
+
+.pending {
+  color: var(--cl-fg-dim);
+}
+
+/*
+ * Scrolls sideways rather than wrapping: four chips on a narrow phone would
+ * otherwise wrap to a second line and push the list itself below the fold.
+ */
+.sorts {
+  display: flex;
+  gap: var(--cl-gap-xs);
+  padding: 0 var(--cl-gap) var(--cl-gap);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sorts::-webkit-scrollbar {
+  display: none;
+}
+
+.sort {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--cl-fg-muted);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sortOn {
+  border-color: transparent;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sort:hover:not(.sortOn) {
+    background: var(--cl-surface-raised);
+    color: var(--cl-fg);
+  }
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+}
+
+.row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 2px var(--cl-gap-sm);
+  padding: var(--cl-gap-xs) var(--cl-gap-sm);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+/*
+ * The box holds the aspect, not the image: art that 404s leaves an empty slot
+ * of the right size instead of collapsing the row to the height of its text.
+ */
+.art {
+  grid-row: span 2;
+  width: 40px;
+  aspect-ratio: 5 / 7;
+  border-radius: 3px;
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+}
+
+.art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  color: var(--cl-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  grid-column: 2;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price,
+.noPrice {
+  grid-row: span 2;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-body);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.price {
+  color: var(--cl-price);
+}
+
+/* The word, not a dash: a lone glyph in the money column reads as a rounding
+   artefact, and this is a statement about the source rather than the card. */
+.noPrice {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.empty {
+  margin: var(--cl-gap) var(--cl-gap) var(--cl-gap-lg);
+  padding: var(--cl-gap-lg);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+@media (min-width: 1000px) {
+  .head,
+  .sorts {
+    padding-left: var(--cl-gap-lg);
+    padding-right: var(--cl-gap-lg);
+  }
+
+  .head {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0 var(--cl-gap-lg);
+  }
+
+  /* Two columns of rows, because a 40px thumbnail leaves a wide screen mostly
+     empty and the list is long enough that halving its height matters. */
+  .list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--cl-gap-xs) var(--cl-gap);
+    padding: 0 var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+}

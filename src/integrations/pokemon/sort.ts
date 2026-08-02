@@ -1,5 +1,9 @@
 import type { PokemonCardSummary } from "../../models/cards.ts";
 
+interface HasCollectorNumber {
+  collectorNumber: string;
+}
+
 /** Sort by headline market price, highest first; cards without a price go last. */
 export function byPriceDesc(a: PokemonCardSummary, b: PokemonCardSummary): number {
   const pa = a.marketPrice ?? -1;
@@ -16,7 +20,12 @@ export function byPriceDesc(a: PokemonCardSummary, b: PokemonCardSummary): numbe
  * whole string, which keeps "1, 2, 10" in order instead of "1, 10, 2" while
  * still grouping lettered subsets sensibly.
  */
-export function byCollectorNumber(a: PokemonCardSummary, b: PokemonCardSummary): number {
+/**
+ * Typed to the field it reads, not to PokemonCardSummary. The owned-printings
+ * list sorts rows that carry a collector number but are not cards, and the
+ * lettered-prefix rules here are exactly the ones it must not reimplement.
+ */
+export function byCollectorNumber(a: HasCollectorNumber, b: HasCollectorNumber): number {
   const pa = parseCollectorNumber(a.collectorNumber);
   const pb = parseCollectorNumber(b.collectorNumber);
 

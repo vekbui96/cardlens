@@ -33,7 +33,11 @@ export default defineConfig({
      * unscoped, this project would also run those specs at the Pixel 7 viewport,
      * where they resolve to the web shell instead and fail.
      */
-    { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /(phone-layout|web-header)\.spec\.ts/ },
+    {
+      name: "phone",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /(phone-layout|web-header|owned-cards)\.spec\.ts/,
+    },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec
      * assumes the 600x600 glasses shell and would resolve to the web shell here
@@ -42,7 +46,7 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
-      testMatch: /(desktop-layout|web-header)\.spec\.ts/,
+      testMatch: /(desktop-layout|web-header|owned-cards)\.spec\.ts/,
     },
   ],
   webServer: [

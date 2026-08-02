@@ -26,7 +26,8 @@ interface Destination {
 
 const DESTINATIONS: Destination[] = [
   { label: "Sets", hint: "Browse and track sets", screen: { name: "sets" } },
-  { label: "Collection", hint: "What you own, and what it is worth", screen: { name: "collection" } },
+  { label: "Collection", hint: "Progress through every set", screen: { name: "collection" } },
+  { label: "My cards", hint: "Every printing you own, by price", screen: { name: "owned" } },
   { label: "Favorites", hint: "Cards you starred", screen: { name: "favorites" } },
   { label: "Recent", hint: "Searches you made", screen: { name: "recent" } },
   { label: "Popular", hint: "Commonly searched Pokémon", screen: { name: "popular" } },
@@ -34,7 +35,7 @@ const DESTINATIONS: Destination[] = [
 
 export function WebHeader() {
   const { push, home, screen } = useNavigation();
-  const { collection, favorites } = useLibrary();
+  const { collection, favorites, totalFinishesOwned } = useLibrary();
   const { run } = useSearchAction();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -58,6 +59,8 @@ export function WebHeader() {
   /** Counts, but only where there is something to count. A "0" is not news. */
   const countFor = (d: Destination): string | null => {
     if (d.screen.name === "collection" && collection.length > 0) return String(collection.length);
+    // Printings, not cards — the list below counts a normal and a reverse twice.
+    if (d.screen.name === "owned" && totalFinishesOwned > 0) return String(totalFinishesOwned);
     if (d.screen.name === "favorites" && favorites.length > 0) return String(favorites.length);
     return null;
   };
