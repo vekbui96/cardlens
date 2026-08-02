@@ -65,6 +65,11 @@ const WebOwnedCardsScreen = lazy(() =>
 const WebSealedScreen = lazy(() =>
   import("../web/collection/WebSealedScreen.tsx").then((m) => ({ default: m.WebSealedScreen })),
 );
+/**
+ * Camera, canvas and a 13KB index — none of which the glasses can use, so it is
+ * lazy like the rest of the web-only screens and never lands on that bundle.
+ */
+const ScanScreen = lazy(() => import("../web/scan/ScanScreen.tsx").then((m) => ({ default: m.ScanScreen })));
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -118,6 +123,8 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       return isWeb ? <WebOwnedCardsScreen /> : <CollectionScreen />;
     case "sealed":
       return isWeb ? <WebSealedScreen /> : <CollectionScreen />;
+    case "scan":
+      return isWeb ? <ScanScreen /> : <CollectionScreen />;
     default:
       return isWeb ? <WebHomeScreen /> : <HomeScreen />;
   }

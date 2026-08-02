@@ -36,7 +36,7 @@ export default defineConfig({
     {
       name: "phone",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(phone-layout|web-header|owned-cards|set-switcher)\.spec\.ts/,
+      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan)\.spec\.ts/,
     },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec
@@ -46,7 +46,7 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
-      testMatch: /(desktop-layout|web-header|owned-cards|set-switcher)\.spec\.ts/,
+      testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan)\.spec\.ts/,
     },
   ],
   webServer: [

@@ -14,7 +14,9 @@ export type Screen =
   /** Web only: every printing held, as one sortable list. See ScreenRouter. */
   | { name: "owned" }
   /** Web only: current sealed product prices for the sets you collect. */
-  | { name: "sealed" };
+  | { name: "sealed" }
+  /** Web only: recognise a card through the camera. Needs a pointer and a lens. */
+  | { name: "scan" };
 
 export type ScreenName = Screen["name"];
 
