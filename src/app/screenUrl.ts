@@ -25,6 +25,8 @@ export function screenToPath(screen: Screen): string {
       return `/card/${encodeURIComponent(screen.cardId)}`;
     case "set":
       return `/set/${encodeURIComponent(screen.setId)}/${encodeURIComponent(screen.setName)}`;
+    case "showcase":
+      return `/showcase/${encodeURIComponent(screen.setId)}/${encodeURIComponent(screen.setName)}/${screen.payload}`;
     default:
       return `/${screen.name}`;
   }
@@ -54,6 +56,16 @@ export function pathToScreen(path: string): Screen | null {
   // normalised name, not by id — me5 there is me05.
   if (head === "set" && rest[0] && rest[1]) {
     return { name: "set", setId: rest[0], setName: rest.slice(1).join("/") };
+  }
+  // The payload is last and base64url, so it never contains a slash — the set
+  // name in the middle still may.
+  if (head === "showcase" && rest.length >= 3) {
+    return {
+      name: "showcase",
+      setId: rest[0],
+      setName: rest.slice(1, -1).join("/"),
+      payload: rest[rest.length - 1],
+    };
   }
   return null;
 }

@@ -11,6 +11,8 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { CardSheet } from "./CardSheet.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
+import { encodeShowcase } from "../../models/showcase.ts";
+import { screenToPath } from "../../app/screenUrl.ts";
 import styles from "./WebSetCardsScreen.module.css";
 
 /**
@@ -36,6 +38,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   /** Binder order is the default; value order answers a different question. */
   const [byValue, setByValue] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [shared, setShared] = useState(false);
 
   /**
    * The switcher swaps sets under a screen that stays mounted, so anything
@@ -114,6 +117,37 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     );
   };
 
+  /**
+   * Build a link that carries this set's ownership and copy it.
+   *
+   * The collection is local and syncs behind a token, so a shareable page has
+   * to bring its data with it. Keyed by collector number rather than card id:
+   * the recipient's app resolves names, art and prices from the public catalog,
+   * and the link stays short enough to paste into a chat.
+   */
+  const share = async () => {
+    const owned = view.cards.flatMap((card) =>
+      ownedFinishes(card.id).map((finish) => ({ collectorNumber: card.collectorNumber, finish })),
+    );
+    const path = screenToPath({
+      name: "showcase",
+      setId,
+      setName,
+      payload: encodeShowcase({ setId, owned }),
+    });
+    const url = `${window.location.origin}${window.location.pathname}#${path}`;
+    try {
+      // The share sheet where there is one — on a phone this is the difference
+      // between sharing a set and copying a string into another app by hand.
+      if (navigator.share) await navigator.share({ title: `${setName} — CardLens`, url });
+      else await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    } catch {
+      // Cancelling the share sheet rejects, and that is not a failure.
+    }
+  };
+
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
   const progress = view.masterTotal ? `${ownedPrintings}/${view.masterTotal}` : `${ownedCards}`;
@@ -155,6 +189,17 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           onClick={() => setByValue((on) => !on)}
         >
           By value
+        </button>
+        {/* Disabled until the set has loaded: the link is built from the cards
+            on screen, so sharing early produces an empty showcase that looks
+            like a collection of nothing. */}
+        <button
+          type="button"
+          className={styles.chip}
+          onClick={() => void share()}
+          disabled={view.cards.length === 0}
+        >
+          {shared ? "Link copied" : "Share"}
         </button>
       </div>
 

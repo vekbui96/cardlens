@@ -16,7 +16,12 @@ export type Screen =
   /** Web only: current sealed product prices for the sets you collect. */
   | { name: "sealed" }
   /** Web only: recognise a card through the camera. Needs a pointer and a lens. */
-  | { name: "scan" };
+  | { name: "scan" }
+  /**
+   * Web only: somebody else's set, read from the link rather than this device.
+   * `payload` is the encoded ownership — see models/showcase.ts.
+   */
+  | { name: "showcase"; setId: string; setName: string; payload: string };
 
 export type ScreenName = Screen["name"];
 

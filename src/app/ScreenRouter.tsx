@@ -70,6 +70,10 @@ const WebSealedScreen = lazy(() =>
  * lazy like the rest of the web-only screens and never lands on that bundle.
  */
 const ScanScreen = lazy(() => import("../web/scan/ScanScreen.tsx").then((m) => ({ default: m.ScanScreen })));
+/** A link someone was sent; most visitors will never open any other screen. */
+const ShowcaseScreen = lazy(() =>
+  import("../web/showcase/ShowcaseScreen.tsx").then((m) => ({ default: m.ShowcaseScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -125,6 +129,12 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       return isWeb ? <WebSealedScreen /> : <CollectionScreen />;
     case "scan":
       return isWeb ? <ScanScreen /> : <CollectionScreen />;
+    case "showcase":
+      return isWeb ? (
+        <ShowcaseScreen setId={screen.setId} setName={screen.setName} payload={screen.payload} />
+      ) : (
+        <SetCardsScreen setId={screen.setId} setName={screen.setName} />
+      );
     default:
       return isWeb ? <WebHomeScreen /> : <HomeScreen />;
   }

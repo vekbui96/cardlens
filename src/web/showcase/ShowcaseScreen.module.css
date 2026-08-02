@@ -1,0 +1,125 @@
+.brand {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--cl-accent);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.summary {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--cl-gap-sm);
+  color: var(--cl-fg-muted);
+  font-size: var(--cl-fs-small);
+}
+
+.count {
+  color: var(--cl-fg);
+  font-weight: 700;
+  font-size: var(--cl-fs-body);
+}
+
+.value {
+  margin-left: auto;
+  color: var(--cl-price);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.page {
+  margin-bottom: var(--cl-gap-lg);
+}
+
+.marker {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  color: var(--cl-fg-muted);
+}
+
+.range {
+  font-weight: 500;
+  color: var(--cl-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Three across, always. A responsive column count would be the usual choice,
+ * but the nine-to-a-page grouping only reads as a binder page if the rows are
+ * three — at four across the page markers describe a shape that is not there.
+ */
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cl-gap-sm);
+}
+
+.tile,
+.tileMissing {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tile img,
+.tileMissing img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--cl-radius-art, 6px);
+}
+
+/* Ghosted, not hidden: a gap says nothing, whereas a faded card says "this one
+   is still missing" and stays recognisable while it does. */
+.tileMissing img {
+  opacity: 0.22;
+  filter: grayscale(1);
+}
+
+.tileMissing .name,
+.tileMissing .meta {
+  color: var(--cl-fg-dim);
+}
+
+.name {
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--cl-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--cl-price);
+  font-variant-numeric: tabular-nums;
+}
+
+.footnote {
+  margin: 0;
+  padding-bottom: var(--cl-gap);
+  text-align: center;
+  font-size: 11px;
+  color: var(--cl-fg-dim);
+}
