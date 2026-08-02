@@ -36,9 +36,18 @@ export default tseslint.config(
     },
   },
   {
-    files: ["server/**/*.ts", "*.config.{ts,js}", "e2e/**/*.ts"],
+    files: ["server/**/*.ts", "*.config.{ts,js}", "e2e/**/*.ts", "scripts/**/*.{ts,mjs}"],
     languageOptions: {
       globals: { ...globals.node },
+    },
+  },
+  {
+    // Scripts that drive a browser hold two environments in one file: Node
+    // around the outside, and page.evaluate bodies that run in Chromium and
+    // legitimately reach for OffscreenCanvas and friends.
+    files: ["scripts/**/*.{ts,mjs}"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 );
