@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * The scanner, driven against Chromium's fake camera.
@@ -25,6 +25,26 @@ test.use({
   },
 });
 
+/**
+ * Start the camera and wait until a capture can actually work.
+ *
+ * The button being enabled is not enough: the index can be loaded while the
+ * video still has no dimensions, and a capture then reads a 0x0 frame and
+ * silently queues nothing. Under parallel load that turned into a flake that
+ * passed in isolation.
+ */
+async function startCamera(page: Page) {
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.getByTestId("capture")).toBeEnabled({ timeout: 20000 });
+  await page.waitForFunction(
+    () => {
+      const v = document.querySelector("video");
+      return Boolean(v && v.videoWidth > 0 && v.readyState >= 2);
+    },
+    { timeout: 20000 },
+  );
+}
+
 test.describe("card scanner", () => {
   // Playwright requires an object-destructuring first argument here.
   // eslint-disable-next-line no-empty-pattern
@@ -49,11 +69,9 @@ test.describe("card scanner", () => {
     });
 
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
+    await startCamera(page);
 
-    const capture = page.getByRole("button", { name: "Capture" });
-    await expect(capture).toBeEnabled({ timeout: 15000 });
-    await capture.click();
+    await page.getByTestId("capture").click();
 
     await expect(page.getByRole("button", { name: /review 1/i })).toBeVisible();
     expect(external, `scan made external requests: ${external.join(", ")}`).toHaveLength(0);
@@ -64,10 +82,9 @@ test.describe("card scanner", () => {
     // stage shrank on the first capture and the guide moved under the card the
     // user was still holding.
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
-    const capture = page.getByTestId("capture");
-    await expect(capture).toBeEnabled({ timeout: 15000 });
+    await startCamera(page);
 
+    const capture = page.getByTestId("capture");
     const stage = page.locator("video");
     const before = await stage.boundingBox();
     await capture.click();
@@ -81,9 +98,8 @@ test.describe("card scanner", () => {
 
   test("keeps scanning without asking, then reviews the batch", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
+    await startCamera(page);
     const capture = page.getByTestId("capture");
-    await expect(capture).toBeEnabled({ timeout: 15000 });
 
     // Three cards in a row with no interruption — that is the whole point.
     await capture.click();
@@ -99,7 +115,7 @@ test.describe("card scanner", () => {
     // The fake device shows a rolling pattern, not a card, so every capture
     // lands unsure. Those must not be silently filed.
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
+    await startCamera(page);
     await page.getByTestId("capture").click();
     await page.getByRole("button", { name: /review 1/i }).click();
 
@@ -109,7 +125,7 @@ test.describe("card scanner", () => {
 
   test("adds the batch once the unsure ones are answered", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
+    await startCamera(page);
     await page.getByTestId("capture").click();
     await page.getByTestId("capture").click();
     await page.getByRole("button", { name: /review 2/i }).click();
@@ -138,7 +154,7 @@ test.describe("card scanner", () => {
       );
     });
     await page.goto("/?ui=web#/scan");
-    await page.getByRole("button", { name: "Start camera" }).click();
+    await startCamera(page);
     await page.getByTestId("capture").click();
     await page.getByRole("button", { name: /review 1/i }).click();
 

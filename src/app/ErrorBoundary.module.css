@@ -1,0 +1,64 @@
+/* Deliberately plain: this renders when something else is already broken, so it
+   depends on as little of the app as possible. */
+.wrap {
+  padding: var(--cl-gap-lg);
+  color: var(--cl-fg);
+  background: var(--cl-bg);
+  min-height: 100%;
+  overflow-y: auto;
+}
+
+.title {
+  margin: 0 0 var(--cl-gap-sm);
+  font-size: var(--cl-fs-heading);
+}
+
+.message {
+  margin: 0 0 var(--cl-gap);
+  color: var(--cl-error);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  margin-bottom: var(--cl-gap);
+  flex-wrap: wrap;
+}
+
+.primary,
+.secondary {
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border-radius: var(--cl-radius-sm, 10px);
+  border: none;
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.secondary {
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg);
+}
+
+.stack {
+  margin: 0;
+  padding: var(--cl-gap-sm);
+  border-radius: var(--cl-radius-sm, 10px);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cl-fg-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 45vh;
+  overflow-y: auto;
+}

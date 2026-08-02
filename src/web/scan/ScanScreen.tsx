@@ -56,7 +56,7 @@ function isKept(c: Capture): boolean {
 
 export function ScanScreen() {
   const { pop, push } = useNavigation();
-  const { addOwned } = useLibrary();
+  const { addManyOwned } = useLibrary();
 
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -67,6 +67,8 @@ export function ScanScreen() {
   const [indexError, setIndexError] = useState<string | null>(null);
   const [queue, setQueue] = useState<Capture[]>([]);
   const [reviewing, setReviewing] = useState(false);
+  /** Video has real dimensions. Capturing before that reads a 0x0 frame. */
+  const [ready, setReady] = useState(false);
   const [addedCount, setAddedCount] = useState(0);
 
   // The index is 13KB and the permission prompt is far slower, so fetching it
@@ -103,7 +105,13 @@ export function ScanScreen() {
    */
   useEffect(() => {
     const el = video.current;
-    if (reviewing || !el || !stream.current) return;
+    if (reviewing) {
+      // The element is unmounted by the review screen; whatever it reported
+      // about itself is stale until a new one loads.
+      setReady(false);
+      return;
+    }
+    if (!el || !stream.current) return;
     if (el.srcObject !== stream.current) {
       el.srcObject = stream.current;
       void el.play().catch(() => {});
@@ -136,6 +144,9 @@ export function ScanScreen() {
 
   const capture = useCallback(() => {
     const el = video.current;
+    // Guarded, but the button is disabled until `ready` so this should never be
+    // the thing that stops a capture — a tap that silently does nothing is the
+    // failure mode this app keeps re-learning.
     if (!el || !index || !el.videoWidth) return;
 
     const guide = guideRect(el.videoWidth, el.videoHeight);
@@ -185,12 +196,17 @@ export function ScanScreen() {
 
   const commit = () => {
     const kept = queue.filter(isKept);
-    for (const c of kept) {
-      const card = c.result.candidates[c.choice as number]?.card;
-      // addOwned, never toggleOwned: a pile being digitised overlaps what is
-      // already held, and toggling would un-mark exactly those.
-      if (card) addOwned(card.id, c.finish, card.setId);
-    }
+    // One merge and one write for the whole batch. Adding them one at a time
+    // re-reads and re-serialises the entire collection per card, which is
+    // quadratic over a batch and exactly what a scanner produces. Never
+    // toggleOwned: a pile being digitised overlaps what is already held, and
+    // toggling would un-mark precisely those.
+    addManyOwned(
+      kept.flatMap((c) => {
+        const card = c.result.candidates[c.choice as number]?.card;
+        return card ? [{ cardId: card.id, finish: c.finish, setId: card.setId }] : [];
+      }),
+    );
     setAddedCount((n) => n + kept.length);
     setQueue([]);
     setReviewing(false);
@@ -327,7 +343,14 @@ export function ScanScreen() {
         under the card the user is still holding.
       */}
       <div className={styles.stage}>
-        <video ref={video} className={live ? styles.video : styles.videoHidden} playsInline muted />
+        <video
+          ref={video}
+          className={live ? styles.video : styles.videoHidden}
+          playsInline
+          muted
+          onLoadedMetadata={() => setReady((video.current?.videoWidth ?? 0) > 0)}
+          onPlaying={() => setReady((video.current?.videoWidth ?? 0) > 0)}
+        />
         {live ? (
           <div
             className={styles.guide}
@@ -390,10 +413,10 @@ export function ScanScreen() {
             type="button"
             className={styles.shutter}
             onClick={capture}
-            disabled={!index}
+            disabled={!index || !ready}
             data-testid="capture"
           >
-            {index ? "Capture" : "Loading cards…"}
+            {!index ? "Loading cards…" : ready ? "Capture" : "Focusing…"}
           </button>
         ) : (
           <button

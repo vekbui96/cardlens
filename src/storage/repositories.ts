@@ -349,6 +349,33 @@ export class Repositories {
     return this.getCollection();
   }
 
+  /**
+   * Mark many printings owned in ONE merge and ONE write.
+   *
+   * addOwned in a loop is quadratic over a batch: each call re-reads every row,
+   * merges, prunes and re-serialises the lot. At a thousand rows that is
+   * invisible; a scanner committing two hundred cards against a twenty-thousand
+   * row collection would do two hundred full passes and hang the phone.
+   *
+   * Same canonicalisation and the same merge rule — only the number of times
+   * the collection is rewritten changes.
+   */
+  addManyOwned(
+    entries: { cardId: string; finish?: CollectFinish; setId?: string }[],
+    now = Date.now(),
+  ): OwnedCard[] {
+    if (entries.length === 0) return this.getCollection();
+    const rows: OwnedPrinting[] = entries.map((e) => ({
+      cardId: e.cardId,
+      setId: e.setId ?? setIdFromCardId(e.cardId),
+      finish: canonicalFinish(e.finish ?? "normal"),
+      at: now,
+      ...(this.game === DEFAULT_GAME ? {} : { game: this.game }),
+    }));
+    this.writePrintings(mergePrintings(this.getPrintings(), rows));
+    return this.getCollection();
+  }
+
   /** Removes one finish, or every finish of the card when `finish` is omitted. */
   removeOwned(cardId: string, rawFinish?: CollectFinish, now = Date.now()): OwnedCard[] {
     const finish = rawFinish === undefined ? undefined : canonicalFinish(rawFinish);

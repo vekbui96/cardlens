@@ -26,7 +26,17 @@ const execFile = promisify(execFileCb);
 
 /** Defaults to the sets actually being collected, most-held first. */
 const DEFAULT_SETS = ["rsv10pt5", "me2", "me5", "me3", "zsv10pt5", "me4", "sv8", "sv8pt5", "me1", "me2pt5"];
-const SETS = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_SETS;
+const args = process.argv.slice(2);
+
+/** `all` builds the whole English catalog rather than just what is collected. */
+async function resolveSets() {
+  if (args[0] === "all") {
+    const sets = await getJson("/catalog/sets");
+    const list = Array.isArray(sets) ? sets : (sets?.data ?? []);
+    return list.map((s) => s.id).filter(Boolean);
+  }
+  return args.length ? args : DEFAULT_SETS;
+}
 
 const HOST = "server-pc.tail0e4194.ts.net:8443";
 const FUNNEL_IP = "199.38.181.54";
@@ -74,9 +84,18 @@ async function setCards(setId) {
     // lands inside the same burst. Back off past it.
     await new Promise((r) => setTimeout(r, attempt * 3000));
   }
+  if (args[0] === "all") {
+    // Whole-catalog builds cover promos and oddities that genuinely have no
+    // cards; failing the run after forty minutes of downloads would be worse
+    // than noting it. A named-set build still refuses, because there the set
+    // was asked for by name and its absence is the bug.
+    console.log(`  ${setId}: no cards — skipping`);
+    return [];
+  }
   throw new Error(`${setId} returned no cards after 4 attempts — refusing to build a partial index`);
 }
 
+const SETS = await resolveSets();
 console.log(`Building index for ${SETS.length} sets…`);
 const cards = [];
 for (const setId of SETS) {

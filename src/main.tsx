@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/global.css";
 import { App } from "./app/App.tsx";
+import { ErrorBoundary } from "./app/ErrorBoundary.tsx";
 import { CompanionPage } from "./pages/CompanionPage.tsx";
 import { PrivacyPage } from "./pages/PrivacyPage.tsx";
 
@@ -22,4 +23,10 @@ function pickRoot() {
 const container = document.getElementById("root");
 if (!container) throw new Error("Root element not found");
 
-createRoot(container).render(<StrictMode>{pickRoot()}</StrictMode>);
+// Outside StrictMode's child, so a throw during the initial render is caught
+// too — that is the case that produces a completely blank page.
+createRoot(container).render(
+  <StrictMode>
+    <ErrorBoundary>{pickRoot()}</ErrorBoundary>
+  </StrictMode>,
+);
