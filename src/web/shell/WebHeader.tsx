@@ -28,6 +28,7 @@ const DESTINATIONS: Destination[] = [
   { label: "Sets", hint: "Browse and track sets", screen: { name: "sets" } },
   { label: "Collection", hint: "Progress through every set", screen: { name: "collection" } },
   { label: "My cards", hint: "Every printing you own, by price", screen: { name: "owned" } },
+  { label: "Sealed prices", hint: "What packs and boxes cost now", screen: { name: "sealed" } },
   { label: "Favorites", hint: "Cards you starred", screen: { name: "favorites" } },
   { label: "Recent", hint: "Searches you made", screen: { name: "recent" } },
   { label: "Popular", hint: "Commonly searched Pokémon", screen: { name: "popular" } },

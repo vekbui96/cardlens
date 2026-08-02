@@ -23,7 +23,15 @@ test.describe("web app bar", () => {
 
     const menu = page.getByRole("menu", { name: "Go to" });
     await expect(menu).toBeVisible();
-    for (const label of ["Sets", "Collection", "My cards", "Favorites", "Recent", "Popular"]) {
+    for (const label of [
+      "Sets",
+      "Collection",
+      "My cards",
+      "Sealed prices",
+      "Favorites",
+      "Recent",
+      "Popular",
+    ]) {
       await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
     // Search is a field in the panel, not a destination that opens a modal.

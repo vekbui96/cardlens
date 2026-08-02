@@ -12,7 +12,9 @@ export type Screen =
   | { name: "set"; setId: string; setName: string }
   | { name: "collection" }
   /** Web only: every printing held, as one sortable list. See ScreenRouter. */
-  | { name: "owned" };
+  | { name: "owned" }
+  /** Web only: current sealed product prices for the sets you collect. */
+  | { name: "sealed" };
 
 export type ScreenName = Screen["name"];
 

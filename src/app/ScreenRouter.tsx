@@ -58,6 +58,13 @@ const WebHomeScreen = lazy(() =>
 const WebOwnedCardsScreen = lazy(() =>
   import("../web/collection/WebOwnedCardsScreen.tsx").then((m) => ({ default: m.WebOwnedCardsScreen })),
 );
+/**
+ * Web only: a table of sealed prices, which is the one shape a 600x600 additive
+ * display cannot carry. Lazy, so the glasses never download it.
+ */
+const WebSealedScreen = lazy(() =>
+  import("../web/collection/WebSealedScreen.tsx").then((m) => ({ default: m.WebSealedScreen })),
+);
 const CollectionScreen = lazy(() =>
   import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
 );
@@ -109,6 +116,8 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
     // open — but falling back to Collection beats rendering nothing if it ever is.
     case "owned":
       return isWeb ? <WebOwnedCardsScreen /> : <CollectionScreen />;
+    case "sealed":
+      return isWeb ? <WebSealedScreen /> : <CollectionScreen />;
     default:
       return isWeb ? <WebHomeScreen /> : <HomeScreen />;
   }

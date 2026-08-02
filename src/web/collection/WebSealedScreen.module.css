@@ -1,0 +1,143 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  padding: var(--cl-gap-lg) 0 0;
+}
+
+.head {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.card {
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+.setName {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--cl-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .setName:hover {
+    color: var(--cl-accent);
+  }
+}
+
+.holdings {
+  margin: 2px 0 var(--cl-gap-sm);
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+/*
+ * Four figures across, wrapping to two on a phone rather than scrolling: these
+ * are meant to be compared at a glance, and a figure you have to scroll to is
+ * one you cannot compare against the one beside it.
+ */
+.prices {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cl-gap-sm);
+}
+
+.price {
+  min-width: 0;
+}
+
+.kind {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.amount,
+.noAmount {
+  margin: 0;
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.amount {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  color: var(--cl-gold);
+}
+
+/* Quieter and smaller: "not sold" is a fact about the product line, not a price. */
+.noAmount {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.empty,
+.note {
+  margin: 0 var(--cl-gap) var(--cl-gap-lg);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.empty {
+  padding: var(--cl-gap-lg);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+@media (min-width: 700px) {
+  .prices {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .head,
+  .empty,
+  .note {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+
+  .list {
+    padding: 0 var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+}

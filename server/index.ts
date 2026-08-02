@@ -3,6 +3,7 @@ import cors from "cors";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
+import { SealedStore } from "./sealedStore.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -18,6 +19,7 @@ const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
 // path in a TS literal silently collapses (\s \d \c are just s, d, c).
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
+const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
 
 /** Upstream failed with nothing cached to fall back on. */
 class UpstreamError extends Error {
@@ -59,6 +61,7 @@ export function createApp(
   store: SessionStore = new SessionStore(SESSION_TTL_MS),
   collection: CollectionStore = new CollectionStore(COLLECTION_FILE),
   printingsStore: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
+  sealedStore: SealedStore = new SealedStore(SEALED_DIR),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -206,6 +209,44 @@ export function createApp(
     } catch (err) {
       console.warn(`[cardlens] printings failed for ${setId}:`, err);
       res.status(502).json({ error: "printings_unavailable" });
+    }
+  });
+
+  /**
+   * Sealed product prices for a set: pack, ETB, booster box, bundle.
+   *
+   * Neither card API prices sealed product — both key everything by card, so a
+   * booster pack is not a thing either can describe. This reads TCGplayer's own
+   * daily dump via tcgcsv, which is the same market price already behind every
+   * card figure in the app.
+   *
+   * Server-side because it costs three upstream requests (groups, products,
+   * prices) and the group list alone covers 217 sets; doing that per device,
+   * per set, over a tether, is the path this replaces.
+   *
+   * No auth: public catalog data, same as the printings route.
+   */
+  app.get("/api/sealed/:setId", printingsLimiter, async (req, res) => {
+    const setId = String(req.params.setId ?? "").slice(0, 40);
+    const setName = typeof req.query.name === "string" ? req.query.name.slice(0, 120) : "";
+    if (!setId || !setName) {
+      res.status(400).json({ error: "set_id_and_name_required" });
+      return;
+    }
+    try {
+      const { value, cached } = await sealedStore.get(setId, setName);
+      if (!value) {
+        res.status(404).json({ error: "no_sealed_products" });
+        return;
+      }
+      // Half a day: the source refreshes daily and this is the one figure in
+      // the app expected to move day to day.
+      res.setHeader("Cache-Control", "public, max-age=43200");
+      res.setHeader("X-Cardlens-Cache", cached ? "hit" : "miss");
+      res.json(value);
+    } catch (err) {
+      console.warn(`[cardlens] sealed failed for ${setId}:`, err);
+      res.status(502).json({ error: "sealed_unavailable" });
     }
   });
 
