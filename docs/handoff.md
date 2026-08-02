@@ -26,16 +26,24 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
 | Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)     |
-| Deployed at       | `652b156` — both Pages and server, verified live                    |
+| Deployed at       | Pages `f8b4094`, server `9fd89da` — both verified live              |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
-`/api/set-information/:setId`, plus the companion relay.
+`/api/set-information/:setId`, `/api/sealed/:setId?name=`, plus the companion relay.
 
 ## Immediate next task
 
 Nothing is half-built. `#/owned` ("My cards" in the web menu) now lists every printing held
 and sorts it four ways; the glasses fall back to Collection there and never download the chunk.
+`#/sealed` prices packs, ETBs, boxes and bundles for the sets you hold, from tcgcsv.com.
+The web set screen's title is a **switcher** — the sets you collect, ranked by progress, one
+tap from wherever you are. Its ordering is shared with the Collection screen via
+`useCollectedSets`; change one and you change both, deliberately.
+
+The obvious follow-on, discussed and not started: **sealed price history**. `#/sealed` is a
+snapshot, and "keep track of" arguably means a series. That needs a daily server-side
+snapshot store, which is a fresh piece of work rather than an extension of this one.
 
 Two plans compete for what comes next:
 
