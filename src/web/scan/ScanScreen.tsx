@@ -56,7 +56,7 @@ function isKept(c: Capture): boolean {
 
 export function ScanScreen() {
   const { pop, push } = useNavigation();
-  const { toggleOwned } = useLibrary();
+  const { addOwned } = useLibrary();
 
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -91,6 +91,24 @@ export function ScanScreen() {
     },
     [],
   );
+
+  /**
+   * Re-attach the stream whenever the preview comes back.
+   *
+   * Review renders a different Screen, so React unmounts the <video> and mounts
+   * a fresh one on the way back — with no srcObject, and therefore videoWidth
+   * of 0, so every capture afterwards silently did nothing and the preview was
+   * black. The MediaStream itself is held in a ref and survives; only the
+   * element needs reconnecting.
+   */
+  useEffect(() => {
+    const el = video.current;
+    if (reviewing || !el || !stream.current) return;
+    if (el.srcObject !== stream.current) {
+      el.srcObject = stream.current;
+      void el.play().catch(() => {});
+    }
+  }, [reviewing, phase]);
 
   const start = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -169,7 +187,9 @@ export function ScanScreen() {
     const kept = queue.filter(isKept);
     for (const c of kept) {
       const card = c.result.candidates[c.choice as number]?.card;
-      if (card) toggleOwned(card.id, c.finish, card.setId);
+      // addOwned, never toggleOwned: a pile being digitised overlaps what is
+      // already held, and toggling would un-mark exactly those.
+      if (card) addOwned(card.id, c.finish, card.setId);
     }
     setAddedCount((n) => n + kept.length);
     setQueue([]);

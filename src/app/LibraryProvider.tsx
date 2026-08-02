@@ -61,6 +61,15 @@ interface LibraryValue {
   ownedFinishes: (id: string) => CollectFinish[];
   isOwnedFinish: (id: string, finish: CollectFinish) => boolean;
   toggleOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
+  /**
+   * Mark owned, idempotently.
+   *
+   * NOT toggleOwned. A scanner works through a pile that already overlaps the
+   * collection, and toggling would un-mark every card already held — silently,
+   * and worst on the most complete sets. Two copies of the same card in one
+   * batch would cancel out entirely.
+   */
+  addOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
   /** Distinct cards per set. */
   ownedCountsBySet: Record<string, number>;
   /** Printings per set — the master-set numerator. */
@@ -117,6 +126,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setCollection(setId ? repo.toggleOwned(cardId, finish, setId) : repo.toggleOwned(cardId, finish));
       // Read after the write: the repo only knows whether the device had room
       // once it has tried to use it.
+      setStorageDegraded(repo.storageDegraded);
+    },
+    [repo],
+  );
+
+  const addOwned = useCallback(
+    (cardId: string, finish: CollectFinish = "normal", setId?: string) => {
+      setCollection(setId ? repo.addOwned(cardId, finish, setId) : repo.addOwned(cardId, finish));
       setStorageDegraded(repo.storageDegraded);
     },
     [repo],
@@ -287,6 +304,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       ownedFinishes,
       isOwnedFinish,
       toggleOwned,
+      addOwned,
       ownedCountsBySet,
       ownedFinishCountsBySet,
       totalFinishesOwned,
@@ -312,6 +330,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       ownedFinishes,
       isOwnedFinish,
       toggleOwned,
+      addOwned,
       ownedCountsBySet,
       ownedFinishCountsBySet,
       totalFinishesOwned,

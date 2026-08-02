@@ -127,6 +127,46 @@ test.describe("card scanner", () => {
     await expect(page.getByRole("button", { name: "Done" })).toBeDisabled();
   });
 
+  test("does not un-mark a card that is already owned", async ({ page }) => {
+    // A pile being digitised overlaps what is already held. The first version
+    // committed with toggleOwned, so scanning an owned card REMOVED it — worst
+    // on the most complete sets, and silent.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "cardlens:v1:collection",
+        JSON.stringify([{ cardId: "me5-1", setId: "me5", finish: "normal", at: 1_700_000_000_000 }]),
+      );
+    });
+    await page.goto("/?ui=web#/scan");
+    await page.getByRole("button", { name: "Start camera" }).click();
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    // Pick whichever card the fake pattern matched, then commit it twice over
+    // by adding, going back, and adding the same choice again.
+    const rows = page.getByTestId("review-row");
+    await rows.first().getByRole("group", { name: "Pick the card" }).getByRole("button").first().click();
+    const chosen = await rows
+      .first()
+      .getByRole("group", { name: "Pick the card" })
+      .getByRole("button")
+      .first()
+      .innerText();
+    await page.getByRole("button", { name: "Add 1 card" }).click();
+
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+    await rows.first().getByRole("group", { name: "Pick the card" }).getByRole("button").first().click();
+    await page.getByRole("button", { name: "Add 1 card" }).click();
+
+    // Marked twice, still owned once — not removed by the second pass.
+    const held = await page.evaluate(() => {
+      const raw = localStorage.getItem("cardlens:v1:collection") ?? "[]";
+      return (JSON.parse(raw) as { deletedAt?: number }[]).filter((r) => !r.deletedAt).length;
+    });
+    expect(held, `a re-scanned card was removed instead of kept (${chosen})`).toBeGreaterThanOrEqual(2);
+  });
+
   test("is reachable from the menu", async ({ page }) => {
     await page.goto("/?ui=web#/sets");
     await page.getByRole("button", { name: "Open menu" }).click();
