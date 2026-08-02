@@ -97,42 +97,6 @@ async function setCards(setId) {
 
 const SETS = await resolveSets();
 console.log(`Building index for ${SETS.length} sets…`);
-const cards = [];
-for (const setId of SETS) {
-  const data = await setCards(setId);
-  let kept = 0;
-  for (const c of data) {
-    const url = c.images?.small ?? c.images?.large;
-    if (!url) continue;
-    cards.push({
-      id: c.id,
-      name: c.name,
-      number: c.number,
-      setId: c.set?.id ?? setId,
-      setName: c.set?.name ?? setId,
-      rarity: c.rarity ?? null,
-      url,
-    });
-    kept++;
-  }
-  console.log(`  ${setId.padEnd(10)} ${kept}/${data.length} cards with art`);
-}
-
-console.log(`Downloading ${cards.length} images…`);
-const downloaded = (
-  await mapLimit(cards, 8, async (c) => {
-    try {
-      const res = await fetch(c.url);
-      if (!res.ok) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      const type = res.headers.get("content-type") ?? "image/png";
-      return { ...c, data: `data:${type};base64,${buf.toString("base64")}` };
-    } catch {
-      return null;
-    }
-  })
-).filter(Boolean);
-console.log(`  ${downloaded.length} downloaded (${cards.length - downloaded.length} failed)`);
 
 const bundled = await build({
   entryPoints: ["src/scan/phash.ts"],
@@ -147,33 +111,76 @@ const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.addScriptTag({ content: bundled.outputFiles[0].text });
 
-// Chunked so a few thousand data URLs are not passed in one argument.
+/**
+ * Download, hash, discard — one chunk at a time.
+ *
+ * The first version collected every image as a base64 data URL and hashed the
+ * lot at the end. That is fine for the ten sets being collected and fatal for
+ * the whole catalog: 20,460 images at ~50KB of base64 each is over a gigabyte,
+ * and the build died with a V8 out-of-memory after forty minutes of downloads.
+ * Nothing survives a chunk here except 8 bytes and a little metadata per card.
+ */
+const CHUNK = 100;
 const hashes = [];
-const CHUNK = 250;
-for (let at = 0; at < downloaded.length; at += CHUNK) {
-  const slice = downloaded.slice(at, at + CHUNK).map((c) => c.data);
-  const part = await page.evaluate(async (images) => {
-    const { perceptualHash, artRect } = window.PHash;
-    const out = [];
-    for (const src of images) {
-      const bmp = await createImageBitmap(await (await fetch(src)).blob());
-      // Every card is normalised to one size first, so a set whose art is
-      // published at a different resolution cannot hash differently for that
-      // reason alone.
-      const canvas = new OffscreenCanvas(245, 342);
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(bmp, 0, 0, 245, 342);
-      const img = ctx.getImageData(0, 0, 245, 342);
-      const h = perceptualHash(img.data, 245, 342, artRect(245, 342));
-      out.push([h[0], h[1]]);
-      bmp.close();
-    }
-    return out;
-  }, slice);
-  hashes.push(...part);
-  process.stdout.write(`\r  hashed ${hashes.length}/${downloaded.length}`);
+const downloaded = [];
+
+for (const setId of SETS) {
+  const data = await setCards(setId);
+  const cards = [];
+  for (const c of data) {
+    const url = c.images?.small ?? c.images?.large;
+    if (!url) continue;
+    cards.push({
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      setId: c.set?.id ?? setId,
+      setName: c.set?.name ?? setId,
+      rarity: c.rarity ?? null,
+      url,
+    });
+  }
+
+  let done = 0;
+  for (let at = 0; at < cards.length; at += CHUNK) {
+    const slice = cards.slice(at, at + CHUNK);
+    const images = await mapLimit(slice, 8, async (c) => {
+      try {
+        const res = await fetch(c.url);
+        if (!res.ok) return null;
+        const buf = Buffer.from(await res.arrayBuffer());
+        return `data:${res.headers.get("content-type") ?? "image/png"};base64,${buf.toString("base64")}`;
+      } catch {
+        return null;
+      }
+    });
+
+    const keep = slice.filter((_, i) => images[i]);
+    const part = await page.evaluate(async (sources) => {
+      const { perceptualHash, artRect } = window.PHash;
+      const out = [];
+      for (const src of sources) {
+        const bmp = await createImageBitmap(await (await fetch(src)).blob());
+        // Normalised to one size first, so a set published at a different
+        // resolution cannot hash differently for that reason alone.
+        const canvas = new OffscreenCanvas(245, 342);
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0, 245, 342);
+        const img = ctx.getImageData(0, 0, 245, 342);
+        const h = perceptualHash(img.data, 245, 342, artRect(245, 342));
+        out.push([h[0], h[1]]);
+        bmp.close();
+      }
+      return out;
+    }, images.filter(Boolean));
+
+    hashes.push(...part);
+    downloaded.push(...keep);
+    done += keep.length;
+  }
+  console.log(`  ${setId.padEnd(10)} ${done}/${data.length}   (${downloaded.length} total)`);
 }
-console.log();
+
 await browser.close();
 
 const index = new Uint32Array(hashes.length * 2);

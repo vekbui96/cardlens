@@ -7,3 +7,7 @@ package-lock.json
 # Git-ignored scratch for plan execution. Prettier does not read .gitignore, so
 # without this every generated brief and report fails format:check.
 .superpowers
+
+# Build artifacts: minified on purpose, and reformatting them costs 70KB on
+# every device that downloads the index.
+public/card-index/
