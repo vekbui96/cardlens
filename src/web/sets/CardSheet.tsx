@@ -62,10 +62,13 @@ export function CardSheet({
   priceFor,
   onToggle,
   onClose,
+  storageDegraded = false,
 }: {
   card: PokemonCardSummary;
   finishes: CollectFinish[];
   owned: CollectFinish[];
+  /** The device is out of room and marks live in memory only. */
+  storageDegraded?: boolean;
   /** Resolved by the caller from SetView.headlinePriceFor — the catalog price is not always the best one. */
   headlinePrice?: number;
   /** Price for one printing of THIS card. The caller binds the collector number. */
@@ -137,6 +140,16 @@ export function CardSheet({
           {ownedValue !== undefined ? (
             <p className={styles.ownedValue} data-testid="sheet-owned-value">
               You own {formatUsd(ownedValue)}
+            </p>
+          ) : null}
+
+          {/* Shown where the marking happens, because that is the action it
+              qualifies. Silence here is what made a full device look like an
+              app ignoring taps. */}
+          {storageDegraded ? (
+            <p className={styles.storageWarning} role="status">
+              This device is out of storage. Marks are kept in memory and still sync, but reload before they
+              do and the newest ones are lost.
             </p>
           ) : null}
 

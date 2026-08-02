@@ -75,6 +75,30 @@ export class VersionedStore {
   }
 }
 
+/**
+ * Drop every cache entry, keeping user data. Returns how many keys went.
+ *
+ * The collection is the one thing here that cannot be refetched, and it is
+ * written last — after a browsing session has already filled the quota with
+ * set-card lists. When its write fails there is nothing to see: the mark simply
+ * does not happen. So a failed collection write buys space from the caches,
+ * which cost one request to rebuild, and tries again.
+ */
+export function evictCaches(backend: StorageLike = getBackend()): number {
+  if (typeof localStorage === "undefined" || backend !== localStorage) return 0;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(`${STORAGE_NAMESPACE}:v${STORAGE_VERSION}:cache:`)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+    return doomed.length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Remove ALL CardLens data (favorites, recents, caches). Used by DevPanel. */
 export function clearAllStorage(): void {
   try {

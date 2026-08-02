@@ -27,7 +27,8 @@ import styles from "./WebSetCardsScreen.module.css";
  */
 export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { pop } = useNavigation();
-  const { ownedFinishes, toggleOwned, ownedCountsBySet, ownedFinishCountsBySet } = useLibrary();
+  const { ownedFinishes, toggleOwned, ownedCountsBySet, ownedFinishCountsBySet, storageDegraded } =
+    useLibrary();
 
   const [rarityKey, setRarityKey] = useState("all");
   /** Master-setting is mostly "what am I still missing", so it gets a real control. */
@@ -204,6 +205,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           headlinePrice={view.headlinePriceFor(openCard)}
           priceFor={(finish) => view.priceFor(openCard.collectorNumber, finish)}
           onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
+          storageDegraded={storageDegraded}
           onClose={() => setOpenCardId(null)}
         />
       ) : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Repositories, MAX_RECENT_SEARCHES, MAX_FAVORITES } from "./repositories.ts";
-import { VersionedStore, createMemoryStorage } from "./versioned.ts";
+import { VersionedStore, createMemoryStorage, type StorageLike } from "./versioned.ts";
 import type { PokemonCardSummary } from "../models/cards.ts";
 
 function repo() {
@@ -197,5 +197,131 @@ describe("preferences", () => {
 
   it("returns defaults when unset", () => {
     expect(repo().getPreferences().priceTtlMinutes).toBe(30);
+  });
+});
+
+describe("a device that has run out of storage", () => {
+  /**
+   * Reproduced in a real browser before this was written: with the collection
+   * write failing, tapping a printing ran the handler, left aria-pressed false,
+   * left the tile count unchanged and reported nothing. addOwned re-read
+   * storage to build its return value, got the rows from before the mark, and
+   * handed React a state identical to the one it already had.
+   *
+   * A full quota is reachable in normal use — one set costs ~107KB across the
+   * card and printing caches, and the collection is written into whatever they
+   * leave behind.
+   */
+  function fullStorage(failFor: RegExp = /collection/) {
+    const inner = createMemoryStorage();
+    let writes = 0;
+    return {
+      writes: () => writes,
+      storage: {
+        getItem: (k: string) => inner.getItem(k),
+        removeItem: (k: string) => inner.removeItem(k),
+        setItem: (k: string, v: string) => {
+          if (failFor.test(k)) {
+            writes++;
+            const err = new Error("quota");
+            err.name = "QuotaExceededError";
+            throw err;
+          }
+          inner.setItem(k, v);
+        },
+      } satisfies StorageLike,
+    };
+  }
+
+  it("still marks the card, so the tap is never a silent no-op", () => {
+    const full = fullStorage();
+    const r = new Repositories(new VersionedStore(full.storage), () => 0);
+
+    r.addOwned("base1-4", "holo");
+
+    expect(r.isOwnedFinish("base1-4", "holo")).toBe(true);
+    expect(r.getCollection()).toHaveLength(1);
+  });
+
+  it("says so, rather than leaving the failure invisible", () => {
+    const full = fullStorage();
+    const r = new Repositories(new VersionedStore(full.storage), () => 0);
+
+    expect(r.storageDegraded).toBe(false);
+    r.addOwned("base1-4", "holo");
+    expect(r.storageDegraded).toBe(true);
+  });
+
+  it("keeps the rows syncable, so they still reach the server", () => {
+    const full = fullStorage();
+    const r = new Repositories(new VersionedStore(full.storage), () => 0);
+
+    r.addOwned("base1-4", "holo");
+
+    // getPrintings is what sync pushes. A device that cannot save must still be
+    // able to hand its work to one that can.
+    expect(r.getPrintings().map((p) => p.finish)).toEqual(["holo"]);
+  });
+
+  it("spends the caches to save the collection before giving up", () => {
+    // The caches cost one request each to rebuild; the collection cannot be
+    // rebuilt at all, so it wins the argument for the remaining space.
+    const inner = createMemoryStorage();
+    let full = true;
+    const storage: StorageLike = {
+      getItem: (k) => inner.getItem(k),
+      removeItem: (k) => inner.removeItem(k),
+      setItem: (k, v) => {
+        if (full && /collection/.test(k)) {
+          const err = new Error("quota");
+          err.name = "QuotaExceededError";
+          throw err;
+        }
+        inner.setItem(k, v);
+      },
+    };
+    let evictions = 0;
+    const r = new Repositories(new VersionedStore(storage), () => {
+      evictions++;
+      full = false; // freeing the caches made room
+      return 3;
+    });
+
+    r.addOwned("base1-4", "holo");
+
+    expect(evictions).toBe(1);
+    expect(r.storageDegraded).toBe(false);
+    // Written for real this time, so a reload keeps it.
+    expect(new Repositories(new VersionedStore(storage)).isOwnedFinish("base1-4", "holo")).toBe(true);
+  });
+
+  it("recovers once there is room again", () => {
+    const inner = createMemoryStorage();
+    let full = true;
+    const storage: StorageLike = {
+      getItem: (k) => inner.getItem(k),
+      removeItem: (k) => inner.removeItem(k),
+      setItem: (k, v) => {
+        if (full && /collection/.test(k)) {
+          const err = new Error("quota");
+          err.name = "QuotaExceededError";
+          throw err;
+        }
+        inner.setItem(k, v);
+      },
+    };
+    const r = new Repositories(new VersionedStore(storage), () => 0);
+
+    r.addOwned("base1-4", "holo");
+    expect(r.storageDegraded).toBe(true);
+
+    full = false;
+    r.addOwned("base1-5", "normal");
+
+    expect(r.storageDegraded).toBe(false);
+    // Both marks land: the in-memory rows are what the successful write saves.
+    const reloaded = new Repositories(new VersionedStore(storage));
+    expect(reloaded.isOwnedFinish("base1-4", "holo")).toBe(true);
+    expect(reloaded.isOwnedFinish("base1-5", "normal")).toBe(true);
   });
 });

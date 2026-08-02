@@ -71,6 +71,14 @@ interface LibraryValue {
   finishTotals: Partial<Record<CollectFinish, number>>;
   /** Per set, how many of each finish are held. */
   finishesBySet: Record<string, Partial<Record<CollectFinish, number>>>;
+  /**
+   * The device could not save the collection — it is held in memory only.
+   *
+   * Worth showing, because the alternative is what this replaced: the mark is
+   * kept in memory and syncs, but a reload loses anything the server has not
+   * taken yet, and nothing on screen would say so.
+   */
+  storageDegraded: boolean;
   addRecentSearch: (query: string) => void;
   addRecentlyViewed: (card: PokemonCardSummary) => void;
   clearRecentSearches: () => void;
@@ -90,6 +98,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>(() => repo.getRecentSearches());
   const [recentlyViewed, setRecentlyViewed] = useState<ViewedCard[]>(() => repo.getRecentlyViewed());
   const [collection, setCollection] = useState<OwnedCard[]>(() => repo.getCollection());
+  const [storageDegraded, setStorageDegraded] = useState(false);
 
   const isFavorite = useCallback((id: string) => favorites.some((c) => c.id === id), [favorites]);
 
@@ -106,6 +115,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const toggleOwned = useCallback(
     (cardId: string, finish: CollectFinish = "normal", setId?: string) => {
       setCollection(setId ? repo.toggleOwned(cardId, finish, setId) : repo.toggleOwned(cardId, finish));
+      // Read after the write: the repo only knows whether the device had room
+      // once it has tried to use it.
+      setStorageDegraded(repo.storageDegraded);
     },
     [repo],
   );
@@ -280,6 +292,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       totalFinishesOwned,
       finishTotals,
       finishesBySet,
+      storageDegraded,
       addRecentSearch,
       addRecentlyViewed,
       clearRecentSearches,
@@ -304,6 +317,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       totalFinishesOwned,
       finishTotals,
       finishesBySet,
+      storageDegraded,
       addRecentSearch,
       addRecentlyViewed,
       clearRecentSearches,

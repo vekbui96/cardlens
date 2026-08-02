@@ -3,7 +3,7 @@ import type { TradingCardGame } from "../models/games.ts";
 import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import { livePrintings, mergePrintings, pruneTombstones, type OwnedPrinting } from "./printings.ts";
-import { VersionedStore } from "./versioned.ts";
+import { evictCaches, VersionedStore } from "./versioned.ts";
 
 /** Spec limits. */
 export const MAX_RECENT_SEARCHES = 20;
@@ -139,7 +139,26 @@ function toPrintings(value: unknown): OwnedPrinting[] {
  * with dedup + cap + most-recent-first ordering. All reads are corruption-safe.
  */
 export class Repositories {
-  constructor(private readonly store: VersionedStore = new VersionedStore()) {}
+  /**
+   * Rows held only in memory, because the last write to disk failed.
+   *
+   * Without this, a failed write is invisible: `addOwned` re-reads storage to
+   * build its return value, gets the rows from before the mark, and hands React
+   * a state identical to the one it already had. The tap does nothing, says
+   * nothing, and looks like the app ignoring you. Holding the rows here keeps
+   * the session honest and — more importantly — keeps them syncable, so the
+   * marks still reach the server even on a device that cannot save them.
+   */
+  private memoryRows: OwnedPrinting[] | null = null;
+
+  /** True once a collection write has failed and stayed failed. */
+  storageDegraded = false;
+
+  constructor(
+    private readonly store: VersionedStore = new VersionedStore(),
+    /** Injectable so a test can prove the retry buys space before giving up. */
+    private readonly evict: () => number = evictCaches,
+  ) {}
 
   // --- Recent searches ------------------------------------------------------
   getRecentSearches(): RecentSearch[] {
@@ -221,13 +240,28 @@ export class Repositories {
    * getCollection() instead.
    */
   getPrintings(): OwnedPrinting[] {
+    if (this.memoryRows) return this.memoryRows;
     const rows = this.store.read<unknown[]>("collection", isArray, []);
     return rows.flatMap(toPrintings);
   }
 
   private writePrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
     const pruned = pruneTombstones(rows).slice(-MAX_COLLECTION);
-    this.store.write("collection", pruned);
+    if (this.store.write("collection", pruned)) {
+      this.memoryRows = null;
+      this.storageDegraded = false;
+      return pruned;
+    }
+    // Out of space. The caches cost one request each to rebuild; the collection
+    // cannot be rebuilt at all, so it wins the argument.
+    this.evict();
+    if (this.store.write("collection", pruned)) {
+      this.memoryRows = null;
+      this.storageDegraded = false;
+      return pruned;
+    }
+    this.memoryRows = pruned;
+    this.storageDegraded = true;
     return pruned;
   }
 

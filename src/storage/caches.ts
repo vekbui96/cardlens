@@ -29,7 +29,15 @@ export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v2", 7 * DAY, 2)
 // v3: summaries carry `variantPrices`, which the collection reads to price a
 // printing TCGdex has no number for. A device holding v2 entries would keep
 // serving summaries without it and show those printings as unpriced.
-export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards:v3", SEARCH_TTL_MS, 30);
+/**
+ * Eight, not thirty. Measured: one set costs ~58KB here and ~49KB in the
+ * printings cache below, and a 295-card set is over twice that — thirty entries
+ * is upwards of 4MB of a ~5MB budget, spent on data that refetches in about a
+ * second. The collection is written into whatever is left, and when nothing is
+ * left a mark silently fails to save. Eight sets is far more than anyone
+ * revisits inside a 6h TTL, and it leaves the irreplaceable data room.
+ */
+export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards:v3", SEARCH_TTL_MS, 8);
 
 /**
  * Printings per set, from TCGdex. Held for 30 days and kept for only a handful

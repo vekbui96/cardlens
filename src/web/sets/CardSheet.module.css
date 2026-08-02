@@ -207,6 +207,18 @@
   opacity: 0.85;
 }
 
+/* Warn-coloured rather than error-coloured: the mark did take, and it will
+   still sync. What is at risk is only what a reload would beat. */
+.storageWarning {
+  margin: 0;
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border-radius: var(--cl-radius-sm);
+  background: color-mix(in srgb, var(--cl-warn) 14%, transparent);
+  color: var(--cl-warn);
+  font-size: var(--cl-fs-small);
+  line-height: 1.35;
+}
+
 .close {
   min-height: 52px;
   border-radius: var(--cl-radius);
