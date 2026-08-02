@@ -6,6 +6,7 @@ import {
   printingPrice,
   type SetPrintingIndex,
 } from "../models/printingIndex.ts";
+import { catalogPrice } from "../models/catalogPrice.ts";
 import { aggregateMovement, type Movement } from "../models/movement.ts";
 import { valueCollection, type CollectionValue, type ValuableRow } from "../models/value.ts";
 import { printingsCache } from "../storage/caches.ts";
@@ -60,12 +61,24 @@ export interface CollectionValueResult extends CollectionValue {
  * all three, and the server already fetches it for printings — the prices were
  * simply being discarded.
  *
+ * TCGdex is not enough on its own either, which is why `catalogPrices` exists:
+ * it returns an empty tcgplayer block for promos and older cards that
+ * pokemontcg.io prices perfectly well — measured on smp-SM210, TCGdex `{}`
+ * against pokemontcg.io holofoil $169.02. Each printing takes TCGdex's price
+ * when there is one and the catalog's when there is not. Both are TCGplayer
+ * market prices in USD, so the sum is in one currency.
+ *
  * One request per set held, served from the server's 30-day disk cache, and
  * cached-first on the device so revisiting is instant.
  */
 export function useCollectionValue(
   rows: ValuableRow[],
   setNames: Record<string, string>,
+  /**
+   * Second-oracle prices, consulted only where TCGdex has none. Optional so the
+   * hook stays testable without a catalog; see hooks/useCatalogPrices.ts.
+   */
+  catalogPrices?: Map<string, number>,
 ): CollectionValueResult {
   const setIds = useMemo(() => [...new Set(rows.map((r) => r.setId))].sort(), [rows]);
 
@@ -96,8 +109,14 @@ export function useCollectionValue(
     // the app makes, because TCGdex keys printings by number, not by card id.
     const numberOf = (cardId: string) => cardId.slice(cardId.indexOf("-") + 1);
 
-    const value = valueCollection(rows, (row) =>
-      printingPrice(prices.get(row.setId), numberOf(row.cardId), row.finish),
+    // Same order of preference as the owned-cards list: TCGdex, then the
+    // catalog. If these two ever disagree the Home total and the list of the
+    // very printings behind it would stop adding up.
+    const value = valueCollection(
+      rows,
+      (row) =>
+        printingPrice(prices.get(row.setId), numberOf(row.cardId), row.finish) ??
+        catalogPrice(catalogPrices, row.cardId, row.finish),
     );
 
     const movement = aggregateMovement(
@@ -106,5 +125,5 @@ export function useCollectionValue(
 
     return { ...value, pending, failed, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
-  }, [rows, setIds, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [rows, setIds, catalogPrices, queries.map((q) => q.dataUpdatedAt).join(",")]);
 }

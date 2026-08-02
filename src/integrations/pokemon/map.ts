@@ -1,4 +1,10 @@
-import type { PokemonCardDetails, PokemonCardSummary, CardVariants, PokemonSet } from "../../models/cards.ts";
+import type {
+  PokemonCardDetails,
+  PokemonCardSummary,
+  CardVariants,
+  PokemonSet,
+  PriceFinishKey,
+} from "../../models/cards.ts";
 import type { RankableCard } from "../../services/search/rank.ts";
 import { normalizeTcgplayerPricing } from "../pricing/normalize.ts";
 import type { RawCard, RawSet } from "./schema.ts";
@@ -28,10 +34,29 @@ export function toSet(raw: RawSet): PokemonSet {
   };
 }
 
+/**
+ * Market price per finish, carried on the summary so the collection can price a
+ * printing TCGdex has no number for without a per-card details fetch.
+ *
+ * The normaliser has already dropped zeros and NaNs; only the market point is
+ * kept, because low/mid/high are a details-screen concern and the collection
+ * only ever sums one figure per printing.
+ */
+function variantPricesFrom(raw: RawCard): Partial<Record<PriceFinishKey, number>> {
+  const out: Partial<Record<PriceFinishKey, number>> = {};
+  for (const [key, point] of Object.entries(normalizeTcgplayerPricing(raw.tcgplayer).variants)) {
+    const market = point?.market;
+    if (typeof market === "number" && market > 0) out[key as PriceFinishKey] = market;
+  }
+  return out;
+}
+
 export function toSummary(raw: RawCard): PokemonCardSummary {
   const market = normalizeTcgplayerPricing(raw.tcgplayer).marketPrice;
   const variants = variantsFromPrices(raw);
   const hasVariants = Object.values(variants).some(Boolean);
+  const variantPrices = variantPricesFrom(raw);
+  const hasPrices = Object.keys(variantPrices).length > 0;
   return {
     id: raw.id,
     name: raw.name,
@@ -45,6 +70,7 @@ export function toSummary(raw: RawCard): PokemonCardSummary {
     // Omitted entirely when the payload revealed no finishes, so consumers can
     // tell "no pricing data" apart from "exists only as normal".
     ...(hasVariants ? { variants } : {}),
+    ...(hasPrices ? { variantPrices } : {}),
   };
 }
 

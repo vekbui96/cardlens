@@ -26,7 +26,10 @@ export const searchCache = new TtlCache<PokemonCardSummary[]>("cache:search", SE
  * refetch. Bump the suffix whenever toSet/toSummary gains a field the UI reads.
  */
 export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v2", 7 * DAY, 2);
-export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards:v2", SEARCH_TTL_MS, 30);
+// v3: summaries carry `variantPrices`, which the collection reads to price a
+// printing TCGdex has no number for. A device holding v2 entries would keep
+// serving summaries without it and show those printings as unpriced.
+export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards:v3", SEARCH_TTL_MS, 30);
 
 /**
  * Printings per set, from TCGdex. Held for 30 days and kept for only a handful

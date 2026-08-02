@@ -5,6 +5,8 @@ import { useLibrary } from "../app/LibraryProvider.tsx";
 import { useSets } from "./useSets.ts";
 import { printingsQuery } from "./useCollectionValue.ts";
 import { buildPrintingIndex, printingPrice } from "../models/printingIndex.ts";
+import { catalogPrice } from "../models/catalogPrice.ts";
+import { useCatalogPrices } from "./useCatalogPrices.ts";
 import type { OwnedPrintingRow } from "../models/ownedSort.ts";
 import { setCardsCache } from "../storage/caches.ts";
 
@@ -55,6 +57,8 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     queries: setIds.map((setId) => printingsQuery(setId, setNames[setId] ?? "")),
   });
 
+  const catalogPrices = useCatalogPrices(setIds);
+
   return useMemo(() => {
     const cardsBySet = new Map<string, Map<string, { name: string; number: string; image?: string }>>();
     const pricesBySet = new Map<string, ReturnType<typeof buildPrintingIndex>>();
@@ -82,7 +86,13 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
       // answered yet, so a row can list before its name arrives.
       const number = info?.number ?? card.id.slice(card.id.indexOf("-") + 1);
       for (const finish of card.finishes) {
-        const price = printingPrice(pricesBySet.get(setId), number, finish);
+        // TCGdex first, pokemontcg.io second. Neither covers this collection
+        // alone: TCGdex has no tcgplayer block for promos and older cards,
+        // pokemontcg.io prices none of the modern sets. Both are TCGplayer
+        // market prices in USD, so mixing them in one total is sound.
+        const price =
+          printingPrice(pricesBySet.get(setId), number, finish) ??
+          catalogPrice(catalogPrices, card.id, finish);
         rows.push({
           cardId: card.id,
           setId,
@@ -103,6 +113,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     collection,
     setIds,
     setNames,
+    catalogPrices,
     cardQueries.map((q) => q.dataUpdatedAt).join(","),
     priceQueries.map((q) => q.dataUpdatedAt).join(","),
   ]);

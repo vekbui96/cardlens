@@ -37,6 +37,16 @@ export interface PokemonCardSummary {
    * variants without a per-card details fetch.
    */
   variants?: CardVariants;
+  /**
+   * Market price (USD) per pokemontcg.io finish key, from the same payload as
+   * `marketPrice`.
+   *
+   * The headline above cannot stand in for these: a card with a normal and a
+   * reverse has one headline and two prices, and spending the headline on both
+   * printings would count a number the data never claimed. Used only as a
+   * fallback where TCGdex has no price — see models/catalogPrice.ts.
+   */
+  variantPrices?: Partial<Record<PriceFinishKey, number>>;
 }
 
 export interface CardVariants {

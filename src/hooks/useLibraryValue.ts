@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useLibrary } from "../app/LibraryProvider.tsx";
 import { useSets } from "./useSets.ts";
 import { useCollectionValue, type CollectionValueResult } from "./useCollectionValue.ts";
+import { useCatalogPrices } from "./useCatalogPrices.ts";
 import type { ValuableRow } from "../models/value.ts";
 
 export interface LibraryValue extends CollectionValueResult {
@@ -44,7 +45,13 @@ export function useLibraryValue(): LibraryValue {
     return names;
   }, [sets]);
 
-  const value = useCollectionValue(rows, setNames);
+  // Sets held, for the second pricing oracle. Same list useOwnedCards derives,
+  // and the queries behind it share keys with the set screens, so this is a
+  // cache read rather than a fetch once a set has been opened.
+  const setIds = useMemo(() => [...new Set(rows.map((r) => r.setId))].sort(), [rows]);
+  const catalogPrices = useCatalogPrices(setIds);
+
+  const value = useCollectionValue(rows, setNames, catalogPrices);
 
   return { ...value, setNames, holdings: rows.length };
 }
