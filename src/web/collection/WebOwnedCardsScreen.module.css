@@ -1,4 +1,13 @@
+/*
+ * Fills the shell rather than growing with its content, and min-height: 0 so a
+ * flex child may actually shrink. Without a definite height here the showcase's
+ * 1fr row resolved against auto, the staged image rendered at its natural 825px
+ * and covered the controls above it — Playwright caught it as a click on "List"
+ * being intercepted by an <img>.
+ */
 .screen {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: var(--cl-gap-lg) 0 0;
@@ -46,11 +55,49 @@
  * nothing on screen to say it was still there, so a sort you own simply looked
  * absent. A second line is cheaper than an invisible control.
  */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cl-gap-xs) var(--cl-gap);
+  padding: 0 var(--cl-gap) var(--cl-gap);
+}
+
+/*
+ * Segmented, and visually one object: view is a choice between two states of
+ * the same thing, where sort is a choice among four peers. Making them look
+ * alike would say they are the same kind of control.
+ */
+.views {
+  display: flex;
+  padding: 2px;
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+}
+
+.view {
+  min-height: 36px;
+  padding: 0 var(--cl-gap);
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--cl-fg-muted);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.viewOn {
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg);
+}
+
 .sorts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--cl-gap-xs);
-  padding: 0 var(--cl-gap) var(--cl-gap);
 }
 
 .sort {
@@ -186,7 +233,7 @@
 
 @media (min-width: 1000px) {
   .head,
-  .sorts {
+  .controls {
     padding-left: var(--cl-gap-lg);
     padding-right: var(--cl-gap-lg);
   }

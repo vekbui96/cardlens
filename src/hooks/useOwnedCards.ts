@@ -60,18 +60,22 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
   const catalogPrices = useCatalogPrices(setIds);
 
   return useMemo(() => {
-    const cardsBySet = new Map<string, Map<string, { name: string; number: string; image?: string }>>();
+    const cardsBySet = new Map<
+      string,
+      Map<string, { name: string; number: string; image?: string; large?: string }>
+    >();
     const pricesBySet = new Map<string, ReturnType<typeof buildPrintingIndex>>();
     let pending = 0;
 
     setIds.forEach((setId, i) => {
       if (cardQueries[i]?.isPending) pending += 1;
-      const byId = new Map<string, { name: string; number: string; image?: string }>();
+      const byId = new Map<string, { name: string; number: string; image?: string; large?: string }>();
       for (const c of cardQueries[i]?.data ?? []) {
         byId.set(c.id, {
           name: c.name,
           number: c.collectorNumber,
           ...(c.imageSmall ? { image: c.imageSmall } : {}),
+          ...(c.imageLarge ? { large: c.imageLarge } : {}),
         });
       }
       cardsBySet.set(setId, byId);
@@ -101,6 +105,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
           collectorNumber: number,
           finish,
           ...(info?.image ? { imageSmall: info.image } : {}),
+          ...(info?.large ? { imageLarge: info.large } : {}),
           ...(price !== undefined ? { price } : {}),
           at: card.at ?? 0,
         });

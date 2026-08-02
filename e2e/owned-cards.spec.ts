@@ -34,6 +34,7 @@ test.describe("my cards", () => {
   test("lists every printing held, not every card", async ({ page }) => {
     await seedCollection(page);
     await page.goto("/?ui=web#/owned");
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     const list = page.getByRole("list");
     await expect(list.getByRole("button").filter({ hasText: "Charizard ex" })).toHaveCount(1);
@@ -45,6 +46,8 @@ test.describe("my cards", () => {
   test("changes order without losing any rows", async ({ page }) => {
     await seedCollection(page);
     await page.goto("/?ui=web#/owned");
+
+    await page.getByRole("button", { name: "List", exact: true }).click();
 
     const rows = page.getByRole("list").getByRole("button");
     // Scoped to the control group: a row reading "unpriced" contains "price",
@@ -71,6 +74,70 @@ test.describe("my cards", () => {
 
     await expect(page).toHaveURL(/#\/owned$/);
     await expect(page.getByRole("heading", { name: "My cards" })).toBeVisible();
+  });
+
+  test("opens on the showcase, with one printing staged and the rest beneath", async ({ page }) => {
+    await seedCollection(page);
+    await page.goto("/?ui=web#/owned");
+
+    // Showcase is the default view: the stage is the point of the screen.
+    await expect(page.getByRole("button", { name: "Showcase" })).toHaveAttribute("aria-pressed", "true");
+
+    const strip = page.getByRole("listbox", { name: "Cards you own" });
+    await expect(strip.getByRole("option")).toHaveCount(3);
+    // Exactly one is staged, always — an empty stage would be a dead screen.
+    await expect(strip.getByRole("option", { selected: true })).toHaveCount(1);
+    await expect(page.getByText("1 of 3")).toBeVisible();
+  });
+
+  test("stages whichever card is chosen from the strip", async ({ page }) => {
+    await seedCollection(page);
+    await page.goto("/?ui=web#/owned");
+
+    const strip = page.getByRole("listbox", { name: "Cards you own" });
+    await strip.getByRole("option").nth(2).click();
+
+    await expect(page.getByText("3 of 3")).toBeVisible();
+    await expect(strip.getByRole("option").nth(2)).toHaveAttribute("aria-selected", "true");
+    await expect(strip.getByRole("option").first()).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("walks the strip with the arrow keys and stops at the ends", async ({ page }) => {
+    await seedCollection(page);
+    await page.goto("/?ui=web#/owned");
+
+    const strip = page.getByRole("listbox", { name: "Cards you own" });
+    await strip.getByRole("option").first().click();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByText("2 of 3")).toBeVisible();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByText("1 of 3")).toBeVisible();
+    // Already at the start: nothing to go back to, and no wrap to the end.
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByText("1 of 3")).toBeVisible();
+    await page.keyboard.press("End");
+    await expect(page.getByText("3 of 3")).toBeVisible();
+  });
+
+  test("keeps the stage and the list on the same sorted order", async ({ page }) => {
+    await seedCollection(page);
+    await page.goto("/?ui=web#/owned");
+
+    // Sorted by name, not price: prices arrive from the network, so a price
+    // sort can legitimately reorder between the two reads and the test would
+    // fail on a race that is not the app's.
+    await page.getByRole("group", { name: "Sort by" }).getByRole("button", { name: "Name" }).click();
+
+    const strip = page.getByRole("listbox", { name: "Cards you own" });
+    const firstStaged = await strip.getByRole("option").first().innerText();
+
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    const firstRow = await page.getByRole("list").getByRole("button").first().innerText();
+
+    // Both views read the same sorted rows; a divergence here would mean two
+    // answers to "which is the dearest card you own".
+    expect(firstRow).toContain(firstStaged.split("\n")[0]);
   });
 
   test("says so plainly when nothing is marked", async ({ page }) => {

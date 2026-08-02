@@ -12,6 +12,8 @@ export interface OwnedPrintingRow {
   /** USD, when the printing has a price. Absent is not zero. */
   price?: number;
   imageSmall?: string;
+  /** Hi-res art. The showcase stage is far larger than a 245px thumbnail. */
+  imageLarge?: string;
   /** When this printing was marked owned. */
   at: number;
 }

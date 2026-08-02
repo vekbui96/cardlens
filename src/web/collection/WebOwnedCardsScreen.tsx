@@ -4,6 +4,7 @@ import { useOwnedCards } from "../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import { OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../models/ownedSort.ts";
 import { formatUsd } from "../../utils/format.ts";
+import { CardShowcase } from "./CardShowcase.tsx";
 import styles from "./WebOwnedCardsScreen.module.css";
 
 /**
@@ -17,11 +18,23 @@ import styles from "./WebOwnedCardsScreen.module.css";
  *
  * Rows are printings, not cards: a card held in normal and reverse is two rows,
  * because they are two things with two prices and you own both.
+ *
+ * Two views over the same sorted rows. Showcase puts one card on screen at a
+ * size worth looking at; the list is dense and scannable. The list is kept
+ * rather than replaced because at this size — 887 printings — scrubbing a
+ * filmstrip is a poor way to find a particular card, and the sorts exist to be
+ * read down a column.
  */
+const VIEWS = [
+  { key: "showcase", label: "Showcase" },
+  { key: "list", label: "List" },
+] as const;
+
 export function WebOwnedCardsScreen() {
   const { push } = useNavigation();
   const { rows, pending } = useOwnedCards();
   const [sort, setSort] = useState<OwnedSortKey>("price");
+  const [view, setView] = useState<"showcase" | "list">("showcase");
 
   const sorted = useMemo(() => sortOwned(rows, sort), [rows, sort]);
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
@@ -56,22 +69,40 @@ export function WebOwnedCardsScreen() {
         A row of buttons rather than a <select>: there are four options, they all
         fit, and the current one should be readable without opening anything.
       */}
-      <div className={styles.sorts} role="group" aria-label="Sort by">
-        {OWNED_SORTS.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            className={`${styles.sort} ${s.key === sort ? styles.sortOn : ""}`}
-            aria-pressed={s.key === sort}
-            onClick={() => setSort(s.key)}
-          >
-            {s.label}
-          </button>
-        ))}
+      <div className={styles.controls}>
+        <div className={styles.views} role="group" aria-label="View">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              className={`${styles.view} ${v.key === view ? styles.viewOn : ""}`}
+              aria-pressed={v.key === view}
+              onClick={() => setView(v.key)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.sorts} role="group" aria-label="Sort by">
+          {OWNED_SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              className={`${styles.sort} ${s.key === sort ? styles.sortOn : ""}`}
+              aria-pressed={s.key === sort}
+              onClick={() => setSort(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {rows.length === 0 ? (
         <p className={styles.empty}>Nothing marked owned yet. Open a set and tap the printings you have.</p>
+      ) : view === "showcase" ? (
+        <CardShowcase rows={sorted} onOpen={(row) => push({ name: "details", cardId: row.cardId })} />
       ) : (
         <ul className={styles.list}>
           {sorted.map((row) => (

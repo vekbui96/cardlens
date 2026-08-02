@@ -1,0 +1,285 @@
+/*
+ * Fills whatever height is left and hands the leftover to the stage, with the
+ * strip pinned beneath it. Sizing the art in dvh instead looked right at one
+ * window size and was wrong at every other: at 1440x900 the filmstrip's prices
+ * were cut off below the fold, and on a tall phone a third of the screen sat
+ * empty under it.
+ */
+.showcase {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--cl-gap);
+  padding-bottom: var(--cl-gap-sm);
+}
+
+/*
+ * Art left, facts right, from the first breakpoint that can hold both. Stacked
+ * on a narrow phone the card would push its own price below the fold, which
+ * defeats the point of a stage.
+ */
+.stage {
+  min-height: 0;
+  /* The backstop, not the belt. Measured: an unconstrained stage image renders
+     at 600x825, sits over the sort controls and eats their clicks — a bug you
+     cannot see in a screenshot because the art still looks fine. Clipping here
+     means no future sizing mistake can reach outside this panel. */
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--cl-gap);
+  margin: 0 var(--cl-gap);
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  /* A single soft wash from the top so the art sits on something rather than
+     floating on the page background. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--cl-accent) 10%, transparent), transparent),
+    var(--cl-surface);
+}
+
+/*
+ * A centring frame with no box of its own. Giving it a fixed height and a 5:7
+ * aspect made it taller than the art it held once max-width clamped the width,
+ * so a lit panel showed above and below every card. The image carries the
+ * shape; this only decides where it sits.
+ */
+.art {
+  min-width: 0;
+  min-height: 0;
+  /* height, not just max-height. A percentage max-height on the image resolves
+     against its parent's SPECIFIED height — with height:auto here the image's
+     own max-height:100% was indeterminate and it rendered at its natural 825px,
+     overflowing the stage and covering the controls. Nothing is drawn on this
+     box, so being taller than the art it holds costs nothing visually. */
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.art img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--cl-radius);
+  display: block;
+}
+
+.artMissing {
+  aspect-ratio: 5 / 7;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface-raised);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.position {
+  margin: 0;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-dim);
+}
+
+.name {
+  margin: 0;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.meta {
+  margin: 0;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.price {
+  margin: 4px 0 0;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-display);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--cl-gold);
+}
+
+/* Same slot, deliberately not the same weight: an absent price is a fact about
+   the source, not a headline about the card. */
+.noPrice {
+  margin: 4px 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.open {
+  align-self: flex-start;
+  margin-top: var(--cl-gap-sm);
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .open:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+/*
+ * The filmstrip. Snapping to centre means a flick lands on a card rather than
+ * between two, and the centred thumbnail is the one the stage is showing.
+ */
+.strip {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  padding: var(--cl-gap-xs) var(--cl-gap) var(--cl-gap-sm);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.strip:focus {
+  outline: none;
+}
+
+.thumb {
+  flex: 0 0 auto;
+  width: 76px;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--cl-radius-sm);
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+/*
+ * Chosen state is a border plus a lift, never colour alone — and the unchosen
+ * thumbnails are dimmed rather than the chosen one brightened, so the strip
+ * does not glow at the reader.
+ */
+.thumb:not(.thumbOn) .thumbArt {
+  opacity: 0.55;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .thumb:hover .thumbArt {
+    opacity: 1;
+  }
+}
+
+.thumbOn {
+  border-color: var(--cl-accent);
+  background: color-mix(in srgb, var(--cl-accent) 12%, transparent);
+}
+
+.thumbArt {
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  border-radius: 3px;
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+  transition: opacity var(--cl-transition, 140ms ease);
+}
+
+.thumbArt img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbName {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--cl-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumbPrice,
+.thumbNoPrice {
+  font-family: var(--cl-font-data);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.thumbPrice {
+  color: var(--cl-price);
+}
+
+.thumbNoPrice {
+  color: var(--cl-fg-dim);
+}
+
+/* Smooth scrolling is an animation like any other. */
+@media (prefers-reduced-motion: reduce) {
+  .strip {
+    scroll-behavior: auto;
+  }
+
+  .thumbArt {
+    transition: none;
+  }
+}
+
+@media (min-width: 1000px) {
+  .stage {
+    /* Capped and centred as a pair. Left at 1fr the facts drifted a third of
+       the window away from the card they describe. */
+    max-width: 1180px;
+    justify-content: center;
+    grid-template-columns: minmax(0, auto) minmax(0, 420px);
+    gap: var(--cl-gap-lg);
+    /* One margin declaration, after max-width: an earlier margin-inline here
+       was silently overridden by this shorthand and centred nothing. */
+    margin: 0 auto;
+    padding: var(--cl-gap-lg);
+  }
+
+  .strip {
+    padding-left: var(--cl-gap-lg);
+    padding-right: var(--cl-gap-lg);
+  }
+
+  .thumb {
+    width: 92px;
+  }
+}
