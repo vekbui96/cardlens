@@ -23,10 +23,10 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Frontend          | https://vekbui96.github.io/cardlens/                                |
 | Server (cardlens) | `https://server-pc.tail0e4194.ts.net:8443` via Tailscale Funnel     |
 | Collection data   | `D:/services/data/collection.json` on SERVER-PC                     |
-| Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **2**)     |
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
 | Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
-| Deployed at       | `66b98cb` — Pages; server unchanged since `a033920`                 |
+| Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)     |
+| Deployed at       | `652b156` — both Pages and server, verified live                    |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
@@ -82,7 +82,8 @@ Full detail in `CLAUDE.md`; the shortlist:
 - **A Playwright project with no `testMatch` runs every spec.** Adding a `phone` project silently re-ran all eight glasses specs at 412x839, where the app resolves to the web shell — five failed and CI would have gone red. The project is now scoped to `phone-layout.spec.ts`.
 - **The card sheet's Done button was inside the scrolling region.** With 12 printings it sat at 1098px against an 844px viewport. Fixed by pinning `.close` outside a new `.scroll` wrapper. It was invisible for months because the mock fixtures give each card one printing — **an assertion that cannot be stressed cannot catch anything.**
 - **Prettier does not read `.gitignore`.** Git-ignored scratch directories still fail `format:check` until they are in `.prettierignore`.
-- A cache-version bump is for **shape** changes. Bumping when output is byte-identical costs a full refetch of every set (120–295 requests each) and buys nothing. `PRINTINGS_CACHE_VERSION` is deliberately still 2.
+- A cache-version bump is for **shape** changes, **or for a field callers already read starting to hold a materially different value** — that second case is why `PRINTINGS_CACHE_VERSION` is now 4. Without it, sets cached before a pricing fix keep serving the old numbers for 30 days and look correct doing it. The client's `cache:printings:v4` has to move in the same commit or only devices with no cache see the fix. Still do not bump when the output is byte-identical: that costs a full refetch of every set (120–295 requests each) and buys nothing.
+- **A price key that disagrees with the variant type is not always wrong.** TCGdex marks invented variants `variantId: "generated"`, and whole older sets are invented — see `CLAUDE.md`. Strict key-to-type matching quietly dropped the prices of the most valuable cards in Hidden Fates and Team Up.
 
 ## Ideas discussed, not started
 
@@ -91,7 +92,7 @@ Full detail in `CLAUDE.md`; the shortlist:
 
 ## Housekeeping still open
 
-- `D:/services/data/collection.json` has **no backup**; `D:\services\backups\` exists and is empty. This is the only irreplaceable data in the system.
+- ~~`collection.json` has no backup~~ — done. `D:\services\scripts\backup-collection.ps1` runs under scheduled task `cardlens-backup` (daily 03:00 and at startup), refuses to snapshot unparseable or empty JSON, skips identical snapshots, keeps 30.
 - SERVER-PC BIOS: **AC Recovery → Power On** is not set, so it stays off after a power cut. It has been found powered off twice.
 - `solid-website-api` deploy key not registered, so that server rebuilds sideloaded source rather than pulling. Does not affect CardLens.
 - `useCollectionValue` still has no direct test, and it computes what the collection is worth. The refactor onto the shared lookup was verified equivalent by review, not by a test.

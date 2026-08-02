@@ -80,6 +80,8 @@ Detection is by **shape**, not size: the glasses are small AND square, a phone i
 - **Variants exist only on the individual card endpoint.** The set endpoint's embedded cards carry `id, image, localId, name`, and `/cards?set=` returns the same brief shape. A set-wide answer therefore costs one request per card: 120 for Pitch Black, 295 for Ascended Heroes.
 - Measured at concurrency 6: 120 cards in 1.3s / 0.28MB, 173 in 1.8s / 0.46MB, zero failures.
 - Set ids differ from pokemontcg.io (`me5` vs `me05`, `sv8pt5` vs `sv08.5`), so matching is **by normalised name**: 167/174 sets join, and card numbers then resolve to `localId` for 1183/1184 sampled cards. Numbers are indexed both padded and unpadded to bridge the two.
+- **`variantId: "generated"` means TCGdex invented the variant** and it carries no information. Whole older sets are like this — measured, all 69 Hidden Fates and all 196 Team Up cards report one made-up `normal` printing while the only tcgplayer key is `holofoil`. Matching the price key against that placeholder type silently dropped prices for 12/69 and 45/196 cards, the expensive ones. A lone generated variant now takes a lone market price; two prices stays unpriced. Modern sets (me05) are never generated and are unaffected.
+- Price keys observed across 526 fully-measured cards: `normal`, `holofoil`, `reverse-holofoil`, and nothing else. `1st-edition-holofoil` never appears — 1st Edition rides as a `stamp` on a `holo` variant with `pricing: null`.
 
 **The server caches printings** (`/api/printings/:setId`) so devices make one 8KB request instead of 120 requests and 280KB.
 
