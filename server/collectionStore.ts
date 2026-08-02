@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { canonicalFinish } from "../src/models/finishes.ts";
+import { canonicalGame, DEFAULT_GAME } from "../src/models/games.ts";
 import { mergePrintings, pruneTombstones, rowStamp, type OwnedPrinting } from "../src/storage/printings.ts";
 
 /**
@@ -60,6 +61,14 @@ export function parseRow(value: unknown): OwnedPrinting | null {
   return {
     cardId: v.cardId,
     setId: v.setId,
+    // Preserved, and only when it is not the default. parseRow is a whitelist,
+    // so a field it does not name is silently dropped — which is how a client
+    // that knew about a second game would have its rows handed back belonging
+    // to the first one. An unrecognised value falls back to the default rather
+    // than being stored: this endpoint is on the public internet, and an
+    // arbitrary string here would partition the OR-Set into keys no client
+    // will ever look under.
+    ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
     // Canonicalised on ingest, matching the client. Without this the store
     // accumulates "holofoil" AND "holo" as separate OR-Set keys for one
     // printing, inflating every count on the server side. Applies to rows read

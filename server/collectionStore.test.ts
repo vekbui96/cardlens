@@ -153,3 +153,35 @@ describe("CollectionStore", () => {
     });
   });
 });
+
+describe("rows that name a game", () => {
+  it("keeps a game the client sent", () => {
+    // parseRow is a whitelist: a field it does not name is dropped. Without
+    // this the server would hand a second game's rows back as Pokémon, which
+    // is the same class of failure as the stale finish validation that once
+    // dropped rows on sync and looked like nothing had happened.
+    expect(parseRow(row({ game: "lorcana" }))?.game).toBe("lorcana");
+  });
+
+  it("does not add the default to rows that never carried it", () => {
+    expect(parseRow(row())).not.toHaveProperty("game");
+    expect(parseRow(row({ game: "pokemon" }))).not.toHaveProperty("game");
+  });
+
+  it("refuses to store an unrecognised game", () => {
+    // The endpoint is public. An arbitrary string here would partition the
+    // OR-Set into keys no client will ever look under.
+    const parsed = parseRow({ ...row(), game: "'; DROP TABLE" });
+    expect(parsed).not.toBeNull();
+    expect(parsed).not.toHaveProperty("game");
+  });
+
+  it("round-trips a second game through the store", () => {
+    const store = new CollectionStore(file);
+    store.merge([row({ cardId: "tfc-1", game: "lorcana" }), row({ cardId: "base1-4" })]);
+
+    const reloaded = new CollectionStore(file);
+    const byId = Object.fromEntries(reloaded.all().map((r) => [r.cardId, r.game]));
+    expect(byId).toEqual({ "tfc-1": "lorcana", "base1-4": undefined });
+  });
+});

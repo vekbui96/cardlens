@@ -325,3 +325,69 @@ describe("a device that has run out of storage", () => {
     expect(reloaded.isOwnedFinish("base1-5", "normal")).toBe(true);
   });
 });
+
+describe("more than one game", () => {
+  const store = () => new VersionedStore(createMemoryStorage());
+
+  it("does not write the default game onto every row", () => {
+    // 20,000 rows is the cap, and this app has already had localStorage run
+    // out and silently swallow marks. A redundant field on every row is not
+    // free.
+    const s = store();
+    new Repositories(s).addOwned("base1-4", "holo");
+
+    const raw = s.read<unknown[]>("collection", (v): v is unknown[] => Array.isArray(v), []);
+    expect(raw[0]).not.toHaveProperty("game");
+  });
+
+  it("stamps a row that is not the default", () => {
+    const s = store();
+    new Repositories(s, () => 0, "lorcana").addOwned("tfc-1", "normal");
+
+    const raw = s.read<{ game?: string }[]>(
+      "collection",
+      (v): v is { game?: string }[] => Array.isArray(v),
+      [],
+    );
+    expect(raw[0]?.game).toBe("lorcana");
+  });
+
+  it("counts only the game being looked at", () => {
+    const s = store();
+    new Repositories(s).addOwned("base1-4", "holo");
+    new Repositories(s, () => 0, "lorcana").addOwned("tfc-1", "normal");
+
+    expect(new Repositories(s).getCollection().map((c) => c.id)).toEqual(["base1-4"]);
+    expect(new Repositories(s, () => 0, "lorcana").getCollection().map((c) => c.id)).toEqual(["tfc-1"]);
+  });
+
+  it("will not report another game's card as owned", () => {
+    const s = store();
+    new Repositories(s, () => 0, "magic").addOwned("shared-1", "normal");
+
+    // Same id, different game: the Pokémon view must not claim it.
+    expect(new Repositories(s).isOwned("shared-1")).toBe(false);
+    expect(new Repositories(s, () => 0, "magic").isOwned("shared-1")).toBe(true);
+  });
+
+  it("will not let one game un-mark another game's identical card", () => {
+    const s = store();
+    new Repositories(s).addOwned("shared-1", "normal");
+    new Repositories(s, () => 0, "magic").addOwned("shared-1", "normal");
+
+    new Repositories(s, () => 0, "magic").removeOwned("shared-1", "normal");
+
+    expect(new Repositories(s).isOwned("shared-1")).toBe(true);
+    expect(new Repositories(s, () => 0, "magic").isOwned("shared-1")).toBe(false);
+  });
+
+  it("syncs every game's rows, not just the active one", () => {
+    // A device that withheld another game's rows would look to the server
+    // exactly like a device that had deleted them.
+    const s = store();
+    new Repositories(s).addOwned("base1-4", "holo");
+    new Repositories(s, () => 0, "lorcana").addOwned("tfc-1", "normal");
+
+    expect(new Repositories(s).getPrintings()).toHaveLength(2);
+  });
+});

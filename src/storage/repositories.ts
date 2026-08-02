@@ -1,8 +1,14 @@
 import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
-import type { TradingCardGame } from "../models/games.ts";
+import { canonicalGame, DEFAULT_GAME, type TradingCardGame } from "../models/games.ts";
 import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
-import { livePrintings, mergePrintings, pruneTombstones, type OwnedPrinting } from "./printings.ts";
+import {
+  gamePrintings,
+  livePrintings,
+  mergePrintings,
+  pruneTombstones,
+  type OwnedPrinting,
+} from "./printings.ts";
 import { evictCaches, VersionedStore } from "./versioned.ts";
 
 /** Spec limits. */
@@ -114,6 +120,10 @@ function toPrintings(value: unknown): OwnedPrinting[] {
       // Legacy values (holofoil, pokeBall, ...) migrate to type:foil keys here,
       // so no stored row ever has to be rewritten.
       finish: canonicalFinish(v.finish),
+      // A whitelist parser drops what it does not name, so this line is what
+      // keeps a second game's rows from being read back as Pokémon. Held only
+      // when it is not the default, matching how it was written.
+      ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
       at: typeof v.at === "number" ? v.at : 0,
       ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
     };
@@ -158,6 +168,14 @@ export class Repositories {
     private readonly store: VersionedStore = new VersionedStore(),
     /** Injectable so a test can prove the retry buys space before giving up. */
     private readonly evict: () => number = evictCaches,
+    /**
+     * The game every collection read and write is about.
+     *
+     * One at a time is what the UI actually does — a set screen, a progress
+     * bar and a total are all questions about one game — so it belongs here
+     * rather than in six call sites that would each have to remember it.
+     */
+    private readonly game: TradingCardGame = DEFAULT_GAME,
   ) {}
 
   // --- Recent searches ------------------------------------------------------
@@ -245,6 +263,18 @@ export class Repositories {
     return rows.flatMap(toPrintings);
   }
 
+  /**
+   * Rows for the active game — what every count and list on screen is about.
+   *
+   * Deliberately NOT what getPrintings returns: sync pushes every row this
+   * device holds regardless of game, because a device that quietly withheld
+   * another game's rows would look to the server exactly like a device that
+   * had deleted them.
+   */
+  private ownRows(): OwnedPrinting[] {
+    return gamePrintings(this.getPrintings(), this.game);
+  }
+
   private writePrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
     const pruned = pruneTombstones(rows).slice(-MAX_COLLECTION);
     if (this.store.write("collection", pruned)) {
@@ -268,7 +298,7 @@ export class Repositories {
   /** Cards owned, each with its held finishes — most recently started last. */
   getCollection(): OwnedCard[] {
     const byCard = new Map<string, OwnedCard>();
-    for (const row of livePrintings(this.getPrintings())) {
+    for (const row of livePrintings(this.ownRows())) {
       const existing = byCard.get(row.cardId);
       if (existing) {
         if (!existing.finishes.includes(row.finish)) existing.finishes.push(row.finish);
@@ -286,11 +316,11 @@ export class Repositories {
   }
 
   isOwned(id: string): boolean {
-    return livePrintings(this.getPrintings()).some((r) => r.cardId === id);
+    return livePrintings(this.ownRows()).some((r) => r.cardId === id);
   }
 
   ownedFinishes(id: string): CollectFinish[] {
-    return livePrintings(this.getPrintings())
+    return livePrintings(this.ownRows())
       .filter((r) => r.cardId === id)
       .map((r) => r.finish);
   }
@@ -311,14 +341,18 @@ export class Repositories {
     const finish = canonicalFinish(rawFinish);
     // Re-marking clears any tombstone by writing a newer `at`, which is exactly
     // how the merge rule expects a resurrection to be expressed.
-    this.writePrintings(mergePrintings(this.getPrintings(), [{ cardId, setId, finish, at: now }]));
+    this.writePrintings(
+      mergePrintings(this.getPrintings(), [
+        { cardId, setId, finish, at: now, ...(this.game === DEFAULT_GAME ? {} : { game: this.game }) },
+      ]),
+    );
     return this.getCollection();
   }
 
   /** Removes one finish, or every finish of the card when `finish` is omitted. */
   removeOwned(cardId: string, rawFinish?: CollectFinish, now = Date.now()): OwnedCard[] {
     const finish = rawFinish === undefined ? undefined : canonicalFinish(rawFinish);
-    const targets = livePrintings(this.getPrintings()).filter(
+    const targets = livePrintings(this.ownRows()).filter(
       (r) => r.cardId === cardId && (finish === undefined || r.finish === finish),
     );
     const tombstones = targets.map((r) => ({ ...r, deletedAt: now }));

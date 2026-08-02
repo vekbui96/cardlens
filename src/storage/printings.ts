@@ -1,4 +1,5 @@
 import type { CollectFinish } from "../models/cards.ts";
+import { canonicalGame, DEFAULT_GAME, type TradingCardGame } from "../models/games.ts";
 
 /**
  * The collection as an OR-Set of (card, finish) rows.
@@ -17,6 +18,14 @@ export interface OwnedPrinting {
   cardId: string;
   setId: string;
   finish: CollectFinish;
+  /**
+   * Which game this row belongs to. **Omitted for Pokémon**, which is the
+   * default and by far the common case: writing it on every row would add a
+   * redundant field to tens of thousands of them, and localStorage running out
+   * is a bug this app has already had. Absence is resolved by `canonicalGame`
+   * on read, so old rows and new ones mean the same thing.
+   */
+  game?: TradingCardGame;
   /** When this printing was marked owned. */
   at: number;
   /** When it was un-marked. Present means "not owned", not "never owned". */
@@ -26,8 +35,22 @@ export interface OwnedPrinting {
 /** Tombstones older than this are dropped — see pruneTombstones. */
 export const TOMBSTONE_TTL_MS = 180 * 24 * 60 * 60_000;
 
-export function printingKey(cardId: string, finish: CollectFinish): string {
-  return `${cardId}|${finish}`;
+/** The game a row belongs to, with absence meaning the default. */
+export function rowGame(row: Pick<OwnedPrinting, "game">): TradingCardGame {
+  return canonicalGame(row.game);
+}
+
+/**
+ * The OR-Set key.
+ *
+ * Computed, never stored — which is what makes it safe to have grown a game
+ * segment. A row saved before games existed resolves to the default and
+ * produces the identical key it always did, so nothing already on a device or
+ * on the server changes identity, and the merge cannot split one printing into
+ * two rows the way writing raw finishes once did.
+ */
+export function printingKey(cardId: string, finish: CollectFinish, game?: TradingCardGame): string {
+  return `${canonicalGame(game)}|${cardId}|${finish}`;
 }
 
 export function isLive(row: OwnedPrinting): boolean {
@@ -64,7 +87,7 @@ export function mergePrintings(...sets: OwnedPrinting[][]): OwnedPrinting[] {
   const winners = new Map<string, OwnedPrinting>();
   for (const rows of sets) {
     for (const row of rows) {
-      const key = printingKey(row.cardId, row.finish);
+      const key = printingKey(row.cardId, row.finish, row.game);
       const existing = winners.get(key);
       winners.set(key, existing ? pickWinner(existing, row) : row);
     }
@@ -84,4 +107,15 @@ export function pruneTombstones(rows: OwnedPrinting[], now = Date.now()): OwnedP
 /** Rows the user currently owns, tombstones excluded. */
 export function livePrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
   return rows.filter(isLive);
+}
+
+/**
+ * Rows belonging to one game.
+ *
+ * Every count the UI shows — cards per set, printings held, what the
+ * collection is worth — is a question about one game at a time. Mixing them
+ * would not error, it would just quietly answer a question nobody asked.
+ */
+export function gamePrintings(rows: OwnedPrinting[], game: TradingCardGame = DEFAULT_GAME) {
+  return rows.filter((r) => rowGame(r) === game);
 }

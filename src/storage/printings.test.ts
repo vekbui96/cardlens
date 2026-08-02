@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TOMBSTONE_TTL_MS,
+  gamePrintings,
   isLive,
   livePrintings,
   mergePrintings,
@@ -106,5 +107,77 @@ describe("livePrintings", () => {
   it("returns only owned rows", () => {
     const rows = [row(), row({ cardId: "x-1", at: 1, deletedAt: 2 })];
     expect(keys(livePrintings(rows))).toEqual(["base1-4|holofoil"]);
+  });
+});
+
+describe("rows that belong to different games", () => {
+  /**
+   * The riskiest property in the whole change. Rows written before games
+   * existed have no `game` field; if they keyed differently from a row written
+   * now, one printing would become two and BOTH would survive the merge —
+   * exactly the bug raw finishes caused when "holofoil" and "holo" were both
+   * stored for one printing.
+   */
+  it("treats an old row and an explicit Pokémon row as the same printing", () => {
+    const legacy = row({ at: 100 });
+    const explicit = row({ game: "pokemon", at: 200 });
+
+    const merged = mergePrintings([legacy], [explicit]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].at).toBe(200);
+  });
+
+  it("keeps the same card id in two games apart", () => {
+    // Nothing guarantees ids are unique across games — TCGplayer numbers them
+    // per category — so this is what stops one game's marks appearing in
+    // another's counts.
+    const pokemon = row({ cardId: "1-1", at: 100 });
+    const lorcana = row({ cardId: "1-1", game: "lorcana", at: 100 });
+
+    expect(mergePrintings([pokemon], [lorcana])).toHaveLength(2);
+  });
+
+  it("cannot have one game's deletion tombstone another game's card", () => {
+    const pokemon = row({ cardId: "1-1", at: 100 });
+    const deletedElsewhere = row({ cardId: "1-1", game: "magic", at: 100, deletedAt: 500 });
+
+    const merged = mergePrintings([pokemon], [deletedElsewhere]);
+
+    expect(livePrintings(merged).map((r) => r.game)).toEqual([undefined]);
+  });
+
+  it("stays order-independent and idempotent across games", () => {
+    const a = row({ cardId: "1-1", at: 100 });
+    const b = row({ cardId: "1-1", game: "magic", at: 300 });
+    const c = row({ cardId: "1-1", game: "magic", at: 200 });
+
+    const forward = mergePrintings([a], [b], [c]);
+    const backward = mergePrintings([c], [b], [a]);
+    const twice = mergePrintings(forward, forward);
+
+    const sortKey = (rows: OwnedPrinting[]) =>
+      rows.map((r) => `${r.game ?? "pokemon"}|${r.cardId}|${r.at}`).sort();
+    expect(sortKey(forward)).toEqual(sortKey(backward));
+    expect(sortKey(twice)).toEqual(sortKey(forward));
+    // The newest Magic write wins, and Pokémon is untouched by it.
+    expect(forward.find((r) => r.game === "magic")?.at).toBe(300);
+  });
+
+  it("reads an unknown game as the default rather than dropping the row", () => {
+    // A hostile payload or a newer client must not be able to partition the
+    // OR-Set into keys this build will never look under.
+    const weird = { ...row({ cardId: "1-1" }), game: "buckets" } as unknown as OwnedPrinting;
+
+    expect(mergePrintings([row({ cardId: "1-1" })], [weird])).toHaveLength(1);
+  });
+});
+
+describe("gamePrintings", () => {
+  it("answers for one game at a time, defaulting to Pokémon", () => {
+    const rows = [row({ cardId: "a-1" }), row({ cardId: "b-1", game: "lorcana" })];
+
+    expect(gamePrintings(rows).map((r) => r.cardId)).toEqual(["a-1"]);
+    expect(gamePrintings(rows, "lorcana").map((r) => r.cardId)).toEqual(["b-1"]);
   });
 });

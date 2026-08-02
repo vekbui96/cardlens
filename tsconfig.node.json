@@ -31,6 +31,7 @@
     "src/storage/printings.ts",
     "src/models/cards.ts",
     "src/models/finishes.ts",
+    "src/models/games.ts",
     "src/models/sealed.ts",
     "src/integrations/providers.ts",
     "src/integrations/tcgdex/client.ts",
