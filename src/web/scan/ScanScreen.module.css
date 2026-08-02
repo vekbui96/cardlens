@@ -1,7 +1,10 @@
 /*
- * The preview is the screen. Everything else is sized around it rather than the
- * other way round, because a scanner where the camera is a small box at the top
- * is a form with a camera on it.
+ * The preview owns the space and never gives it up.
+ *
+ * The first version put the result panel in the same column, so the stage
+ * shrank the moment a card was recognised — the guide moved under the card the
+ * user was still holding. Everything below the stage now has a reserved height
+ * whether or not it has anything in it.
  */
 .stage {
   position: relative;
@@ -85,12 +88,51 @@
   line-height: 1.45;
 }
 
+/*
+ * Fixed height, present from the first render. This is the row that would
+ * otherwise appear on the first capture and steal the preview's space.
+ */
+.strip {
+  flex: 0 0 auto;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.stripEmpty {
+  color: var(--cl-fg-dim);
+  font-size: var(--cl-fs-small);
+}
+
+.stripThumb {
+  flex: 0 0 auto;
+  height: 54px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* The ones that will need a decision, marked while still scanning so the count
+   at the bottom is never a surprise. */
+.stripUnsure {
+  border-color: var(--cl-warn);
+  border-width: 2px;
+}
+
 .controls {
   flex: 0 0 auto;
+  display: flex;
+  gap: var(--cl-gap-sm);
 }
 
 .shutter {
-  width: 100%;
+  flex: 2 1 0;
   min-height: 56px;
   border: none;
   border-radius: var(--cl-radius);
@@ -102,36 +144,31 @@
   cursor: pointer;
 }
 
-.shutter:disabled {
-  opacity: 0.55;
+.reviewButton {
+  flex: 1 1 0;
+  min-height: 56px;
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shutter:disabled,
+.reviewButton:disabled {
+  opacity: 0.5;
   cursor: default;
 }
 
-.result {
-  flex: 0 0 auto;
-  background: var(--cl-surface);
-  border: var(--cl-border-strong);
-  border-radius: var(--cl-radius);
-  padding: var(--cl-gap);
-}
+/* --- Review --------------------------------------------------------------- */
 
-.verdict {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin: 0 0 var(--cl-gap-sm);
-  font-weight: 650;
-}
-
-/* Shown, not hidden behind a percentage: a real distance is checkable and a
-   made-up confidence score is not. */
-.distance {
-  font-size: var(--cl-fs-small);
-  color: var(--cl-fg-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.candidates {
+.review {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -140,16 +177,32 @@
   gap: var(--cl-gap-sm);
 }
 
-.candidate {
+.row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--cl-gap-sm) var(--cl-gap);
-  align-items: center;
+  gap: var(--cl-gap);
+  padding: var(--cl-gap-sm);
+  background: var(--cl-surface);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm);
 }
 
-.meta {
+/* Dimmed, not removed: a rejected row has to stay reachable to be un-rejected,
+   and a list that reorders itself under a thumb is hard to work down. */
+.rowRejected {
+  opacity: 0.45;
+}
+
+.thumb {
+  width: 54px;
+  border-radius: 4px;
+  align-self: start;
+}
+
+.rowBody {
   display: flex;
   flex-direction: column;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -165,40 +218,89 @@
   color: var(--cl-fg-muted);
 }
 
-.owned {
-  font-size: var(--cl-fs-small);
-  color: var(--cl-accent);
-}
-
-.actions {
-  grid-column: 1 / -1;
+.picker {
   display: flex;
-  gap: var(--cl-gap-sm);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.actions button {
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   min-height: 44px;
-  flex: 1 1 auto;
-  padding: 0 var(--cl-gap);
+  padding: 6px var(--cl-gap-sm);
   border-radius: var(--cl-radius-sm);
   border: var(--cl-border-strong);
-  background: var(--cl-surface-raised);
+  background: none;
   color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.optionOn {
+  border-color: transparent;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.optionSub {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border-radius: 999px;
+  border: var(--cl-border-strong);
+  background: none;
+  color: var(--cl-fg-muted);
   font-family: inherit;
   font-size: var(--cl-fs-small);
   font-weight: 600;
   cursor: pointer;
 }
 
+.chipOn {
+  border-color: transparent;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
 .link {
-  background: none !important;
-  color: var(--cl-fg-muted) !important;
-  border-color: transparent !important;
+  min-height: 44px;
+  padding: 0 var(--cl-gap-sm);
+  border: none;
+  background: none;
+  color: var(--cl-fg-dim);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  cursor: pointer;
+}
+
+.footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.footer .shutter {
+  flex: none;
+  width: 100%;
 }
 
 .dismiss {
-  margin-top: var(--cl-gap-sm);
   width: 100%;
   min-height: 44px;
   border: none;
@@ -208,12 +310,4 @@
   font-family: inherit;
   font-size: var(--cl-fs-small);
   cursor: pointer;
-}
-
-.footnote {
-  flex: 0 0 auto;
-  margin: 0;
-  text-align: center;
-  font-size: var(--cl-fs-small);
-  color: var(--cl-fg-dim);
 }

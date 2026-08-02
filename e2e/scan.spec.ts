@@ -55,38 +55,76 @@ test.describe("card scanner", () => {
     await expect(capture).toBeEnabled({ timeout: 15000 });
     await capture.click();
 
-    await expect(page.getByRole("group", { name: "Scan result" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /review 1/i })).toBeVisible();
     expect(external, `scan made external requests: ${external.join(", ")}`).toHaveLength(0);
   });
 
-  test("offers a choice rather than guessing when it is not sure", async ({ page }) => {
+  test("does not resize the preview when a card is captured", async ({ page }) => {
+    // The first version put results in the same column as the preview, so the
+    // stage shrank on the first capture and the guide moved under the card the
+    // user was still holding.
     await page.goto("/?ui=web#/scan");
     await page.getByRole("button", { name: "Start camera" }).click();
-    await page.getByRole("button", { name: "Capture" }).click();
+    const capture = page.getByTestId("capture");
+    await expect(capture).toBeEnabled({ timeout: 15000 });
 
-    const result = page.getByRole("group", { name: "Scan result" });
-    await expect(result).toBeVisible();
-    // A rolling test pattern is not a card, so this must land in the unsure
-    // branch and show alternatives instead of filing something wrong.
-    await expect(result.getByText("Not sure — pick one")).toBeVisible();
-    await expect(result.getByRole("button", { name: "Normal" })).toHaveCount(3);
+    const stage = page.locator("video");
+    const before = await stage.boundingBox();
+    await capture.click();
+    await capture.click();
+    await expect(page.getByRole("button", { name: /review 2/i })).toBeVisible();
+    const after = await stage.boundingBox();
+
+    expect(after!.height, "preview shrank after capturing").toBeCloseTo(before!.height, 0);
+    expect(after!.y, "preview moved after capturing").toBeCloseTo(before!.y, 0);
   });
 
-  test("marks a card owned and returns to scanning", async ({ page }) => {
+  test("keeps scanning without asking, then reviews the batch", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
     await page.getByRole("button", { name: "Start camera" }).click();
-    await page.getByRole("button", { name: "Capture" }).click();
+    const capture = page.getByTestId("capture");
+    await expect(capture).toBeEnabled({ timeout: 15000 });
 
-    await page
-      .getByRole("group", { name: "Scan result" })
-      .getByRole("button", { name: "Normal" })
-      .first()
-      .click();
+    // Three cards in a row with no interruption — that is the whole point.
+    await capture.click();
+    await capture.click();
+    await capture.click();
+    await expect(page.getByRole("group", { name: "Scan result" })).toHaveCount(0);
 
-    // The result clears so the next card can go straight under the camera, and
-    // the header counts what the session has added.
-    await expect(page.getByRole("group", { name: "Scan result" })).toBeHidden();
+    await page.getByRole("button", { name: /review 3/i }).click();
+    await expect(page.getByTestId("review-row")).toHaveCount(3);
+  });
+
+  test("will not add a card it could not identify on its own", async ({ page }) => {
+    // The fake device shows a rolling pattern, not a card, so every capture
+    // lands unsure. Those must not be silently filed.
+    await page.goto("/?ui=web#/scan");
+    await page.getByRole("button", { name: "Start camera" }).click();
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    await expect(page.getByRole("button", { name: "Nothing to add" })).toBeDisabled();
+    await expect(page.getByText(/still needs? a choice/)).toBeVisible();
+  });
+
+  test("adds the batch once the unsure ones are answered", async ({ page }) => {
+    await page.goto("/?ui=web#/scan");
+    await page.getByRole("button", { name: "Start camera" }).click();
+    await page.getByTestId("capture").click();
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 2/i }).click();
+
+    // Answer the first, reject the second.
+    const rows = page.getByTestId("review-row");
+    await rows.first().getByRole("group", { name: "Pick the card" }).getByRole("button").first().click();
+    await rows.nth(1).getByRole("button", { name: "Reject" }).click();
+
+    await page.getByRole("button", { name: "Add 1 card" }).click();
+
+    // Back to scanning with an empty queue, and the header counts the session.
+    await expect(page.getByTestId("capture")).toBeVisible();
     await expect(page.getByText("1 added")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Done" })).toBeDisabled();
   });
 
   test("is reachable from the menu", async ({ page }) => {
