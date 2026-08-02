@@ -1,0 +1,19 @@
+{
+  "name": "CardLens Camera Check",
+  "short_name": "Cam Check",
+  "description": "Does getUserMedia work in an installed PWA on this device?",
+  "start_url": "/cardlens/camera-check/",
+  "scope": "/cardlens/camera-check/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080b13",
+  "theme_color": "#080b13",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

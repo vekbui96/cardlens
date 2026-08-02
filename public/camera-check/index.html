@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>CardLens Camera Check</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#080b13" />
+    <!--
+      A deliberately standalone page, not part of the app.
+
+      It answers one question: does getUserMedia work in a PWA installed to the
+      home screen on this device? That has historically been broken on iOS, and
+      it is the single assumption that would sink a browser-based card scanner.
+      Better to spend one afternoon finding out than to build a scanner on top
+      of it.
+
+      Self-contained on purpose — no build step, no bundle, nothing to go wrong
+      between the question and the answer.
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080b13;
+        --fg: #e9edf7;
+        --muted: #8a94ad;
+        --ok: #4ade80;
+        --bad: #ff7a7a;
+        --warn: #f2b544;
+        --accent: #5b8cff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: max(16px, env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.45 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      p.sub {
+        margin: 0 0 20px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .verdict {
+        padding: 16px;
+        border-radius: 14px;
+        margin-bottom: 16px;
+        font-weight: 650;
+        font-size: 18px;
+        background: #111726;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .verdict.ok {
+        color: var(--ok);
+        border-color: rgba(74, 222, 128, 0.4);
+      }
+      .verdict.bad {
+        color: var(--bad);
+        border-color: rgba(255, 122, 122, 0.4);
+      }
+      .verdict.warn {
+        color: var(--warn);
+        border-color: rgba(242, 181, 68, 0.4);
+      }
+      button {
+        width: 100%;
+        min-height: 56px;
+        border: none;
+        border-radius: 14px;
+        background: var(--accent);
+        color: #05102b;
+        font: inherit;
+        font-weight: 650;
+        font-size: 17px;
+        cursor: pointer;
+        margin-bottom: 12px;
+      }
+      button.secondary {
+        background: #1a2133;
+        color: var(--fg);
+      }
+      video {
+        width: 100%;
+        border-radius: 14px;
+        background: #000;
+        display: none;
+        margin-bottom: 12px;
+        aspect-ratio: 3 / 4;
+        object-fit: cover;
+      }
+      video.on {
+        display: block;
+      }
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        font-size: 14px;
+      }
+      dt {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      dd {
+        margin: 0;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        word-break: break-word;
+      }
+      .card {
+        background: #111726;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .steps {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .steps b {
+        color: var(--fg);
+      }
+      textarea {
+        width: 100%;
+        height: 150px;
+        background: #0d1220;
+        color: var(--fg);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        padding: 10px;
+        font:
+          12px/1.4 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Camera check</h1>
+    <p class="sub">Does the rear camera open in an installed PWA?</p>
+
+    <div class="verdict" id="verdict">Tap “Start camera” below.</div>
+
+    <button id="start">Start camera</button>
+    <video id="preview" playsinline muted autoplay></video>
+
+    <div class="card">
+      <dl id="facts"></dl>
+    </div>
+
+    <div class="card steps" id="steps">
+      <b>To test the case that matters:</b><br />
+      1. In Safari, tap Share → <b>Add to Home Screen</b>.<br />
+      2. Close Safari, open it from the <b>home screen icon</b>.<br />
+      3. Tap Start camera again and compare.<br /><br />
+      “Mode” below must read <b>standalone</b> for the real test. In a browser tab it reads <b>browser</b>,
+      and that case has always worked.
+    </div>
+
+    <button class="secondary" id="copy">Copy results</button>
+    <textarea id="out" readonly></textarea>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const facts = {};
+
+      function displayMode() {
+        if (window.navigator.standalone === true) return "standalone (iOS)";
+        for (const mode of ["standalone", "fullscreen", "minimal-ui"]) {
+          if (window.matchMedia(`(display-mode: ${mode})`).matches) return mode;
+        }
+        return "browser";
+      }
+
+      function render() {
+        el("facts").innerHTML = Object.entries(facts)
+          .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+          .join("");
+        el("out").value = Object.entries(facts)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n");
+      }
+
+      function verdict(text, kind) {
+        const node = el("verdict");
+        node.textContent = text;
+        node.className = `verdict ${kind}`;
+      }
+
+      facts["Mode"] = displayMode();
+      facts["Secure context"] = window.isSecureContext ? "yes" : "NO — camera needs HTTPS";
+      facts["getUserMedia"] = navigator.mediaDevices?.getUserMedia ? "present" : "MISSING";
+      facts["User agent"] = navigator.userAgent;
+      render();
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        verdict("getUserMedia is not available at all here.", "bad");
+      }
+
+      el("start").addEventListener("click", async () => {
+        verdict("Asking for the camera…", "warn");
+        const started = performance.now();
+        try {
+          // environment = the rear camera, which is the one a scanner needs.
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 } },
+            audio: false,
+          });
+          const video = el("preview");
+          video.srcObject = stream;
+          video.classList.add("on");
+          await video.play().catch(() => {});
+
+          const track = stream.getVideoTracks()[0];
+          const s = track.getSettings();
+          facts["Camera opened"] = "YES";
+          facts["Time to open"] = `${Math.round(performance.now() - started)} ms`;
+          facts["Resolution"] = `${s.width}x${s.height}`;
+          facts["Frame rate"] = s.frameRate ? `${Math.round(s.frameRate)} fps` : "unknown";
+          facts["Facing"] = s.facingMode ?? "unreported";
+          facts["Device"] = track.label || "unnamed";
+
+          // A scanner reads pixels every frame; opening the camera is only half
+          // the question. If the canvas readback is blocked, nothing works.
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = 64;
+            canvas.height = 64;
+            canvas.getContext("2d").drawImage(video, 0, 0, 64, 64);
+            const data = canvas.getContext("2d").getImageData(0, 0, 64, 64).data;
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 4) sum += data[i];
+            facts["Pixel readback"] = sum > 0 ? "YES" : "blank frame";
+          } catch (err) {
+            facts["Pixel readback"] = `BLOCKED — ${err.name}`;
+          }
+
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            facts["Cameras found"] = devices.filter((d) => d.kind === "videoinput").length;
+          } catch {
+            facts["Cameras found"] = "enumerate failed";
+          }
+
+          const standalone = facts["Mode"].startsWith("standalone");
+          verdict(
+            standalone
+              ? "PASS — the camera works in the installed app."
+              : "Works in a browser tab. Now install it and run again.",
+            standalone ? "ok" : "warn",
+          );
+        } catch (err) {
+          facts["Camera opened"] = "NO";
+          facts["Error"] = `${err.name}: ${err.message}`;
+          verdict(`FAILED — ${err.name}. Copy the results below.`, "bad");
+        }
+        render();
+      });
+
+      el("copy").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(el("out").value);
+          el("copy").textContent = "Copied";
+          setTimeout(() => (el("copy").textContent = "Copy results"), 1500);
+        } catch {
+          el("out").select();
+        }
+      });
+    </script>
+  </body>
+</html>
