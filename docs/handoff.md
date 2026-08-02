@@ -26,7 +26,7 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **2**)     |
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
 | Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
-| Deployed at       | `a033920` — both Pages and server, CI green                         |
+| Deployed at       | `66b98cb` — Pages; server unchanged since `a033920`                 |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
@@ -34,7 +34,10 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 
 ## Immediate next task
 
-Nothing is half-built. Two plans compete for what comes next:
+Nothing is half-built. `#/owned` ("My cards" in the web menu) now lists every printing held
+and sorts it four ways; the glasses fall back to Collection there and never download the chunk.
+
+Two plans compete for what comes next:
 
 - **`docs/web-plan.md`** — the phone/desktop client. Search is the biggest gap (one prefix
   token, 40-result cap, no way to search your own collection), then a real collection
