@@ -28,11 +28,16 @@ export const PRINTINGS_TTL_MS = 30 * 24 * 60 * 60_000;
  *
  * v2 — printings carry a `price`.
  * v3 — printings carry `eur` rolling averages for movement.
+ * v4 — cards whose variants TCGdex generated take their lone market price.
  *
- * Only bump for a SHAPE change. Bumping when the output is byte-identical costs
- * a full refetch of every set (120-295 upstream requests each) and buys nothing.
+ * Bump for a SHAPE change, or when a field callers already read starts holding
+ * a materially different VALUE — v4 is the second kind. It is the same hazard
+ * the version guard exists for: without it, sets cached before the fix would
+ * keep serving the missing prices for up to 30 days and look correct doing it.
+ * Do not bump when the output is byte-identical; a full refetch costs 120-295
+ * upstream requests per set and buys nothing.
  */
-export const PRINTINGS_CACHE_VERSION = 3;
+export const PRINTINGS_CACHE_VERSION = 4;
 
 interface CacheEntry {
   at: number;

@@ -21,6 +21,13 @@ export const TcgdexVariantSchema = z.object({
   /** Pattern name when the printing is a patterned foil; absent for plain ones. */
   foil: z.string().optional(),
   size: z.string().optional(),
+  /**
+   * `"generated"` when TCGdex has no real variant data and synthesised this
+   * entry. Older sets are entirely generated — every card in Hidden Fates and
+   * Team Up reports a single made-up `normal` — so the type carries no
+   * information there and must not be treated as evidence. See toPrintings.
+   */
+  variantId: z.string().optional(),
 });
 export type TcgdexVariant = z.infer<typeof TcgdexVariantSchema>;
 

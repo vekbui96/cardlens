@@ -30,9 +30,20 @@ export function WebOwnedCardsScreen() {
     <section className={styles.screen} aria-label="My cards">
       <header className={styles.head}>
         <h2 className={styles.title}>My cards</h2>
+        {/*
+          The total appears only once there is one. formatUsd renders a
+          non-positive figure as "Unavailable", which is right for one card and
+          wrong here: a running total of zero means nothing has priced yet, and
+          saying so in the money slot reads as a failure rather than progress.
+        */}
         <p className={styles.summary}>
-          <span className={styles.count}>{rows.length}</span> printings ·{" "}
-          <span className={styles.total}>{formatUsd(total)}</span>
+          <span className={styles.count}>{rows.length}</span> printings
+          {total > 0 ? (
+            <>
+              {" · "}
+              <span className={styles.total}>{formatUsd(total)}</span>
+            </>
+          ) : null}
           {pending > 0 ? (
             <span className={styles.pending}> · pricing {pending === 1 ? "1 set" : `${pending} sets`}…</span>
           ) : unpriced > 0 ? (
@@ -80,8 +91,15 @@ export function WebOwnedCardsScreen() {
                   ) : null}
                 </span>
                 <span className={styles.name}>{row.name}</span>
+                {/*
+                  Finish first, set last. Two rows of the same card differ only
+                  by finish, so it is the one field that must survive the
+                  ellipsis on a narrow phone — with the set leading, a pair of
+                  Charizards truncated to "Obsidian Flames · 125 · R…" and
+                  "… · N…", which is the only part that told them apart.
+                */}
                 <span className={styles.meta}>
-                  {row.setName} · {row.collectorNumber} · {finishLabel(row.finish)}
+                  {finishLabel(row.finish)} · {row.setName} {row.collectorNumber}
                 </span>
                 {/*
                   No price is not a zero price: pattern foils are routinely

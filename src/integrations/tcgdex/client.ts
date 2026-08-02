@@ -253,9 +253,36 @@ function eurAverages(card: TcgdexCard, type: string): Printing["eur"] {
   return { avg1, avg7, avg30 };
 }
 
+/**
+ * The market price when the card's variant list is a placeholder.
+ *
+ * TCGdex synthesises a variant when it has no real data, marking it
+ * `variantId: "generated"`. Whole older sets are like this — measured, every
+ * card in Hidden Fates (69) and Team Up (196) is generated, each reporting one
+ * made-up `normal` printing — so matching the price key against that type
+ * throws away prices the API is plainly reporting: 12 of 69 Hidden Fates cards
+ * and 45 of 196 Team Up cards, including Moltres & Zapdos & Articuno GX at
+ * $62.04 under a `holofoil` key against a `normal` variant.
+ *
+ * One placeholder printing and one price cannot be mismatched — there is
+ * nothing else either could refer to — so that pairing is taken. Two prices is
+ * a real choice and stays unpriced, because a wrong price is worse than a
+ * missing one. Where variants are NOT generated, TCGdex is asserting something
+ * and is believed: measured against me05, where no card is generated, this
+ * changes nothing.
+ */
+function lonePlaceholderPrice(card: TcgdexCard, prices: Record<string, number>): number | undefined {
+  const variants = card.variants_detailed ?? [];
+  const values = Object.values(prices);
+  if (variants.length !== 1 || values.length !== 1) return undefined;
+  if (variants[0]?.variantId !== "generated" || variants[0]?.foil) return undefined;
+  return values[0];
+}
+
 export function toPrintings(card: TcgdexCard): Printing[] {
   const seen = new Set<string>();
   const prices = marketPricesByType(card);
+  const placeholder = lonePlaceholderPrice(card, prices);
   const out: Printing[] = [];
   for (const variant of card.variants_detailed ?? []) {
     const key = `${variant.type}|${variant.foil ?? ""}`;
@@ -264,7 +291,7 @@ export function toPrintings(card: TcgdexCard): Printing[] {
     // Only unpatterned printings take a price. TCGdex reports no separate key
     // for pattern foils, so giving a Poké Ball reverse the plain reverse price
     // would invent a number — those stay unpriced.
-    const price = variant.foil ? undefined : prices[variant.type];
+    const price = variant.foil ? undefined : (prices[variant.type] ?? placeholder);
     const eur = eurAverages(card, variant.type);
     out.push({
       type: variant.type,

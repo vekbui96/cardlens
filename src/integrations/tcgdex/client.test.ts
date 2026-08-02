@@ -204,6 +204,53 @@ describe("toPrintings", () => {
     expect(toPrintings(card)).toEqual([{ type: "normal" }]);
   });
 
+  it("prices a card whose only variant was generated and whose only key disagrees", () => {
+    // Live: sm115-44 (Moltres & Zapdos & Articuno GX) reports one variant,
+    // {type: "normal", variantId: "generated"}, and exactly one price key,
+    // holofoil $62.04. TCGdex has no variant data for the set at all — every
+    // card in Hidden Fates and Team Up is generated — so "normal" is a
+    // placeholder, not a claim. Matching key to type strictly left 12 of 69
+    // Hidden Fates cards and 45 of 196 Team Up cards unpriced, and they are the
+    // expensive ones. One variant and one price cannot be mismatched, so the
+    // price is attached.
+    const card = {
+      id: "sm115-44",
+      localId: "44",
+      variants_detailed: [{ type: "normal", variantId: "generated" }],
+      pricing: { tcgplayer: { holofoil: { marketPrice: 62.04 }, unit: "USD" } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "normal", price: 62.04 }]);
+  });
+
+  it("will not guess when a generated card has more than one price to choose from", () => {
+    // Two keys and one placeholder variant is genuinely ambiguous: whichever
+    // price is picked might be the wrong one, and a wrong price is worse than
+    // a missing one.
+    const card = {
+      id: "x-2",
+      localId: "2",
+      variants_detailed: [{ type: "normal", variantId: "generated" }],
+      pricing: { tcgplayer: { holofoil: { marketPrice: 9 }, "reverse-holofoil": { marketPrice: 4 } } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "normal" }]);
+  });
+
+  it("leaves real variant data alone when the key does not match", () => {
+    // Not generated: TCGdex is asserting this card exists in normal, and the
+    // lone holofoil key describes a printing it says the card does not have.
+    // Measured: this rule changes nothing for me05, where no card is generated.
+    const card = {
+      id: "me05-002",
+      localId: "002",
+      variants_detailed: [{ type: "normal" }],
+      pricing: { tcgplayer: { holofoil: { marketPrice: 9 } } },
+    };
+
+    expect(toPrintings(card)).toEqual([{ type: "normal" }]);
+  });
+
   it("never prices a patterned foil off the plain finish's key", () => {
     // TCGdex publishes no separate key for reverse:pokeball etc.; giving it
     // the plain reverse price would fabricate a number.

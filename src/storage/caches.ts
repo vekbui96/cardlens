@@ -33,5 +33,10 @@ export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards
  * of sets: assembling one costs a request per card (120-295), so this is the
  * difference between a 1.5s background fill and doing it on every visit.
  * Printings for a released set essentially never change.
+ *
+ * v4 alongside the server's PRINTINGS_CACHE_VERSION: the prices inside changed
+ * for cards whose variants TCGdex generated, and a device holding a v3 entry
+ * would sit on the old priceless copy for 30 days no matter what the server
+ * sends. Both versions have to move together or only new devices see the fix.
  */
-export const printingsCache = new TtlCache<SetPrintings>("cache:printings:v3", 30 * DAY, 8);
+export const printingsCache = new TtlCache<SetPrintings>("cache:printings:v4", 30 * DAY, 8);

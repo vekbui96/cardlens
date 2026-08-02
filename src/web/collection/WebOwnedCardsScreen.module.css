@@ -41,19 +41,16 @@
 }
 
 /*
- * Scrolls sideways rather than wrapping: four chips on a narrow phone would
- * otherwise wrap to a second line and push the list itself below the fold.
+ * Wraps rather than scrolling sideways. A hidden-scrollbar strip saved a row of
+ * height and cost the fourth chip: at 360px "Set & number" ran off the edge with
+ * nothing on screen to say it was still there, so a sort you own simply looked
+ * absent. A second line is cheaper than an invisible control.
  */
 .sorts {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--cl-gap-xs);
   padding: 0 var(--cl-gap) var(--cl-gap);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.sorts::-webkit-scrollbar {
-  display: none;
 }
 
 .sort {
@@ -96,7 +93,10 @@
 .row {
   width: 100%;
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  /* minmax(0, 1fr), not 1fr: a plain 1fr track floors at its content's
+     min-width, so a long set name would push the price off the row instead of
+     ellipsing. */
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: 2px var(--cl-gap-sm);
   padding: var(--cl-gap-xs) var(--cl-gap-sm);
