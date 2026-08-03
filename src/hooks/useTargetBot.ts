@@ -21,6 +21,18 @@ const REFETCH_MS = 30_000;
  */
 const CHECK_TIMEOUT_MS = 90_000;
 
+/** A cart test is a check plus the add, the checkout click and the cleanup. */
+const CART_TIMEOUT_MS = 120_000;
+
+export interface CartTestResult {
+  ok: boolean;
+  detail: string;
+  /** Items the cleanup pass removed — should be 1 after a successful add. */
+  removed: number;
+  /** PNG data URI showing where the flow stopped, or null if none was taken. */
+  screenshot: string | null;
+}
+
 export class TargetAuthError extends Error {
   constructor() {
     super("Sync token missing or rejected");
@@ -124,6 +136,20 @@ export function useTargetBot() {
     onSuccess: invalidate,
   });
 
+  /**
+   * Carts the item for real, then empties the cart again.
+   *
+   * The only way to prove the cart path works, since it needs the hard Target
+   * login and a restock cannot be scheduled. Longer timeout than a check: it
+   * walks the product page, the add, the cart, the checkout click and the
+   * cleanup.
+   */
+  const testCart = useMutation({
+    mutationFn: (tcin: string) =>
+      post(`/watchlist/${tcin}/testcart`, undefined, CART_TIMEOUT_MS) as Promise<CartTestResult>,
+    onSuccess: invalidate,
+  });
+
   const setPaused = useMutation({
     mutationFn: (paused: boolean) => post("/pause", { paused }),
     onSuccess: invalidate,
@@ -140,6 +166,7 @@ export function useTargetBot() {
     remove,
     update,
     checkNow,
+    testCart,
     setPaused,
   };
 }

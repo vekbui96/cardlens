@@ -269,3 +269,41 @@
   outline: var(--cl-focus-ring);
   outline-offset: 2px;
 }
+
+/* --- Cart test result ---------------------------------------------------- */
+
+.cartResult {
+  margin-top: var(--cl-gap-sm);
+  padding: var(--cl-gap-sm);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, var(--cl-radius));
+  background: var(--cl-bg);
+}
+
+.cartOk,
+.cartBad {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+}
+
+.cartOk {
+  color: var(--cl-accent-strong);
+}
+
+.cartBad {
+  color: var(--cl-error);
+}
+
+/* Full width, capped height: the useful part is the top of the page, and an
+   uncapped 800px-tall screenshot pushes every other product off screen. */
+.shot {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  object-position: top;
+  margin-top: var(--cl-gap-sm);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, var(--cl-radius));
+}

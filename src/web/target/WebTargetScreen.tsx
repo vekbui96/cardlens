@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useTargetBot } from "../../hooks/useTargetBot.ts";
+import { useTargetBot, type CartTestResult } from "../../hooks/useTargetBot.ts";
 import { extractTcin, statusLabel, type WatchedProduct } from "../../models/target.ts";
 import { formatUpdated } from "../../utils/format.ts";
 import styles from "./WebTargetScreen.module.css";
@@ -225,6 +225,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function ProductRow({ product, bot }: { product: WatchedProduct; bot: Bot }) {
   const checking = bot.checkNow.isPending && bot.checkNow.variables === product.tcin;
+  const carting = bot.testCart.isPending && bot.testCart.variables === product.tcin;
+  const cartResult = bot.testCart.variables === product.tcin ? bot.testCart.data : undefined;
+  const cartFailed = bot.testCart.variables === product.tcin && bot.testCart.isError;
   const tone =
     product.lastStatus === "IN_STOCK"
       ? styles.good
@@ -278,6 +281,18 @@ function ProductRow({ product, bot }: { product: WatchedProduct; bot: Bot }) {
           {checking ? "Checking…" : "Check now"}
         </button>
 
+        {/* Puts a real item in a real cart before removing it, so it says so
+            rather than sitting next to "Check now" looking equally harmless. */}
+        <button
+          type="button"
+          className={styles.secondary}
+          disabled={carting}
+          onClick={() => bot.testCart.mutate(product.tcin)}
+          title="Adds this to your Target cart, then removes it again"
+        >
+          {carting ? "Carting…" : "Test cart"}
+        </button>
+
         {product.healthCheck ? null : (
           <button
             type="button"
@@ -289,6 +304,45 @@ function ProductRow({ product, bot }: { product: WatchedProduct; bot: Bot }) {
           </button>
         )}
       </div>
+
+      {carting ? <p className={styles.meta}>Driving the browser — this takes 15–30s.</p> : null}
+
+      {cartFailed ? (
+        <p className={styles.formError}>
+          The cart test could not run — the bot is unreachable, or it took longer than two minutes.
+        </p>
+      ) : null}
+
+      {cartResult ? <CartResult result={cartResult} /> : null}
     </li>
+  );
+}
+
+/**
+ * What the cart attempt actually did.
+ *
+ * The detail string is the bot's own words rather than a mapped-to-friendly
+ * version: "added to cart — Target requires a re-sign-in" tells you the login
+ * expired, and flattening that to "failed" would throw away the one fact
+ * worth having. The screenshot shows where it stopped.
+ */
+function CartResult({ result }: { result: CartTestResult }) {
+  return (
+    <div className={styles.cartResult}>
+      <p className={result.ok ? styles.cartOk : styles.cartBad}>
+        {result.ok ? "Worked" : "Did not complete"} — {result.detail}
+      </p>
+      <p className={styles.meta}>
+        Cleanup removed {result.removed} item{result.removed === 1 ? "" : "s"} from the cart.
+        {result.removed === 0 && result.ok
+          ? " Nothing was removed despite success — check the cart yourself."
+          : ""}
+      </p>
+      {result.screenshot ? (
+        <a href={result.screenshot} target="_blank" rel="noreferrer noopener">
+          <img className={styles.shot} src={result.screenshot} alt="Where the cart attempt stopped" />
+        </a>
+      ) : null}
+    </div>
   );
 }

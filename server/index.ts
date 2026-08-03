@@ -273,6 +273,21 @@ export function createApp(
     await relay(res, "POST", `/api/target/watchlist/${tcin}/check`);
   });
 
+  /**
+   * Run the cart flow now and undo it. Deliberately its own route rather than
+   * a flag on /check: this one puts a real item in a real Target cart before
+   * removing it again, which is not something a status refresh should ever do
+   * by accident.
+   */
+  app.post("/api/target/watchlist/:tcin/testcart", targetLimiter, requireTargetToken, async (req, res) => {
+    const { tcin } = req.params;
+    if (!validTcin(tcin)) {
+      res.status(400).json({ error: "invalid_tcin" });
+      return;
+    }
+    await relay(res, "POST", `/api/target/watchlist/${tcin}/testcart`);
+  });
+
   app.post("/api/target/pause", targetLimiter, requireTargetToken, async (req, res) => {
     const body = req.body as { paused?: unknown };
     if (typeof body?.paused !== "boolean") {

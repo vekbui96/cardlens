@@ -17,10 +17,11 @@ const BOT_TOKEN = process.env.TARGET_BOT_TOKEN ?? "";
 
 /**
  * A stock check drives a real browser through PerimeterX, including a possible
- * re-warm and retry — measured at up to ~30s. The timeout is well clear of that
- * so a slow check reads as slow, not as a failure.
+ * re-warm and retry — measured at up to ~30s. A cart test is longer still: the
+ * product page, the add, the cart, the checkout click, then the cleanup pass.
+ * The timeout is well clear of both so slow reads as slow, not as failure.
  */
-const TIMEOUT_MS = 90_000;
+const TIMEOUT_MS = 120_000;
 
 export interface BotReply {
   status: number;
