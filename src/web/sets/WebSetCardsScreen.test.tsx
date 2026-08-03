@@ -227,13 +227,43 @@ describe("WebSetCardsScreen", () => {
     await user.click(within(sheet).getByRole("button", { name: "Exclude Reverse Holo" }));
     await user.click(within(sheet).getByRole("button", { name: "Done" }));
 
-    // Its own state, not "owned" and not "missing".
-    expect(screen.getByRole("button", { name: /, 125, Reverse Holo, excluded$/ })).toBeInTheDocument();
-
-    // And gone from what is still wanted, which is the whole point.
-    await user.click(screen.getByRole("button", { name: "Missing only" }));
+    // Gone from the grid: it is not part of this set, so leaving it visible is
+    // clutter that can never resolve.
     expect(screen.queryByRole("button", { name: /, 125, Reverse Holo/ })).toBeNull();
+    // The other pocket of the same card is untouched.
     expect(slot("125", "Normal")).toBeInTheDocument();
+
+    // Revealed on demand, and named as excluded rather than as missing.
+    await user.click(screen.getByRole("button", { name: "Excluded (1)" }));
+    expect(await screen.findByRole("button", { name: /, 125, Reverse Holo, excluded$/ })).toBeInTheDocument();
+  });
+
+  it("offers no excluded control until something is excluded", async () => {
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+    await findSlot("125", "Normal");
+    expect(screen.queryByRole("button", { name: /^Excluded \(/ })).toBeNull();
+  });
+
+  it("keeps an all-excluded card recoverable", async () => {
+    // 223 has a single printing, so excluding it removes the card from the
+    // grid entirely. Without the reveal there would be no route back to its
+    // sheet, and no way to undo.
+    const user = userEvent.setup();
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("223", "Holofoil");
+    await user.click(details("223", "Holofoil"));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Exclude Holofoil" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Done" }));
+
+    expect(screen.queryByRole("button", { name: /, 223, / })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Excluded (1)" }));
+    await user.click(await screen.findByRole("button", { name: /^Details for .*, 223, Holofoil$/ }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Include Holofoil" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Done" }));
+
+    expect(slot("223", "Holofoil")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("puts an excluded printing back", async () => {
@@ -247,6 +277,8 @@ describe("WebSetCardsScreen", () => {
     await user.click(within(sheet).getByRole("button", { name: "Include Reverse Holo" }));
     await user.click(within(sheet).getByRole("button", { name: "Done" }));
 
+    // Back in the grid without needing the reveal, because it is no longer
+    // excluded at all.
     expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "false");
   });
 

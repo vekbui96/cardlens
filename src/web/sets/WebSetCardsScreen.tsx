@@ -50,6 +50,14 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   const [missingOnly, setMissingOnly] = useState(false);
   /** Binder order is the default; value order answers a different question. */
   const [byValue, setByValue] = useState(false);
+  /**
+   * Excluded printings are hidden by default — they are not part of this set,
+   * so leaving them in the grid is clutter that never resolves. Revealed on
+   * demand rather than gone for good: a printing you cannot see is one you
+   * cannot put back, and a card whose every printing is excluded would
+   * otherwise vanish along with its sheet.
+   */
+  const [showExcluded, setShowExcluded] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [shared, setShared] = useState(false);
   /** False means the server was unreachable and a snapshot link was copied instead. */
@@ -107,8 +115,11 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
 
   type Slot = (typeof slots)[number];
 
+  const excludedCount = useMemo(() => slots.filter((s) => s.excluded).length, [slots]);
+
   const visibleSlots = useMemo(() => {
-    const visible = missingOnly ? slots.filter((s) => !s.held && !s.excluded) : slots;
+    const shown = showExcluded ? slots : slots.filter((s) => !s.excluded);
+    const visible = missingOnly ? shown.filter((s) => !s.held && !s.excluded) : shown;
     if (!byValue) return visible;
     // Copy before sorting: slots derives from memoised view.cards, and sorting
     // in place would mutate the binder order everything else reads.
@@ -116,7 +127,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       (a, b) =>
         (view.priceFor(b.collectorNumber, b.finish) ?? 0) - (view.priceFor(a.collectorNumber, a.finish) ?? 0),
     );
-  }, [slots, missingOnly, byValue, view]);
+  }, [slots, missingOnly, byValue, view, showExcluded]);
 
   /**
    * Binder pages are only honest over an unbroken run in collector order. A
@@ -309,6 +320,16 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
         {/* Disabled until the set has loaded: the link is built from the cards
             on screen, so sharing early produces an empty showcase that looks
             like a collection of nothing. */}
+        {excludedCount > 0 ? (
+          <button
+            type="button"
+            className={`${styles.chip} ${showExcluded ? styles.chipOn : ""}`}
+            aria-pressed={showExcluded}
+            onClick={() => setShowExcluded((on) => !on)}
+          >
+            Excluded ({excludedCount})
+          </button>
+        ) : null}
         <button
           type="button"
           className={styles.chip}
