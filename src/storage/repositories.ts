@@ -78,6 +78,24 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   lastSyncAt: 0,
 };
 
+/**
+ * Token for the Target restock bot — deliberately NOT the collection token.
+ *
+ * The two guard different blast radii. The collection token is entered on every
+ * device that syncs cards and only ever reads or writes card rows. This one
+ * drives a real browser on the home server that can put items in a Target cart,
+ * so it lives on the one device that manages the watchlist, and losing it does
+ * not mean losing the other.
+ *
+ * Same rule as the sync token: localStorage, never a `VITE_` variable, because
+ * this ships as a static bundle and anything baked in at build time is public.
+ */
+export interface TargetSettings {
+  token: string;
+}
+
+export const DEFAULT_TARGET_SETTINGS: TargetSettings = { token: "" };
+
 export interface Preferences {
   /** Price cache lifetime in minutes (clamped 15–60). */
   priceTtlMinutes: number;
@@ -442,6 +460,22 @@ export class Repositories {
   clearSync(): SyncSettings {
     this.store.write("sync-settings", DEFAULT_SYNC_SETTINGS);
     return DEFAULT_SYNC_SETTINGS;
+  }
+
+  // --- Target restock bot ---------------------------------------------------
+  getTargetSettings(): TargetSettings {
+    const stored = this.store.read<Partial<TargetSettings>>(
+      "target-settings",
+      (v): v is Partial<TargetSettings> => typeof v === "object" && v !== null,
+      {},
+    );
+    return { ...DEFAULT_TARGET_SETTINGS, ...stored };
+  }
+
+  setTargetSettings(patch: Partial<TargetSettings>): TargetSettings {
+    const next = { ...this.getTargetSettings(), ...patch };
+    this.store.write("target-settings", next);
+    return next;
   }
 
   // --- Preferences ----------------------------------------------------------

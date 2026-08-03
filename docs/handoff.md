@@ -18,19 +18,39 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 
 ## Live state
 
-| Thing             | Where                                                               |
-| ----------------- | ------------------------------------------------------------------- |
-| Frontend          | https://vekbui96.github.io/cardlens/                                |
-| Server (cardlens) | `https://server-pc.tail0e4194.ts.net:8443` via Tailscale Funnel     |
-| Collection data   | `D:/services/data/collection.json` on SERVER-PC                     |
-| Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
-| Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
-| Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)     |
-| Deployed at       | Pages `a850132`, server `e56f04e` — both verified live              |
+| Thing             | Where                                                                          |
+| ----------------- | ------------------------------------------------------------------------------ |
+| Frontend          | https://vekbui96.github.io/cardlens/                                           |
+| Server (cardlens) | `https://server-pc.tail0e4194.ts.net:8443` via Tailscale Funnel                |
+| Collection data   | `D:/services/data/collection.json` on SERVER-PC                                |
+| Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo            |
+| Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                                 |
+| Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
+| Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
+| Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
+| Deployed at       | Pages `a850132`, server `e56f04e` — both verified live                         |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
-`/api/set-information/:setId`, `/api/sealed/:setId?name=`, plus the companion relay.
+`/api/set-information/:setId`, `/api/sealed/:setId?name=`, `/api/target/*`,
+plus the companion relay.
+
+## Target restock tab (`#/target`)
+
+Web-only screen over the Pokémon restock bot that already ran on SERVER-PC. It
+shows what is watched and what the bot itself is doing — a watchlist where
+nothing restocked and a bot that stopped checking look identical otherwise.
+
+- The bot exposes a loopback aiohttp API (`api.py`); cardlens proxies it. It is
+  **not** read from `products.db` directly: adding a watch needs the bot's
+  warmed browser to resolve a title and first status, and paused/blocked state
+  only exists in that process's memory.
+- **The Target login is still outstanding.** `scripts/hard_login.py` has to be
+  run once at the server's console. Monitoring and alerts work without it; only
+  auto-cart does not. The auto-cart toggle is offerable regardless — the attempt
+  fails visibly at checkout rather than silently doing nothing.
+- The health-check product (Prismacolor, always in stock) is the canary and the
+  API refuses to delete it, same guard `!unwatch` applies.
 
 ## Immediate next task
 

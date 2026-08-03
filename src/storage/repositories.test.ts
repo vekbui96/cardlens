@@ -200,6 +200,33 @@ describe("preferences", () => {
   });
 });
 
+describe("target bot settings", () => {
+  it("returns an empty token when unset", () => {
+    expect(repo().getTargetSettings().token).toBe("");
+  });
+
+  it("round-trips a token", () => {
+    const r = repo();
+    expect(r.setTargetSettings({ token: "abc123" }).token).toBe("abc123");
+    expect(r.getTargetSettings().token).toBe("abc123");
+  });
+
+  it("keeps the target token out of collection sync, and vice versa", () => {
+    // The whole point of the split: this token can drive a Target cart, the
+    // sync token cannot. Writing one must never populate the other, or every
+    // syncing device silently gains the larger power.
+    const r = repo();
+    r.setTargetSettings({ token: "target-only" });
+    r.setSyncSettings({ token: "collection-only" });
+
+    expect(r.getSyncSettings().token).toBe("collection-only");
+    expect(r.getTargetSettings().token).toBe("target-only");
+
+    r.clearSync();
+    expect(r.getTargetSettings().token).toBe("target-only");
+  });
+});
+
 describe("a device that has run out of storage", () => {
   /**
    * Reproduced in a real browser before this was written: with the collection

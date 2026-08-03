@@ -30,6 +30,7 @@ const DESTINATIONS: Destination[] = [
   { label: "My cards", hint: "Every printing you own, by price", screen: { name: "owned" } },
   { label: "Scan", hint: "Point the camera at a card", screen: { name: "scan" } },
   { label: "Sealed prices", hint: "What packs and boxes cost now", screen: { name: "sealed" } },
+  { label: "Target restock", hint: "What the bot is watching", screen: { name: "target" } },
   { label: "Favorites", hint: "Cards you starred", screen: { name: "favorites" } },
   { label: "Recent", hint: "Searches you made", screen: { name: "recent" } },
   { label: "Popular", hint: "Commonly searched Pokémon", screen: { name: "popular" } },
