@@ -123,3 +123,16 @@
   font-size: 11px;
   color: var(--cl-fg-dim);
 }
+
+/* Its own line so every tile is the same height whether or not it is held —
+   a grid whose rows jog by a few pixels reads as broken rather than as varied. */
+.missing {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cl-fg-dim);
+  min-height: 13px;
+}
+
+.price {
+  min-height: 13px;
+}

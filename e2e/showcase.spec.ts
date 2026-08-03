@@ -43,7 +43,9 @@ test.describe("set showcase", () => {
     const visitor = await context.browser()!.newPage();
     await visitor.goto(url.replace(/^https?:\/\/[^/]+/, ""));
     await expect(visitor.getByText("2 printings shown")).toBeVisible();
-    await expect(visitor.getByText(/Normal, Reverse Holo/)).toBeVisible();
+    // Each printing is its own slot, the way a binder actually holds them.
+    await expect(visitor.getByText("125 · Normal")).toBeVisible();
+    await expect(visitor.getByText("125 · Reverse Holo")).toBeVisible();
     await visitor.close();
   });
 
@@ -60,8 +62,11 @@ test.describe("set showcase", () => {
     const url = await page.evaluate(() => navigator.clipboard.readText());
 
     await page.goto(url.replace(/^https?:\/\/[^/]+/, ""));
-    // Obsidian Flames has two mock cards; only one is owned.
-    await expect(page.getByText("· missing")).toHaveCount(1);
+    // Obsidian Flames has two mock cards. 125 is held in both its printings;
+    // 223 is not held at all, so its slots are ghosted rather than absent.
+    const slots = page.getByTestId("showcase-slot");
+    await expect(slots.filter({ hasText: "missing" }).first()).toBeVisible();
+    await expect(slots.filter({ hasText: "125 · Normal" })).toHaveCount(1);
     await expect(page.getByText("Charizard ex").first()).toBeVisible();
   });
 

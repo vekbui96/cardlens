@@ -52,21 +52,34 @@ export function ShowcaseScreen({
     return map;
   }, [setId, payload]);
 
-  const pages = useMemo(
+  /**
+   * One slot per PRINTING, not per card.
+   *
+   * A master set is arranged in a binder with the normal and the reverse in
+   * their own pockets, so a tile that lists "Normal, Reverse Holo" describes
+   * one slot holding two cards — which is not what is in front of anyone. The
+   * slots are the set's known printings, plus any the link carries that the
+   * set data does not know about, so a hand-marked pattern foil still shows.
+   */
+  const slots = useMemo(
     () =>
-      binderPages(
-        view.cards.map((card) => {
-          const available = view.finishesFor(card.collectorNumber, card.variants);
-          const held = ownedByNumber.get(card.collectorNumber) ?? [];
-          return {
-            collectorNumber: card.collectorNumber,
-            complete: held.length > 0 && held.length >= available.length,
-            card,
-          };
-        }),
-      ),
+      view.cards.flatMap((card) => {
+        const available = view.finishesFor(card.collectorNumber, card.variants);
+        const held = ownedByNumber.get(card.collectorNumber) ?? [];
+        const finishes = [...available, ...held.filter((f) => !available.includes(f))];
+        // With no printings data at all, fall back to what the link holds, so
+        // the showcase degrades to "only the owned cards" rather than nothing.
+        return (finishes.length > 0 ? finishes : held).map((finish) => ({
+          collectorNumber: card.collectorNumber,
+          complete: held.includes(finish),
+          card,
+          finish,
+        }));
+      }),
     [view, ownedByNumber],
   );
+
+  const pages = useMemo(() => binderPages(slots), [slots]);
 
   const totals = useMemo(() => {
     let held = 0;
@@ -119,26 +132,29 @@ export function ShowcaseScreen({
           {/* Nine to a page, three across — a real binder page, which is how
               the cards are actually arranged in front of the person sharing. */}
           <ul className={styles.grid}>
-            {page.cards.map(({ card }) => {
-              const held = ownedByNumber.get(card.collectorNumber) ?? [];
-              const value = held.reduce<number | undefined>((sum, f) => {
-                const price = view.priceFor(card.collectorNumber, f);
-                return price === undefined ? sum : (sum ?? 0) + price;
-              }, undefined);
+            {page.cards.map(({ card, finish }) => {
+              const held = (ownedByNumber.get(card.collectorNumber) ?? []).includes(finish);
+              const price = view.priceFor(card.collectorNumber, finish);
 
               return (
-                <li key={card.id} className={held.length > 0 ? styles.tile : styles.tileMissing}>
+                <li
+                  key={`${card.id}|${finish}`}
+                  className={held ? styles.tile : styles.tileMissing}
+                  data-testid="showcase-slot"
+                >
                   <CardImage src={card.imageSmall} alt="" size="thumb" />
                   <span className={styles.name}>{card.name}</span>
                   <span className={styles.meta}>
-                    {card.collectorNumber}
-                    {/* The variation is the point of a master set, so it is
-                        named rather than implied by a tick. */}
-                    {held.length > 0 ? ` · ${held.map(finishLabel).join(", ")}` : " · missing"}
+                    {card.collectorNumber} · {finishLabel(finish)}
                   </span>
-                  {held.length > 0 && value !== undefined ? (
-                    <span className={styles.price}>{formatUsd(value)}</span>
-                  ) : null}
+                  {/* The price of THIS printing. A reverse and a normal of the
+                      same card are routinely worth very different amounts, which
+                      is most of the reason for separating them. */}
+                  {held && price !== undefined ? (
+                    <span className={styles.price}>{formatUsd(price)}</span>
+                  ) : (
+                    <span className={styles.missing}>{held ? "" : "missing"}</span>
+                  )}
                 </li>
               );
             })}
