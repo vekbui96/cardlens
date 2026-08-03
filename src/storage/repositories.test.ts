@@ -227,6 +227,56 @@ describe("target bot settings", () => {
   });
 });
 
+describe("excluding a printing from the master set", () => {
+  it("stops it counting as owned without owning it", () => {
+    const r = repo();
+    r.toggleExcluded("me5-1", "reverse");
+
+    expect(r.excludedFinishes("me5-1")).toEqual(["reverse"]);
+    // Not owned - an exclusion is the opposite of a mark, not a kind of one.
+    expect(r.getCollection().find((c) => c.id === "me5-1")).toBeUndefined();
+  });
+
+  it("drops ownership when a held printing is excluded", () => {
+    // Otherwise "held" and "target" disagree: the printing counts toward a set
+    // it has just been declared not part of.
+    const r = repo();
+    r.toggleOwned("me5-1", "reverse");
+    expect(r.getCollection()[0].finishes).toContain("reverse");
+
+    r.toggleExcluded("me5-1", "reverse");
+    expect(r.getCollection().find((c) => c.id === "me5-1")).toBeUndefined();
+    expect(r.excludedFinishes("me5-1")).toEqual(["reverse"]);
+  });
+
+  it("puts it back when excluded a second time", () => {
+    const r = repo();
+    r.toggleExcluded("me5-1", "reverse");
+    r.toggleExcluded("me5-1", "reverse");
+    expect(r.excludedFinishes("me5-1")).toEqual([]);
+  });
+
+  it("survives a reload", () => {
+    // The read path is a whitelist, so a field it does not name is silently
+    // dropped - which would lose every exclusion on the next page load.
+    const storage = createMemoryStorage();
+    const first = new Repositories(new VersionedStore(storage));
+    first.toggleExcluded("me5-1", "reverse");
+
+    const second = new Repositories(new VersionedStore(storage));
+    expect(second.excludedFinishes("me5-1")).toEqual(["reverse"]);
+  });
+
+  it("keeps exclusions per printing, not per card", () => {
+    const r = repo();
+    r.toggleOwned("me5-1", "normal");
+    r.toggleExcluded("me5-1", "reverse");
+
+    expect(r.getCollection()[0].finishes).toEqual(["normal"]);
+    expect(r.excludedFinishes("me5-1")).toEqual(["reverse"]);
+  });
+});
+
 describe("a device that has run out of storage", () => {
   /**
    * Reproduced in a real browser before this was written: with the collection

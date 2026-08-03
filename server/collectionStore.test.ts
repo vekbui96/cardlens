@@ -185,3 +185,34 @@ describe("rows that name a game", () => {
     expect(byId).toEqual({ "tfc-1": "lorcana", "base1-4": undefined });
   });
 });
+
+describe("excluded printings", () => {
+  it("preserves the flag, so exclusions reach other devices", () => {
+    // parseRow is a whitelist: a field it does not name is dropped silently,
+    // which would let every device disagree about the master-set target.
+    const row = parseRow({
+      cardId: "me5-1",
+      setId: "me5",
+      finish: "reverse",
+      at: 1_700_000_000_000,
+      excluded: true,
+    });
+    expect(row?.excluded).toBe(true);
+  });
+
+  it("treats anything other than true as not excluded", () => {
+    // "false" and absent already mean the same thing; storing a falsy value
+    // would add a field to rows that do not need one.
+    for (const value of [false, "true", 1, null]) {
+      const row = parseRow({
+        cardId: "me5-1",
+        setId: "me5",
+        finish: "reverse",
+        at: 1_700_000_000_000,
+        excluded: value,
+      });
+      expect(row).not.toBeNull();
+      expect(row?.excluded).toBeUndefined();
+    }
+  });
+});

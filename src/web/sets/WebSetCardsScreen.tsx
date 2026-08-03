@@ -31,8 +31,15 @@ import styles from "./WebSetCardsScreen.module.css";
  */
 export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { pop } = useNavigation();
-  const { ownedFinishes, toggleOwned, ownedCountsBySet, ownedFinishCountsBySet, storageDegraded } =
-    useLibrary();
+  const {
+    ownedFinishes,
+    toggleOwned,
+    excludedFinishes,
+    toggleExcluded,
+    ownedCountsBySet,
+    ownedFinishCountsBySet,
+    storageDegraded,
+  } = useLibrary();
 
   const [rarityKey, setRarityKey] = useState("all");
   /** Master-setting is mostly "what am I still missing", so it gets a real control. */
@@ -71,25 +78,31 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       view.cards.flatMap((card) => {
         const available = view.finishesFor(card.collectorNumber, card.variants);
         const held = ownedFinishes(card.id);
+        const skipped = excludedFinishes(card.id);
         const extras = held.filter((f) => !available.includes(f));
         const finishes = [...available, ...extras];
         // No printings data yet: fall back to one slot for what is held, so the
         // grid degrades to "the cards you have" rather than to nothing.
         return (finishes.length > 0 ? finishes : held).map((finish) => ({
           collectorNumber: card.collectorNumber,
-          complete: held.includes(finish),
+          // An excluded printing counts as done for binder-page purposes: the
+          // page is complete when nothing on it is still wanted, and a promo
+          // you have opted out of is not wanted.
+          complete: held.includes(finish) || skipped.includes(finish),
+          held: held.includes(finish),
+          excluded: skipped.includes(finish),
           extra: extras.includes(finish),
           card,
           finish,
         }));
       }),
-    [view, ownedFinishes],
+    [view, ownedFinishes, excludedFinishes],
   );
 
   type Slot = (typeof slots)[number];
 
   const visibleSlots = useMemo(() => {
-    const visible = missingOnly ? slots.filter((s) => !s.complete) : slots;
+    const visible = missingOnly ? slots.filter((s) => !s.held && !s.excluded) : slots;
     if (!byValue) return visible;
     // Copy before sorting: slots derives from memoised view.cards, and sorting
     // in place would mutate the binder order everything else reads.
@@ -122,28 +135,40 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
    * marking a pocket, versus looking the card up.
    */
   const renderSlot = (slot: Slot) => {
-    const { card, finish, complete, extra } = slot;
+    const { card, finish, held, excluded, extra } = slot;
     const price = view.priceFor(card.collectorNumber, finish);
     return (
       <li key={`${card.id}:${finish}`}>
         {/* Not a <button> wrapping a <button> - that is invalid, and the nested
             control is unreachable by keyboard in several browsers. */}
-        <div className={`${styles.tile} ${complete ? styles.tileDone : ""} ${extra ? styles.tileExtra : ""}`}>
+        <div
+          className={`${styles.tile} ${held ? styles.tileDone : ""} ${
+            excluded ? styles.tileExcluded : ""
+          } ${extra ? styles.tileExtra : ""}`}
+        >
           <button
             type="button"
             className={styles.tileMark}
-            aria-pressed={complete}
+            aria-pressed={held}
+            // Excluded is its own word, not "not owned": the difference between
+            // "I still want this" and "this is not part of my set" is the whole
+            // point of the state.
             aria-label={`${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}${
-              complete ? ", owned" : ", not owned"
+              excluded ? ", excluded" : held ? ", owned" : ", not owned"
             }`}
             onClick={() => toggleOwned(card.id, finish, setId)}
           >
             {/* Dim rather than hide what is missing: a grid of greyed art is
                 readable at a glance, a grid with holes in it is not. */}
             <CardImage src={card.imageSmall} alt="" size="thumb" />
-            {complete ? (
+            {held ? (
               <span className={styles.tickDone} aria-hidden="true">
                 ✓
+              </span>
+            ) : null}
+            {excluded ? (
+              <span className={styles.excludedMark} aria-hidden="true">
+                ✕
               </span>
             ) : null}
           </button>
@@ -308,6 +333,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           headlinePrice={view.headlinePriceFor(openCard)}
           priceFor={(finish) => view.priceFor(openCard.collectorNumber, finish)}
           onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
+          excluded={excludedFinishes(openCard.id)}
+          onToggleExcluded={(finish: CollectFinish) => toggleExcluded(openCard.id, finish, setId)}
           onRemoveAll={() => {
             // Toggle each held printing off rather than deleting rows: the
             // collection is an OR-Set, so a removal must be a tombstone or a

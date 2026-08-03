@@ -19,6 +19,8 @@ function renderSheet(over: Partial<Parameters<typeof CardSheet>[0]> = {}) {
       headlinePrice={4.25}
       priceFor={(f) => (f === "normal" ? 1.5 : f === "reverse" ? 4.25 : undefined)}
       onToggle={vi.fn()}
+      excluded={[]}
+      onToggleExcluded={vi.fn()}
       onRemoveAll={vi.fn()}
       onClose={vi.fn()}
       {...over}
@@ -30,8 +32,8 @@ describe("CardSheet prices", () => {
   it("prices each printing separately", () => {
     renderSheet();
 
-    expect(screen.getByRole("button", { name: /Normal/ })).toHaveTextContent("$1.50");
-    expect(screen.getByRole("button", { name: /Reverse Holo/ })).toHaveTextContent("$4.25");
+    expect(screen.getByRole("button", { name: new RegExp(`^Normal`) })).toHaveTextContent("$1.50");
+    expect(screen.getByRole("button", { name: new RegExp(`^Reverse Holo`) })).toHaveTextContent("$4.25");
   });
 
   it("shows Unavailable rather than $0.00 for an unpriced printing", () => {
@@ -41,7 +43,9 @@ describe("CardSheet prices", () => {
       priceFor: () => undefined,
     });
 
-    expect(screen.getByRole("button", { name: /Poké Ball Reverse/ })).toHaveTextContent("Unavailable");
+    expect(screen.getByRole("button", { name: new RegExp(`^Poké Ball Reverse`) })).toHaveTextContent(
+      "Unavailable",
+    );
   });
 
   it("totals only the printings actually owned", () => {
@@ -66,7 +70,7 @@ describe("CardSheet extras", () => {
       onToggle,
     });
 
-    const extra = screen.getByRole("button", { name: /Master Ball Reverse/ });
+    const extra = screen.getByRole("button", { name: new RegExp(`^Master Ball Reverse`) });
     expect(extra).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(extra);

@@ -61,6 +61,10 @@ interface LibraryValue {
   ownedFinishes: (id: string) => CollectFinish[];
   isOwnedFinish: (id: string, finish: CollectFinish) => boolean;
   toggleOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
+  /** Printings this card has that are deliberately not part of the master set. */
+  excludedFinishes: (id: string) => CollectFinish[];
+  /** Take a printing out of the master-set target, or put it back. */
+  toggleExcluded: (cardId: string, finish: CollectFinish, setId?: string) => void;
   /**
    * Mark owned, idempotently.
    *
@@ -121,6 +125,30 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const isOwnedFinish = useCallback(
     (id: string, finish: CollectFinish) => Boolean(byId.get(id)?.finishes.includes(finish)),
     [byId],
+  );
+
+  /**
+   * Read straight from the repository rather than from the grouped collection
+   * state: an excluded printing is deliberately NOT in `collection`, which is
+   * the view of what is owned.
+   */
+  const excludedFinishes = useCallback(
+    (id: string) => {
+      // Read through `collection` so the dependency is real rather than
+      // suppressed: this reads STORED rows, which every collection write
+      // rewrites. Without it the callback identity is stable, and the set
+      // grid's memo never recomputes after a printing is excluded.
+      void collection;
+      return repo.excludedFinishes(id);
+    },
+    [repo, collection],
+  );
+
+  const toggleExcluded = useCallback(
+    (cardId: string, finish: CollectFinish, setId?: string) => {
+      setCollection(setId ? repo.toggleExcluded(cardId, finish, setId) : repo.toggleExcluded(cardId, finish));
+    },
+    [repo],
   );
 
   const toggleOwned = useCallback(
@@ -314,6 +342,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       ownedFinishes,
       isOwnedFinish,
       toggleOwned,
+      excludedFinishes,
+      toggleExcluded,
       addOwned,
       addManyOwned,
       ownedCountsBySet,
@@ -341,6 +371,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       ownedFinishes,
       isOwnedFinish,
       toggleOwned,
+      excludedFinishes,
+      toggleExcluded,
       addOwned,
       addManyOwned,
       ownedCountsBySet,

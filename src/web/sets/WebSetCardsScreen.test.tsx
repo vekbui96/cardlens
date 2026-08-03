@@ -216,6 +216,40 @@ describe("WebSetCardsScreen", () => {
     expect(within(sheet).queryByRole("button", { name: /Remove/ })).toBeNull();
   });
 
+  it("excludes a printing from the set so it stops reading as missing", async () => {
+    const user = userEvent.setup();
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(details("125", "Normal"));
+
+    const sheet = screen.getByRole("dialog");
+    await user.click(within(sheet).getByRole("button", { name: "Exclude Reverse Holo" }));
+    await user.click(within(sheet).getByRole("button", { name: "Done" }));
+
+    // Its own state, not "owned" and not "missing".
+    expect(screen.getByRole("button", { name: /, 125, Reverse Holo, excluded$/ })).toBeInTheDocument();
+
+    // And gone from what is still wanted, which is the whole point.
+    await user.click(screen.getByRole("button", { name: "Missing only" }));
+    expect(screen.queryByRole("button", { name: /, 125, Reverse Holo/ })).toBeNull();
+    expect(slot("125", "Normal")).toBeInTheDocument();
+  });
+
+  it("puts an excluded printing back", async () => {
+    const user = userEvent.setup();
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(details("125", "Normal"));
+    const sheet = screen.getByRole("dialog");
+    await user.click(within(sheet).getByRole("button", { name: "Exclude Reverse Holo" }));
+    await user.click(within(sheet).getByRole("button", { name: "Include Reverse Holo" }));
+    await user.click(within(sheet).getByRole("button", { name: "Done" }));
+
+    expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("headlines a card with its dearest printing when the catalog has no price", async () => {
     const user = userEvent.setup();
     // Pitch Black returns prices: {} for all 120 cards, so the catalog price is

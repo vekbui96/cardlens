@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TOMBSTONE_TTL_MS,
+  excludedPrintings,
   gamePrintings,
   isLive,
   livePrintings,
@@ -179,5 +180,39 @@ describe("gamePrintings", () => {
 
     expect(gamePrintings(rows).map((r) => r.cardId)).toEqual(["a-1"]);
     expect(gamePrintings(rows, "lorcana").map((r) => r.cardId)).toEqual(["b-1"]);
+  });
+});
+
+describe("excluded printings", () => {
+  const base = { cardId: "me5-1", setId: "me5", finish: "reverse" as const };
+
+  it("are live rows, but not owned ones", () => {
+    const rows = [{ ...base, at: 100, excluded: true as const }];
+    expect(livePrintings(rows)).toEqual([]);
+    expect(excludedPrintings(rows)).toHaveLength(1);
+  });
+
+  it("beat an ownership written in the same millisecond", () => {
+    // Excluding something already owned writes both rows back to back, so a
+    // same-timestamp tie is the normal case, not a rare one. Without a rule
+    // the winner depended on map order and the exclusion silently did nothing.
+    const owned = { ...base, at: 100 };
+    const skipped = { ...base, at: 100, excluded: true as const };
+    expect(mergePrintings([owned], [skipped])).toEqual([skipped]);
+    // Commutative: the merge must not depend on which side is "local".
+    expect(mergePrintings([skipped], [owned])).toEqual([skipped]);
+  });
+
+  it("lose to a later re-inclusion", () => {
+    const skipped = { ...base, at: 100, excluded: true as const };
+    const included = { ...base, at: 200, deletedAt: 200 };
+    expect(excludedPrintings(mergePrintings([skipped], [included]))).toEqual([]);
+  });
+
+  it("still lose to a tombstone at the same stamp", () => {
+    // The tombstone rule is checked first and stays the stronger one.
+    const skipped = { ...base, at: 100, excluded: true as const };
+    const removed = { ...base, at: 100, deletedAt: 100 };
+    expect(mergePrintings([skipped], [removed])).toEqual([removed]);
   });
 });

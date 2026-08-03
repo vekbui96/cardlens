@@ -57,6 +57,9 @@ export function parseRow(value: unknown): OwnedPrinting | null {
   if (v.deletedAt !== undefined) {
     if (typeof v.deletedAt !== "number" || !Number.isFinite(v.deletedAt) || v.deletedAt < 0) return null;
   }
+  // Only `true` is meaningful, and only true is stored. Anything else is
+  // treated as absent rather than rejected: a client that sends `false` means
+  // "not excluded", which is what omitting it already says.
 
   return {
     cardId: v.cardId,
@@ -69,6 +72,7 @@ export function parseRow(value: unknown): OwnedPrinting | null {
     // arbitrary string here would partition the OR-Set into keys no client
     // will ever look under.
     ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
+    ...(v.excluded === true ? { excluded: true as const } : {}),
     // Canonicalised on ingest, matching the client. Without this the store
     // accumulates "holofoil" AND "holo" as separate OR-Set keys for one
     // printing, inflating every count on the server side. Applies to rows read

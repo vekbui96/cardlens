@@ -30,6 +30,20 @@ export interface OwnedPrinting {
   at: number;
   /** When it was un-marked. Present means "not owned", not "never owned". */
   deletedAt?: number;
+  /**
+   * Not part of this master set, by the collector's own decision.
+   *
+   * A set's printings come from TCGdex, which lists everything ever printed of
+   * a card — including promos and box toppers somebody chasing the main set
+   * will never buy. Without this they read as permanently missing, and the
+   * completion figure is wrong forever.
+   *
+   * A third state, not a second boolean: owned, excluded and removed are
+   * mutually exclusive, and all three ride the existing OR-Set merge so an
+   * exclusion converges across devices exactly like a mark does. Written only
+   * when true, so no existing row changes shape.
+   */
+  excluded?: true;
 }
 
 /** Tombstones older than this are dropped — see pruneTombstones. */
@@ -70,12 +84,19 @@ const stamp = rowStamp;
  * Ties go to the tombstone: if a mark and an un-mark carry the same timestamp
  * the user's last intent is unknowable, and re-adding a card is a one-gesture
  * fix whereas silently resurrecting a deleted one is invisible.
+ *
+ * Then to the exclusion, for the same reason. Excluding a printing marked in
+ * the same millisecond is not hypothetical — the two writes happen back to
+ * back when you exclude something you already own, and without this rule the
+ * winner depended on map order, so the exclusion silently did nothing.
+ * Restrictive intents win ties; both are one tap to undo.
  */
 function pickWinner(a: OwnedPrinting, b: OwnedPrinting): OwnedPrinting {
   const sa = stamp(a);
   const sb = stamp(b);
   if (sa !== sb) return sa > sb ? a : b;
   if (isLive(a) !== isLive(b)) return isLive(a) ? b : a;
+  if (Boolean(a.excluded) !== Boolean(b.excluded)) return a.excluded ? a : b;
   return a;
 }
 
@@ -104,9 +125,27 @@ export function pruneTombstones(rows: OwnedPrinting[], now = Date.now()): OwnedP
   return rows.filter((r) => isLive(r) || now - (r.deletedAt ?? 0) < TOMBSTONE_TTL_MS);
 }
 
-/** Rows the user currently owns, tombstones excluded. */
+/**
+ * Rows the user currently owns: tombstones and excluded printings both out.
+ *
+ * This is the single place ownership is derived, which is why excluding is
+ * filtered HERE rather than at each call site — every count in the app (set
+ * progress, collection value, showcase payload) reads through this function
+ * and so cannot disagree about whether an excluded printing is held.
+ */
 export function livePrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
-  return rows.filter(isLive);
+  return rows.filter((r) => isLive(r) && !r.excluded);
+}
+
+/**
+ * Printings deliberately left out of the master set.
+ *
+ * Live rows, like owned ones — an exclusion is a positive statement, not an
+ * absence — so it survives a merge against a stale device that still thinks
+ * the printing is merely unowned.
+ */
+export function excludedPrintings(rows: OwnedPrinting[]): OwnedPrinting[] {
+  return rows.filter((r) => isLive(r) && r.excluded === true);
 }
 
 /**

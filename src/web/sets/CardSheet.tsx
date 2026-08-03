@@ -26,29 +26,53 @@ import styles from "./CardSheet.module.css";
 function PrintingRow({
   finish,
   held,
+  excluded = false,
   extra = false,
   priceFor,
   onToggle,
+  onToggleExcluded,
 }: {
   finish: CollectFinish;
   held: boolean;
+  /** Not part of this master set — a promo or box topper you will not chase. */
+  excluded?: boolean;
   extra?: boolean;
   priceFor: (finish: CollectFinish) => number | undefined;
   onToggle: (finish: CollectFinish) => void;
+  onToggleExcluded: (finish: CollectFinish) => void;
 }) {
   return (
-    <li>
+    <li className={styles.printingRow}>
       <button
         type="button"
-        className={`${styles.printing} ${held ? styles.held : ""} ${extra ? styles.extra : ""}`}
+        className={`${styles.printing} ${held ? styles.held : ""} ${extra ? styles.extra : ""} ${
+          excluded ? styles.printingExcluded : ""
+        }`}
         aria-pressed={held}
+        disabled={excluded}
         onClick={() => onToggle(finish)}
       >
         <span className={styles.box} aria-hidden="true">
           {held ? "✓" : ""}
         </span>
         <span className={styles.printingLabel}>{finishLabel(finish)}</span>
-        <span className={styles.printingPrice}>{formatUsd(priceFor(finish))}</span>
+        <span className={styles.printingPrice}>{excluded ? "not in set" : formatUsd(priceFor(finish))}</span>
+      </button>
+      {/*
+       * Separate from the mark, because it answers a different question: not
+       * "do I have this" but "does this belong in the set at all". TCGdex lists
+       * every printing ever made, so promos and box toppers would otherwise
+       * read as permanently missing and the completion figure would never be
+       * reachable.
+       */}
+      <button
+        type="button"
+        className={styles.excludeToggle}
+        aria-pressed={excluded}
+        aria-label={`${excluded ? "Include" : "Exclude"} ${finishLabel(finish)}`}
+        onClick={() => onToggleExcluded(finish)}
+      >
+        {excluded ? "Include" : "Exclude"}
       </button>
     </li>
   );
@@ -61,6 +85,8 @@ export function CardSheet({
   headlinePrice,
   priceFor,
   onToggle,
+  onToggleExcluded,
+  excluded,
   onRemoveAll,
   onClose,
   storageDegraded = false,
@@ -75,6 +101,9 @@ export function CardSheet({
   /** Price for one printing of THIS card. The caller binds the collector number. */
   priceFor: (finish: CollectFinish) => number | undefined;
   onToggle: (finish: CollectFinish) => void;
+  /** Printings left out of the master set. */
+  excluded: CollectFinish[];
+  onToggleExcluded: (finish: CollectFinish) => void;
   /** Clear every held printing of this card in one action. */
   onRemoveAll: () => void;
   onClose: () => void;
@@ -162,8 +191,10 @@ export function CardSheet({
                 key={finish}
                 finish={finish}
                 held={owned.includes(finish)}
+                excluded={excluded.includes(finish)}
                 priceFor={priceFor}
                 onToggle={onToggle}
+                onToggleExcluded={onToggleExcluded}
               />
             ))}
           </ul>
@@ -179,6 +210,7 @@ export function CardSheet({
                   extra
                   priceFor={priceFor}
                   onToggle={onToggle}
+                  onToggleExcluded={onToggleExcluded}
                 />
               ))}
             </ul>

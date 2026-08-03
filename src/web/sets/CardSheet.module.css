@@ -253,3 +253,46 @@
   outline: var(--cl-focus-ring);
   outline-offset: 2px;
 }
+
+/* --- Excluding a printing from the set ----------------------------------- */
+
+.printingRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--cl-gap-xs);
+}
+
+.printingRow .printing {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Struck through, not hidden: an excluded printing must stay visible or it
+   cannot be put back. Disabled too — marking it owned would contradict it. */
+.printingExcluded {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.excludeToggle {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, 8px);
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  cursor: pointer;
+}
+
+.excludeToggle[aria-pressed="true"] {
+  color: var(--cl-accent-strong);
+  border-color: var(--cl-accent);
+}
+
+.excludeToggle:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}

@@ -3,6 +3,7 @@ import { canonicalGame, DEFAULT_GAME, type TradingCardGame } from "../models/gam
 import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import {
+  excludedPrintings,
   gamePrintings,
   livePrintings,
   mergePrintings,
@@ -144,6 +145,9 @@ function toPrintings(value: unknown): OwnedPrinting[] {
       ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
       at: typeof v.at === "number" ? v.at : 0,
       ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
+      // Only ever true. Dropping it here would lose every exclusion on reload,
+      // the same way the server's whitelist would lose it on sync.
+      ...(v.excluded === true ? { excluded: true as const } : {}),
     };
     return [row];
   }
@@ -414,6 +418,38 @@ export class Repositories {
     return this.isOwnedFinish(cardId, finish)
       ? this.removeOwned(cardId, finish)
       : this.addOwned(cardId, finish, setId);
+  }
+
+  /** Printings this card has that are deliberately not part of the master set. */
+  excludedFinishes(cardId: string): CollectFinish[] {
+    return excludedPrintings(this.ownRows())
+      .filter((r) => r.cardId === cardId)
+      .map((r) => r.finish);
+  }
+
+  /**
+   * Take a printing out of the master set, or put it back.
+   *
+   * Excluding also drops ownership: a promo you have decided is not part of
+   * this set should stop counting toward it either way, and leaving a row that
+   * is both owned and excluded would make "held" and "target" disagree.
+   */
+  toggleExcluded(
+    cardId: string,
+    rawFinish: CollectFinish,
+    setId = setIdFromCardId(cardId),
+    now = Date.now(),
+  ): OwnedCard[] {
+    const finish = canonicalFinish(rawFinish);
+    const already = this.excludedFinishes(cardId).includes(finish);
+    const game = this.game;
+
+    const row: OwnedPrinting = already
+      ? { cardId, setId, finish, at: now, deletedAt: now, ...(game === DEFAULT_GAME ? {} : { game }) }
+      : { cardId, setId, finish, at: now, excluded: true, ...(game === DEFAULT_GAME ? {} : { game }) };
+
+    this.writePrintings(mergePrintings(this.getPrintings(), [row]));
+    return this.getCollection();
   }
 
   /** Merge rows from elsewhere (a sync peer) into local state. */

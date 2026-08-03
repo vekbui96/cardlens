@@ -396,3 +396,33 @@
     flex: 0 1 auto;
   }
 }
+
+/*
+ * A printing deliberately outside the master set — a promo, a box topper.
+ *
+ * Dimmed further than "missing" and marked with a cross, because the two mean
+ * opposite things: one is still wanted, the other never will be.
+ */
+.tileExcluded .tileMark {
+  opacity: 0.25;
+}
+
+.tileExcluded .tileName,
+.tileExcluded .tileFinish {
+  text-decoration: line-through;
+}
+
+.excludedMark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--cl-fg-dim);
+  color: var(--cl-bg);
+  font-size: 12px;
+  font-weight: 700;
+}
