@@ -26,7 +26,7 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo |
 | Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                      |
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)     |
-| Deployed at       | Pages `f8b4094`, server `9fd89da` — both verified live              |
+| Deployed at       | Pages `a850132`, server `e56f04e` — both verified live              |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
@@ -34,25 +34,45 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 
 ## Immediate next task
 
-Nothing is half-built. `#/owned` ("My cards" in the web menu) now lists every printing held
-and sorts it four ways; the glasses fall back to Collection there and never download the chunk.
-`#/sealed` prices packs, ETBs, boxes and bundles for the sets you hold, from tcgcsv.com.
-The web set screen's title is a **switcher** — the sets you collect, ranked by progress, one
-tap from wherever you are. Its ordering is shared with the Collection screen via
-`useCollectedSets`; change one and you change both, deliberately.
+Nothing is half-built. The card **scanner** is the current thread.
 
-The obvious follow-on, discussed and not started: **sealed price history**. `#/sealed` is a
-snapshot, and "keep track of" arguably means a series. That needs a daily server-side
-snapshot store, which is a fresh piece of work rather than an extension of this one.
+**What exists and is live**
 
-Two plans compete for what comes next:
+- `src/scan/phash.ts` — artwork hashing. Thresholds (distance 16, margin 8) are
+  MEASURED, not guessed; the table is in the file. Re-run
+  `node scripts/validate-recognition.mjs me5 me3 me2` after any change to it.
+- `public/card-index/` — 1,709 cards from the ten collected sets, 13KB. Built by
+  `scripts/build-card-index.mjs`, which checkpoints after every set.
+- `#/scan` — batch scanning with **auto-capture**, review-then-commit, thumbnails.
+- `#/showcase/...` — share a set as a link that carries its own data, one tile
+  per printing, missing ones ghosted. Snapshot only; resharing is the update.
 
-- **`docs/web-plan.md`** — the phone/desktop client. Search is the biggest gap (one prefix
-  token, 40-result cap, no way to search your own collection), then a real collection
-  dashboard with price movement. Start here if the phone is the client that gets used.
-- **`docs/performance-plan.md` item 5** — every mark rewrites the whole collection. Still the
-  only item there expected to be _felt_ as the collection grows, and the web sheet makes
-  marking fast enough to hit it sooner.
+**Next, in the order I would do them**
+
+1. **localStorage → IndexedDB.** The ceiling that silently ate marks is still
+   there and the scanner fills it faster. Keep the OR-Set, tombstones, merge
+   rule and watermark — only the backend behind `VersionedStore` changes. It
+   touches every read path, so start it fresh rather than squeezing it in.
+2. **Finish the full index.** `node scripts/build-card-index.mjs all`, ~45
+   minutes, then commit `public/card-index/` and deploy. THREE runs have been
+   stopped by the environment rather than by the script, so run it in a real
+   terminal. Interruption is now survivable.
+3. **Collector-number OCR.** 27 of 1,709 cards share an exact hash — all
+   genuine reprints with identical art. The margin rule already refuses to
+   guess; a crop of the number corner would settle them.
+
+**Unexplained: a crash on Collection.** Not reproducible with 973 seeded rows on
+desktop. An ErrorBoundary now ships, so the next occurrence shows the message
+with a Copy details button instead of a blank page. Ask for that output, and for
+whether it is a white screen, a freeze, or a self-reload — the last means memory,
+and Collection is the heaviest screen in the app.
+
+**A pattern worth naming.** Four bugs this session, three of the same shape: a
+**silent early return** that made an action do nothing. A storage write that
+failed without saying so; a capture that returned early on a 0x0 frame; a set
+that indexed zero cards because the API returned empty. Treat a guard clause
+that returns quietly as a smell in this codebase — it has been the single most
+reliable source of "it just doesn't work".
 
 ## What the pricing work actually changed
 
