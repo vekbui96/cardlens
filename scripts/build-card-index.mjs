@@ -229,11 +229,7 @@ function writeArtifacts(hashes, cards) {
   );
   writeFileSync(
     `${OUT_DIR}/latest.json`,
-    JSON.stringify(
-      { version, cards: cards.length, sets: [...new Set(cards.map((c) => c.setId))] },
-      null,
-      2,
-    ),
+    JSON.stringify({ version, cards: cards.length, sets: [...new Set(cards.map((c) => c.setId))] }, null, 2),
   );
   return { version, bytes: index.byteLength };
 }
