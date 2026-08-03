@@ -311,3 +311,19 @@
   font-size: var(--cl-fs-small);
   cursor: pointer;
 }
+
+.autoRow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+}
+
+.autoNote {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

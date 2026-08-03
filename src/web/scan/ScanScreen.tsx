@@ -6,6 +6,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { artRect, perceptualHash } from "../../scan/phash.ts";
 import { guideRect, guideStyle } from "../../scan/frame.ts";
 import { loadCardIndex, identify, type CardIndex, type ScanResult } from "../../scan/cardIndex.ts";
+import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
 
@@ -69,6 +70,9 @@ export function ScanScreen() {
   const [reviewing, setReviewing] = useState(false);
   /** Video has real dimensions. Capturing before that reads a 0x0 frame. */
   const [ready, setReady] = useState(false);
+  const [auto, setAuto] = useState(true);
+  const [hint, setHint] = useState<Decision["reason"]>("moving");
+  const autoState = useRef<AutoState>(initialAutoState);
   const [addedCount, setAddedCount] = useState(0);
 
   // The index is 13KB and the permission prompt is far slower, so fetching it
@@ -142,31 +146,30 @@ export function ScanScreen() {
     }
   }, []);
 
-  const capture = useCallback(() => {
+  /** Hash the guide region of the current frame, or null if there is none. */
+  const hashFrame = useCallback(() => {
     const el = video.current;
-    // Guarded, but the button is disabled until `ready` so this should never be
-    // the thing that stops a capture — a tap that silently does nothing is the
-    // failure mode this app keeps re-learning.
-    if (!el || !index || !el.videoWidth) return;
-
+    if (!el || !el.videoWidth) return null;
     const guide = guideRect(el.videoWidth, el.videoHeight);
     const canvas = document.createElement("canvas");
     canvas.width = CAPTURE_WIDTH;
     canvas.height = CAPTURE_HEIGHT;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-
+    if (!ctx) return null;
     // Crop to the guide and normalise to the size every index entry was built
     // at, so resolution alone can never change a hash.
     ctx.drawImage(el, guide.x, guide.y, guide.w, guide.h, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
     const frame = ctx.getImageData(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
-    const hash = perceptualHash(
-      frame.data,
-      CAPTURE_WIDTH,
-      CAPTURE_HEIGHT,
-      artRect(CAPTURE_WIDTH, CAPTURE_HEIGHT),
-    );
-    const result = identify(index, hash, 3);
+    return {
+      hash: perceptualHash(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, artRect(CAPTURE_WIDTH, CAPTURE_HEIGHT)),
+      canvas,
+    };
+  }, []);
+
+  const capture = useCallback(() => {
+    const framed = hashFrame();
+    if (!framed || !index) return;
+    const result = identify(index, framed.hash, 3);
 
     // A thumbnail of what the camera actually saw. Reviewing a list of names
     // with no picture is guesswork; this is how you catch the one that went
@@ -174,7 +177,7 @@ export function ScanScreen() {
     const thumb = document.createElement("canvas");
     thumb.width = THUMB_WIDTH;
     thumb.height = Math.round((THUMB_WIDTH * CAPTURE_HEIGHT) / CAPTURE_WIDTH);
-    thumb.getContext("2d")?.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+    thumb.getContext("2d")?.drawImage(framed.canvas, 0, 0, thumb.width, thumb.height);
 
     setQueue((prev) => [
       ...prev,
@@ -189,7 +192,30 @@ export function ScanScreen() {
         rejected: false,
       },
     ]);
-  }, [index]);
+  }, [index, hashFrame]);
+
+  const live = phase.at === "live";
+
+  /**
+   * The detection loop.
+   *
+   * ~10fps, not 60: detection at frame rate buys nothing a hand can use and
+   * costs the main thread the smoothness of the preview. One hash per tick is
+   * the entire budget — the same hash answers "has it stopped moving" and
+   * "is this still the card I just took".
+   */
+  useEffect(() => {
+    if (!auto || !live || !ready || !index || reviewing) return;
+    const timer = window.setInterval(() => {
+      const framed = hashFrame();
+      if (!framed) return;
+      const decision = decide(autoState.current, framed.hash, Date.now());
+      autoState.current = decision.state;
+      setHint(decision.reason);
+      if (decision.capture) capture();
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [auto, live, ready, index, reviewing, hashFrame, capture]);
 
   const update = (key: number, patch: Partial<Capture>) =>
     setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
@@ -212,7 +238,6 @@ export function ScanScreen() {
     setReviewing(false);
   };
 
-  const live = phase.at === "live";
   const unsure = queue.filter((c) => c.choice === null && !c.rejected).length;
   const keeping = queue.filter(isKept).length;
 
@@ -383,6 +408,25 @@ export function ScanScreen() {
       </div>
 
       {/* Reserved even when empty, so the preview above never changes size. */}
+      <div className={styles.autoRow}>
+        <button
+          type="button"
+          className={`${styles.chip} ${auto ? styles.chipOn : ""}`}
+          aria-pressed={auto}
+          onClick={() => {
+            // Fresh state either way: a stale baseline from before the toggle
+            // would either fire immediately or refuse to.
+            autoState.current = initialAutoState;
+            setAuto((on) => !on);
+          }}
+        >
+          {auto ? "Auto on" : "Auto off"}
+        </button>
+        <span className={styles.autoNote}>
+          {auto ? "Hold a card in the frame — it captures itself" : "Tap to capture each card"}
+        </span>
+      </div>
+
       <div className={styles.strip} aria-label="Scanned this session">
         {queue.length === 0 ? (
           <span className={styles.stripEmpty}>
@@ -416,7 +460,7 @@ export function ScanScreen() {
             disabled={!index || !ready}
             data-testid="capture"
           >
-            {!index ? "Loading cards…" : ready ? "Capture" : "Focusing…"}
+            {!index ? "Loading cards…" : !ready ? "Focusing…" : auto ? autoHint(hint) : "Capture"}
           </button>
         ) : (
           <button

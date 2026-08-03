@@ -33,8 +33,11 @@ test.use({
  * silently queues nothing. Under parallel load that turned into a flake that
  * passed in isolation.
  */
-async function startCamera(page: Page) {
+async function startCamera(page: Page, { auto = false } = {}) {
   await page.getByRole("button", { name: "Start camera" }).click();
+  // Auto is on by default. Tests that count captures must not race the
+  // detection loop, so it is off unless a test is specifically about it.
+  if (!auto) await page.getByRole("button", { name: "Auto on" }).click();
   await expect(page.getByTestId("capture")).toBeEnabled({ timeout: 20000 });
   await page.waitForFunction(
     () => {
@@ -181,6 +184,24 @@ test.describe("card scanner", () => {
       return (JSON.parse(raw) as { deletedAt?: number }[]).filter((r) => !r.deletedAt).length;
     });
     expect(held, `a re-scanned card was removed instead of kept (${chosen})`).toBeGreaterThanOrEqual(2);
+  });
+
+  test("captures on its own once a card holds still", async ({ page }) => {
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page, { auto: true });
+
+    // The fake device shows a moving pattern, so this asserts the loop is
+    // running and reporting, not that it fires — firing on a rolling gradient
+    // would mean the stability rule was broken.
+    await expect(page.getByRole("button", { name: "Auto on" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("capture")).toContainText(/Hold still|Scanned|Next card|Scanning/);
+  });
+
+  test("can be turned off for one card at a time", async ({ page }) => {
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await expect(page.getByRole("button", { name: "Auto off" })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("capture")).toHaveText("Capture");
   });
 
   test("is reachable from the menu", async ({ page }) => {
