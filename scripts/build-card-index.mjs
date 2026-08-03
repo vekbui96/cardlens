@@ -16,7 +16,9 @@
  *
  *   node scripts/build-card-index.mjs [setId...]
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { build } from "esbuild";
@@ -178,52 +180,67 @@ for (const setId of SETS) {
     downloaded.push(...keep);
     done += keep.length;
   }
+  writeArtifacts(hashes, downloaded);
   console.log(`  ${setId.padEnd(10)} ${done}/${data.length}   (${downloaded.length} total)`);
 }
 
 await browser.close();
 
-const index = new Uint32Array(hashes.length * 2);
-hashes.forEach(([a, b], i) => {
-  index[i * 2] = a;
-  index[i * 2 + 1] = b;
-});
-
 /**
- * Version is content-derived, so a rebuild that changes nothing produces the
- * same filename and every cached copy stays valid — and one that DOES change
- * gets a new URL, which is what lets the service worker cache it forever.
+ * Write the artifacts for everything hashed so far.
+ *
+ * Called after EVERY set, not once at the end. Three whole-catalog runs have
+ * now been stopped part-way — one to an out-of-memory, two killed — and each
+ * threw away everything it had done: the last lost 90 sets and 8,699 cards
+ * because the only write was on the final line. A checkpoint costs a few
+ * milliseconds against forty minutes of downloading, and it means a stopped run
+ * leaves a smaller index rather than none.
  */
-const { createHash } = await import("node:crypto");
-const version = createHash("sha256").update(Buffer.from(index.buffer)).digest("hex").slice(0, 8);
+function writeArtifacts(hashes, cards) {
+  const index = new Uint32Array(hashes.length * 2);
+  hashes.forEach(([a, b], i) => {
+    index[i * 2] = a;
+    index[i * 2 + 1] = b;
+  });
 
-mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(`${OUT_DIR}/index-${version}.bin`, Buffer.from(index.buffer));
-writeFileSync(
-  `${OUT_DIR}/cards-${version}.json`,
-  JSON.stringify(
-    downloaded.map((c) => ({
-      id: c.id,
-      name: c.name,
-      number: c.number,
-      setId: c.setId,
-      setName: c.setName,
-      rarity: c.rarity,
-    })),
-  ),
-);
-writeFileSync(
-  `${OUT_DIR}/latest.json`,
-  JSON.stringify(
-    { version, cards: downloaded.length, sets: SETS, builtAt: new Date().toISOString() },
-    null,
-    2,
-  ),
-);
+  // Content-derived, so a rebuild that changes nothing keeps every cached copy
+  // valid and one that does change gets a new URL.
+  const version = createHash("sha256").update(Buffer.from(index.buffer)).digest("hex").slice(0, 8);
 
-const kb = (n) => `${(n / 1024).toFixed(0)}KB`;
-console.log(`\nindex-${version}.bin  ${kb(index.byteLength)}  (${downloaded.length} cards)`);
-console.log(`cards-${version}.json ${kb(Buffer.byteLength(JSON.stringify(downloaded.map((c) => c.id))))}+`);
+  mkdirSync(OUT_DIR, { recursive: true });
+  // Old versions would otherwise pile up in the repo and ship to every device.
+  for (const name of readdirSync(OUT_DIR)) {
+    if (/^(index|cards)-/.test(name) && !name.includes(version)) rmSync(join(OUT_DIR, name));
+  }
+
+  writeFileSync(`${OUT_DIR}/index-${version}.bin`, Buffer.from(index.buffer));
+  writeFileSync(
+    `${OUT_DIR}/cards-${version}.json`,
+    JSON.stringify(
+      cards.map((c) => ({
+        id: c.id,
+        name: c.name,
+        number: c.number,
+        setId: c.setId,
+        setName: c.setName,
+        rarity: c.rarity,
+      })),
+    ),
+  );
+  writeFileSync(
+    `${OUT_DIR}/latest.json`,
+    JSON.stringify(
+      { version, cards: cards.length, sets: [...new Set(cards.map((c) => c.setId))] },
+      null,
+      2,
+    ),
+  );
+  return { version, bytes: index.byteLength };
+}
+
+const { version, bytes } = writeArtifacts(hashes, downloaded);
+console.log(`
+index-${version}.bin  ${(bytes / 1024).toFixed(0)}KB  (${downloaded.length} cards)`);
 
 // Collisions matter more than size: two cards sharing a hash can never be told
 // apart by artwork, and the scanner has to fall back to asking.
