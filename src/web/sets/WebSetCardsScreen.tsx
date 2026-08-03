@@ -141,23 +141,30 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
             {/* Dim rather than hide what is missing: a grid of greyed art is
                 readable at a glance, a grid with holes in it is not. */}
             <CardImage src={card.imageSmall} alt="" size="thumb" />
-            <span className={styles.tileFinish}>{finishLabel(finish)}</span>
             {complete ? (
               <span className={styles.tickDone} aria-hidden="true">
                 ✓
               </span>
             ) : null}
           </button>
+          {/*
+           * Name first, then number and pocket — the same caption the showcase
+           * carries. A tile labelled only "Normal" cannot be scanned: the art
+           * is 100px and identifying the card is exactly what the label is for.
+           */}
           <button
             type="button"
-            className={styles.tileNumber}
+            className={styles.tileInfo}
             onClick={() => setOpenCardId(card.id)}
             // Names the pocket it sits under, not just the card: a card with two
             // printings renders two of these, and identical labels make them
             // indistinguishable to a screen reader.
             aria-label={`Details for ${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}`}
           >
-            <span>{card.collectorNumber}</span>
+            <span className={styles.tileName}>{card.name}</span>
+            <span className={styles.tileFinish}>
+              {card.collectorNumber} · {finishLabel(finish)}
+            </span>
             {price !== undefined ? <span className={styles.tilePrice}>{formatUsd(price)}</span> : null}
           </button>
         </div>

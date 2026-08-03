@@ -104,7 +104,7 @@
   margin: 0;
   padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--cl-gap);
 }
 
@@ -187,6 +187,20 @@
   display: flex;
   flex-direction: column;
   gap: var(--cl-gap-xs);
+  height: 100%;
+  /* Without this a grid item refuses to shrink below its content, which is
+     what made the ellipsis never engage and the columns come out unequal. */
+  min-width: 0;
+}
+
+/*
+ * Captions align TOP, directly under the art, so the names read across a row.
+ * Bottom-pinning them lined up the prices instead, which pushed the name of a
+ * printing with no price half a line down and made the row look broken - the
+ * name is what the eye tracks, not the price.
+ */
+.tile .tileInfo {
+  margin-top: 0;
 }
 
 .tileMark {
@@ -265,23 +279,12 @@
   }
 }
 
-/* Which pocket this is. Always shown — the whole point is telling the normal
-   and the reverse apart at a glance, so it cannot be hover-only. */
-.tileFinish {
-  font-size: var(--cl-fs-small);
-  color: var(--cl-fg-muted);
-  text-align: left;
-  padding: 0 2px;
-  /* Long foil names must not reflow the grid. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tileDone .tileFinish {
-  color: var(--cl-fg);
-}
-
+/*
+ * The owned tick, sitting ON the art rather than under it.
+ *
+ * In the flow it added a line of height to owned tiles only, which pushed
+ * their captions down and left every row ragged.
+ */
 .tickDone {
   position: absolute;
   top: 6px;
@@ -297,30 +300,60 @@
   font-weight: 700;
 }
 
-/* Mono: collector numbers are ragged-width catalogue identifiers (101a, TG01,
-   SV001) that have to align down the column, as in a binder index. */
-.tileNumber {
+/*
+ * The caption, and the way into the card sheet.
+ *
+ * Left-aligned and stacked like the showcase: name, then number and pocket,
+ * then price. The name is what makes a wall of thumbnails scannable — the art
+ * is ~100px wide on a phone, which is not enough to identify a card.
+ */
+.tileInfo {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cl-gap-xs);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   width: 100%;
+  min-width: 0;
   /* 44px so the details control is a real touch target and not a trap between
      two marking taps. */
   min-height: 44px;
-  padding: 0 2px;
+  padding: 2px;
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--cl-fg-dim);
-  font-family: var(--cl-font-data);
-  font-size: var(--cl-fs-small);
-  font-variant-numeric: tabular-nums;
+  text-align: left;
 }
 
-.tileNumber:focus-visible {
+.tileInfo:focus-visible {
   outline: var(--cl-focus-ring);
   outline-offset: 2px;
+  border-radius: var(--cl-radius-sm, 6px);
+}
+
+.tileName {
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileDone .tileName {
+  color: var(--cl-fg);
+}
+
+/* Mono: collector numbers are ragged-width catalogue identifiers (101a, TG01,
+   SV001) that have to align down the column, as in a binder index. */
+.tileFinish {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tilePrice {
@@ -343,7 +376,7 @@
  */
 @media (min-width: 1000px) {
   .grid {
-    grid-template-columns: repeat(9, 1fr);
+    grid-template-columns: repeat(9, minmax(0, 1fr));
     gap: var(--cl-gap);
     padding: var(--cl-gap-sm) var(--cl-gap-lg) var(--cl-gap);
   }

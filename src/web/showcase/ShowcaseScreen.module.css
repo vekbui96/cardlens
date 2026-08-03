@@ -207,13 +207,21 @@
 .viewerBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 60;
   display: grid;
   place-items: center;
   padding: var(--cl-gap);
-  background: rgba(0, 0, 0, 0.82);
+  background: rgba(4, 6, 10, 0.93);
   /* Safe areas: a phone's home indicator otherwise sits over the close button. */
   padding-bottom: max(var(--cl-gap), env(safe-area-inset-bottom));
+}
+
+/* Card art is busy, and so is the grid behind it. Blur separates the two the
+   same way the card sheet does, rather than relying on opacity alone. */
+@supports (backdrop-filter: blur(1px)) {
+  .viewerBackdrop {
+    backdrop-filter: blur(10px);
+  }
 }
 
 .viewer {
@@ -229,7 +237,7 @@
    width-bound card runs off the bottom and the close button goes with it. */
 .viewerArt {
   width: 100%;
-  max-height: 68vh;
+  max-height: 58vh;
   object-fit: contain;
   border-radius: var(--cl-radius-art);
   box-shadow: var(--cl-shadow-lg);

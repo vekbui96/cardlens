@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
@@ -48,7 +49,14 @@ function CardViewer({ slot, onClose }: { slot: ViewedSlot; onClose: () => void }
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  /*
+   * Portalled to <body>. The app shell's sticky header sits in its own
+   * stacking context, so a backdrop rendered inside the screen paints UNDER
+   * it however high its z-index goes — the page showed through the overlay.
+   * A portal is the only fix that does not depend on which ancestor created
+   * the context.
+   */
+  return createPortal(
     <div className={styles.viewerBackdrop} onClick={onClose} role="presentation">
       <div
         className={styles.viewer}
@@ -74,7 +82,8 @@ function CardViewer({ slot, onClose }: { slot: ViewedSlot; onClose: () => void }
           Close
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
