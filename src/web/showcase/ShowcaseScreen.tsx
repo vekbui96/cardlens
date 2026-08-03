@@ -6,8 +6,8 @@ import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
 import { LoadingState, ErrorState } from "../../components/States.tsx";
 import { binderPages } from "../../models/binder.ts";
 import { finishLabel } from "../../models/finishes.ts";
-import { decodeShowcase } from "../../models/showcase.ts";
-import { formatUsd } from "../../utils/format.ts";
+import { decodeShowcase, type ShowcasePrinting } from "../../models/showcase.ts";
+import { formatUpdated, formatUsd } from "../../utils/format.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import styles from "./ShowcaseScreen.module.css";
@@ -87,6 +87,12 @@ function CardViewer({ slot, onClose }: { slot: ViewedSlot; onClose: () => void }
   );
 }
 
+/**
+ * Somebody else's set from a LINK — the data rides in the URL.
+ *
+ * Kept working unchanged: links already pasted into chats must not break
+ * because a newer, live kind of share exists.
+ */
 export function ShowcaseScreen({
   setId,
   setName,
@@ -95,6 +101,24 @@ export function ShowcaseScreen({
   setId: string;
   setName: string;
   payload: string;
+}) {
+  const owned = useMemo(() => decodeShowcase(setId, payload).owned, [setId, payload]);
+  return <ShowcaseView setId={setId} setName={setName} owned={owned} />;
+}
+
+export function ShowcaseView({
+  setId,
+  setName,
+  owned: ownedRows,
+  live = false,
+  updatedAt,
+}: {
+  setId: string;
+  setName: string;
+  owned: ShowcasePrinting[];
+  /** Re-read from the server rather than carried by the link. */
+  live?: boolean;
+  updatedAt?: number;
 }) {
   const { openSets } = useNavigation();
   /**
@@ -116,13 +140,13 @@ export function ShowcaseScreen({
    */
   const ownedByNumber = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const p of decodeShowcase(setId, payload).owned) {
+    for (const p of ownedRows) {
       const list = map.get(p.collectorNumber) ?? [];
       if (!list.includes(p.finish)) list.push(p.finish);
       map.set(p.collectorNumber, list);
     }
     return map;
-  }, [setId, payload]);
+  }, [ownedRows]);
 
   /**
    * One slot per PRINTING, not per card.
@@ -286,7 +310,11 @@ export function ShowcaseScreen({
 
       {viewing ? <CardViewer slot={viewing} onClose={() => setViewing(null)} /> : null}
 
-      <p className={styles.footnote}>Shared from CardLens · prices are TCGplayer market, USD</p>
+      <p className={styles.footnote}>
+        {live ? "Live from CardLens — updates as the collection does" : "Shared from CardLens"} · prices are
+        TCGplayer market, USD
+        {live && updatedAt ? ` · updated ${formatUpdated(new Date(updatedAt).toISOString())}` : ""}
+      </p>
     </Screen>
   );
 }

@@ -69,3 +69,18 @@ describe("screen <-> path", () => {
     });
   });
 });
+
+describe("live share links", () => {
+  it("round-trips a live link", () => {
+    const screen = { name: "live", shareId: "abc-123_XYZ" } as const;
+    const path = screenToPath(screen);
+    expect(path).toBe("/live/abc-123_XYZ");
+    expect(pathToScreen(path)).toEqual(screen);
+  });
+
+  it("still round-trips a snapshot link", () => {
+    // Links already pasted into chats must keep working.
+    const screen = { name: "showcase", setId: "me5", setName: "Pitch Black", payload: "AbC" } as const;
+    expect(pathToScreen(screenToPath(screen))).toEqual(screen);
+  });
+});

@@ -5,6 +5,7 @@ import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionSto
 import { PrintingsStore } from "./printingsStore.ts";
 import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
+import { ShareStore } from "./shareStore.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -28,6 +29,7 @@ const TARGET_TOKEN = process.env.TARGET_TOKEN ?? "";
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
+const SHARES_FILE = process.env.SHARES_FILE ?? "D:/services/data/shares.json";
 
 /** Upstream failed with nothing cached to fall back on. */
 class UpstreamError extends Error {
@@ -70,6 +72,7 @@ export function createApp(
   collection: CollectionStore = new CollectionStore(COLLECTION_FILE),
   printingsStore: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
   sealedStore: SealedStore = new SealedStore(SEALED_DIR),
+  shares: ShareStore = new ShareStore(SHARES_FILE),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -295,6 +298,68 @@ export function createApp(
       return;
     }
     await relay(res, "POST", "/api/target/pause", { paused: body.paused });
+  });
+
+  // --- Live set shares -------------------------------------------------------
+  /**
+   * A link that re-reads the collection instead of carrying a copy of it.
+   *
+   * GET is deliberately UNAUTHENTICATED - the whole point is handing the link
+   * to somebody who has no token. The id is the credential, so it is 16 random
+   * bytes and the route says nothing about whether an unknown id ever existed.
+   *
+   * Only the printings for ONE set are returned, and only what is owned:
+   * excluded printings are the owner's private bookkeeping about what they
+   * intend to chase, not a claim about what they hold.
+   */
+  const shareLimiter = rateLimiter(120, 60_000);
+
+  app.post("/api/share", shareLimiter, requireToken, (req, res) => {
+    const body = req.body as { setId?: unknown; setName?: unknown };
+    const setId = typeof body?.setId === "string" ? body.setId.trim().slice(0, 40) : "";
+    const setName = typeof body?.setName === "string" ? body.setName.trim().slice(0, 120) : "";
+    if (!setId || !setName) {
+      res.status(400).json({ error: "set_id_and_name_required" });
+      return;
+    }
+    res.json(shares.createOrReuse(setId, setName));
+  });
+
+  app.get("/api/share", shareLimiter, requireToken, (_req, res) => {
+    res.json({ shares: shares.live() });
+  });
+
+  app.delete("/api/share/:id", shareLimiter, requireToken, (req, res) => {
+    const id = String(req.params.id ?? "").slice(0, 64);
+    if (!shares.revoke(id)) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({ revoked: id });
+  });
+
+  app.get("/api/share/:id", shareLimiter, (req, res) => {
+    const id = String(req.params.id ?? "").slice(0, 64);
+    const share = shares.get(id);
+    // 404 for revoked and for never-existed alike: distinguishing them would
+    // confirm an id was real to someone probing.
+    if (!share) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    const owned = collection
+      .all()
+      .filter((r) => r.setId === share.setId && r.at > (r.deletedAt ?? 0) && !r.excluded)
+      .map((r) => ({
+        // Rows are keyed by card id; the showcase renders by collector number,
+        // which is the suffix. Matching by number is also what makes a shared
+        // link resolvable against a catalog that renumbered its ids.
+        collectorNumber: r.cardId.slice(r.cardId.lastIndexOf("-") + 1),
+        finish: r.finish,
+      }));
+
+    res.json({ setId: share.setId, setName: share.setName, owned, at: Date.now() });
   });
 
   // --- Printings (TCGdex, cached server-side) --------------------------------

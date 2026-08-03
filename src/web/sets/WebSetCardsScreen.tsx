@@ -10,6 +10,9 @@ import type { CollectFinish } from "../../models/cards.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { useRepositories } from "../../app/contexts.tsx";
+import { companionBase } from "../../services/companionApi.ts";
+import { fetchJson } from "../../services/http.ts";
 import { CardSheet } from "./CardSheet.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
 import { encodeShowcase } from "../../models/showcase.ts";
@@ -31,6 +34,7 @@ import styles from "./WebSetCardsScreen.module.css";
  */
 export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { pop } = useNavigation();
+  const repo = useRepositories();
   const {
     ownedFinishes,
     toggleOwned,
@@ -48,6 +52,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   const [byValue, setByValue] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [shared, setShared] = useState(false);
+  /** False means the server was unreachable and a snapshot link was copied instead. */
+  const [sharedLive, setSharedLive] = useState(true);
 
   /**
    * The switcher swaps sets under a screen that stays mounted, so anything
@@ -205,24 +211,54 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
    * the recipient's app resolves names, art and prices from the public catalog,
    * and the link stays short enough to paste into a chat.
    */
+  /**
+   * Ask the server for this set's live link and copy it.
+   *
+   * A live link rather than the old encoded snapshot: what you share stays
+   * current as you mark cards, instead of freezing at the moment you sent it.
+   * The server reuses one link per set, so pressing this twice does not leave a
+   * second live link you have forgotten about and cannot see to revoke.
+   *
+   * Falls back to the snapshot link when the server cannot be reached — a
+   * shareable link is better than an error, and the snapshot path needs
+   * nothing but the device itself.
+   */
   const share = async () => {
-    const owned = view.cards.flatMap((card) =>
-      ownedFinishes(card.id).map((finish) => ({ collectorNumber: card.collectorNumber, finish })),
-    );
-    const path = screenToPath({
-      name: "showcase",
-      setId,
-      setName,
-      payload: encodeShowcase({ setId, owned }),
-    });
-    const url = `${window.location.origin}${window.location.pathname}#${path}`;
+    const origin = `${window.location.origin}${window.location.pathname}`;
+    let path: string;
+
+    try {
+      const token = repo.getSyncSettings().token;
+      if (!token) throw new Error("no token");
+      const created = (await fetchJson(`${companionBase()}/share`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ setId, setName }),
+      })) as { id?: unknown };
+      if (typeof created?.id !== "string") throw new Error("no id");
+      path = screenToPath({ name: "live", shareId: created.id });
+      setSharedLive(true);
+    } catch {
+      const owned = view.cards.flatMap((card) =>
+        ownedFinishes(card.id).map((finish) => ({ collectorNumber: card.collectorNumber, finish })),
+      );
+      path = screenToPath({
+        name: "showcase",
+        setId,
+        setName,
+        payload: encodeShowcase({ setId, owned }),
+      });
+      setSharedLive(false);
+    }
+
+    const url = `${origin}#${path}`;
     try {
       // The share sheet where there is one — on a phone this is the difference
       // between sharing a set and copying a string into another app by hand.
       if (navigator.share) await navigator.share({ title: `${setName} — CardLens`, url });
       else await navigator.clipboard.writeText(url);
       setShared(true);
-      setTimeout(() => setShared(false), 2000);
+      setTimeout(() => setShared(false), 2500);
     } catch {
       // Cancelling the share sheet rejects, and that is not a failure.
     }
@@ -279,7 +315,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           onClick={() => void share()}
           disabled={view.cards.length === 0}
         >
-          {shared ? "Link copied" : "Share"}
+          {shared ? (sharedLive ? "Live link copied" : "Snapshot link copied") : "Share"}
         </button>
       </div>
 

@@ -23,7 +23,13 @@ export type Screen =
    * Web only: somebody else's set, read from the link rather than this device.
    * `payload` is the encoded ownership — see models/showcase.ts.
    */
-  | { name: "showcase"; setId: string; setName: string; payload: string };
+  | { name: "showcase"; setId: string; setName: string; payload: string }
+  /**
+   * Web only: somebody else's set, read LIVE from the server rather than from
+   * the link. Same page as `showcase`, but the data can change after it was
+   * sent — see server/shareStore.ts.
+   */
+  | { name: "live"; shareId: string };
 
 export type ScreenName = Screen["name"];
 

@@ -27,6 +27,10 @@ export function screenToPath(screen: Screen): string {
       return `/set/${encodeURIComponent(screen.setId)}/${encodeURIComponent(screen.setName)}`;
     case "showcase":
       return `/showcase/${encodeURIComponent(screen.setId)}/${encodeURIComponent(screen.setName)}/${screen.payload}`;
+    // Just the id: the set and its name come from the server, so they cannot
+    // drift from what is actually being shared.
+    case "live":
+      return `/live/${encodeURIComponent(screen.shareId)}`;
     default:
       return `/${screen.name}`;
   }
@@ -76,6 +80,9 @@ export function pathToScreen(path: string): Screen | null {
       setName: rest.slice(1, -1).join("/"),
       payload: rest[rest.length - 1],
     };
+  }
+  if (head === "live" && rest.length >= 1) {
+    return { name: "live", shareId: rest[0] };
   }
   return null;
 }

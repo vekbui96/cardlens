@@ -78,6 +78,9 @@ const WebTargetScreen = lazy(() =>
   import("../web/target/WebTargetScreen.tsx").then((m) => ({ default: m.WebTargetScreen })),
 );
 /** A link someone was sent; most visitors will never open any other screen. */
+const LiveShowcaseScreen = lazy(() =>
+  import("../web/showcase/LiveShowcaseScreen.tsx").then((m) => ({ default: m.LiveShowcaseScreen })),
+);
 const ShowcaseScreen = lazy(() =>
   import("../web/showcase/ShowcaseScreen.tsx").then((m) => ({ default: m.ShowcaseScreen })),
 );
@@ -138,6 +141,10 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       return isWeb ? <ScanScreen /> : <CollectionScreen />;
     case "target":
       return isWeb ? <WebTargetScreen /> : <CollectionScreen />;
+    case "live":
+      // Falls back to Collection on the glasses for the same reason showcase
+      // does: they have no way to open a link.
+      return isWeb ? <LiveShowcaseScreen shareId={screen.shareId} /> : <CollectionScreen />;
     case "showcase":
       return isWeb ? (
         <ShowcaseScreen setId={screen.setId} setName={screen.setName} payload={screen.payload} />
