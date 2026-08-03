@@ -38,7 +38,7 @@ test.describe("web shell at desktop size", () => {
       .first()
       .click();
 
-    const tiles = page.getByRole("button", { name: /printings owned/ });
+    const tiles = page.getByRole("button", { name: /, (not )?owned$/ });
     await expect(tiles.first()).toBeVisible();
 
     const count = await tiles.count();
@@ -63,7 +63,7 @@ test.describe("web shell at desktop size", () => {
       .first()
       .click();
 
-    const tile = page.getByRole("button", { name: /printings owned/ }).first();
+    const tile = page.getByRole("button", { name: /, (not )?owned$/ }).first();
     await expect(tile).toBeVisible();
 
     const box = await tile.boundingBox();
@@ -118,7 +118,7 @@ test.describe("web shell at desktop size", () => {
       .first()
       .click();
     await page
-      .getByRole("button", { name: /printings owned/ })
+      .getByRole("button", { name: /^Details for / })
       .first()
       .click();
 

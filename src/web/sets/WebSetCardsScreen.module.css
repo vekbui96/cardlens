@@ -175,7 +175,21 @@
   color: var(--cl-fg);
 }
 
+/*
+ * One tile is one PRINTING, so a card with a reverse holo occupies two pockets
+ * side by side — the same arrangement as the binder and the showcase.
+ *
+ * The art marks it and the number opens it: two controls, because they are two
+ * intents. A single tap target doing both would make "look this card up" and
+ * "add it to my collection" the same gesture.
+ */
 .tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+}
+
+.tileMark {
   width: 100%;
   padding: 0;
   border: none;
@@ -186,16 +200,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--cl-gap-xs);
-  /* Missing cards read as dimmed art rather than as gaps: a grid with holes in
-     it is much harder to scan than a grid that is uniformly laid out. */
+  position: relative;
+  /* Missing printings read as dimmed art rather than as gaps: a grid with holes
+     in it is much harder to scan than one that is uniformly laid out. */
   opacity: 0.4;
   transition:
     opacity var(--cl-transition),
     transform var(--cl-transition);
 }
 
-.tileOwned {
+.tileDone .tileMark {
   opacity: 1;
+}
+
+.tileMark:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--cl-radius-art);
 }
 
 /*
@@ -204,10 +225,10 @@
  * Without it the tile collapses to nothing when an image 404s — found by
  * screenshotting, where two cells in a nine-card page rendered as a floating
  * number and tick with no box at all. It also fixes the layout shift every tile
- * caused while loading, which performance-plan.md item 7 lists separately.
+ * caused while loading.
  */
-.tile img,
-.tile > div {
+.tileMark img,
+.tileMark > div {
   width: 100%;
   height: auto;
   aspect-ratio: 5 / 7;
@@ -220,47 +241,90 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* Complete cards get a gold ring, not just a tick — the state should be legible
-   from the art alone while scanning, before reading any number. */
-.tileDone img,
-.tileDone > div {
+/* Held printings get a gold ring, not just a tick — the state should be legible
+   from the art alone while scanning, before reading any label. */
+.tileDone .tileMark img,
+.tileDone .tileMark > div {
   box-shadow:
     var(--cl-shadow),
     inset 0 0 0 2px var(--cl-gold);
 }
 
+/* A finish the set data does not list, marked by hand. Dashed, so it reads as
+   "yours, not the catalogue's" rather than as an error. */
+.tileExtra .tileMark img,
+.tileExtra .tileMark > div {
+  outline: 1px dashed var(--cl-fg-dim);
+  outline-offset: -3px;
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .tile:hover {
+  .tileMark:hover {
     opacity: 1;
     transform: translateY(-2px);
   }
 }
 
-.tileMeta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cl-gap-xs);
+/* Which pocket this is. Always shown — the whole point is telling the normal
+   and the reverse apart at a glance, so it cannot be hover-only. */
+.tileFinish {
   font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  text-align: left;
   padding: 0 2px;
+  /* Long foil names must not reflow the grid. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileDone .tileFinish {
+  color: var(--cl-fg);
+}
+
+.tickDone {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--cl-gold);
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* Mono: collector numbers are ragged-width catalogue identifiers (101a, TG01,
    SV001) that have to align down the column, as in a binder index. */
 .tileNumber {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-gap-xs);
+  width: 100%;
+  /* 44px so the details control is a real touch target and not a trap between
+     two marking taps. */
+  min-height: 44px;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
   color: var(--cl-fg-dim);
   font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
   font-variant-numeric: tabular-nums;
 }
 
-.tick {
-  color: var(--cl-fg-muted);
-  font-family: var(--cl-font-data);
-  font-variant-numeric: tabular-nums;
+.tileNumber:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
 }
 
-.tickDone {
-  color: var(--cl-gold);
+.tilePrice {
+  color: var(--cl-price);
 }
 
 /*

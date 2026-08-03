@@ -31,7 +31,7 @@ test.describe("set showcase", () => {
 
     await page.goto("/?ui=web#/set/sv3/Obsidian%20Flames");
     // Wait for the grid: the link is built from the cards on screen.
-    await expect(page.getByRole("button", { name: /printings owned/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /, (not )?owned$/ }).first()).toBeVisible();
     await page.getByRole("button", { name: "Share" }).click();
 
     const url = await page.evaluate(() => navigator.clipboard.readText());
@@ -57,7 +57,7 @@ test.describe("set showcase", () => {
       localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
     }, OWNED);
     await page.goto("/?ui=web#/set/sv3/Obsidian%20Flames");
-    await expect(page.getByRole("button", { name: /printings owned/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /, (not )?owned$/ }).first()).toBeVisible();
     await page.getByRole("button", { name: "Share" }).click();
     const url = await page.evaluate(() => navigator.clipboard.readText());
 
@@ -68,6 +68,51 @@ test.describe("set showcase", () => {
     await expect(slots.filter({ hasText: "missing" }).first()).toBeVisible();
     await expect(slots.filter({ hasText: "125 · Normal" })).toHaveCount(1);
     await expect(page.getByText("Charizard ex").first()).toBeVisible();
+  });
+
+  test("lets a visitor filter down to what is still missing", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.addInitScript((rows) => {
+      localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
+    }, OWNED);
+    await page.goto("/?ui=web#/set/sv3/Obsidian%20Flames");
+    await expect(page.getByRole("button", { name: /, (not )?owned$/ }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Share" }).click();
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+
+    await page.goto(url.replace(/^https?:\/\/[^/]+/, ""));
+    // 125 is held in both printings; 223 is not held at all.
+    await expect(page.getByTestId("showcase-slot").filter({ hasText: "125 · Normal" })).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Missing only" }).click();
+
+    // What they hold drops out; what they still want remains — the question a
+    // visitor holding spares actually has.
+    await expect(page.getByTestId("showcase-slot").filter({ hasText: "125 · Normal" })).toHaveCount(0);
+    await expect(page.getByTestId("showcase-slot").filter({ hasText: "223" }).first()).toBeVisible();
+  });
+
+  test("opens a card big enough to actually look at", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.addInitScript((rows) => {
+      localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
+    }, OWNED);
+    await page.goto("/?ui=web#/set/sv3/Obsidian%20Flames");
+    await expect(page.getByRole("button", { name: /, (not )?owned$/ }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Share" }).click();
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+
+    await page.goto(url.replace(/^https?:\/\/[^/]+/, ""));
+    await page.getByRole("button", { name: /^View Charizard ex, 125, Normal/ }).click();
+
+    const viewer = page.getByRole("dialog");
+    await expect(viewer).toBeVisible();
+    // The viewer says whether the sharer holds this printing — the reason a
+    // visitor opened it.
+    await expect(viewer.getByText(/Owned/)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
   test("does not fall over on a link a chat client mangled", async ({ page }) => {

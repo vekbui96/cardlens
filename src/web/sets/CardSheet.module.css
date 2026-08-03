@@ -229,3 +229,27 @@
   font-family: inherit;
   cursor: pointer;
 }
+
+/*
+ * Clearing a whole card. Destructive, so it is text rather than a filled
+ * button — it sits below the printing rows where the eye lands last, and must
+ * not compete with them for a tap.
+ */
+.removeAll {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--cl-gap-sm);
+  padding: 0 var(--cl-gap-sm);
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-error);
+  cursor: pointer;
+  text-align: left;
+}
+
+.removeAll:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}

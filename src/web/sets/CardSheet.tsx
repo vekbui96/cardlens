@@ -61,6 +61,7 @@ export function CardSheet({
   headlinePrice,
   priceFor,
   onToggle,
+  onRemoveAll,
   onClose,
   storageDegraded = false,
 }: {
@@ -74,6 +75,8 @@ export function CardSheet({
   /** Price for one printing of THIS card. The caller binds the collector number. */
   priceFor: (finish: CollectFinish) => number | undefined;
   onToggle: (finish: CollectFinish) => void;
+  /** Clear every held printing of this card in one action. */
+  onRemoveAll: () => void;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -179,6 +182,16 @@ export function CardSheet({
                 />
               ))}
             </ul>
+          ) : null}
+          {/* Clearing a card one printing at a time is the common case done the
+              slow way — a wrongly-scanned card can hold four. This removes them
+              in one action, and only appears when there is something to remove
+              so it never reads as a destructive button on an untouched card. */}
+          {owned.length > 0 ? (
+            <button type="button" className={styles.removeAll} onClick={onRemoveAll}>
+              Remove {owned.length === 1 ? "this printing" : `all ${owned.length} printings`} from my
+              collection
+            </button>
           ) : null}
         </div>
 

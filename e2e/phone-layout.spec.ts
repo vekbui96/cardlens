@@ -102,7 +102,7 @@ test.describe("web shell at phone size", () => {
       .first()
       .click();
     await page
-      .getByRole("button", { name: /printings owned/ })
+      .getByRole("button", { name: /^Details for / })
       .first()
       .click();
 

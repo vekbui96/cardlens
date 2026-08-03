@@ -5,13 +5,15 @@ import { CardImage } from "../../components/CardImage.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { RARITY_FILTERS } from "../../features/results/rarityFilters.ts";
 import { binderPages } from "../../models/binder.ts";
-import type { PokemonCardSummary, CollectFinish } from "../../models/cards.ts";
+import { finishLabel } from "../../models/finishes.ts";
+import type { CollectFinish } from "../../models/cards.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { CardSheet } from "./CardSheet.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
 import { encodeShowcase } from "../../models/showcase.ts";
+import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
 import styles from "./WebSetCardsScreen.module.css";
 
@@ -53,21 +55,49 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   // behind, and the badges on every tile depend on them.
   const view = useSetView(setId, setName, { rarities: rarity.rarities, wantPrintings: true });
 
-  const isComplete = useMemo(() => {
-    return (card: PokemonCardSummary) => {
-      const available = view.finishesFor(card.collectorNumber, card.variants);
-      const held = ownedFinishes(card.id);
-      return available.length > 0 && available.every((f) => held.includes(f));
-    };
-  }, [view, ownedFinishes]);
+  /**
+   * One slot per PRINTING, not per card — the same model the showcase uses.
+   *
+   * A master set lives in a binder with the normal and the reverse in their own
+   * pockets, so a single tile marked "1/2 printings" describes a pocket that
+   * does not exist. Two tiles side by side is what is actually in front of you,
+   * and it makes the missing one visible without opening anything.
+   *
+   * Extras — a hand-marked finish the set data does not know about — get a slot
+   * too, so nothing already held can become invisible here.
+   */
+  const slots = useMemo(
+    () =>
+      view.cards.flatMap((card) => {
+        const available = view.finishesFor(card.collectorNumber, card.variants);
+        const held = ownedFinishes(card.id);
+        const extras = held.filter((f) => !available.includes(f));
+        const finishes = [...available, ...extras];
+        // No printings data yet: fall back to one slot for what is held, so the
+        // grid degrades to "the cards you have" rather than to nothing.
+        return (finishes.length > 0 ? finishes : held).map((finish) => ({
+          collectorNumber: card.collectorNumber,
+          complete: held.includes(finish),
+          extra: extras.includes(finish),
+          card,
+          finish,
+        }));
+      }),
+    [view, ownedFinishes],
+  );
 
-  const cards = useMemo(() => {
-    const visible = missingOnly ? view.cards.filter((c) => !isComplete(c)) : view.cards;
+  type Slot = (typeof slots)[number];
+
+  const visibleSlots = useMemo(() => {
+    const visible = missingOnly ? slots.filter((s) => !s.complete) : slots;
     if (!byValue) return visible;
-    // Copy before sorting: view.cards is memoised upstream and sorting in place
-    // would mutate the cached binder order everything else reads.
-    return [...visible].sort((a, b) => (view.headlinePriceFor(b) ?? 0) - (view.headlinePriceFor(a) ?? 0));
-  }, [view, missingOnly, isComplete, byValue]);
+    // Copy before sorting: slots derives from memoised view.cards, and sorting
+    // in place would mutate the binder order everything else reads.
+    return [...visible].sort(
+      (a, b) =>
+        (view.priceFor(b.collectorNumber, b.finish) ?? 0) - (view.priceFor(a.collectorNumber, a.finish) ?? 0),
+    );
+  }, [slots, missingOnly, byValue, view]);
 
   /**
    * Binder pages are only honest over an unbroken run in collector order. A
@@ -77,42 +107,60 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
    */
   const inBinderOrder = rarity.rarities === null && !missingOnly && !byValue;
   const pages = useMemo(
-    () =>
-      inBinderOrder
-        ? binderPages(
-            cards.map((c) => ({ collectorNumber: c.collectorNumber, complete: isComplete(c), card: c })),
-          )
-        : [],
-    [inBinderOrder, cards, isComplete],
+    () => (inBinderOrder ? binderPages(visibleSlots) : []),
+    [inBinderOrder, visibleSlots],
   );
 
   const openCard = openCardId ? (view.cards.find((c) => c.id === openCardId) ?? null) : null;
 
-  /** One tile, shared by the binder-page and flat-grid paths. */
-  const renderTile = (card: PokemonCardSummary) => {
-    const available = view.finishesFor(card.collectorNumber, card.variants);
-    const held = ownedFinishes(card.id);
-    const complete = available.length > 0 && available.every((f) => held.includes(f));
+  /**
+   * One tile per printing, shared by the binder-page and flat-grid paths.
+   *
+   * The art is the toggle: with a finger you tap the printing itself, which is
+   * why the glasses' collect mode and printing picker have no counterpart here.
+   * The number is a separate control because the two are different intents —
+   * marking a pocket, versus looking the card up.
+   */
+  const renderSlot = (slot: Slot) => {
+    const { card, finish, complete, extra } = slot;
+    const price = view.priceFor(card.collectorNumber, finish);
     return (
-      <li key={card.id}>
-        <button
-          type="button"
-          className={`${styles.tile} ${held.length > 0 ? styles.tileOwned : ""} ${
-            complete ? styles.tileDone : ""
-          }`}
-          onClick={() => setOpenCardId(card.id)}
-          aria-label={`${card.name}, ${card.collectorNumber}, ${held.length} of ${available.length} printings owned`}
-        >
-          <CardImage src={card.imageSmall} alt="" size="thumb" />
-          {/* Dim rather than hide what is missing: a grid of greyed art is
-              readable at a glance, a grid with holes in it is not. */}
-          <span className={styles.tileMeta}>
-            <span className={styles.tileNumber}>{card.collectorNumber}</span>
-            <span className={complete ? styles.tickDone : styles.tick} aria-hidden="true">
-              {complete ? "✓" : `${held.length}/${available.length}`}
-            </span>
-          </span>
-        </button>
+      <li key={`${card.id}:${finish}`}>
+        {/* Not a <button> wrapping a <button> - that is invalid, and the nested
+            control is unreachable by keyboard in several browsers. */}
+        <div className={`${styles.tile} ${complete ? styles.tileDone : ""} ${extra ? styles.tileExtra : ""}`}>
+          <button
+            type="button"
+            className={styles.tileMark}
+            aria-pressed={complete}
+            aria-label={`${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}${
+              complete ? ", owned" : ", not owned"
+            }`}
+            onClick={() => toggleOwned(card.id, finish, setId)}
+          >
+            {/* Dim rather than hide what is missing: a grid of greyed art is
+                readable at a glance, a grid with holes in it is not. */}
+            <CardImage src={card.imageSmall} alt="" size="thumb" />
+            <span className={styles.tileFinish}>{finishLabel(finish)}</span>
+            {complete ? (
+              <span className={styles.tickDone} aria-hidden="true">
+                ✓
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={styles.tileNumber}
+            onClick={() => setOpenCardId(card.id)}
+            // Names the pocket it sits under, not just the card: a card with two
+            // printings renders two of these, and identical labels make them
+            // indistinguishable to a screen reader.
+            aria-label={`Details for ${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}`}
+          >
+            <span>{card.collectorNumber}</span>
+            {price !== undefined ? <span className={styles.tilePrice}>{formatUsd(price)}</span> : null}
+          </button>
+        </div>
       </li>
     );
   };
@@ -208,7 +256,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       {view.isError ? (
         <ErrorState message="Couldn’t load set" onRetry={view.refetch} retryFocused={false} />
       ) : null}
-      {!view.isLoading && !view.isError && cards.length === 0 ? (
+      {!view.isLoading && !view.isError && visibleSlots.length === 0 ? (
         <EmptyState
           title={missingOnly ? "Nothing missing" : `No ${rarity.short} cards`}
           hint={missingOnly ? "Every card here is complete." : "Try another rarity."}
@@ -216,14 +264,17 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       ) : null}
 
       {/* Filtered views are not binder pages, so they say what they are instead. */}
-      {cards.length > 0 && !inBinderOrder ? (
+      {visibleSlots.length > 0 && !inBinderOrder ? (
         <p className={styles.summary}>
-          <span className={styles.summaryCount}>{cards.length}</span> {cards.length === 1 ? "card" : "cards"}
+          <span className={styles.summaryCount}>{visibleSlots.length}</span>{" "}
+          {visibleSlots.length === 1 ? "printing" : "printings"}
           {byValue ? " · most valuable first" : ""}
         </p>
       ) : null}
 
-      {cards.length > 0 && !inBinderOrder ? <ul className={styles.grid}>{cards.map(renderTile)}</ul> : null}
+      {visibleSlots.length > 0 && !inBinderOrder ? (
+        <ul className={styles.grid}>{visibleSlots.map(renderSlot)}</ul>
+      ) : null}
 
       {pages.map((page) => (
         <section key={page.index} className={styles.page}>
@@ -238,7 +289,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
               {page.complete}/{page.cards.length}
             </span>
           </h2>
-          <ul className={styles.grid}>{page.cards.map((p) => renderTile(p.card))}</ul>
+          <ul className={styles.grid}>{page.cards.map(renderSlot)}</ul>
         </section>
       ))}
 
@@ -250,6 +301,13 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           headlinePrice={view.headlinePriceFor(openCard)}
           priceFor={(finish) => view.priceFor(openCard.collectorNumber, finish)}
           onToggle={(finish: CollectFinish) => toggleOwned(openCard.id, finish, setId)}
+          onRemoveAll={() => {
+            // Toggle each held printing off rather than deleting rows: the
+            // collection is an OR-Set, so a removal must be a tombstone or a
+            // stale device resurrects it on the next sync.
+            for (const finish of ownedFinishes(openCard.id)) toggleOwned(openCard.id, finish, setId);
+            setOpenCardId(null);
+          }}
           storageDegraded={storageDegraded}
           onClose={() => setOpenCardId(null)}
         />

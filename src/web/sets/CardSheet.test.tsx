@@ -19,6 +19,7 @@ function renderSheet(over: Partial<Parameters<typeof CardSheet>[0]> = {}) {
       headlinePrice={4.25}
       priceFor={(f) => (f === "normal" ? 1.5 : f === "reverse" ? 4.25 : undefined)}
       onToggle={vi.fn()}
+      onRemoveAll={vi.fn()}
       onClose={vi.fn()}
       {...over}
     />,

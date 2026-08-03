@@ -107,10 +107,21 @@ function serveCustom(
   );
 }
 
-const tileName = (number: string) => new RegExp(`, ${number}, \\d of \\d printings owned`);
-/** Waits for the grid to arrive. */
-const findTile = (number: string) => screen.findByRole("button", { name: tileName(number) });
-const tile = (number: string) => screen.getByRole("button", { name: tileName(number) });
+/**
+ * One tile is one printing now, so a tile is identified by BOTH the collector
+ * number and the finish. The mark button carries its held state in the name;
+ * the number beside it is a separate control that opens the sheet.
+ */
+// Anchored on the held-state suffix: the details control beside it carries
+// the same number and finish, so an unanchored match finds both.
+const marked = (number: string, finish: string) => new RegExp(`, ${number}, ${finish}, (not )?owned$`);
+const slot = (number: string, finish: string) => screen.getByRole("button", { name: marked(number, finish) });
+const findSlot = (number: string, finish: string) =>
+  screen.findByRole("button", { name: marked(number, finish) });
+/** Every marking control, in render order — both held and unheld end in "owned". */
+const allSlots = () => screen.findAllByRole("button", { name: /owned$/ });
+const details = (number: string, finish: string) =>
+  screen.getByRole("button", { name: new RegExp(`^Details for .*, ${number}, ${finish}$`) });
 
 beforeEach(() => {
   localStorage.clear();
@@ -122,72 +133,87 @@ afterEach(() => {
 });
 
 describe("WebSetCardsScreen", () => {
-  it("shows the set as a grid of cards with their printing counts", async () => {
+  it("gives every printing its own tile, the way a binder does", async () => {
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    expect(await findTile("125")).toBeInTheDocument();
-    expect(tile("125")).toHaveAccessibleName(/0 of 2 printings owned/);
-    // A card that exists in one printing only must not claim two.
-    expect(tile("223")).toHaveAccessibleName(/0 of 1 printings owned/);
+    // 125 has two printings, so it occupies two pockets side by side rather
+    // than one tile claiming "0 of 2".
+    expect(await findSlot("125", "Normal")).toBeInTheDocument();
+    expect(slot("125", "Reverse Holo")).toBeInTheDocument();
+
+    // A card that exists in one printing only must not invent a second pocket.
+    expect(slot("223", "Holofoil")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: marked("223", "Reverse Holo") })).toBeNull();
   });
 
-  it("marks a printing by tapping it in the sheet", async () => {
+  it("marks and unmarks a printing by tapping its tile", async () => {
     const user = userEvent.setup();
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    await user.click(await findTile("125"));
+    const reverse = await findSlot("125", "Reverse Holo");
+    expect(reverse).toHaveAttribute("aria-pressed", "false");
 
-    const sheet = screen.getByRole("dialog");
-    // Tapping the printing itself — no collect mode, no picker. Those exist on
-    // the glasses only because a pinch must be told which printing it means.
-    // The button's accessible name also carries its price, so match loosely.
-    await user.click(within(sheet).getByRole("button", { name: /Reverse Holo/ }));
-    expect(within(sheet).getByRole("button", { name: /Reverse Holo/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await user.click(reverse);
+    expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "true");
+    // The other pocket of the same card is untouched — that is the whole point
+    // of splitting them.
+    expect(slot("125", "Normal")).toHaveAttribute("aria-pressed", "false");
 
-    await user.click(within(sheet).getByRole("button", { name: "Done" }));
-    expect(tile("125")).toHaveAccessibleName(/1 of 2 printings owned/);
+    // Tapping again removes it: the tile is the whole add/remove affordance.
+    await user.click(slot("125", "Reverse Holo"));
+    expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("only offers printings the card actually has", async () => {
+  it("hides held printings behind the missing-only filter", async () => {
     const user = userEvent.setup();
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    await user.click(await findTile("223"));
-    const sheet = screen.getByRole("dialog");
-
-    expect(within(sheet).getByRole("button", { name: /Holofoil/ })).toBeInTheDocument();
-    expect(within(sheet).queryByRole("button", { name: /Reverse Holo/ })).toBeNull();
-  });
-
-  it("hides completed cards behind the missing-only filter", async () => {
-    const user = userEvent.setup();
-    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
-
-    // Complete 223 — its single holo printing.
-    await user.click(await findTile("223"));
-    const sheet = screen.getByRole("dialog");
-    await user.click(within(sheet).getByRole("button", { name: /Holofoil/ }));
-    await user.click(within(sheet).getByRole("button", { name: "Done" }));
-    expect(tile("223")).toHaveAccessibleName(/1 of 1 printings owned/);
-
+    await user.click(await findSlot("125", "Normal"));
     await user.click(screen.getByRole("button", { name: "Missing only" }));
 
-    expect(screen.queryByRole("button", { name: /, 223, / })).toBeNull();
-    expect(tile("125")).toBeInTheDocument();
+    // Held pocket gone, the still-missing pocket of the SAME card stays.
+    expect(screen.queryByRole("button", { name: marked("125", "Normal") })).toBeNull();
+    expect(slot("125", "Reverse Holo")).toBeInTheDocument();
   });
 
-  it("closes the sheet on Escape", async () => {
+  it("opens the sheet from the number, not the art", async () => {
     const user = userEvent.setup();
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    await user.click(await findTile("125"));
+    await findSlot("125", "Normal");
+    await user.click(details("125", "Normal"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("removes every printing of a card in one action", async () => {
+    const user = userEvent.setup();
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await user.click(await findSlot("125", "Normal"));
+    await user.click(slot("125", "Reverse Holo"));
+
+    await user.click(details("125", "Normal"));
+    const sheet = screen.getByRole("dialog");
+    await user.click(within(sheet).getByRole("button", { name: /Remove all 2 printings/ }));
+
+    // The sheet closes and both pockets are empty again.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(slot("125", "Normal")).toHaveAttribute("aria-pressed", "false");
+    expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("offers no remove action on a card with nothing held", async () => {
+    const user = userEvent.setup();
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(details("125", "Normal"));
+
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).queryByRole("button", { name: /Remove/ })).toBeNull();
   });
 
   it("headlines a card with its dearest printing when the catalog has no price", async () => {
@@ -212,7 +238,8 @@ describe("WebSetCardsScreen", () => {
     serveCustom([card], printings);
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    await user.click(await screen.findByRole("button", { name: /Test Card/ }));
+    await findSlot("007", "Normal");
+    await user.click(details("007", "Normal"));
 
     // The reverse printing row also shows $4.25, so scope to the headline specifically.
     expect(await screen.findByTestId("sheet-headline-price")).toHaveTextContent("$4.25");
@@ -246,17 +273,17 @@ describe("WebSetCardsScreen", () => {
     serveCustom(cards, printings);
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
 
-    const binderOrder = await screen.findAllByRole("button", { name: /printings owned/ });
+    const binderOrder = await allSlots();
     expect(binderOrder[0]).toHaveAccessibleName(/Cheap Card/);
 
     await user.click(screen.getByRole("button", { name: "By value" }));
 
-    const valueOrder = await screen.findAllByRole("button", { name: /printings owned/ });
+    const valueOrder = await allSlots();
     expect(valueOrder[0]).toHaveAccessibleName(/Dear Card/);
 
     await user.click(screen.getByRole("button", { name: "By value" }));
 
-    const restored = await screen.findAllByRole("button", { name: /printings owned/ });
+    const restored = await allSlots();
     expect(restored[0]).toHaveAccessibleName(/Cheap Card/);
   });
 });
