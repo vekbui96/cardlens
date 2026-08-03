@@ -15,6 +15,8 @@ export type Screen =
   | { name: "owned" }
   /** Web only: current sealed product prices for the sets you collect. */
   | { name: "sealed" }
+  /** Web only: the Target restock watchlist and the bot's own health. */
+  | { name: "target" }
   /** Web only: recognise a card through the camera. Needs a pointer and a lens. */
   | { name: "scan" }
   /**

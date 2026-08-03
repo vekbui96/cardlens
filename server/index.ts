@@ -4,6 +4,7 @@ import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
 import { SealedStore } from "./sealedStore.ts";
+import { callBot, validTcin } from "./targetBot.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -15,6 +16,13 @@ const POKEMONTCG_BASE = "https://api.pokemontcg.io/v2";
 const POKEMONTCG_API_KEY = process.env.POKEMONTCG_API_KEY ?? "";
 const MAX_INPUT_LENGTH = 100;
 const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
+/**
+ * Separate from COLLECTION_TOKEN on purpose. The collection token is entered on
+ * every syncing device and only moves card rows; this one can drive a browser
+ * that adds items to a real Target cart. Sharing one token would give every
+ * device the larger power, and rotating either would break both.
+ */
+const TARGET_TOKEN = process.env.TARGET_TOKEN ?? "";
 // Forward slashes deliberately: Node accepts them on Windows, and a backslash
 // path in a TS literal silently collapses (\s \d \c are just s, d, c).
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
@@ -81,7 +89,10 @@ export function createApp(
         if (!strict || !origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
         return cb(null, false);
       },
-      methods: ["GET", "POST", "OPTIONS"],
+      // PATCH/DELETE exist for the Target watchlist. Widening this list only
+      // changes what a BROWSER may attempt cross-origin; the shared token is
+      // still the gate, and no other route implements either verb.
+      methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     }),
   );
 
@@ -176,6 +187,99 @@ export function createApp(
     if (dropped > 0) console.warn(`[cardlens] collection merge dropped ${dropped} invalid row(s)`);
     const rows = collection.merge(incoming);
     res.json({ rows, at: Date.now(), dropped });
+  });
+
+  // --- Target stock bot ------------------------------------------------------
+  /**
+   * Read and drive the restock watchlist. Same shared token as collection sync,
+   * because it is the same device already holding it — a second token would be
+   * a second thing to type into every device for no extra safety.
+   *
+   * The limit is tighter than collection sync: every call here reaches a real
+   * browser on the far side, and a check can take tens of seconds.
+   */
+  const targetLimiter = rateLimiter(60, 60_000);
+
+  /** Same fail-closed rule as collection sync, against its own token. */
+  function requireTargetToken(req: Request, res: Response, next: NextFunction): void {
+    if (!TARGET_TOKEN) {
+      res.status(503).json({ error: "target_bot_disabled" });
+      return;
+    }
+    const header = req.get("authorization") ?? "";
+    const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (presented !== TARGET_TOKEN) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    next();
+  }
+
+  async function relay(res: Response, method: string, path: string, body?: unknown) {
+    const reply = await callBot(method, path, body);
+    res.status(reply.status).json(reply.body);
+  }
+
+  app.get("/api/target/state", targetLimiter, requireTargetToken, async (_req, res) => {
+    await relay(res, "GET", "/api/target/state");
+  });
+
+  app.post("/api/target/watchlist", targetLimiter, requireTargetToken, async (req, res) => {
+    const body = req.body as { target?: unknown; name?: unknown };
+    const target = typeof body?.target === "string" ? body.target.trim() : "";
+    if (!target) {
+      res.status(400).json({ error: "target_required" });
+      return;
+    }
+    const name = typeof body?.name === "string" ? body.name.trim().slice(0, 200) : "";
+    await relay(res, "POST", "/api/target/watchlist", {
+      target: target.slice(0, 500),
+      ...(name ? { name } : {}),
+    });
+  });
+
+  app.patch("/api/target/watchlist/:tcin", targetLimiter, requireTargetToken, async (req, res) => {
+    const { tcin } = req.params;
+    if (!validTcin(tcin)) {
+      res.status(400).json({ error: "invalid_tcin" });
+      return;
+    }
+    const body = req.body as { enabled?: unknown; autoCart?: unknown };
+    const patch: Record<string, boolean> = {};
+    if (typeof body?.enabled === "boolean") patch.enabled = body.enabled;
+    if (typeof body?.autoCart === "boolean") patch.autoCart = body.autoCart;
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ error: "nothing_to_update" });
+      return;
+    }
+    await relay(res, "PATCH", `/api/target/watchlist/${tcin}`, patch);
+  });
+
+  app.delete("/api/target/watchlist/:tcin", targetLimiter, requireTargetToken, async (req, res) => {
+    const { tcin } = req.params;
+    if (!validTcin(tcin)) {
+      res.status(400).json({ error: "invalid_tcin" });
+      return;
+    }
+    await relay(res, "DELETE", `/api/target/watchlist/${tcin}`);
+  });
+
+  app.post("/api/target/watchlist/:tcin/check", targetLimiter, requireTargetToken, async (req, res) => {
+    const { tcin } = req.params;
+    if (!validTcin(tcin)) {
+      res.status(400).json({ error: "invalid_tcin" });
+      return;
+    }
+    await relay(res, "POST", `/api/target/watchlist/${tcin}/check`);
+  });
+
+  app.post("/api/target/pause", targetLimiter, requireTargetToken, async (req, res) => {
+    const body = req.body as { paused?: unknown };
+    if (typeof body?.paused !== "boolean") {
+      res.status(400).json({ error: "paused_required" });
+      return;
+    }
+    await relay(res, "POST", "/api/target/pause", { paused: body.paused });
   });
 
   // --- Printings (TCGdex, cached server-side) --------------------------------

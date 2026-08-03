@@ -1,0 +1,271 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  padding: var(--cl-gap-lg) 0 0;
+}
+
+.head {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--cl-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cl-fg);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.sectionTitle {
+  margin: 0 0 var(--cl-gap-sm);
+  font-size: var(--cl-fs-body);
+  font-weight: 650;
+  color: var(--cl-fg);
+}
+
+.notice,
+.empty {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg-muted);
+}
+
+.noticeText {
+  margin: 0 0 var(--cl-gap-sm);
+}
+
+/* --- Bot health ---------------------------------------------------------- */
+
+.runtime {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+.runtimeTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-gap-sm);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--cl-gap-sm);
+  margin: var(--cl-gap) 0 0;
+}
+
+.stat {
+  margin: 0;
+}
+
+.statLabel {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.statValue {
+  margin: 2px 0 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg);
+}
+
+/* --- Add form ------------------------------------------------------------ */
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+.input {
+  /* 16px minimum: iOS Safari zooms the page on focus for anything smaller. */
+  font: inherit;
+  font-size: max(16px, var(--cl-fs-body));
+  padding: 10px 12px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, var(--cl-radius));
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+  min-height: 44px;
+}
+
+.input:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.formError {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-error);
+}
+
+/* --- Product list -------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.card {
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+/* Still listed, still checkable — just not being swept. Dimmed, not hidden. */
+.disabled {
+  opacity: 0.55;
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cl-gap-sm);
+}
+
+.name {
+  font-size: var(--cl-fs-body);
+  font-weight: 600;
+  color: var(--cl-fg);
+  text-decoration: none;
+}
+
+.name:hover,
+.name:focus-visible {
+  text-decoration: underline;
+}
+
+.meta {
+  margin: 6px 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  margin-top: var(--cl-gap-sm);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 44px targets: this screen is used on a phone, not the glasses. */
+  min-height: 44px;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cl-accent);
+}
+
+/* --- Status pills -------------------------------------------------------- */
+
+.pill {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.good {
+  background: color-mix(in srgb, var(--cl-accent) 18%, transparent);
+  color: var(--cl-accent-strong);
+}
+
+.neutral {
+  background: color-mix(in srgb, var(--cl-fg) 10%, transparent);
+  color: var(--cl-fg-muted);
+}
+
+.warn {
+  background: color-mix(in srgb, var(--cl-warn) 20%, transparent);
+  color: var(--cl-warn);
+}
+
+.bad {
+  background: color-mix(in srgb, var(--cl-error) 18%, transparent);
+  color: var(--cl-error);
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.primary,
+.secondary,
+.danger {
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--cl-radius-sm, var(--cl-radius));
+  cursor: pointer;
+  transition: var(--cl-transition, none);
+}
+
+.primary {
+  border: none;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.secondary {
+  border: var(--cl-border);
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+}
+
+.danger {
+  border: var(--cl-border);
+  background: var(--cl-bg);
+  color: var(--cl-error);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary:focus-visible,
+.secondary:focus-visible,
+.danger:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}

@@ -128,6 +128,8 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 ## Server operations
 
 - Windows services via NSSM: `solid-website-api` (:8080), `cardlens` (:8787). Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.
+- **The Target restock bot is NOT a service** — it is a scheduled task, `target-stock-checker`, at `D:\services\target-stock-checker`. It must run in the **interactive** session (LogonType Interactive, session 1) because it drives a HEADED Chromium: PerimeterX captchas headless. SSH lands in session 0, which has no desktop, so start it with `Start-ScheduledTask -TaskName target-stock-checker` and never directly. If SERVER-PC signs out, the bot stops.
+- `/api/target/*` proxies to that bot's loopback API on :8788 (`server/targetBot.ts`). Three distinct tokens are involved and none is interchangeable: `TARGET_TOKEN` (device → cardlens), `TARGET_BOT_TOKEN` (cardlens → bot), `COLLECTION_TOKEN` (collection sync only). The Target token is deliberately separate from the collection one — these routes can add items to a real Target cart, and the collection token is spread across every syncing device.
 - **NSSM holds log files open.** `Get-Content` and `ReadAllBytes` both fail; open with `FileShare::ReadWrite`.
 - **ICMP is blocked** on SERVER-PC — ping is useless as a liveness check. Use SSH, or curl the funnel URL.
 - Published via Tailscale Funnel: `https://server-pc.tail0e4194.ts.net` (:8080) and `:8443` (:8787).

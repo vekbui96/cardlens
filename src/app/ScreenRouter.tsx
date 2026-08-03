@@ -70,6 +70,13 @@ const WebSealedScreen = lazy(() =>
  * lazy like the rest of the web-only screens and never lands on that bundle.
  */
 const ScanScreen = lazy(() => import("../web/scan/ScanScreen.tsx").then((m) => ({ default: m.ScanScreen })));
+/**
+ * Web only: the Target restock watchlist. Text entry for a product URL and a
+ * table of toggles — neither of which a keyboard-less 600x600 display can carry.
+ */
+const WebTargetScreen = lazy(() =>
+  import("../web/target/WebTargetScreen.tsx").then((m) => ({ default: m.WebTargetScreen })),
+);
 /** A link someone was sent; most visitors will never open any other screen. */
 const ShowcaseScreen = lazy(() =>
   import("../web/showcase/ShowcaseScreen.tsx").then((m) => ({ default: m.ShowcaseScreen })),
@@ -129,6 +136,8 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       return isWeb ? <WebSealedScreen /> : <CollectionScreen />;
     case "scan":
       return isWeb ? <ScanScreen /> : <CollectionScreen />;
+    case "target":
+      return isWeb ? <WebTargetScreen /> : <CollectionScreen />;
     case "showcase":
       return isWeb ? (
         <ShowcaseScreen setId={screen.setId} setName={screen.setName} payload={screen.payload} />
