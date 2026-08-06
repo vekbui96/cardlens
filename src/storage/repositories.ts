@@ -11,6 +11,7 @@ import {
   type OwnedPrinting,
 } from "./printings.ts";
 import { evictCaches, VersionedStore } from "./versioned.ts";
+import type { Binder } from "../models/binderLayout.ts";
 
 /** Spec limits. */
 export const MAX_RECENT_SEARCHES = 20;
@@ -110,6 +111,17 @@ export const DEFAULT_PREFERENCES: Preferences = {
 
 function isArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
+}
+
+function isBinder(value: unknown): value is Binder {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    typeof v.name === "string" &&
+    (v.format === "9" || v.format === "12") &&
+    Array.isArray(v.pages)
+  );
 }
 
 function isCardSummary(value: unknown): value is PokemonCardSummary {
@@ -522,6 +534,39 @@ export class Repositories {
     const next = { ...this.getTargetSettings(), ...patch };
     this.store.write("target-settings", next);
     return next;
+  }
+
+  // --- Custom binders -------------------------------------------------------
+  /**
+   * Binders the user laid out by hand.
+   *
+   * Local only for now, and NOT part of collection sync: a binder is a layout,
+   * not ownership, and pushing it through the OR-Set would need a merge rule
+   * for "two devices moved the same card to different pockets" that nobody has
+   * decided yet.
+   *
+   * Image slots hold their src inline. That is fine for a URL and a real risk
+   * for a data URI — this app has already had localStorage run out — so the
+   * screen that adds images is responsible for keeping them small.
+   */
+  getBinders(): Binder[] {
+    const rows = this.store.read<unknown[]>("binders", isArray, []);
+    return rows.flatMap((row) => (isBinder(row) ? [row] : []));
+  }
+
+  saveBinder(binder: Binder): Binder[] {
+    const next = this.getBinders().filter((b) => b.id !== binder.id);
+    next.unshift(binder);
+    this.store.write("binders", next);
+    return this.getBinders();
+  }
+
+  deleteBinder(id: string): Binder[] {
+    this.store.write(
+      "binders",
+      this.getBinders().filter((b) => b.id !== id),
+    );
+    return this.getBinders();
   }
 
   // --- Preferences ----------------------------------------------------------

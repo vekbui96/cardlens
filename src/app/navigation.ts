@@ -29,7 +29,10 @@ export type Screen =
    * the link. Same page as `showcase`, but the data can change after it was
    * sent — see server/shareStore.ts.
    */
-  | { name: "live"; shareId: string };
+  | { name: "live"; shareId: string }
+  /** Web only: binders you lay out yourself. */
+  | { name: "binders" }
+  | { name: "binder"; binderId: string };
 
 export type ScreenName = Screen["name"];
 

@@ -78,6 +78,12 @@ const WebTargetScreen = lazy(() =>
   import("../web/target/WebTargetScreen.tsx").then((m) => ({ default: m.WebTargetScreen })),
 );
 /** A link someone was sent; most visitors will never open any other screen. */
+const WebBindersScreen = lazy(() =>
+  import("../web/binders/WebBindersScreen.tsx").then((m) => ({ default: m.WebBindersScreen })),
+);
+const WebBinderScreen = lazy(() =>
+  import("../web/binders/WebBinderScreen.tsx").then((m) => ({ default: m.WebBinderScreen })),
+);
 const LiveShowcaseScreen = lazy(() =>
   import("../web/showcase/LiveShowcaseScreen.tsx").then((m) => ({ default: m.LiveShowcaseScreen })),
 );
@@ -141,6 +147,12 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       return isWeb ? <ScanScreen /> : <CollectionScreen />;
     case "target":
       return isWeb ? <WebTargetScreen /> : <CollectionScreen />;
+    case "binders":
+      // Web only: laying out a page needs a pointer and a grid the glasses
+      // have no room for.
+      return isWeb ? <WebBindersScreen /> : <CollectionScreen />;
+    case "binder":
+      return isWeb ? <WebBinderScreen binderId={screen.binderId} /> : <CollectionScreen />;
     case "live":
       // Falls back to Collection on the glasses for the same reason showcase
       // does: they have no way to open a link.

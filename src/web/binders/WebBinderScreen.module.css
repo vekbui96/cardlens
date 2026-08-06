@@ -1,0 +1,235 @@
+.controls,
+.pickerHead {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  flex-wrap: wrap;
+  margin: 0 var(--cl-gap) var(--cl-gap-sm);
+}
+
+.formats {
+  display: flex;
+  gap: 4px;
+}
+
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: var(--cl-border);
+  border-radius: 999px;
+  background: var(--cl-surface);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.chipOn {
+  background: var(--cl-accent);
+  border-color: transparent;
+  color: var(--cl-on-accent);
+}
+
+.chip:focus-visible,
+.select:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.hint,
+.footnote,
+.notice {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.notice {
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+/* The page grid needs the horizontal room; the binder is the subject. */
+.pages {
+  padding: 0 var(--cl-gap);
+}
+
+/*
+ * The picker is sticky at the bottom: choosing a card means looking at the
+ * page you are filling, so scrolling the page must not scroll the picker away.
+ */
+.picker {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding-top: var(--cl-gap-sm);
+  border-top: var(--cl-border);
+  background: var(--cl-bg);
+}
+
+.setPick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setPickLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.select {
+  min-height: 44px;
+  /* 16px minimum or iOS Safari zooms the page on focus. */
+  font: inherit;
+  font-size: max(16px, var(--cl-fs-small));
+  padding: 0 8px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, 8px);
+  background: var(--cl-surface);
+  color: var(--cl-fg);
+}
+
+/* One row that scrolls sideways, so the binder above stays visible. */
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap);
+  display: flex;
+  gap: var(--cl-gap-sm);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.cards > li {
+  flex: 0 0 92px;
+  scroll-snap-align: start;
+}
+
+.card {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card img,
+.card > div {
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: var(--cl-radius-art);
+}
+
+/* Offered but not held — same language the pocket uses once placed. */
+.cardWanted img {
+  filter: grayscale(0.8) brightness(0.55);
+}
+
+.cardMeta {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- Binder list --------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.binderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-gap-sm);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  font: inherit;
+  color: var(--cl-fg);
+  cursor: pointer;
+  text-align: left;
+}
+
+.binderName {
+  font-weight: 650;
+}
+
+.binderMeta {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.create {
+  display: flex;
+  gap: var(--cl-gap-sm);
+  flex-wrap: wrap;
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.input {
+  flex: 1 1 160px;
+  min-height: 44px;
+  font: inherit;
+  font-size: max(16px, var(--cl-fs-body));
+  padding: 0 12px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, 8px);
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+}
+
+.primary {
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--cl-radius-sm, 8px);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.danger {
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-error);
+  cursor: pointer;
+}

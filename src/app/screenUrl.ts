@@ -31,6 +31,8 @@ export function screenToPath(screen: Screen): string {
     // drift from what is actually being shared.
     case "live":
       return `/live/${encodeURIComponent(screen.shareId)}`;
+    case "binder":
+      return `/binder/${encodeURIComponent(screen.binderId)}`;
     default:
       return `/${screen.name}`;
   }
@@ -46,6 +48,7 @@ const SIMPLE = new Set([
   "sealed",
   "scan",
   "target",
+  "binders",
 ]);
 
 /**
@@ -80,6 +83,9 @@ export function pathToScreen(path: string): Screen | null {
       setName: rest.slice(1, -1).join("/"),
       payload: rest[rest.length - 1],
     };
+  }
+  if (head === "binder" && rest.length >= 1) {
+    return { name: "binder", binderId: rest[0] };
   }
   if (head === "live" && rest.length >= 1) {
     return { name: "live", shareId: rest[0] };

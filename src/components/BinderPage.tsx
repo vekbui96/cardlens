@@ -1,0 +1,113 @@
+import { CardImage } from "./CardImage.tsx";
+import {
+  specFor,
+  type BinderFormat,
+  type BinderPage as PageData,
+  type BinderSlot,
+} from "../models/binderLayout.ts";
+import styles from "./BinderPage.module.css";
+
+/**
+ * One side of a binder page, in a given format.
+ *
+ * The reusable piece: the builder, the viewer and anything shared later all
+ * render through this, so a pocket looks and behaves the same everywhere and
+ * the grid geometry lives in exactly one place.
+ *
+ * It knows nothing about storage or the collection. Ownership arrives as a
+ * predicate, because "do I own this" is a question only the caller can answer
+ * — a shared binder is judged against the sharer's collection, not the
+ * viewer's.
+ */
+export function BinderPageView({
+  page,
+  format,
+  owns,
+  onSlotClick,
+  selectedIndex,
+  pageNumber,
+}: {
+  page: PageData;
+  format: BinderFormat;
+  /** True when the viewer's collection contains this slot. Images are always "held". */
+  owns: (slot: BinderSlot) => boolean;
+  /** Omit for a read-only binder — pockets stop being buttons. */
+  onSlotClick?: (index: number) => void;
+  selectedIndex?: number | null;
+  pageNumber: number;
+}) {
+  const spec = specFor(format);
+  const interactive = typeof onSlotClick === "function";
+
+  return (
+    <section className={styles.page} aria-label={`Page ${pageNumber}`}>
+      <header className={styles.head}>
+        <span className={styles.pageNumber}>Page {pageNumber}</span>
+        <span className={styles.format}>{spec.label}</span>
+      </header>
+
+      <ul className={styles.grid} style={{ gridTemplateColumns: `repeat(${spec.cols}, minmax(0, 1fr))` }}>
+        {Array.from({ length: spec.pockets }, (_, index) => {
+          const slot = page.slots[index];
+          const held = slot ? owns(slot) : false;
+          const label = slotLabel(slot, index, held);
+
+          const inner = slot ? (
+            <>
+              {slot.kind === "card" ? (
+                <CardImage src={slot.imageSmall} alt="" size="thumb" />
+              ) : (
+                // Custom art: the alt is the label because there is no catalog
+                // entry to name it.
+                <img className={styles.custom} src={slot.src} alt={slot.label ?? ""} />
+              )}
+              {/* Shadowed rather than hidden: a card you have not got yet is
+                  the point of planning a binder, so it must be placeable and
+                  visibly distinct from one you hold. */}
+              {!held ? <span className={styles.wantedTag}>Don’t own</span> : null}
+            </>
+          ) : (
+            <span className={styles.emptyMark} aria-hidden="true" />
+          );
+
+          const className = [
+            styles.pocket,
+            slot ? styles.filled : styles.empty,
+            slot && !held ? styles.wanted : "",
+            selectedIndex === index ? styles.selected : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return (
+            <li key={index} className={styles.cell}>
+              {interactive ? (
+                <button
+                  type="button"
+                  className={className}
+                  aria-label={label}
+                  aria-pressed={selectedIndex === index}
+                  onClick={() => onSlotClick?.(index)}
+                >
+                  {inner}
+                </button>
+              ) : (
+                <div className={className} aria-label={label} role="img">
+                  {inner}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function slotLabel(slot: BinderSlot | undefined, index: number, held: boolean): string {
+  const pocket = `Pocket ${index + 1}`;
+  if (!slot) return `${pocket}, empty`;
+  if (slot.kind === "image") return `${pocket}, ${slot.label ?? "custom image"}`;
+  const name = slot.name ?? slot.cardId;
+  return `${pocket}, ${name}, ${held ? "owned" : "not owned"}`;
+}

@@ -1,0 +1,145 @@
+/*
+ * A binder page side. Geometry comes from the format (3x3 or 4x3) and is set
+ * inline by the component, so this file never hardcodes a pocket count.
+ */
+
+.page {
+  margin: 0 0 var(--cl-gap-lg);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cl-gap-sm);
+  margin: 0 0 var(--cl-gap-sm);
+  padding-bottom: 4px;
+  border-bottom: var(--cl-border);
+}
+
+.pageNumber {
+  font-size: var(--cl-fs-body);
+  font-weight: 650;
+  color: var(--cl-fg);
+}
+
+.format {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* minmax(0) so a long label can never widen one column and squeeze the
+     others — the pockets in a real page are identical by construction. */
+  gap: var(--cl-gap-sm);
+}
+
+.cell {
+  min-width: 0;
+}
+
+.pocket {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  position: relative;
+  aspect-ratio: 5 / 7;
+  border-radius: var(--cl-radius-art);
+  overflow: hidden;
+}
+
+button.pocket {
+  cursor: pointer;
+}
+
+.pocket img,
+.pocket > div {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--cl-radius-art);
+}
+
+.custom {
+  display: block;
+}
+
+/*
+ * An empty pocket reads as a sleeve, not as a missing tile: a dashed inset on
+ * the page surface, which is what you are actually looking at through the
+ * plastic.
+ */
+.empty {
+  border: 1px dashed var(--cl-border-strong, var(--cl-fg-dim));
+  background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
+}
+
+.emptyMark {
+  position: absolute;
+  inset: 0;
+}
+
+.filled {
+  box-shadow:
+    var(--cl-shadow),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/*
+ * A card placed but not owned. Shadowed, desaturated and tagged — it has to be
+ * legible enough to plan around while never being mistaken for something held.
+ */
+.wanted img {
+  filter: grayscale(0.85) brightness(0.5) contrast(0.95);
+}
+
+.wanted {
+  box-shadow:
+    var(--cl-shadow),
+    inset 0 0 0 1px var(--cl-fg-dim);
+}
+
+.wantedTag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  background: rgba(4, 6, 10, 0.82);
+  color: var(--cl-fg-muted);
+  font-size: var(--cl-fs-small);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.selected {
+  outline: 2px solid var(--cl-accent);
+  outline-offset: 2px;
+}
+
+button.pocket:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.pocket:hover {
+    transform: translateY(-2px);
+    transition: transform var(--cl-transition, 120ms);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.pocket:hover {
+    transform: none;
+  }
+}
