@@ -3,14 +3,16 @@ import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { BinderPageView } from "../../components/BinderPage.tsx";
-import { useCollectedSets } from "../../hooks/useCollectedSets.ts";
+import { useSets } from "../../hooks/useSets.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import {
   countBinder,
+  fillSequential,
   placeSlot,
+  preferredFinish,
   reformat,
   specFor,
   trimPages,
@@ -44,7 +46,9 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const [setId, setSetId] = useState("me5");
   const [setName, setSetName] = useState("Pitch Black");
 
-  const collected = useCollectedSets();
+  // ALL sets, not just collected ones: a binder is a plan, and planning a
+  // set you have not started is the common case.
+  const { data: allSets } = useSets();
   const view = useSetView(setId, setName, { rarities: null, wantPrintings: true });
 
   const owns = useMemo(
@@ -101,6 +105,54 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
         </button>
       </div>
 
+      <div className={styles.controls}>
+        <label className={styles.setPick}>
+          <span className={styles.setPickLabel}>Set</span>
+          <select
+            className={styles.select}
+            value={setId}
+            onChange={(e) => {
+              const next = (allSets ?? []).find((c) => c.id === e.target.value);
+              setSetId(e.target.value);
+              setSetName(next?.name ?? e.target.value);
+            }}
+          >
+            {(allSets ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* One of each card, in collector order, at the printing a set binder
+            is normally sleeved with. Replaces the pages - see fillSequential. */}
+        <button
+          type="button"
+          className={styles.chip}
+          disabled={view.cards.length === 0}
+          onClick={() => {
+            const slots = view.cards.flatMap((card) => {
+              const finish = preferredFinish(view.finishesFor(card.collectorNumber, card.variants));
+              if (!finish) return [];
+              return [
+                {
+                  kind: "card" as const,
+                  cardId: card.id,
+                  finish,
+                  name: card.name,
+                  imageSmall: card.imageSmall,
+                  collectorNumber: card.collectorNumber,
+                },
+              ];
+            });
+            commit(fillSequential(binder, slots, Date.now()));
+            setSelected(null);
+          }}
+        >
+          Fill with one of each
+        </button>
+      </div>
+
       {/* Changing format keeps reading order, not positions — a 4-wide page has
           no pocket matching the 9th of a 3-wide one. */}
       <p className={styles.hint}>
@@ -134,14 +186,14 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                 className={styles.select}
                 value={setId}
                 onChange={(e) => {
-                  const next = collected.find((c) => c.setId === e.target.value);
+                  const next = (allSets ?? []).find((c) => c.id === e.target.value);
                   setSetId(e.target.value);
-                  setSetName(next?.setName ?? e.target.value);
+                  setSetName(next?.name ?? e.target.value);
                 }}
               >
-                {collected.map((c) => (
-                  <option key={c.setId} value={c.setId}>
-                    {c.setName}
+                {(allSets ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>

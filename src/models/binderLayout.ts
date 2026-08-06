@@ -137,6 +137,44 @@ export function trimPages(binder: Binder): Binder {
   return pages.length === binder.pages.length ? binder : { ...binder, pages };
 }
 
+/**
+ * One printing per card, for filling a binder with a single copy of each.
+ *
+ * Reverse holo first: in a modern set almost every ordinary card has one, and
+ * a reverse-holo run is the usual way a master-setter sleeves a binder. The
+ * cards that have no reverse are the ex / full-art tier, which come holo — so
+ * holo is the fallback, and plain normal only when a card has neither.
+ */
+export function preferredFinish(available: CollectFinish[]): CollectFinish | null {
+  if (available.length === 0) return null;
+  return (
+    available.find((f) => f === "reverse") ??
+    available.find((f) => f.startsWith("reverse")) ??
+    available.find((f) => f === "holo") ??
+    available.find((f) => f.startsWith("holo")) ??
+    available[0]
+  );
+}
+
+/**
+ * Lay slots into pockets in order, page after page, from pocket zero.
+ *
+ * Replaces the binder's pages rather than appending: "fill from this set" is a
+ * statement about the whole binder, and merging into whatever was there would
+ * make the result depend on history the user cannot see.
+ */
+export function fillSequential(binder: Binder, slots: BinderSlot[], now: number): Binder {
+  const spec = specFor(binder.format);
+  const pages: BinderPage[] = [];
+  slots.forEach((slot, i) => {
+    const page = Math.floor(i / spec.pockets);
+    while (pages.length <= page) pages.push({ slots: {} });
+    pages[page].slots[i % spec.pockets] = slot;
+  });
+  if (pages.length === 0) pages.push({ slots: {} });
+  return { ...binder, pages, updatedAt: now };
+}
+
 export interface BinderCounts {
   filled: number;
   pockets: number;

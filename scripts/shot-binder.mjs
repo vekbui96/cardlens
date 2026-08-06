@@ -8,14 +8,33 @@ await ctx.addInitScript(() => {
   const rows = [];
   for (let n = 1; n <= 12; n++) rows.push({ cardId: `me5-${n}`, setId: "me5", finish: "normal", at: now });
   localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
-  localStorage.setItem("cardlens:v1:binders", JSON.stringify([{
-    id: "b1", name: "Vault X Masters", format: "9", createdAt: now, updatedAt: now,
-    pages: [{ slots: {
-      0: { kind: "card", cardId: "me5-1", finish: "normal", name: "Owned One", collectorNumber: "1" },
-      1: { kind: "card", cardId: "me5-2", finish: "normal", name: "Owned Two", collectorNumber: "2" },
-      4: { kind: "card", cardId: "me5-999", finish: "normal", name: "Chase Card", collectorNumber: "999" },
-    } }],
-  }]));
+  localStorage.setItem(
+    "cardlens:v1:binders",
+    JSON.stringify([
+      {
+        id: "b1",
+        name: "Vault X Masters",
+        format: "9",
+        createdAt: now,
+        updatedAt: now,
+        pages: [
+          {
+            slots: {
+              0: { kind: "card", cardId: "me5-1", finish: "normal", name: "Owned One", collectorNumber: "1" },
+              1: { kind: "card", cardId: "me5-2", finish: "normal", name: "Owned Two", collectorNumber: "2" },
+              4: {
+                kind: "card",
+                cardId: "me5-999",
+                finish: "normal",
+                name: "Chase Card",
+                collectorNumber: "999",
+              },
+            },
+          },
+        ],
+      },
+    ]),
+  );
 });
 const page = await ctx.newPage();
 await page.goto(`${B}/#/binder/b1`);

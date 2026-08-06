@@ -4,6 +4,8 @@ import {
   emptyBinder,
   moveSlot,
   placeSlot,
+  fillSequential,
+  preferredFinish,
   reformat,
   specFor,
   trimPages,
@@ -121,5 +123,46 @@ describe("trimPages and counts", () => {
     let b = placeSlot(base(), 0, 0, card("1"), NOW);
     b = placeSlot(b, 0, 1, { kind: "image", src: "data:image/png;base64,AAA" }, NOW);
     expect(countBinder(b)).toEqual({ filled: 2, pockets: 9, cards: 1, images: 1 });
+  });
+});
+
+describe("preferredFinish", () => {
+  it("prefers the reverse holo, which is how a set binder is usually sleeved", () => {
+    expect(preferredFinish(["normal", "reverse"])).toBe("reverse");
+  });
+
+  it("falls back to holo for cards with no reverse — the ex tier", () => {
+    expect(preferredFinish(["holo"])).toBe("holo");
+    expect(preferredFinish(["normal", "holo"])).toBe("holo");
+  });
+
+  it("takes a patterned reverse over a plain holo", () => {
+    // A Poké Ball reverse is still a reverse; it belongs in the reverse run.
+    expect(preferredFinish(["holo", "reverse:pokeball"])).toBe("reverse:pokeball");
+  });
+
+  it("uses whatever exists when there is neither", () => {
+    expect(preferredFinish(["normal"])).toBe("normal");
+    expect(preferredFinish([])).toBeNull();
+  });
+});
+
+describe("fillSequential", () => {
+  it("lays cards in order across pages, from pocket zero", () => {
+    const slots = Array.from({ length: 11 }, (_, i) => card(String(i)));
+    const b = fillSequential(base(), slots, NOW);
+    expect(b.pages).toHaveLength(2);
+    expect(b.pages[0].slots[0]).toMatchObject({ cardId: "me5-0" });
+    expect(b.pages[0].slots[8]).toMatchObject({ cardId: "me5-8" });
+    expect(b.pages[1].slots[1]).toMatchObject({ cardId: "me5-10" });
+  });
+
+  it("replaces what was there rather than merging", () => {
+    // "Fill from this set" is a statement about the whole binder; merging would
+    // make the result depend on history the user cannot see.
+    const before = placeSlot(base(), 0, 5, card("old"), NOW);
+    const after = fillSequential(before, [card("new")], NOW);
+    expect(after.pages[0].slots[5]).toBeUndefined();
+    expect(after.pages[0].slots[0]).toMatchObject({ cardId: "me5-new" });
   });
 });
