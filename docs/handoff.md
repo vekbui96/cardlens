@@ -28,15 +28,15 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
 | Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
-| Binders           | `D:/services/data/binders.json` + `binder-images/` — NOT deployed yet          |
+| Binders           | `D:/services/data/binders.json` + `binder-images/` — server live, Pages behind |
 | Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
-| Deployed at       | Pages and server both on `ae63015` — verified live                             |
+| Deployed at       | Server on `7654b3b` (verified live). **Pages still on `da2b975`** — see below  |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/binders`, `/api/binders/merge`, `/api/binders/images`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
 `/api/set-information/:setId`, `/api/sealed/:setId?name=`, `/api/target/*`,
-plus the companion relay. The three `binders` routes are NOT deployed yet.
+plus the companion relay. All three `binders` routes are live.
 
 ## Target restock tab (`#/target`)
 
@@ -95,10 +95,11 @@ Chromium because PerimeterX captchas headless, so it needs the console session.
 restarts and nobody logs in, stock checking silently stops and every live share 404s.
 This happened once mid-session. Autologon is the real fix.
 
-## Binder sync — built, verified locally, NOT deployed
+## Binder sync — server deployed, Pages waiting on GitHub
 
-Everything else in this file is live. This is not: it is in the working tree,
-not committed, and has never run on SERVER-PC or GitHub Pages.
+Committed as `7654b3b` and pushed. CI passed. **The server is live on it**
+(`/api/binders` answers 401 instead of 404, the image route returns the JSON
+`not_found` shape). **GitHub Pages is not** — see the deployment note below.
 
 Built as the plan that used to be item 1 described — per binder, last write wins, `binders.json`
 beside the shares, on `COLLECTION_TOKEN` — plus the custom-image upload, which
@@ -119,6 +120,26 @@ state-of-play is:
   both sides of the protocol; two have not.
 - Not built, deliberately: any way to delete an image on purpose. Orphans are
   swept after a merge once they are 7 days old.
+
+### The Pages deploy, and what the deploy state actually was
+
+**GitHub had a partial system outage on 2026-08-06** — Actions and Pages both
+reported `major_outage`. The Pages run for `7654b3b` sat `pending` and never
+started; `workflow_dispatch` returned HTTP 500 while still creating a run. Pages
+is therefore still serving `da2b975`. Re-run "Deploy to GitHub Pages" once
+GitHub is healthy; nothing about the change needs redoing.
+
+**The previous handoff's deploy claim was wrong.** It said Pages and server were
+both on `ae63015` and verified live. Measured before deploying: the server was on
+`5bead17` — two commits behind — and the Pages run for `ae63015` had FAILED, as
+had CI for the two commits before this one. All three failures were the same
+Actions infrastructure error (`Failed to resolve action download info: Service
+Unavailable`), not code. Check `gh run list` rather than trusting a "deployed"
+line in this file.
+
+That ordering — server ahead of Pages — is the safe one, and is now safe in both
+directions:
+
 - A frontend newer than the server is now survivable. The binder routes 404 on
   an old server (confirmed against the live one), and a 404 is treated as "this
   server predates the endpoint" and skipped, rather than wedging sync on
