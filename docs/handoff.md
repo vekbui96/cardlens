@@ -28,7 +28,9 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
 | Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
-| Deployed at       | Pages `a850132`, server `e56f04e` — both verified live                         |
+| Binders           | localStorage only, NOT synced — see "Open" below                               |
+| Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
+| Deployed at       | Pages and server both on `ae63015` — verified live                             |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
@@ -52,7 +54,99 @@ nothing restocked and a bot that stopped checking look identical otherwise.
 - The health-check product (Prismacolor, always in stock) is the canary and the
   API refuses to delete it, same guard `!unwatch` applies.
 
-## Immediate next task
+## Where things stand (August 2026)
+
+A long session. Everything below is committed, pushed, deployed and verified
+unless it says otherwise.
+
+### Shipped
+
+| Feature               | Where              | Notes                                                                                 |
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------- |
+| Target restock tab    | `#/target`         | Watchlist over the bot: status, health, add/remove, auto-cart toggle, test cart       |
+| Per-printing set grid | `#/set/...`        | One tile per printing, not per card. Tap art to mark, tap caption for the sheet       |
+| Exclusions            | card sheet         | A printing can be declared not part of the set. Hidden by default, revealed by a chip |
+| Live shares           | `#/live/:id`       | A link that re-reads the collection instead of carrying it. Revocable                 |
+| Collection graph      | home + shared sets | Printings owned over time, 30d/90d/1y/all                                             |
+| Custom binders        | `#/binders`        | Vault X 9- and 12-pocket, laid out by hand, plus "fill with one of each"              |
+
+### Tokens and services
+
+Three distinct tokens, none interchangeable:
+
+- `COLLECTION_TOKEN` — collection sync and binder/share management
+- `TARGET_TOKEN` — the Target tab (device to cardlens). Separate on purpose: these
+  routes reach a browser that can put things in a real Target cart
+- `TARGET_BOT_TOKEN` — cardlens to the bot, loopback only
+
+All in `D:\services\cardlens\.env`. Shares live in `D:/services/data/shares.json`.
+
+### The Target bot
+
+Moved off the laptop to `D:\services	arget-stock-checker`. Python 3.12 in `.venv`,
+scheduled task `target-stock-checker`, **Interactive** logon — it drives a HEADED
+Chromium because PerimeterX captchas headless, so it needs the console session.
+`api.py` serves a loopback API on :8788 that cardlens proxies.
+
+**It does not survive an unattended reboot.** The task is at-logon, so if the machine
+restarts and nobody logs in, stock checking silently stops and every live share 404s.
+This happened once mid-session. Autologon is the real fix.
+
+## Open, in the order I would do them
+
+1. **Binder sync.** Binders are localStorage only. Proposed: per-binder
+   last-write-wins on `COLLECTION_TOKEN`, `binders.json` beside the shares.
+   Granularity matters — per binder means editing different binders on two
+   devices never conflicts. Do custom-image upload at the same time, because
+   syncing data URIs would push megabytes through an endpoint sized for card rows.
+2. **The silent snapshot fallback.** When the server is unreachable, Share quietly
+   encodes the whole collection into a ~2,000-character URL and the button says
+   "Snapshot link copied", which is easy to miss. It should say the server could
+   not be reached and keep the live option one tap away.
+3. **The IN_STOCK false positive.** redsky reports `['DISCONTINUED','IN_STOCK',
+'OUT_OF_STOCK','UNAVAILABLE']` for TCIN 93565639 and `check_target` calls that
+   IN_STOCK because one entry says so — while the product page has Pickup, Delivery
+   and Shipping all unavailable. It has read "in stock" for weeks. Requiring a
+   shipping-capable fulfilment would fix it.
+4. **Auto-buy.** Fully specced in `docs/superpowers/plans/2026-06-30-autobuy.md`
+   (target-stock-checker repo). Blocked by a permission guardrail mid-session, and
+   deliberately not worked around. **Before anything places an order,
+   `ORDER_TOTAL_SEL` must be verified against a real order-review page** —
+   `_parse_price` takes the FIRST dollar amount, so a selector whose text starts
+   with a subtotal means a $200 order passes a $100 cap.
+5. **RDP on SERVER-PC.** Registry, service and firewall are set; the listener never
+   came up because `TermService` cannot restart in place. A reboot should finish it.
+
+## Traps found the hard way this session
+
+- **`1fr` is `minmax(auto, 1fr)`.** A `white-space: nowrap` label sets a grid
+  track's min-content width and squeezes its neighbours — the ellipsis never
+  engages because the track grows instead. Use `minmax(0, 1fr)` plus
+  `min-width: 0`. This is why the showcase looked right and the set grid did not.
+- **A sticky header owns its own stacking context.** No z-index on a backdrop
+  nested inside the screen can beat it. Portal modals to `<body>`.
+- **Naive timestamps lie across timezones.** The server is on Pacific and the
+  devices are Central, so `datetime.now().isoformat()` made every check read as
+  "2 hr ago". All bot timestamps go through `now_iso()` and carry an offset.
+- **Two whitelists silently drop unknown fields** — `toPrintings` on read and
+  `parseRow` on the server. A new row field must be added to both or it vanishes
+  on reload and on sync respectively.
+- **Same-millisecond merge ties are the normal case, not a rare one.** Excluding
+  a card you already own writes two rows back to back; without a tie-break rule
+  the winner depended on map order. Ties go to the tombstone, then the exclusion.
+- **NSSM bakes environment variables in at install.** `Restart-Service` does NOT
+  pick up `.env` changes — re-run `04-install-services.ps1`. A restart alone left
+  every Target route returning 503 with the code correctly deployed.
+- **Prettier is enforced by CI and script-applied edits do not respect it.** Run
+  `npm run format` after any python/sed edit; `format:check` caught one after a push.
+- **NordVPN breaks Tailscale on the laptop.** `ts.net` names resolve to an
+  unreachable tailnet IP. There is a hosts-file override pinning
+  `server-pc.tail0e4194.ts.net` to `199.38.181.54` — **it is now stale and should
+  be removed**; the funnel is unreachable from the laptop because of it. Phones
+  and other devices are unaffected. Undo: delete that line, uncomment the
+  `100.75.251.52` one below it. Backup at `hosts.bak-cardlens`.
+
+## Earlier thread: the card scanner
 
 Nothing is half-built. The card **scanner** is the current thread.
 
