@@ -120,6 +120,13 @@ state-of-play is:
   both sides of the protocol; two have not.
 - Not built, deliberately: any way to delete an image on purpose. Orphans are
   swept after a merge once they are 7 days old.
+- **"Add page" was broken from the day binders shipped** and is now fixed. The
+  screen added a page by placing a null slot at a new index, then ran
+  `trimPages` on the same commit, which dropped the empty page it had just
+  made — the button did nothing and said nothing. `addPage` / `removeLastPage`
+  name the two intents instead, and trimming is no longer automatic: a blank
+  page kept on purpose and one left over are identical, so the app must not
+  guess. `trimPages` is gone; `reformat` already compacts by re-flowing.
 
 ### The Pages deploy, and what the deploy state actually was
 

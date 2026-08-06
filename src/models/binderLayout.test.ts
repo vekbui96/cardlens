@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  addPage,
+  canRemoveLastPage,
   countBinder,
   emptyBinder,
+  fillSequential,
   moveSlot,
   placeSlot,
-  fillSequential,
   preferredFinish,
   reformat,
+  removeLastPage,
   specFor,
-  trimPages,
   type BinderSlot,
 } from "./binderLayout.ts";
 
@@ -111,14 +113,7 @@ describe("reformat", () => {
   });
 });
 
-describe("trimPages and counts", () => {
-  it("drops trailing empty pages but keeps one", () => {
-    let b = placeSlot(base(), 3, 0, card("1"), NOW);
-    b = placeSlot(b, 3, 0, null, NOW);
-    expect(trimPages(b).pages).toHaveLength(1);
-    expect(trimPages(emptyBinder("x", "x", "9", NOW)).pages).toHaveLength(1);
-  });
-
+describe("counts", () => {
   it("counts cards and images against total pockets", () => {
     let b = placeSlot(base(), 0, 0, card("1"), NOW);
     b = placeSlot(b, 0, 1, { kind: "image", src: "data:image/png;base64,AAA" }, NOW);
@@ -164,5 +159,36 @@ describe("fillSequential", () => {
     const after = fillSequential(before, [card("new")], NOW);
     expect(after.pages[0].slots[5]).toBeUndefined();
     expect(after.pages[0].slots[0]).toMatchObject({ cardId: "me5-new" });
+  });
+});
+
+describe("addPage / removeLastPage", () => {
+  const b = () => emptyBinder("b1", "Masters", "9", 1);
+
+  it("actually adds a page", () => {
+    // The regression: the screen used to add a page by placing a null slot on
+    // a new index, and trimPages removed it again on the same commit. The
+    // button did nothing and said nothing.
+    expect(addPage(b(), 2).pages).toHaveLength(2);
+  });
+
+  it("stamps updatedAt, so the new page syncs", () => {
+    // Without this the binder converges on its old timestamp and the extra page
+    // never reaches another device.
+    expect(addPage(b(), 500).updatedAt).toBe(500);
+    expect(removeLastPage(addPage(b(), 500), 900).updatedAt).toBe(900);
+  });
+
+  it("removes an empty last page but never the only one", () => {
+    expect(removeLastPage(addPage(b(), 2), 3).pages).toHaveLength(1);
+    expect(removeLastPage(b(), 3).pages).toHaveLength(1);
+    expect(canRemoveLastPage(b())).toBe(false);
+  });
+
+  it("refuses to remove a page that holds a card", () => {
+    // Removing it would destroy the card silently, and there is no undo.
+    const filled = placeSlot(addPage(b(), 2), 1, 0, { kind: "card", cardId: "me5-1", finish: "normal" }, 3);
+    expect(canRemoveLastPage(filled)).toBe(false);
+    expect(removeLastPage(filled, 4).pages).toHaveLength(2);
   });
 });

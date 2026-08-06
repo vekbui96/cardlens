@@ -152,11 +152,36 @@ export function moveSlot(
   return next;
 }
 
-/** Drop trailing empty pages, but always keep one. */
-export function trimPages(binder: Binder): Binder {
-  const pages = [...binder.pages];
-  while (pages.length > 1 && Object.keys(pages[pages.length - 1].slots).length === 0) pages.pop();
-  return pages.length === binder.pages.length ? binder : { ...binder, pages };
+/**
+ * Append an empty page.
+ *
+ * Its own function rather than `placeSlot(binder, pages.length, 0, null)`,
+ * which is what the screen used to do: that grows the binder and then writes
+ * nothing into it, so the page is empty and indistinguishable from one left
+ * over — and a trailing-empty-page trim removed it again on the very same commit.
+ * The button did nothing at all, silently. An intent the user pressed a button
+ * for has to be expressible.
+ */
+export function addPage(binder: Binder, now: number): Binder {
+  return { ...binder, pages: [...binder.pages, { slots: {} }], updatedAt: now };
+}
+
+/** True when the last page holds nothing and is not the only page. */
+export function canRemoveLastPage(binder: Binder): boolean {
+  const last = binder.pages[binder.pages.length - 1];
+  return binder.pages.length > 1 && !!last && Object.keys(last.slots).length === 0;
+}
+
+/**
+ * Drop the last page, if it is empty.
+ *
+ * The inverse of addPage, and the reason trimming is no longer automatic: a
+ * blank page kept on purpose and a blank page left over look identical, so the
+ * app cannot tell them apart and must not guess. Deciding is one button press.
+ */
+export function removeLastPage(binder: Binder, now: number): Binder {
+  if (!canRemoveLastPage(binder)) return binder;
+  return { ...binder, pages: binder.pages.slice(0, -1), updatedAt: now };
 }
 
 /**

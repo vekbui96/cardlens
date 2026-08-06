@@ -9,13 +9,15 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import {
+  addPage,
+  canRemoveLastPage,
   countBinder,
   fillSequential,
   placeSlot,
   preferredFinish,
   reformat,
+  removeLastPage,
   specFor,
-  trimPages,
   type BinderFormat,
   type BinderSlot,
 } from "../../models/binderLayout.ts";
@@ -88,7 +90,13 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const spec = specFor(binder.format);
   const counts = countBinder(binder);
 
-  const commit = (next: typeof binder) => saveBinder(trimPages(next));
+  /**
+   * No trimming. It used to run on every commit, which meant "Add page" grew
+   * the binder and the same call immediately dropped the new empty page again
+   * — the button did nothing, silently. Trailing empties are now the user's to
+   * remove, with the button next to the one that adds them.
+   */
+  const commit = (next: typeof binder) => saveBinder(next);
 
   const place = (slot: BinderSlot | null) => {
     if (!selected) return;
@@ -145,12 +153,19 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             </button>
           ))}
         </div>
+        <button type="button" className={styles.chip} onClick={() => commit(addPage(binder, Date.now()))}>
+          Add page
+        </button>
+        {/* Only offered when it would do something, and only for an EMPTY last
+            page — removing one that holds cards would destroy them with no
+            undo. */}
         <button
           type="button"
           className={styles.chip}
-          onClick={() => commit(placeSlot(binder, binder.pages.length, 0, null, Date.now()))}
+          disabled={!canRemoveLastPage(binder)}
+          onClick={() => commit(removeLastPage(binder, Date.now()))}
         >
-          Add page
+          Remove page
         </button>
       </div>
 

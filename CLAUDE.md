@@ -187,6 +187,11 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 ## Conventions
 
 - Screens own their `BackRow` and drive focus through `useBackableFocus`; `MenuRow` only works inside a `FocusList`, so standalone controls use `ToggleRow`.
+- **A blank page kept on purpose and one left over are identical**, so nothing
+  may trim trailing empty binder pages automatically. Doing so made "Add page"
+  a silent no-op for as long as binders existed: the commit added the page and
+  the same commit removed it. `addPage` / `removeLastPage` are explicit, and
+  `reformat` compacts by re-flowing rather than by trimming.
 - The mock fixtures do NOT contain Pitch Black (`me5`), which several screens
   default to — an e2e test that needs cards must switch to a set that exists,
   e.g. Obsidian Flames.

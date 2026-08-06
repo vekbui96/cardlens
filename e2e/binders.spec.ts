@@ -95,6 +95,29 @@ test.describe("binders", () => {
     await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
   });
 
+  test("adds a page, and the page is still there after a reload", async ({ page }) => {
+    // This shipped broken: the screen added a page by placing a null slot on a
+    // new index, and the same commit ran trimPages, which dropped it again. The
+    // button did nothing and said nothing. Asserting through a RELOAD matters —
+    // an in-memory page that never reached storage would pass without it.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Big binder");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    await expect(page.getByRole("region", { name: /^Page / })).toHaveCount(1);
+    await page.getByRole("button", { name: "Add page" }).click();
+    await expect(page.getByRole("region", { name: /^Page / })).toHaveCount(2);
+
+    await page.reload();
+    await expect(page.getByRole("region", { name: /^Page / })).toHaveCount(2);
+
+    // And its inverse, which is what makes trimming the user's decision.
+    await page.getByRole("button", { name: "Remove page" }).click();
+    await expect(page.getByRole("region", { name: /^Page / })).toHaveCount(1);
+    // Never the last one.
+    await expect(page.getByRole("button", { name: "Remove page" })).toBeDisabled();
+  });
+
   test("a deleted binder stays gone", async ({ page }) => {
     await page.goto("/?ui=web#/binders");
     await page.getByLabel("Binder name").fill("Doomed");
