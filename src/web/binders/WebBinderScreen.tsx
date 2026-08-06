@@ -20,7 +20,26 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { resizeToDataUrl } from "../../utils/imageResize.ts";
+import { uploadBinderImage } from "../../services/sync/binderImages.ts";
+import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
 import styles from "./WebBinderScreen.module.css";
+
+/**
+ * Say what actually went wrong.
+ *
+ * A single "could not add image" would collapse four different situations —
+ * wrong token, sync switched off at the server, a file that is not an image,
+ * and no connection — into one message that tells the user nothing about which
+ * of them to fix.
+ */
+function imageErrorMessage(err: unknown): string {
+  if (err instanceof SyncAuthError) return "The server rejected this device's sync token.";
+  if (err instanceof SyncDisabledError) return "The server has sync switched off, so it cannot hold images.";
+  if (err instanceof SyncTooLargeError) return "That image is too large, even after resizing.";
+  if (err instanceof Error && err.message) return err.message;
+  return "Could not reach the server to store that image.";
+}
 
 /**
  * Lay out one binder.
@@ -37,14 +56,15 @@ import styles from "./WebBinderScreen.module.css";
 export function WebBinderScreen({ binderId }: { binderId: string }) {
   const { pop } = useNavigation();
   const repo = useRepositories();
-  const { ownedFinishes } = useLibrary();
+  const { ownedFinishes, binders, saveBinder } = useLibrary();
 
-  const [binders, setBinders] = useState(() => repo.getBinders());
   const binder = binders.find((b) => b.id === binderId) ?? null;
 
   const [selected, setSelected] = useState<{ page: number; index: number } | null>(null);
   const [setId, setSetId] = useState("me5");
   const [setName, setSetName] = useState("Pitch Black");
+  const [uploading, setUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   // ALL sets, not just collected ones: a binder is a plan, and planning a
   // set you have not started is the common case.
@@ -68,11 +88,40 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const spec = specFor(binder.format);
   const counts = countBinder(binder);
 
-  const commit = (next: typeof binder) => setBinders(repo.saveBinder(trimPages(next)));
+  const commit = (next: typeof binder) => saveBinder(trimPages(next));
 
   const place = (slot: BinderSlot | null) => {
     if (!selected) return;
     commit(placeSlot(binder, selected.page, selected.index, slot, Date.now()));
+  };
+
+  /**
+   * Resize on the device, upload, then place the id.
+   *
+   * The order matters: the pocket is only filled once the server holds the
+   * bytes. Placing first and uploading after would leave a pocket pointing at
+   * an id that does not exist if the upload failed — and a binder that renders
+   * a broken image on every other device is worse than one that says the
+   * upload did not work.
+   */
+  const addImage = async (file: File) => {
+    setImageError(null);
+    const token = repo.getSyncSettings().token;
+    if (!token) {
+      setImageError("Connect this device to the server first — custom images are stored there, not here.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataUrl = await resizeToDataUrl(file);
+      const imageId = await uploadBinderImage(token, dataUrl);
+      place({ kind: "image", imageId, label: file.name.replace(/\.[^.]+$/, "").slice(0, 120) });
+    } catch (err) {
+      console.warn("[cardlens] binder image upload failed:", err);
+      setImageError(imageErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -198,10 +247,37 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                 ))}
               </select>
             </label>
+            {/* A photo, a divider, a proxy — anything the catalog has no entry
+                for. The file is resized here and stored on the server, so the
+                binder carries a 20-byte id rather than a data URI it would
+                re-send on every edit. */}
+            <label className={`${styles.chip} ${uploading ? styles.chipBusy : ""}`}>
+              {uploading ? "Uploading…" : "Add image"}
+              <input
+                type="file"
+                accept="image/*"
+                className={styles.fileInput}
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  // Reset first: picking the same file twice in a row fires no
+                  // change event otherwise, so a failed upload could not be
+                  // retried without choosing a different picture.
+                  e.target.value = "";
+                  if (file) void addImage(file);
+                }}
+              />
+            </label>
             <button type="button" className={styles.chip} onClick={() => place(null)}>
               Clear pocket
             </button>
           </div>
+
+          {imageError ? (
+            <p className={styles.error} role="alert">
+              {imageError}
+            </p>
+          ) : null}
 
           <ul className={styles.cards}>
             {view.cards.flatMap((card) => {

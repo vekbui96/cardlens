@@ -29,6 +29,8 @@
     "playwright.config.ts",
     "server",
     "src/storage/printings.ts",
+    "src/storage/binders.ts",
+    "src/models/binderLayout.ts",
     "src/models/cards.ts",
     "src/models/finishes.ts",
     "src/models/games.ts",

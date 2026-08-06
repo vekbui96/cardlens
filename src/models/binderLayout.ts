@@ -51,8 +51,20 @@ export interface CardSlot {
 /** Anything that is not a catalog card — a photo, a divider, a proxy. */
 export interface ImageSlot {
   kind: "image";
-  /** A URL or data URI. See the storage note in repositories.ts. */
-  src: string;
+  /**
+   * A server-held image, by id. Resolved to a URL at render time rather than
+   * stored as one: the binder syncs between devices that reach the server on
+   * different origins (a phone on the funnel, a dev build on localhost), and a
+   * baked-in absolute URL would break on all but the device that uploaded it.
+   *
+   * It is also what keeps binder sync small. A binder is pushed whole on every
+   * edit, so an inline data URI would put megabytes through an endpoint sized
+   * for card rows — and into a localStorage budget this app has already
+   * exhausted once.
+   */
+  imageId?: string;
+  /** A URL or data URI, for an image the server does not hold. */
+  src?: string;
   label?: string;
 }
 
@@ -69,7 +81,16 @@ export interface Binder {
   format: BinderFormat;
   pages: BinderPage[];
   createdAt: number;
+  /** Last edit. The sync watermark and the last-write-wins key — see storage/binders.ts. */
   updatedAt: number;
+  /**
+   * When it was deleted. Present means gone, not "never existed".
+   *
+   * Same reasoning as the collection's tombstones: an absent binder is
+   * indistinguishable from one this device has never seen, so deleting on the
+   * phone and then syncing from the laptop would bring it straight back.
+   */
+  deletedAt?: number;
 }
 
 export function specFor(format: BinderFormat): BinderSpec {
@@ -82,7 +103,8 @@ export function emptyBinder(id: string, name: string, format: BinderFormat, now:
 
 /** Key for a card slot, matching the collection's (card, finish) identity. */
 export function slotKey(slot: BinderSlot): string {
-  return slot.kind === "card" ? `${slot.cardId}|${slot.finish}` : `img|${slot.src.slice(0, 64)}`;
+  if (slot.kind === "card") return `${slot.cardId}|${slot.finish}`;
+  return `img|${slot.imageId ?? slot.src?.slice(0, 64) ?? ""}`;
 }
 
 /**

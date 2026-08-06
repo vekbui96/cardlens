@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Repositories, MAX_RECENT_SEARCHES, MAX_FAVORITES } from "./repositories.ts";
 import { VersionedStore, createMemoryStorage, type StorageLike } from "./versioned.ts";
 import type { PokemonCardSummary } from "../models/cards.ts";
+import type { Binder } from "../models/binderLayout.ts";
 
 function repo() {
   return new Repositories(new VersionedStore(createMemoryStorage()));
@@ -466,5 +467,75 @@ describe("more than one game", () => {
     new Repositories(s, () => 0, "lorcana").addOwned("tfc-1", "normal");
 
     expect(new Repositories(s).getPrintings()).toHaveLength(2);
+  });
+});
+
+describe("binders", () => {
+  const binder = (id: string, name: string, updatedAt: number): Binder => ({
+    id,
+    name,
+    format: "9",
+    pages: [{ slots: {} }],
+    createdAt: updatedAt,
+    updatedAt,
+  });
+
+  it("hides a deleted binder but keeps a tombstone to sync", () => {
+    // Dropping the record would make a deletion indistinguishable from a binder
+    // this device has never seen, and the next pull would bring it straight
+    // back — the same failure the collection uses tombstones to avoid.
+    const r = repo();
+    r.saveBinder(binder("b1", "Masters", Date.now()));
+    r.deleteBinder("b1");
+
+    expect(r.getBinders()).toEqual([]);
+    expect(r.getBinderRecords()).toHaveLength(1);
+    expect(r.getBinderRecords()[0].deletedAt).toBeGreaterThan(0);
+  });
+
+  it("does not resurrect a deleted binder when a stale copy syncs in", () => {
+    const now = Date.now();
+    const r = repo();
+    r.saveBinder(binder("b1", "Masters", now));
+    r.deleteBinder("b1");
+
+    r.mergeIncomingBinders([binder("b1", "Masters", now - 1000)]);
+
+    expect(r.getBinders()).toEqual([]);
+  });
+
+  it("takes an incoming edit that is newer than the local one", () => {
+    const now = Date.now();
+    const r = repo();
+    r.saveBinder(binder("b1", "Local", now - 1000));
+    r.mergeIncomingBinders([binder("b1", "From the phone", now)]);
+    expect(r.getBinders().map((b) => b.name)).toEqual(["From the phone"]);
+  });
+
+  it("keeps binders edited on two devices when they are different binders", () => {
+    const now = Date.now();
+    const r = repo();
+    r.saveBinder(binder("b1", "Mine", now));
+    r.mergeIncomingBinders([binder("b2", "Theirs", now)]);
+    expect(
+      r
+        .getBinders()
+        .map((b) => b.id)
+        .sort(),
+    ).toEqual(["b1", "b2"]);
+  });
+
+  it("lists newest edit first", () => {
+    const now = Date.now();
+    const r = repo();
+    r.saveBinder(binder("old", "Old", now - 5000));
+    r.saveBinder(binder("new", "New", now));
+    expect(r.getBinders().map((b) => b.id)).toEqual(["new", "old"]);
+  });
+
+  it("deleting an unknown binder writes nothing", () => {
+    const r = repo();
+    r.deleteBinder("never-existed");
+    expect(r.getBinderRecords()).toEqual([]);
   });
 });

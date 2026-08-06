@@ -6,6 +6,8 @@ import { PrintingsStore } from "./printingsStore.ts";
 import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
 import { ShareStore } from "./shareStore.ts";
+import { BinderStore, MAX_BINDERS_PER_REQUEST, parseBinder } from "./binderStore.ts";
+import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderImages.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -30,6 +32,8 @@ const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collect
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
 const SHARES_FILE = process.env.SHARES_FILE ?? "D:/services/data/shares.json";
+const BINDERS_FILE = process.env.BINDERS_FILE ?? "D:/services/data/binders.json";
+const BINDER_IMAGES_DIR = process.env.BINDER_IMAGES_DIR ?? "D:/services/data/binder-images";
 
 /** Upstream failed with nothing cached to fall back on. */
 class UpstreamError extends Error {
@@ -73,6 +77,8 @@ export function createApp(
   printingsStore: PrintingsStore = new PrintingsStore(PRINTINGS_DIR),
   sealedStore: SealedStore = new SealedStore(SEALED_DIR),
   shares: ShareStore = new ShareStore(SHARES_FILE),
+  binders: BinderStore = new BinderStore(BINDERS_FILE),
+  binderImages: BinderImageStore = new BinderImageStore(BINDER_IMAGES_DIR),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -190,6 +196,101 @@ export function createApp(
     if (dropped > 0) console.warn(`[cardlens] collection merge dropped ${dropped} invalid row(s)`);
     const rows = collection.merge(incoming);
     res.json({ rows, at: Date.now(), dropped });
+  });
+
+  // --- Binder sync -----------------------------------------------------------
+  /**
+   * Binders converge per binder, last write wins — NOT per pocket. See
+   * storage/binders.ts for why; the short version is that a binder is one
+   * arrangement rather than a set of independent facts, and merging pocket by
+   * pocket would produce a page neither device laid out.
+   *
+   * Same token as collection sync, on purpose: a binder is a view of the
+   * collection, it is entered on the same devices, and a second token would be
+   * a second thing to type in for no extra safety. The Target token is separate
+   * because it can spend money; this cannot.
+   */
+  const binderLimiter = rateLimiter(120, 60_000);
+  /**
+   * Far looser than the sync routes, because one binder page is a dozen image
+   * GETs at once and scrolling through a binder is hundreds. Reads are cheap
+   * static bytes; it is the writes that need the tight bucket.
+   */
+  const binderImageLimiter = rateLimiter(600, 60_000);
+
+  app.get("/api/binders", binderLimiter, requireToken, (req, res) => {
+    const raw = req.query.since;
+    const since = typeof raw === "string" ? Number(raw) : 0;
+    const rows = Number.isFinite(since) && since > 0 ? binders.since(since) : binders.all();
+    res.json({ binders: rows, at: Date.now() });
+  });
+
+  app.post("/api/binders/merge", binderLimiter, requireToken, (req, res) => {
+    const body = req.body as { binders?: unknown };
+    if (!Array.isArray(body?.binders)) {
+      res.status(400).json({ error: "invalid_binders" });
+      return;
+    }
+    if (body.binders.length > MAX_BINDERS_PER_REQUEST) {
+      res.status(413).json({ error: "too_many_binders", max: MAX_BINDERS_PER_REQUEST });
+      return;
+    }
+    // Invalid binders are dropped rather than fatal, matching collection sync:
+    // one malformed binder must not reject a push carrying good ones. The count
+    // is returned so the client can say something instead of losing it in
+    // silence.
+    const incoming = body.binders.flatMap((b) => parseBinder(b) ?? []);
+    const dropped = body.binders.length - incoming.length;
+    if (dropped > 0) console.warn(`[cardlens] binder merge dropped ${dropped} invalid binder(s)`);
+    const merged = binders.merge(incoming);
+
+    // Orphan art, well after the fact. Sweeping here rather than on a timer
+    // keeps it tied to the moment the reference set actually changed; the age
+    // floor inside sweep() is what makes it safe to run this often.
+    const removed = binderImages.sweep(binders.referencedImages());
+    if (removed.length > 0) console.info(`[cardlens] swept ${removed.length} unreferenced binder image(s)`);
+
+    res.json({ binders: merged, at: Date.now(), dropped });
+  });
+
+  /**
+   * Custom binder art.
+   *
+   * Upload needs the token; reading does NOT — same rule as a live share, and
+   * for the same reason. The id is 16 random bytes and is the credential, which
+   * is what lets a shared binder render for somebody who has no token.
+   */
+  app.post("/api/binders/images", binderLimiter, requireToken, (req, res) => {
+    const body = req.body as { dataUrl?: unknown };
+    try {
+      const id = binderImages.save(body?.dataUrl);
+      if (!id) {
+        res.status(400).json({ error: "invalid_image" });
+        return;
+      }
+      res.json({ id });
+    } catch (err) {
+      if (err instanceof ImageTooLargeError) {
+        res.status(413).json({ error: "image_too_large", max: MAX_IMAGE_BYTES });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/binders/images/:id", binderImageLimiter, (req, res) => {
+    const image = binderImages.read(String(req.params.id ?? ""));
+    // 404 for malformed, unknown and traversal alike — the route says nothing
+    // about which, the same way an unknown share id does not.
+    if (!image) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    // The bytes at an id never change, so this can be cached hard. It has to
+    // be: a binder page is a dozen of these at once, on a tethered connection.
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("Content-Type", image.contentType);
+    res.send(image.body);
   });
 
   // --- Target stock bot ------------------------------------------------------

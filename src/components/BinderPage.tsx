@@ -1,4 +1,5 @@
 import { CardImage } from "./CardImage.tsx";
+import { imageSlotSrc } from "../services/sync/binderImages.ts";
 import {
   specFor,
   type BinderFormat,
@@ -58,8 +59,10 @@ export function BinderPageView({
                 <CardImage src={slot.imageSmall} alt="" size="thumb" />
               ) : (
                 // Custom art: the alt is the label because there is no catalog
-                // entry to name it.
-                <img className={styles.custom} src={slot.src} alt={slot.label ?? ""} />
+                // entry to name it. The src is resolved HERE rather than stored,
+                // because the binder travels between devices that reach the
+                // server on different origins.
+                <img className={styles.custom} src={imageSlotSrc(slot)} alt={slot.label ?? ""} />
               )}
               {/* Shadowed rather than hidden: a card you have not got yet is
                   the point of planning a binder, so it must be placeable and

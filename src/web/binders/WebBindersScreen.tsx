@@ -2,13 +2,19 @@ import { useState, type FormEvent } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
-import { useRepositories } from "../../app/contexts.tsx";
+import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { countBinder, emptyBinder, specFor, type BinderFormat } from "../../models/binderLayout.ts";
 import styles from "./WebBinderScreen.module.css";
 
-/** Ids only need to be unique on this device — binders do not sync yet. */
+/**
+ * Ids must be unique across DEVICES, not just this one, because they are the
+ * key binders converge on: two phones that both minted "b1" would merge into
+ * one binder and the older arrangement would vanish. The clock alone is not
+ * enough — two devices creating a binder in the same millisecond is unlikely
+ * but the failure is silent and permanent — so it carries randomness too.
+ */
 function newId(): string {
-  return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -21,8 +27,7 @@ function newId(): string {
  */
 export function WebBindersScreen() {
   const { pop, push } = useNavigation();
-  const repo = useRepositories();
-  const [binders, setBinders] = useState(() => repo.getBinders());
+  const { binders, saveBinder, deleteBinder } = useLibrary();
   const [name, setName] = useState("");
   const [format, setFormat] = useState<BinderFormat>("9");
 
@@ -31,7 +36,7 @@ export function WebBindersScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const binder = emptyBinder(newId(), trimmed, format, Date.now());
-    setBinders(repo.saveBinder(binder));
+    saveBinder(binder);
     setName("");
     push({ name: "binder", binderId: binder.id });
   };
@@ -88,11 +93,7 @@ export function WebBindersScreen() {
                       {binder.pages.length} page{binder.pages.length === 1 ? "" : "s"}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className={styles.danger}
-                    onClick={() => setBinders(repo.deleteBinder(binder.id))}
-                  >
+                  <button type="button" className={styles.danger} onClick={() => deleteBinder(binder.id)}>
                     Delete
                   </button>
                 </div>

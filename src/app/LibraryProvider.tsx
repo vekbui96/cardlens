@@ -24,6 +24,10 @@ import {
   SyncDisabledError,
   pendingRows,
 } from "../services/sync/collectionSync.ts";
+import { BinderSyncClient } from "../services/sync/binderSync.ts";
+import { SyncNotFoundError } from "../services/sync/http.ts";
+import { pendingBinders } from "../storage/binders.ts";
+import type { Binder } from "../models/binderLayout.ts";
 
 /**
  * What the Collection screen shows about sync. Deliberately a status, never a
@@ -96,6 +100,17 @@ interface LibraryValue {
    * taken yet, and nothing on screen would say so.
    */
   storageDegraded: boolean;
+  /**
+   * Binders that still exist, newest edit first.
+   *
+   * Held here rather than in each screen's own useState, which is what they did
+   * while binders were local-only: a sync that pulled a binder edited on
+   * another device had nowhere to deliver it, so the open screen would keep
+   * rendering the arrangement it read at mount.
+   */
+  binders: Binder[];
+  saveBinder: (binder: Binder) => void;
+  deleteBinder: (id: string) => void;
   addRecentSearch: (query: string) => void;
   addRecentlyViewed: (card: PokemonCardSummary) => void;
   clearRecentSearches: () => void;
@@ -116,6 +131,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [recentlyViewed, setRecentlyViewed] = useState<ViewedCard[]>(() => repo.getRecentlyViewed());
   const [collection, setCollection] = useState<OwnedCard[]>(() => repo.getCollection());
   const [storageDegraded, setStorageDegraded] = useState(false);
+  const [binders, setBinders] = useState<Binder[]>(() => repo.getBinders());
+
+  const saveBinder = useCallback((binder: Binder) => setBinders(repo.saveBinder(binder)), [repo]);
+  const deleteBinder = useCallback((id: string) => setBinders(repo.deleteBinder(id)), [repo]);
 
   const isFavorite = useCallback((id: string) => favorites.some((c) => c.id === id), [favorites]);
 
@@ -234,6 +253,17 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [repo, sync.lastPushedAt, collection],
   );
 
+  /**
+   * Counted separately from card rows, and NOT added to the status line's
+   * figure: "3 pending" next to a collection means three cards, and quietly
+   * folding a binder into that number would make it lie.
+   */
+  const pendingBinderCount = useMemo(
+    () => pendingBinders(repo.getBinderRecords(), sync.bindersPushedAt).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repo, sync.bindersPushedAt, binders],
+  );
+
   const runSync = useCallback(async () => {
     const settings = repo.getSyncSettings();
     if (!settings.token) return;
@@ -255,6 +285,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         outgoing.length > 0 ? await client.push(outgoing) : await client.pull(settings.lastPulledAt);
 
       setCollection(repo.mergeIncoming(result.rows));
+      // Committed BEFORE the binders are attempted. If the binder half then
+      // fails, the collection's work is still banked — otherwise a persistently
+      // failing binder sync would make every run re-push the whole collection,
+      // which is harmless but slow and hides what is actually broken.
       setSync(
         repo.setSyncSettings({
           lastPushedAt: outgoing.length > 0 ? pushedAt : settings.lastPushedAt,
@@ -262,6 +296,37 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           lastSyncAt: Date.now(),
         }),
       );
+
+      // Binders ride the same run and the same token, against their own
+      // endpoint and their own watermarks. Sequenced after the collection
+      // rather than in parallel because they share one home server on a
+      // residential connection, and because a binder is a view of a collection
+      // that should already have landed.
+      try {
+        const binderClient = new BinderSyncClient(settings.token);
+        const outgoingBinders = pendingBinders(repo.getBinderRecords(), settings.bindersPushedAt);
+        const bindersPushedAt = Date.now();
+        const binderResult =
+          outgoingBinders.length > 0
+            ? await binderClient.push(outgoingBinders)
+            : await binderClient.pull(settings.bindersPulledAt);
+        setBinders(repo.mergeIncomingBinders(binderResult.binders));
+        setSync(
+          repo.setSyncSettings({
+            bindersPushedAt: outgoingBinders.length > 0 ? bindersPushedAt : settings.bindersPushedAt,
+            bindersPulledAt: binderResult.at,
+            lastSyncAt: Date.now(),
+          }),
+        );
+      } catch (err) {
+        // Pages and the home server deploy separately, so new code against an
+        // older server is a normal transient state. Without this, that state
+        // would show as a permanently offline sync, retrying every thirty
+        // seconds — and it would say the COLLECTION was not syncing when the
+        // collection had just synced fine.
+        if (!(err instanceof SyncNotFoundError)) throw err;
+        console.info("[cardlens] this server has no binder sync yet — skipping it");
+      }
       setSyncState("idle");
     } catch (err) {
       // A wrong token or a server with sync switched off stays broken until
@@ -307,11 +372,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   // deps precisely so a failed run schedules the next one — without it, pending
   // and runSync are unchanged after a failure and the timer never fires again.
   useEffect(() => {
-    if (pending === 0) return;
+    // Binders count here even though they are kept out of the status figure: a
+    // rearranged binder with no card marks alongside it must still schedule a
+    // run, or it sits on the device until something else happens to sync.
+    if (pending === 0 && pendingBinderCount === 0) return;
     const delay = syncState === "offline" ? SYNC_RETRY_MS : SYNC_DEBOUNCE_MS;
     const t = setTimeout(() => void runSync(), delay);
     return () => clearTimeout(t);
-  }, [pending, runSync, syncAttempt, syncState]);
+  }, [pending, pendingBinderCount, runSync, syncAttempt, syncState]);
 
   const syncStatus = useMemo<SyncStatus>(
     () => ({ state: syncState, pending, lastSyncAt: sync.lastSyncAt }),
@@ -363,6 +431,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       finishTotals,
       finishesBySet,
       storageDegraded,
+      binders,
+      saveBinder,
+      deleteBinder,
       addRecentSearch,
       addRecentlyViewed,
       clearRecentSearches,
@@ -393,6 +464,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       finishTotals,
       finishesBySet,
       storageDegraded,
+      binders,
+      saveBinder,
+      deleteBinder,
       addRecentSearch,
       addRecentlyViewed,
       clearRecentSearches,

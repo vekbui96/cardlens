@@ -12,6 +12,7 @@ import {
 } from "./printings.ts";
 import { evictCaches, VersionedStore } from "./versioned.ts";
 import type { Binder } from "../models/binderLayout.ts";
+import { binderTombstone, liveBinders, mergeBinders, pruneBinderTombstones } from "./binders.ts";
 
 /** Spec limits. */
 export const MAX_RECENT_SEARCHES = 20;
@@ -71,6 +72,16 @@ export interface SyncSettings {
   lastPushedAt: number;
   lastPulledAt: number;
   lastSyncAt: number;
+  /**
+   * Binder watermarks, separate from the collection's.
+   *
+   * They measure a different stream of writes against a different endpoint. One
+   * shared pair would make a collection push move the binder watermark past
+   * binder edits that were never sent — they would then never be sent, and the
+   * loss would be invisible on the device that made them.
+   */
+  bindersPushedAt: number;
+  bindersPulledAt: number;
 }
 
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
@@ -78,6 +89,8 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   lastPushedAt: 0,
   lastPulledAt: 0,
   lastSyncAt: 0,
+  bindersPushedAt: 0,
+  bindersPulledAt: 0,
 };
 
 /**
@@ -120,7 +133,12 @@ function isBinder(value: unknown): value is Binder {
     typeof v.id === "string" &&
     typeof v.name === "string" &&
     (v.format === "9" || v.format === "12") &&
-    Array.isArray(v.pages)
+    Array.isArray(v.pages) &&
+    // Both timestamps are required, not cosmetic: they ARE the last-write-wins
+    // key. A record missing one would make every merge involving it NaN, which
+    // loses whichever side it is compared against.
+    typeof v.createdAt === "number" &&
+    typeof v.updatedAt === "number"
   );
 }
 
@@ -540,33 +558,51 @@ export class Repositories {
   /**
    * Binders the user laid out by hand.
    *
-   * Local only for now, and NOT part of collection sync: a binder is a layout,
-   * not ownership, and pushing it through the OR-Set would need a merge rule
-   * for "two devices moved the same card to different pockets" that nobody has
-   * decided yet.
+   * These sync, per binder, last write wins — see storage/binders.ts for why
+   * that granularity rather than the collection's per-printing OR-Set. The
+   * consequence here is that a delete must be a TOMBSTONE, exactly as it is for
+   * printings: dropping the row would make a deleted binder indistinguishable
+   * from one this device has never seen, and the next sync would bring it back.
    *
-   * Image slots hold their src inline. That is fine for a URL and a real risk
-   * for a data URI — this app has already had localStorage run out — so the
-   * screen that adds images is responsible for keeping them small.
+   * Image slots carry an `imageId` and the bytes live on the server. A data URI
+   * would be re-serialised into localStorage on every pocket move and pushed
+   * whole on every sync — this app has already had localStorage run out once.
    */
-  getBinders(): Binder[] {
+  private allBinders(): Binder[] {
     const rows = this.store.read<unknown[]>("binders", isArray, []);
     return rows.flatMap((row) => (isBinder(row) ? [row] : []));
   }
 
-  saveBinder(binder: Binder): Binder[] {
-    const next = this.getBinders().filter((b) => b.id !== binder.id);
-    next.unshift(binder);
-    this.store.write("binders", next);
+  /** Binders that still exist, newest edit first — what the screens show. */
+  getBinders(): Binder[] {
+    return liveBinders(this.allBinders());
+  }
+
+  /** Raw records including tombstones. This is what syncs. */
+  getBinderRecords(): Binder[] {
+    return this.allBinders();
+  }
+
+  private writeBinders(binders: Binder[]): Binder[] {
+    this.store.write("binders", pruneBinderTombstones(binders));
     return this.getBinders();
   }
 
-  deleteBinder(id: string): Binder[] {
-    this.store.write(
-      "binders",
-      this.getBinders().filter((b) => b.id !== id),
-    );
-    return this.getBinders();
+  saveBinder(binder: Binder): Binder[] {
+    // Merged rather than replaced, so a save racing an incoming sync cannot
+    // clobber a binder this device was not editing.
+    return this.writeBinders(mergeBinders(this.allBinders(), [binder]));
+  }
+
+  deleteBinder(id: string, now = Date.now()): Binder[] {
+    const existing = this.allBinders().find((b) => b.id === id);
+    if (!existing) return this.getBinders();
+    return this.writeBinders(mergeBinders(this.allBinders(), [binderTombstone(existing, now)]));
+  }
+
+  /** Merge binders from a sync peer into local state. */
+  mergeIncomingBinders(incoming: Binder[]): Binder[] {
+    return this.writeBinders(mergeBinders(this.allBinders(), incoming));
   }
 
   // --- Preferences ----------------------------------------------------------

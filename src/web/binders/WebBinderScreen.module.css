@@ -31,6 +31,39 @@
   color: var(--cl-on-accent);
 }
 
+/* The image picker is a <label> wrapping a hidden input, so it needs the box
+   model a <button> gets for free — without this the 44px touch target that the
+   rest of the web shell guarantees would not apply to it. */
+label.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chipBusy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Visually hidden rather than display:none, so it stays focusable by keyboard
+   and the label still opens it. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.error {
+  margin: 0 var(--cl-gap) var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-error);
+}
+
 .chip:focus-visible,
 .select:focus-visible {
   outline: var(--cl-focus-ring);

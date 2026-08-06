@@ -106,6 +106,49 @@ One row per `(card, finish)` with tombstones (`src/storage/printings.ts`).
 - Tombstones prune after 180 days. Removing them earlier lets a long-offline device resurrect deleted cards.
 - **To wipe data, write tombstones — do not delete the file.** Deleting the server copy leaves device rows stranded, and the device will not re-push them because its watermark says it already did.
 
+### Binders converge per binder, last write wins — NOT as an OR-Set
+
+`src/storage/binders.ts`, shared with the server the same way `printings.ts` is.
+
+The collection merges per `(card, finish)` because two devices marking different
+cards are both right. A binder is one arrangement: pocket 4 of page 2 holds
+exactly one card, and merging pocket by pocket would produce a page neither
+person laid out. Granularity is per **binder** so editing different binders on
+two devices never conflicts — the case that actually happens — and only
+concurrent edits to the same binder lose the older one.
+
+Everything else follows the collection's rules deliberately: **deletes are
+tombstones** (`deletedAt`), ties go to the tombstone, tombstones prune at 180
+days, and the watermark is `max(updatedAt, deletedAt)`. Tombstones drop their
+pages — the id must survive, the contents need not.
+
+Binder watermarks are **separate** from the collection's (`bindersPushedAt` /
+`bindersPulledAt`). One shared pair would let a collection push move the binder
+watermark past binder edits that were never sent.
+
+Binder ids must be unique across DEVICES, not just one — they are the key the
+merge converges on.
+
+### Custom binder art lives on the server, never in the binder
+
+A binder is pushed **whole** on every edit, so an inline data URI would go
+through the sync endpoint on every pocket move and into the localStorage budget
+this app has already exhausted once. So: the client resizes to ≤900px JPEG,
+`POST /api/binders/images` stores the bytes, and the slot carries a 20-byte
+`imageId`.
+
+- The URL is resolved at **render** time (`imageSlotSrc`), never stored — a
+  binder travels between devices that reach the server on different origins.
+- Reads are unauthenticated, like a live share: the id is 16 random bytes and is
+  the credential. Uploads need `COLLECTION_TOKEN`.
+- **SVG is refused.** It is script execution served from the API origin.
+- The id pattern is shared between `binderImages.ts` and `binderStore.ts`. An id
+  one accepts and the other refuses to serve is a permanently broken pocket.
+- Orphans are swept after a merge, but only images **older than 7 days**. An
+  image is uploaded before the binder referencing it is pushed — the client
+  debounces sync by 10 seconds — so a sweep with no age floor deletes pictures
+  inside that window.
+
 ### Sync has no outbox queue
 
 "What still needs sending" is derivable: every row stamped after the last successful push. A queue can be lost, double-applied, or drift from the data it describes; a watermark recomputes truth from the rows. A failed sync needs no cleanup.
@@ -120,6 +163,11 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 
 ## Testing traps
 
+- **The e2e API server writes to a scratch dir**, not `D:/services` — see the
+  `webServer` env in `playwright.config.ts`. It also runs with a real
+  `COLLECTION_TOKEN`, which is what lets `binders.spec.ts` exercise the actual
+  image upload instead of asserting against a 401. Without those paths a test
+  run on SERVER-PC would write into the live collection.
 - **e2e runs on in-memory mocks** (`VITE_USE_MOCKS: "true"` in `playwright.config.ts`). `page.route` interception does nothing for catalog data, so network-failure behaviour cannot be tested there — use a component test with a provider you control.
 - **A hanging request is not an aborted one.** An abort settles the query and lets error/empty states through; a hang pins `isLoading` forever. The Collection screen bug (permanent "Loading sets…" on the glasses) only reproduces with a promise that never resolves.
 - **Verify a regression test actually fails without the fix.** Two attempts at the above passed against the bug before one reproduced it.
@@ -139,5 +187,8 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 ## Conventions
 
 - Screens own their `BackRow` and drive focus through `useBackableFocus`; `MenuRow` only works inside a `FocusList`, so standalone controls use `ToggleRow`.
+- The mock fixtures do NOT contain Pitch Black (`me5`), which several screens
+  default to — an e2e test that needs cards must switch to a set that exists,
+  e.g. Obsidian Flames.
 - Sets list in collector-number order (`byCollectorNumber`) — binder order, not price. Numbers are strings and not always numeric (`101a`, `TG01`, `SV001`).
 - Storage reads are corruption-safe and migrate on read: total, idempotent, and cannot half-apply if the app closes mid-write.

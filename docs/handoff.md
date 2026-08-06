@@ -28,14 +28,15 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
 | Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
-| Binders           | localStorage only, NOT synced — see "Open" below                               |
+| Binders           | `D:/services/data/binders.json` + `binder-images/` — NOT deployed yet          |
 | Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
 | Deployed at       | Pages and server both on `ae63015` — verified live                             |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
+`/api/binders`, `/api/binders/merge`, `/api/binders/images`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
 `/api/set-information/:setId`, `/api/sealed/:setId?name=`, `/api/target/*`,
-plus the companion relay.
+plus the companion relay. The three `binders` routes are NOT deployed yet.
 
 ## Target restock tab (`#/target`)
 
@@ -69,6 +70,8 @@ unless it says otherwise.
 | Live shares           | `#/live/:id`       | A link that re-reads the collection instead of carrying it. Revocable                 |
 | Collection graph      | home + shared sets | Printings owned over time, 30d/90d/1y/all                                             |
 | Custom binders        | `#/binders`        | Vault X 9- and 12-pocket, laid out by hand, plus "fill with one of each"              |
+| Binder sync           | `/api/binders`     | Per binder, last write wins, tombstoned deletes, own watermarks, `COLLECTION_TOKEN`   |
+| Custom binder images  | binder pocket      | Resized on the device, stored server-side, referenced by a 20-byte id — never inline  |
 
 ### Tokens and services
 
@@ -92,13 +95,38 @@ Chromium because PerimeterX captchas headless, so it needs the console session.
 restarts and nobody logs in, stock checking silently stops and every live share 404s.
 This happened once mid-session. Autologon is the real fix.
 
+## Binder sync — built, verified locally, NOT deployed
+
+Everything else in this file is live. This is not: it is in the working tree,
+not committed, and has never run on SERVER-PC or GitHub Pages.
+
+Built as the plan that used to be item 1 described — per binder, last write wins, `binders.json`
+beside the shares, on `COLLECTION_TOKEN` — plus the custom-image upload, which
+was the reason to do them together. `CLAUDE.md` holds the durable rules; the
+state-of-play is:
+
+- **No `.env` change is needed.** `BINDERS_FILE` and `BINDER_IMAGES_DIR` default
+  to `D:/services/data/binders.json` and `D:/services/data/binder-images/`.
+  That is deliberate — NSSM bakes environment variables in at install, so a new
+  variable would mean re-running `04-install-services.ps1`, not a restart.
+- **`server/` changed, so both targets must be deployed**, not just Pages.
+- Verified against a real server on scratch data: last-write-wins, a stale push
+  losing, a tombstone refusing to resurrect, out-of-range pockets dropped,
+  `holofoil` canonicalised on ingest, a traversal id 404ing, SVG refused, the
+  501-binder payload 413ing. The upload path is covered end to end in
+  `e2e/binders.spec.ts` — resize, POST, id, resolved URL, `naturalWidth > 0`.
+- **Nothing has synced between two real devices yet.** One machine has exercised
+  both sides of the protocol; two have not.
+- Not built, deliberately: any way to delete an image on purpose. Orphans are
+  swept after a merge once they are 7 days old.
+- A frontend newer than the server is now survivable. The binder routes 404 on
+  an old server (confirmed against the live one), and a 404 is treated as "this
+  server predates the endpoint" and skipped, rather than wedging sync on
+  "offline" and saying the collection had failed when it had just succeeded.
+
 ## Open, in the order I would do them
 
-1. **Binder sync.** Binders are localStorage only. Proposed: per-binder
-   last-write-wins on `COLLECTION_TOKEN`, `binders.json` beside the shares.
-   Granularity matters — per binder means editing different binders on two
-   devices never conflicts. Do custom-image upload at the same time, because
-   syncing data URIs would push megabytes through an endpoint sized for card rows.
+1. ~~**Binder sync.**~~ **Done, but NOT yet deployed** — see the section above.
 2. **The silent snapshot fallback.** When the server is unreachable, Share quietly
    encodes the whole collection into a ~2,000-character URL and the button says
    "Snapshot link copied", which is easy to miss. It should say the server could
@@ -141,9 +169,14 @@ This happened once mid-session. Autologon is the real fix.
   `npm run format` after any python/sed edit; `format:check` caught one after a push.
 - **NordVPN breaks Tailscale on the laptop.** `ts.net` names resolve to an
   unreachable tailnet IP. There is a hosts-file override pinning
-  `server-pc.tail0e4194.ts.net` to `199.38.181.54` — **it is now stale and should
-  be removed**; the funnel is unreachable from the laptop because of it. Phones
-  and other devices are unaffected. Undo: delete that line, uncomment the
+  `server-pc.tail0e4194.ts.net` to `199.38.181.54`, the funnel's public address.
+  **Measured 2026-08-06: that override is what is KEEPING the server reachable,
+  not what is blocking it.** The funnel answers 200 through it, while the
+  tailnet IP `100.75.251.52` times out and `tailscale status` reports every node
+  offline with the coordination server unreachable. An earlier note in this file
+  said the line was stale and should be deleted — that was wrong; deleting it
+  today loses the only working route. Re-measure before touching it. Undo, if
+  Tailscale is ever healthy again: delete that line, uncomment the
   `100.75.251.52` one below it. Backup at `hosts.bak-cardlens`.
 
 ## Earlier thread: the card scanner

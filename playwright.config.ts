@@ -1,4 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Scratch data root for the e2e server.
+ *
+ * Without it the server falls back to its production paths under D:/services,
+ * which do not exist on a dev machine (a stream of ENOENT warnings) and DO
+ * exist on the home server — where a test run would write into the real
+ * collection. Everything here is disposable.
+ */
+const DATA = join(tmpdir(), "cardlens-e2e");
+/** A token so the authenticated routes can actually be exercised, not just 401'd. */
+const E2E_TOKEN = "e2e-token";
 
 /**
  * Playwright drives the app the way the glasses do: arrow keys, Enter, Escape.
@@ -36,7 +50,7 @@ export default defineConfig({
     {
       name: "phone",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase)\.spec\.ts/,
+      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
     },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec
@@ -55,6 +69,15 @@ export default defineConfig({
       port: 8787,
       reuseExistingServer: !process.env.CI,
       stdout: "pipe",
+      env: {
+        COLLECTION_TOKEN: E2E_TOKEN,
+        COLLECTION_FILE: join(DATA, "collection.json"),
+        BINDERS_FILE: join(DATA, "binders.json"),
+        BINDER_IMAGES_DIR: join(DATA, "binder-images"),
+        PRINTINGS_DIR: join(DATA, "printings"),
+        SEALED_DIR: join(DATA, "sealed"),
+        SHARES_FILE: join(DATA, "shares.json"),
+      },
     },
     {
       command: "npm run dev",
