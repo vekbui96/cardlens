@@ -452,6 +452,16 @@ export class Repositories {
     return this.getCollection();
   }
 
+  /**
+   * When each owned printing was marked, one entry per printing.
+   *
+   * Just the timestamps: the growth chart needs no card identity, and handing
+   * the UI whole rows would leak the storage shape into a component.
+   */
+  ownedStamps(): number[] {
+    return livePrintings(this.ownRows()).map((r) => r.at);
+  }
+
   /** Merge rows from elsewhere (a sync peer) into local state. */
   mergeIncoming(rows: OwnedPrinting[]): OwnedCard[] {
     this.writePrintings(mergePrintings(this.getPrintings(), rows));

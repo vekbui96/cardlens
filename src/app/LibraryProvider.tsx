@@ -63,6 +63,8 @@ interface LibraryValue {
   toggleOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
   /** Printings this card has that are deliberately not part of the master set. */
   excludedFinishes: (id: string) => CollectFinish[];
+  /** When each owned printing was marked — the growth chart's only input. */
+  ownedStamps: number[];
   /** Take a printing out of the master-set target, or put it back. */
   toggleExcluded: (cardId: string, finish: CollectFinish, setId?: string) => void;
   /**
@@ -132,6 +134,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
    * state: an excluded printing is deliberately NOT in `collection`, which is
    * the view of what is owned.
    */
+  const ownedStamps = useMemo(() => {
+    // Read through `collection` so the dependency is real rather than
+    // suppressed: this reads STORED rows, which every mark rewrites. Without
+    // it the chart keeps rendering the collection as it was at mount.
+    void collection;
+    return repo.ownedStamps();
+  }, [repo, collection]);
+
   const excludedFinishes = useCallback(
     (id: string) => {
       // Read through `collection` so the dependency is real rather than
@@ -343,6 +353,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isOwnedFinish,
       toggleOwned,
       excludedFinishes,
+      ownedStamps,
       toggleExcluded,
       addOwned,
       addManyOwned,
@@ -372,6 +383,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       isOwnedFinish,
       toggleOwned,
       excludedFinishes,
+      ownedStamps,
       toggleExcluded,
       addOwned,
       addManyOwned,

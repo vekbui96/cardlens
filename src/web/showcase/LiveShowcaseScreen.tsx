@@ -50,7 +50,13 @@ function parseShare(value: unknown): LiveShare | null {
     if (typeof r.collectorNumber !== "string" || typeof r.finish !== "string") return [];
     // Canonicalised here as everywhere else, so a legacy finish from an old
     // client does not become a second key the UI never looks under.
-    return [{ collectorNumber: r.collectorNumber, finish: canonicalFinish(r.finish) }];
+    return [
+      {
+        collectorNumber: r.collectorNumber,
+        finish: canonicalFinish(r.finish),
+        ...(typeof r.at === "number" ? { at: r.at } : {}),
+      },
+    ];
   });
 
   return {

@@ -1,0 +1,165 @@
+/*
+ * Steps chosen against the DARK surface rather than flipped from a light
+ * theme: gold already means "held" everywhere in this app, so the curve is the
+ * same material as a marked card rather than a new colour to learn.
+ */
+
+.figure {
+  margin: 0;
+  padding: var(--cl-gap);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cl-gap);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cl-fg-dim);
+}
+
+/* The hero number is the headline; the plot is its shape. */
+.hero {
+  margin: 2px 0 0;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-display, 2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--cl-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--cl-font);
+  font-size: var(--cl-fs-small);
+  font-weight: 500;
+  color: var(--cl-fg-muted);
+}
+
+.ranges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.range {
+  min-height: 32px;
+  padding: 0 10px;
+  border: var(--cl-border);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.rangeOn {
+  background: var(--cl-gold-dim);
+  border-color: transparent;
+  color: var(--cl-gold);
+}
+
+.range:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.plot {
+  position: relative;
+  margin-top: var(--cl-gap-sm);
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+  overflow: visible;
+}
+
+/* 2px, and the only saturated thing in the figure. */
+.line {
+  stroke: var(--cl-gold);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fillTop {
+  stop-color: var(--cl-gold);
+  stop-opacity: 0.22;
+}
+
+.fillBottom {
+  stop-color: var(--cl-gold);
+  stop-opacity: 0;
+}
+
+/* Recessive: the crosshair locates, it does not compete with the curve. */
+.crosshair {
+  stroke: var(--cl-fg-dim);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.dot {
+  fill: var(--cl-gold);
+  stroke: var(--cl-surface);
+  stroke-width: 2;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: var(--cl-radius-sm, 6px);
+  background: var(--cl-surface-raised);
+  border: var(--cl-border);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  pointer-events: none;
+}
+
+.tooltip strong {
+  color: var(--cl-fg);
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.note {
+  margin: var(--cl-gap-sm) 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .line,
+  .dot {
+    transition: opacity var(--cl-transition, 120ms);
+  }
+}

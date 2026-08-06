@@ -290,3 +290,7 @@
   outline: var(--cl-focus-ring);
   outline-offset: 2px;
 }
+
+.graphWrap {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}

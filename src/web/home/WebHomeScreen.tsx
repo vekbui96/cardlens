@@ -3,6 +3,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
 import { continueTarget, topProgress } from "../../features/home/continueSet.ts";
+import { CollectionGraph } from "../../components/CollectionGraph.tsx";
 import { useLibraryValue } from "../../hooks/useLibraryValue.ts";
 import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -22,8 +23,14 @@ import styles from "./WebHomeScreen.module.css";
  */
 export function WebHomeScreen() {
   const { push } = useNavigation();
-  const { collection, ownedCountsBySet, ownedFinishCountsBySet, totalFinishesOwned, finishesBySet } =
-    useLibrary();
+  const {
+    collection,
+    ownedCountsBySet,
+    ownedFinishCountsBySet,
+    totalFinishesOwned,
+    finishesBySet,
+    ownedStamps,
+  } = useLibrary();
   const { data: sets } = useSets();
   const { typeSearch } = useSearchAction();
   const value = useLibraryValue();
@@ -92,6 +99,13 @@ export function WebHomeScreen() {
                 : `${value.priced} of ${value.printings} printings priced`}
             </span>
           </button>
+
+          {/*
+            The value card is the number; this is its shape. Printings rather
+            than value over time, because the app only knows today's prices —
+            see models/history.ts.
+          */}
+          <CollectionGraph stamps={ownedStamps} />
 
           {resume ? (
             <button

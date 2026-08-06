@@ -357,6 +357,10 @@ export function createApp(
         // link resolvable against a catalog that renumbered its ids.
         collectorNumber: r.cardId.slice(r.cardId.lastIndexOf("-") + 1),
         finish: r.finish,
+        // When it was marked, so the shared page can draw the same growth
+        // curve the owner sees. It reveals acquisition dates for this ONE set
+        // and nothing else - the same scope the rest of the payload has.
+        at: r.at,
       }));
 
     res.json({ setId: share.setId, setName: share.setName, owned, at: Date.now() });

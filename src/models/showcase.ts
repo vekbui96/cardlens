@@ -30,6 +30,12 @@ const FROM_CODE: Record<string, string> = Object.fromEntries(
 export interface ShowcasePrinting {
   collectorNumber: string;
   finish: CollectFinish;
+  /**
+   * When it was marked, present only on LIVE shares. Snapshot links encode
+   * ownership alone and pre-date this, so anything reading it must treat
+   * absence as "no history to draw" rather than as zero.
+   */
+  at?: number;
 }
 
 export interface Showcase {

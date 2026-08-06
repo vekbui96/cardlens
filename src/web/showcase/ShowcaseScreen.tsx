@@ -8,6 +8,7 @@ import { binderPages } from "../../models/binder.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import { decodeShowcase, type ShowcasePrinting } from "../../models/showcase.ts";
 import { formatUpdated, formatUsd } from "../../utils/format.ts";
+import { CollectionGraph } from "../../components/CollectionGraph.tsx";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import styles from "./ShowcaseScreen.module.css";
@@ -240,6 +241,12 @@ export function ShowcaseView({
 
   const missingCount = slots.length - totals.held;
 
+  /** Acquisition dates, when the share carries them. */
+  const stamps = useMemo(
+    () => ownedRows.flatMap((r) => (typeof r.at === "number" && r.at > 0 ? [r.at] : [])),
+    [ownedRows],
+  );
+
   return (
     <Screen
       title={setName}
@@ -281,6 +288,14 @@ export function ShowcaseView({
           <span className={styles.filterCount}>
             {missingCount} of {slots.length} still missing
           </span>
+        </div>
+      ) : null}
+
+      {/* Only a live share carries dates; a snapshot link has no history to
+          draw, so the figure is absent rather than empty. */}
+      {stamps.length > 0 ? (
+        <div className={styles.graphWrap}>
+          <CollectionGraph stamps={stamps} title={`${setName} over time`} />
         </div>
       ) : null}
 
