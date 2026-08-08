@@ -133,28 +133,22 @@ state-of-play is:
   page kept on purpose and one left over are identical, so the app must not
   guess. `trimPages` is gone; `reformat` already compacts by re-flowing.
 
-### Pages is on a branch right now, NOT Actions — switch it back
+### Pages is back on Actions (resolved 2026-08-08)
 
-GitHub Actions could not allocate a runner for this repo for over 24 hours,
-across a critical Actions incident and after it was marked resolved: two Pages
-runs sat `pending` with ZERO jobs (23h45m and 21h). So the bundle was built
-locally with the workflow's own env and pushed to a `gh-pages` branch, and the
-Pages source was switched from GitHub Actions to that branch.
+Briefly published from a `gh-pages` branch while GitHub Actions was down. That
+is over: the branch is deleted, `build_type` is `workflow` again, and a
+workflow deploy is verified live. Pushing to `main` deploys the site again.
 
-**Consequence, and it is easy to get caught by: pushing to `main` no longer
-deploys anything.** The branch is a manual snapshot.
+**The manual publish took the site down for two days** — see the Git Bash /
+MSYS trap now in `CLAUDE.md`. The blank page returned HTTP 200, so every
+status check reported healthy.
 
-To rebuild it by hand:
-
-```bash
-VITE_BASE=/cardlens/ VITE_ENABLE_DEV_PANEL=false   VITE_COMPANION_API_BASE_URL="https://server-pc.tail0e4194.ts.net:8443/api"   VITE_API_BASE_URL="https://server-pc.tail0e4194.ts.net:8443/api/catalog"   npm run build && cp dist/index.html dist/404.html
-# then commit dist/ (plus an empty .nojekyll) to the gh-pages branch
-```
-
-To put it back the moment Actions is healthy: Settings -> Pages -> Source ->
-GitHub Actions, re-run `deploy-pages.yml`, confirm the live bundle hash moves,
-then delete `gh-pages`. `.github/workflows/deploy-pages.yml` was never changed
-and is still correct.
+**And the "Actions outage" was only the first day.** After it cleared, a single
+run stuck in `waiting` from 2026-08-06 held the `pages` concurrency group
+(`cancel-in-progress: false`), so every later Pages run queued behind it
+forever while CI passed normally. Cancelling that one run drained the queue and
+the next deploy finished in 26 seconds. Check for stuck runs before concluding
+Actions is broken.
 
 ### What the deploy state actually was
 

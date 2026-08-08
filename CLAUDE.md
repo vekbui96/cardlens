@@ -13,9 +13,35 @@ Most of what follows was learned the hard way. Where a claim came from measureme
 - `npx playwright test` — e2e
 - `npm run dev:all` — Vite + companion server together
 
+**Never build or deploy from Git Bash.** MSYS rewrites any argument or env
+value that looks like a Unix absolute path into a Windows one, silently.
+`VITE_BASE=/cardlens/ npm run build` in Git Bash produces
+`VITE_BASE=C:/Program Files/Git/cardlens/`, and every asset in `index.html`
+then points at `/Program Files/Git/cardlens/assets/...`. **This took the site
+down for two days in August 2026** — the page returned HTTP 200 and rendered
+nothing, so every status check said healthy. Use PowerShell, or let the
+workflow do it: `deploy-pages.yml` sets `VITE_BASE` in YAML, with no shell
+involved, and was never affected.
+
+The general rule that follows: **a blank SPA returns 200.** After any deploy,
+LOAD the page and look at it. `curl -o /dev/null -w "%{http_code}"` cannot tell
+a working site from a broken one.
+
 **Prettier is enforced by CI.** Edits applied by script (python/sed) do not respect it, so run `npm run format` after any bulk edit.
 
 ## Deploying
+
+**`deploy-pages.yml` declares `concurrency: group: pages, cancel-in-progress:
+false`.** A run stuck in `waiting` therefore blocks every later Pages run
+indefinitely — one from 2026-08-06 held the group for two days while CI kept
+passing, which looks exactly like "Actions is broken" and is not. Check for it
+before diagnosing anything else:
+
+```bash
+gh api "repos/vekbui96/cardlens/actions/runs?per_page=30"   --jq '.workflow_runs[] | select(.status!="completed") | {id,name,status,created_at}'
+```
+
+Cancel the oldest stuck run and the queue drains immediately.
 
 Two independent targets — the frontend alone is often not enough:
 
