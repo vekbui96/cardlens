@@ -28,7 +28,7 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
 | Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
-| Binders           | `D:/services/data/binders.json` + `binder-images/` — server live, Pages behind |
+| Binders           | `D:/services/data/binders.json` + `binder-images/`, synced, live               |
 | Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
 | Deployed at       | Server on `7654b3b` (verified live). **Pages still on `da2b975`** — see below  |
 
@@ -37,6 +37,10 @@ Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
 `/api/set-information/:setId`, `/api/sealed/:setId?name=`, `/api/target/*`,
 plus the companion relay. All three `binders` routes are live.
+
+**Pages currently publishes from the `gh-pages` BRANCH, not Actions** — see the
+deployment note below. Pushing to `main` does NOT update the site until that is
+switched back.
 
 ## Target restock tab (`#/target`)
 
@@ -128,7 +132,30 @@ state-of-play is:
   page kept on purpose and one left over are identical, so the app must not
   guess. `trimPages` is gone; `reformat` already compacts by re-flowing.
 
-### The Pages deploy, and what the deploy state actually was
+### Pages is on a branch right now, NOT Actions — switch it back
+
+GitHub Actions could not allocate a runner for this repo for over 24 hours,
+across a critical Actions incident and after it was marked resolved: two Pages
+runs sat `pending` with ZERO jobs (23h45m and 21h). So the bundle was built
+locally with the workflow's own env and pushed to a `gh-pages` branch, and the
+Pages source was switched from GitHub Actions to that branch.
+
+**Consequence, and it is easy to get caught by: pushing to `main` no longer
+deploys anything.** The branch is a manual snapshot.
+
+To rebuild it by hand:
+
+```bash
+VITE_BASE=/cardlens/ VITE_ENABLE_DEV_PANEL=false   VITE_COMPANION_API_BASE_URL="https://server-pc.tail0e4194.ts.net:8443/api"   VITE_API_BASE_URL="https://server-pc.tail0e4194.ts.net:8443/api/catalog"   npm run build && cp dist/index.html dist/404.html
+# then commit dist/ (plus an empty .nojekyll) to the gh-pages branch
+```
+
+To put it back the moment Actions is healthy: Settings -> Pages -> Source ->
+GitHub Actions, re-run `deploy-pages.yml`, confirm the live bundle hash moves,
+then delete `gh-pages`. `.github/workflows/deploy-pages.yml` was never changed
+and is still correct.
+
+### What the deploy state actually was
 
 **GitHub had a partial system outage on 2026-08-06** — Actions and Pages both
 reported `major_outage`. The Pages run for `7654b3b` sat `pending` and never
