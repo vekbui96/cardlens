@@ -175,7 +175,22 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 
 ## Server operations
 
-- Windows services via NSSM: `solid-website-api` (:8080), `cardlens` (:8787). Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.
+- Windows services via NSSM: `solid-website-api` (:8080), `cardlens` (:8787),
+  `recognition` (:8200, **loopback only**, auto-start). The recogniser is Python
+  in `D:\services
+ecognition\.venv`; install/reinstall with
+  `06-install-recognition.ps1`. Its index is read from the cardlens checkout
+  (`RECOGNITION_INDEX_DIR`), so a card-index rebuild ships with a cardlens deploy.
+- **Tailscale Funnel only permits 443, 8443 and 10000**, and 443/8443 are spent.
+  Anything new is therefore a loopback service that `cardlens` fronts — the
+  pattern `/api/target/*` and `/api/recognize` both use.
+- **`/api/recognize` is for the card SORTER, not the CardLens scanner.** The
+  scanner recognises on the device via `src/scan/phash.ts`: 164KB of index,
+  sub-millisecond, offline, works on the glasses. Routing it through the server
+  would be slower and answer the same question.
+- The service-wide CSP is `default-src 'none'`, which is right for a JSON API
+  and fatal for any HTML route — it blocks inline script and style. Set a
+  per-route CSP, as `/api/recognize/bench` does. Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.
 - **The Target restock bot is NOT a service** — it is a scheduled task, `target-stock-checker`, at `D:\services\target-stock-checker`. It must run in the **interactive** session (LogonType Interactive, session 1) because it drives a HEADED Chromium: PerimeterX captchas headless. SSH lands in session 0, which has no desktop, so start it with `Start-ScheduledTask -TaskName target-stock-checker` and never directly. If SERVER-PC signs out, the bot stops.
 - `/api/target/*` proxies to that bot's loopback API on :8788 (`server/targetBot.ts`). Three distinct tokens are involved and none is interchangeable: `TARGET_TOKEN` (device → cardlens), `TARGET_BOT_TOKEN` (cardlens → bot), `COLLECTION_TOKEN` (collection sync only). The Target token is deliberately separate from the collection one — these routes can add items to a real Target cart, and the collection token is spread across every syncing device.
 - **NSSM holds log files open.** `Get-Content` and `ReadAllBytes` both fail; open with `FileShare::ReadWrite`.

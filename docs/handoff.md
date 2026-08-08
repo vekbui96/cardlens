@@ -30,6 +30,7 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
 | Binders           | `D:/services/data/binders.json` + `binder-images/`, synced, live               |
 | Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
+| Recognition       | `recognition` service, loopback :8200, fronted at `/api/recognize`             |
 | Deployed at       | Server on `7654b3b` (verified live). **Pages still on `da2b975`** — see below  |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
