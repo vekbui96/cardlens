@@ -1,6 +1,6 @@
 # Session handoff — CardLens
 
-Written at the end of a long session so the next one can start without re-deriving anything. Read `CLAUDE.md` first — it holds the repo's traps and measurements. This file is only "where things stand right now".
+Written at the end of a long session so the next one can start without re-deriving anything. If something is BROKEN or you are deploying, go to `docs/runbook.md` instead — this file is state, that one is procedure. Read `CLAUDE.md` first — it holds the repo's traps and measurements. This file is only "where things stand right now".
 
 **Everything below is committed, pushed, deployed and verified unless it says otherwise.**
 

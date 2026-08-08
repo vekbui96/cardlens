@@ -4,6 +4,10 @@ CardLens — Pokémon card search, pricing and collection tracking for **Meta Ra
 
 Most of what follows was learned the hard way. Where a claim came from measurement, the number is included so it can be re-checked rather than trusted.
 
+**Something broken, or deploying?** `docs/runbook.md` is the paste-able version
+— triage order, the exact commands, and the traps that have actually caused
+outages.
+
 **Starting a session?** `docs/handoff.md` says where things stand right now — what is half-built, what is waiting on the user's device, and what not to re-litigate. This file is the durable knowledge; that one is the current state.
 
 ## Commands
