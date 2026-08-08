@@ -8,6 +8,7 @@ import { callBot, validTcin } from "./targetBot.ts";
 import { ShareStore } from "./shareStore.ts";
 import { BinderStore, MAX_BINDERS_PER_REQUEST, parseBinder } from "./binderStore.ts";
 import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderImages.ts";
+import { callRecogniser, recogniserHealth, MAX_IMAGE_BYTES as MAX_RECOGNITION_BYTES } from "./recognition.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -31,6 +32,12 @@ const TARGET_TOKEN = process.env.TARGET_TOKEN ?? "";
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
+/**
+ * The card recogniser, on loopback. Tailscale Funnel only permits 443, 8443 and
+ * 10000, and two are already spent — so this service fronts it rather than the
+ * recogniser being exposed itself. See server/recognition.ts.
+ */
+const RECOGNITION_URL = (process.env.RECOGNITION_URL ?? "http://127.0.0.1:8200").replace(/\/$/, "");
 const SHARES_FILE = process.env.SHARES_FILE ?? "D:/services/data/shares.json";
 const BINDERS_FILE = process.env.BINDERS_FILE ?? "D:/services/data/binders.json";
 const BINDER_IMAGES_DIR = process.env.BINDER_IMAGES_DIR ?? "D:/services/data/binder-images";
@@ -292,6 +299,87 @@ export function createApp(
     res.setHeader("Content-Type", image.contentType);
     res.send(image.body);
   });
+
+  // --- Card recognition ------------------------------------------------------
+  /**
+   * "What card is this?" — proxied to a loopback Python service.
+   *
+   * Behind COLLECTION_TOKEN rather than a token of its own. The blast radius is
+   * the same as collection sync's: it reads an image and answers with a card
+   * id. It cannot spend money, which is the whole reason TARGET_TOKEN is
+   * separate, and a third token to type into every device buys nothing.
+   *
+   * Again, for the avoidance of doubt: the CardLens scanner does NOT use this.
+   * It recognises on the device. See server/recognition.ts.
+   */
+  const recognitionLimiter = rateLimiter(60, 60_000);
+
+  /**
+   * The recogniser's own test page, re-pointed at this server's proxy.
+   *
+   * Unauthenticated on purpose: it is markup and script with no secrets in it,
+   * and the POST behind it still demands the token. Gating the page as well
+   * would mean a second way to present credentials for no extra protection.
+   *
+   * This exists so a phone can photograph a card anywhere and see the verdict —
+   * which is the only way the real accuracy numbers ever get measured. The
+   * recogniser itself stays on loopback.
+   */
+  app.get("/api/recognize/bench", recognitionLimiter, async (_req, res) => {
+    const reply = await fetch(`${RECOGNITION_URL}/`).catch(() => null);
+    if (!reply?.ok) {
+      res.status(503).type("text/plain").send("The recognition service is not running.");
+      return;
+    }
+    const page = await reply.text();
+    // The service-wide CSP is `default-src 'none'`, which is right for a JSON
+    // API and fatal for a page: it blocks the inline script and style this one
+    // is entirely made of, and the blob: URL that previews the capture.
+    // Relaxed HERE only, and no further than the page needs — it still cannot
+    // reach another origin or be framed.
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+        "img-src 'self' data: blob:; connect-src 'self'; form-action 'none'; frame-ancestors 'none'",
+    );
+    res
+      .type("html")
+      .send(
+        page.replace(
+          "<script>",
+          '<script>window.__RECOGNIZE_ENDPOINT__="/api/recognize";' +
+            "window.__RECOGNIZE_NEEDS_TOKEN__=true;</script><script>",
+        ),
+      );
+  });
+
+  app.get("/api/recognize/health", recognitionLimiter, requireToken, async (_req, res) => {
+    const reply = await recogniserHealth();
+    res.status(reply.status).json(reply.body);
+  });
+
+  app.post(
+    "/api/recognize",
+    recognitionLimiter,
+    requireToken,
+    // Raw, not JSON: the body is multipart/form-data and re-encoding it would
+    // rewrite the boundary and the image. `type: () => true` because a browser
+    // sets its own boundary parameter and an exact type match would miss it.
+    express.raw({ type: () => true, limit: MAX_RECOGNITION_BYTES }),
+    async (req, res) => {
+      const contentType = req.get("content-type") ?? "";
+      if (!contentType.startsWith("multipart/form-data")) {
+        res.status(400).json({ error: "expected_multipart" });
+        return;
+      }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: "empty_body" });
+        return;
+      }
+      const reply = await callRecogniser(req.body, contentType);
+      res.status(reply.status).json(reply.body);
+    },
+  );
 
   // --- Target stock bot ------------------------------------------------------
   /**
