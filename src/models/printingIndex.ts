@@ -1,5 +1,5 @@
 import type { Printing } from "../integrations/tcgdex/client.ts";
-import { isLikelyPackPrinting, makeFinish, type Finish } from "./finishes.ts";
+import { isLikelyPackPrinting, makeFinish, parseFinish, type Finish } from "./finishes.ts";
 import type { EurAverages } from "./movement.ts";
 
 export interface SetPrintingIndex {
@@ -89,12 +89,35 @@ function unpadded(collectorNumber: string): string {
 }
 
 /**
+ * Every key worth trying for one number+finish, most specific first.
+ *
+ * Three number forms because TCGdex pads modern sets while pokemontcg.io does
+ * not and either form can reach here.
+ *
+ * Then the same three with the foil stripped. Providers do not model pattern
+ * foils: TCGdex exposes variants as flat booleans (normal/reverse/holo) with no
+ * concept of pokeball, energy or quickball, so a set full of patterned reverses
+ * still comes back as a bare `reverse`. The collection stores the pattern it saw
+ * on the card, so without this an exact-match lookup finds nothing and the row
+ * totals as $0 with no indication anything is missing.
+ *
+ * A base-type price is the right stand-in: a patterned reverse and a plain
+ * reverse are the same print run wherever both exist. Crossing *types* is not —
+ * a holo price must never answer for a reverse — so only the foil is dropped.
+ */
+function lookupKeys(collectorNumber: string, finish: Finish): string[] {
+  const numbers = [collectorNumber, unpadded(collectorNumber), collectorNumber.padStart(3, "0")];
+  const { type } = parseFinish(finish);
+  const finishes = type === finish ? [finish] : [finish, type];
+  return finishes.flatMap((f) => numbers.map((n) => `${n}|${f}`));
+}
+
+/**
  * Price for one printing of one card.
  *
- * Tries the number as given and then unpadded, because TCGdex pads modern sets
- * while pokemontcg.io does not and either form can reach here. This lookup was
- * previously inlined in useCollectionValue; it lives here so the set screen and
- * the collection total cannot disagree about what a printing is worth.
+ * This lookup was previously inlined in useCollectionValue; it lives here so the
+ * set screen and the collection total cannot disagree about what a printing is
+ * worth.
  */
 export function printingPrice(
   index: SetPrintingIndex | null | undefined,
@@ -102,19 +125,19 @@ export function printingPrice(
   finish: Finish,
 ): number | undefined {
   if (!index) return undefined;
-  return (
-    index.prices[`${collectorNumber}|${finish}`] ??
-    index.prices[`${unpadded(collectorNumber)}|${finish}`] ??
-    index.prices[`${collectorNumber.padStart(3, "0")}|${finish}`]
-  );
+  for (const key of lookupKeys(collectorNumber, finish)) {
+    const price = index.prices[key];
+    if (price !== undefined) return price;
+  }
+  return undefined;
 }
 
 /**
  * Cardmarket rolling averages (EUR) for one printing.
  *
- * Same number-form fallbacks as printingPrice, for the same reason. Only ever
- * consumed in aggregate — a single card's change at these prices is a rounding
- * step, not a movement.
+ * Same key fallbacks as printingPrice, for the same reasons. Only ever consumed
+ * in aggregate — a single card's change at these prices is a rounding step, not
+ * a movement.
  */
 export function printingEur(
   index: SetPrintingIndex | null | undefined,
@@ -122,9 +145,9 @@ export function printingEur(
   finish: Finish,
 ): EurAverages | undefined {
   if (!index) return undefined;
-  return (
-    index.eur[`${collectorNumber}|${finish}`] ??
-    index.eur[`${unpadded(collectorNumber)}|${finish}`] ??
-    index.eur[`${collectorNumber.padStart(3, "0")}|${finish}`]
-  );
+  for (const key of lookupKeys(collectorNumber, finish)) {
+    const eur = index.eur[key];
+    if (eur !== undefined) return eur;
+  }
+  return undefined;
 }

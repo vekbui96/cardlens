@@ -86,6 +86,29 @@ describe("printingPrice", () => {
     expect(printingPrice(index, "001", "reverse:pokeball")).toBeUndefined();
   });
 
+  it("prices a patterned foil from the base type when the provider has no pattern", () => {
+    // TCGdex models variants as flat booleans (normal/reverse/holo) and has no
+    // concept of ball patterns, so a set full of pokeball reverses still comes
+    // back as a bare `reverse`. The collection holds `reverse:pokeball`, so an
+    // exact-match-only lookup resolves to nothing and the row silently totals
+    // as $0. Measured on me2pt5: 15 of 63 held cards.
+    const index = buildPrintingIndex({
+      "001": [{ type: "reverse", price: 3.5 }],
+    });
+
+    expect(printingPrice(index, "001", "reverse:pokeball")).toBe(3.5);
+  });
+
+  it("does not fall back across different types", () => {
+    // A holo price must never answer for a reverse. Stripping the foil is a
+    // narrowing of the same printing; crossing types is a different card.
+    const index = buildPrintingIndex({
+      "001": [{ type: "holo", price: 12 }],
+    });
+
+    expect(printingPrice(index, "001", "reverse:pokeball")).toBeUndefined();
+  });
+
   it("returns undefined for a missing index or unknown card", () => {
     expect(printingPrice(null, "001", "normal")).toBeUndefined();
     expect(printingPrice(buildPrintingIndex({}), "999", "normal")).toBeUndefined();
