@@ -62,7 +62,7 @@ test.describe("card scanner", () => {
     await page.goto("/?ui=web#/scan");
     // The count proves the binary and its metadata were both fetched and agreed
     // on their length — a mismatch throws rather than silently misnaming cards.
-    await expect(page.getByText(/cards indexed from your sets/)).toBeVisible();
+    await expect(page.getByText(/[\d,]+ cards indexed/)).toBeVisible();
   });
 
   test("recognises on the device when this one is not connected", async ({ page }) => {

@@ -567,7 +567,7 @@ export function ScanScreen() {
         {queue.length === 0 ? (
           <span className={styles.stripEmpty}>
             {index
-              ? `${index.cards.length.toLocaleString()} cards indexed from your sets${engine === "server" ? " · server recognising" : ""}`
+              ? `${index.cards.length.toLocaleString()} cards indexed${engine === "server" ? " · server recognising" : ""}`
               : indexError
                 ? engine === "server"
                   ? `${indexError} — the server is the only recogniser`

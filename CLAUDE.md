@@ -59,6 +59,21 @@ ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"git -C D:\services\car
 
 The server has been silently stale before, running validation that rejected finishes the client could produce — rows were dropped on sync and it looked like nothing happened. **After changing anything under `server/` or the shared `src/` files listed in `tsconfig.node.json`, deploy both.**
 
+**A card-index rebuild is a THIRD target.** `recognition` reads its index from
+the cardlens checkout, and `api.py` caches it in a module global on first use
+(`if _index is None`) — so pulling new index files changes nothing until the
+Python service is restarted:
+
+```bash
+ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"Restart-Service recognition\""
+curl -s https://server-pc.tail0e4194.ts.net:8443/api/recognize/health -H "Authorization: Bearer $COLLECTION_TOKEN"
+```
+
+Skipping it is quiet and nasty: the browser falls back to an index the server
+does not have, so the server answers `UNKNOWN` for cards the device recognises
+fine, and server-first scanning looks like a recognition regression. Check
+`cards` in the health response against `public/card-index/latest.json`.
+
 ## The platform (docs/meta-web-app.md)
 
 - Gestures arrive as ordinary `keydown`: arrows for swipes, `Enter` for index pinch (SELECT), `Escape` for middle pinch (BACK).
@@ -220,8 +235,8 @@ ecognition\.venv`; install/reinstall with
   not a rejected token. Both sides run the same hash over the same index file —
   the Python one is a line-by-line port with a parity test — so the answers are
   identical today. The server exists on this path so it can be given a bigger
-  index, OCR, or card detection **without reshipping the Pages bundle**; 82 of
-  1,709 cards are unresolvable by artwork alone and that is the whole gap.
+  index, OCR, or card detection **without reshipping the Pages bundle**; 1,730
+  of 20,205 cards are unresolvable by artwork alone and that is the whole gap.
   - The fallback is not optional. SERVER-PC has been found powered off twice,
     and every capture records which recogniser answered so a silent failover
     cannot be mistaken for the server working.

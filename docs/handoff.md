@@ -238,8 +238,11 @@ Nothing is half-built. The card **scanner** is the current thread.
 - `src/scan/phash.ts` — artwork hashing. Thresholds (distance 16, margin 8) are
   MEASURED, not guessed; the table is in the file. Re-run
   `node scripts/validate-recognition.mjs me5 me3 me2` after any change to it.
-- `public/card-index/` — 1,709 cards from the ten collected sets, 13KB. Built by
-  `scripts/build-card-index.mjs`, which checkpoints after every set.
+- `public/card-index/` — **20,205 cards across all 174 English sets**, 158KB of
+  hashes plus 2.3MB of metadata (405KB gzipped together, and the filenames are
+  content-hashed so it is fetched once per rebuild, not per session). Built by
+  `scripts/build-card-index.mjs all`, which checkpoints after every set and
+  takes `--resume`. It was ten collected sets and 1,709 cards until 2026-08-10.
 - `#/scan` — batch scanning with **auto-capture**, review-then-commit, thumbnails.
   Since 2026-08-10 it recognises **server-first** via `/api/recognize`, falling
   back to the on-device index whenever the server does not answer, and labels
@@ -260,13 +263,13 @@ Nothing is half-built. The card **scanner** is the current thread.
    there and the scanner fills it faster. Keep the OR-Set, tombstones, merge
    rule and watermark — only the backend behind `VersionedStore` changes. It
    touches every read path, so start it fresh rather than squeezing it in.
-2. **Finish the full index.** `node scripts/build-card-index.mjs all`, ~45
-   minutes, then commit `public/card-index/` and deploy. THREE runs have been
-   stopped by the environment rather than by the script, so run it in a real
-   terminal. Interruption is now survivable.
-3. **Collector-number OCR.** 27 of 1,709 cards share an exact hash — all
-   genuine reprints with identical art. The margin rule already refuses to
-   guess; a crop of the number corner would settle them.
+2. **Collector-number OCR — now the biggest single win available.** Growing the
+   index to the full catalog took ambiguity from 4.8% to **8.6%**, and 652 cards
+   share an exact hash with another. Every one is a genuine reprint with
+   identical art — Base Set against Base Set 2 against Legendary Collection —
+   so no improvement to the hash, the optics or the lighting can touch them.
+   The margin rule already refuses to guess; a crop of the number corner would
+   settle them. Measure with `node scripts/measure-index-crowding.mjs`.
 
 **Unexplained: a crash on Collection.** Not reproducible with 973 seeded rows on
 desktop. An ErrorBoundary now ships, so the next occurrence shows the message

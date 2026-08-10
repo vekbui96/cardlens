@@ -2,7 +2,7 @@
  * Proxy to the card recognition service.
  *
  * The recogniser is a separate Python process on this machine (FastAPI, numpy,
- * and a 1,709-card perceptual-hash index). It listens on loopback only, so this
+ * and a 20,205-card perceptual-hash index). It listens on loopback only, so this
  * service — which already owns the shared token and the Tailscale Funnel — is
  * how anything reaches it. Nothing new is exposed publicly, and Funnel only
  * permits ports 443, 8443 and 10000 anyway, two of which are already spent.
@@ -18,8 +18,8 @@
  * of the TypeScript one over the same index file and a parity test enforces it.
  * The reason to route here at all is that this side can be given a bigger
  * index, OCR disambiguation or card detection without reshipping a static
- * bundle to Pages — and 82 of 1,709 cards are unresolvable by artwork alone, so
- * that ceiling is real and already measured.
+ * bundle to Pages — and 1,730 of 20,205 cards are unresolvable by artwork
+ * alone, so that ceiling is real and already measured.
  *
  * If this proxy ever answers something the device would not, that is the point.
  * If it answers more SLOWLY than the device and nothing else, the scanner

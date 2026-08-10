@@ -298,9 +298,28 @@ export interface Verdict {
  * silently files the wrong card and nobody ever notices, whereas being asked is
  * merely annoying.
  *
- * Supporting figure: across 69,751 impostor pairs the closest unrelated pair
- * was 12 bits. Re-run the sweep once the full 20,460-card index exists — that
- * is the number that can move, since near-collisions grow with the pair count.
+ * **The sweep has now been re-run at full catalog size, and the pair holds.**
+ * `node scripts/measure-index-crowding.mjs` over the shipped 20,205-card index,
+ * feeding every card its own hash:
+ *
+ * ```
+ *                1,709 cards      20,205 cards
+ * MATCHED             95.2%             91.4%
+ * AMBIGUOUS            4.8%              8.6%
+ * WRONG                   0                 0
+ * exact ties             54               652
+ * ```
+ *
+ * Twelve times the cards costs about four points of auto-accept and NOTHING in
+ * correctness, which is the whole argument for gating on the margin rather than
+ * on a weighted score. Crowding cannot produce a false accept here: two cards
+ * that sit on top of each other have a margin of zero, and zero fails the gate.
+ * It spends the growth on being asked more often instead.
+ *
+ * What it is asked about is not random, either — the 1,730 ambiguous cards are
+ * overwhelmingly Base Set against Base Set 2 against Legendary Collection,
+ * which are the same artwork reprinted. No hash can separate those; only the
+ * collector number can, which is what OCR is for.
  */
 export const MAX_DISTANCE = 16;
 export const MIN_MARGIN = 8;
