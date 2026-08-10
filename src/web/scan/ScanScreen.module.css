@@ -218,6 +218,18 @@
   color: var(--cl-fg-muted);
 }
 
+/*
+  Provenance, deliberately quieter than the card it describes: it matters when
+  something looks wrong and should never compete with the name when it does not.
+*/
+.via {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .picker {
   display: flex;
   flex-direction: column;

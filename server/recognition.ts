@@ -7,13 +7,23 @@
  * how anything reaches it. Nothing new is exposed publicly, and Funnel only
  * permits ports 443, 8443 and 10000 anyway, two of which are already spent.
  *
- * **This is NOT how the CardLens scanner works, and must not become it.**
- * `src/scan/phash.ts` recognises on the device: 164KB of index, a Hamming
- * distance over 20,460 integers, sub-millisecond, no network, works offline and
- * on the glasses. Routing that through a home server on residential upstream
- * would be slower, would need connectivity, and would answer exactly the same
- * question. This proxy exists for the card SORTER, whose machine cannot run a
- * browser, and for testing recognition from a phone against real photographs.
+ * Three callers now: the card SORTER, whose machine cannot run a browser; the
+ * bench page, which is how recognition gets measured against real photographs
+ * from a phone; and — since 2026-08-10 — the CardLens scanner itself.
+ *
+ * **The scanner's use of this is server-FIRST, never server-only.** It keeps
+ * `src/scan/phash.ts` loaded and answers from the device whenever this route
+ * does not: sub-millisecond, offline, and working when SERVER-PC is not. Today
+ * the two give the same answer, because the Python hash is a line-by-line port
+ * of the TypeScript one over the same index file and a parity test enforces it.
+ * The reason to route here at all is that this side can be given a bigger
+ * index, OCR disambiguation or card detection without reshipping a static
+ * bundle to Pages — and 82 of 1,709 cards are unresolvable by artwork alone, so
+ * that ceiling is real and already measured.
+ *
+ * If this proxy ever answers something the device would not, that is the point.
+ * If it answers more SLOWLY than the device and nothing else, the scanner
+ * should go back to being local-only.
  *
  * Why a raw byte forward rather than a JSON relay like targetBot: the payload
  * is multipart/form-data, and parsing then re-encoding it would rewrite the

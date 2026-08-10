@@ -214,10 +214,21 @@ ecognition\.venv`; install/reinstall with
 - **Tailscale Funnel only permits 443, 8443 and 10000**, and 443/8443 are spent.
   Anything new is therefore a loopback service that `cardlens` fronts — the
   pattern `/api/target/*` and `/api/recognize` both use.
-- **`/api/recognize` is for the card SORTER, not the CardLens scanner.** The
-  scanner recognises on the device via `src/scan/phash.ts`: 164KB of index,
-  sub-millisecond, offline, works on the glasses. Routing it through the server
-  would be slower and answer the same question.
+- **The scanner is server-first, device-always** (changed 2026-08-10; it was
+  device-only before). `src/web/scan/ScanScreen.tsx` POSTs each capture to
+  `/api/recognize` and falls back to `src/scan/phash.ts` on any failure that is
+  not a rejected token. Both sides run the same hash over the same index file —
+  the Python one is a line-by-line port with a parity test — so the answers are
+  identical today. The server exists on this path so it can be given a bigger
+  index, OCR, or card detection **without reshipping the Pages bundle**; 82 of
+  1,709 cards are unresolvable by artwork alone and that is the whole gap.
+  - The fallback is not optional. SERVER-PC has been found powered off twice,
+    and every capture records which recogniser answered so a silent failover
+    cannot be mistaken for the server working.
+  - Captures go as **PNG**, not JPEG: 245×342 is small either way, and lossless
+    bytes are what make "server and device agree" testable rather than hopeful.
+  - `/api/recognize` is rate-limited at **300/min**, not the usual 60 — a scan
+    burst tops out near 85/min per device and 60 throttled ordinary use.
 - The service-wide CSP is `default-src 'none'`, which is right for a JSON API
   and fatal for any HTML route — it blocks inline script and style. Set a
   per-route CSP, as `/api/recognize/bench` does. Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.

@@ -309,10 +309,20 @@ export function createApp(
    * id. It cannot spend money, which is the whole reason TARGET_TOKEN is
    * separate, and a third token to type into every device buys nothing.
    *
-   * Again, for the avoidance of doubt: the CardLens scanner does NOT use this.
-   * It recognises on the device. See server/recognition.ts.
+   * The CardLens scanner DOES use this, as of 2026-08-10 — server first, with
+   * the on-device index as the fallback when this route does not answer. See
+   * server/recognition.ts.
    */
-  const recognitionLimiter = rateLimiter(60, 60_000);
+  /**
+   * 300/min, not the 60 every other route gets.
+   *
+   * A scanning session is the only caller that arrives in a sustained burst:
+   * auto-capture locks out for 700ms, so one device tops out near 85 captures a
+   * minute and 60 would throttle an ordinary stack of cards. The far side is a
+   * loopback process answering in ~110ms, so 300 is roughly half a core, and
+   * the ceiling still exists to bound an abusive client rather than a busy one.
+   */
+  const recognitionLimiter = rateLimiter(300, 60_000);
 
   /**
    * The recogniser's own test page, re-pointed at this server's proxy.

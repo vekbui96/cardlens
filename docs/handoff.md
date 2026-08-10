@@ -241,6 +241,11 @@ Nothing is half-built. The card **scanner** is the current thread.
 - `public/card-index/` — 1,709 cards from the ten collected sets, 13KB. Built by
   `scripts/build-card-index.mjs`, which checkpoints after every set.
 - `#/scan` — batch scanning with **auto-capture**, review-then-commit, thumbnails.
+  Since 2026-08-10 it recognises **server-first** via `/api/recognize`, falling
+  back to the on-device index whenever the server does not answer, and labels
+  every reviewed row with which one did. The `Server` / `On device` chip beside
+  the auto toggle forces either. Needs the collection token, same as sync — an
+  unconnected device just scans locally.
 - `#/showcase/...` — share a set as a link that carries its own data, one tile
   per printing, missing ones ghosted. Snapshot only; resharing is the update.
 

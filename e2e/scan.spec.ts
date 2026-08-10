@@ -1,5 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 
+/** Matches the token the e2e API server is started with — see playwright.config.ts. */
+const E2E_TOKEN = "e2e-token";
+
 /**
  * The scanner, driven against Chromium's fake camera.
  *
@@ -62,22 +65,54 @@ test.describe("card scanner", () => {
     await expect(page.getByText(/cards indexed from your sets/)).toBeVisible();
   });
 
-  test("opens the camera and captures without a round-trip", async ({ page }) => {
-    const external: string[] = [];
-    // Nothing may leave the device on the scan path. This is a privacy claim
-    // the screen makes in words, so it gets an assertion.
+  test("recognises on the device when this one is not connected", async ({ page }) => {
+    // No token means no server, and the screen must not merely cope with that —
+    // it must not reach the network at all. An unconnected device scanning in
+    // aeroplane mode is the case the on-device index exists for.
+    const requests: string[] = [];
     page.on("request", (r) => {
       const url = r.url();
-      if (!url.startsWith("http://localhost") && !url.startsWith("data:")) external.push(url);
+      if (!url.startsWith("data:")) requests.push(url);
     });
 
     await page.goto("/?ui=web#/scan");
     await startCamera(page);
+    await expect(page.getByTestId("engine")).toHaveText("On device");
 
     await page.getByTestId("capture").click();
 
     await expect(page.getByRole("button", { name: /review 1/i })).toBeVisible();
-    expect(external, `scan made external requests: ${external.join(", ")}`).toHaveLength(0);
+    const recognise = requests.filter((u) => u.includes("/api/recognize"));
+    expect(recognise, `an unconnected device called the server: ${recognise.join(", ")}`).toHaveLength(0);
+  });
+
+  test("routes to the server when connected, and falls back when it cannot", async ({ page }) => {
+    // The e2e API server runs with a real token but no recogniser behind it, so
+    // /api/recognize answers 503. That is exactly the failover this asserts:
+    // the capture is still identified, and the row says which one did it.
+    await page.addInitScript((token) => {
+      localStorage.setItem(
+        "cardlens:v1:sync-settings",
+        JSON.stringify({ token, lastPushedAt: 0, lastPulledAt: 0, lastSyncAt: 0 }),
+      );
+    }, E2E_TOKEN);
+
+    const posted: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/api/recognize")) posted.push(r.url());
+    });
+
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await expect(page.getByTestId("engine")).toHaveText("Server");
+
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    expect(posted, "a connected device did not ask the server").not.toHaveLength(0);
+    // Silent failover is the thing to guard against: it looks identical to the
+    // server working until someone checks why accuracy never improved.
+    await expect(page.getByTestId("via")).toContainText("On device");
   });
 
   test("does not resize the preview when a card is captured", async ({ page }) => {

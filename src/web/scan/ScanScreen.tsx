@@ -3,9 +3,11 @@ import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { useRepositories } from "../../app/contexts.tsx";
 import { artRect, perceptualHash } from "../../scan/phash.ts";
 import { guideRect, guideStyle } from "../../scan/frame.ts";
 import { loadCardIndex, identify, type CardIndex, type ScanResult } from "../../scan/cardIndex.ts";
+import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
@@ -17,9 +19,16 @@ import styles from "./ScanScreen.module.css";
  * pointer, no camera API, and a 600x600 additive display where a live preview
  * would cost every row of the list it replaced.
  *
- * Recognition is entirely on-device — the artwork is hashed and matched against
- * the index shipped with the app. Nothing is uploaded, no round-trip is on the
- * scan path, and it works with the phone in aeroplane mode.
+ * Recognition runs **server-first, device-always**. The capture goes to the
+ * Python recogniser behind `/api/recognize`, which today runs a bit-exact port
+ * of `phash.ts` over the same index and therefore answers identically — but
+ * which can be given a bigger index, OCR disambiguation or card detection
+ * without reshipping this app, none of which fits in a 13KB static asset.
+ *
+ * The on-device index stays loaded and answers whenever the server does not:
+ * SERVER-PC has been found powered off twice, and a scanner that stops when the
+ * house does is not a scanner. Every capture records which one answered, so a
+ * silent failover cannot be mistaken for the server working.
  *
  * **Scanning never stops to ask.** A prompt per card turns a stack of two
  * hundred into two hundred decisions, which is the difference between a
@@ -40,10 +49,23 @@ type Phase =
   | { at: "denied"; reason: string }
   | { at: "unsupported" };
 
+/** Which recogniser answered. `null` while the answer is still in flight. */
+type Via = "server" | "device" | null;
+
 interface Capture {
   key: number;
   thumb: string;
-  result: ScanResult;
+  /**
+   * Null until an answer arrives.
+   *
+   * A server round trip cannot block the shutter — the next card is already
+   * being lined up — so the row is queued empty and filled in when it settles.
+   * That also keeps the filmstrip in capture order rather than reply order.
+   */
+  result: ScanResult | null;
+  via: Via;
+  /** The service's reasoning, or why there is no result. */
+  note: string | null;
   /** Index into candidates, or null when nothing has been chosen yet. */
   choice: number | null;
   finish: CollectFinish;
@@ -58,6 +80,7 @@ function isKept(c: Capture): boolean {
 export function ScanScreen() {
   const { pop, push } = useNavigation();
   const { addManyOwned } = useLibrary();
+  const repo = useRepositories();
 
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -74,6 +97,24 @@ export function ScanScreen() {
   const [hint, setHint] = useState<Decision["reason"]>("moving");
   const autoState = useRef<AutoState>(initialAutoState);
   const [addedCount, setAddedCount] = useState(0);
+  /**
+   * Server unless this device has never been connected.
+   *
+   * Falling straight to the device when there is no token is not a downgrade
+   * worth a warning: the two answer the same thing today. The status line says
+   * which is running so it is never a guess.
+   */
+  const [engine, setEngine] = useState<"server" | "device">(() =>
+    repo.getSyncSettings().token ? "server" : "device",
+  );
+  const [engineNote, setEngineNote] = useState<string | null>(null);
+  /**
+   * Read once, not per render: the auto loop re-renders at 10fps and this is a
+   * localStorage read and a JSON parse. Connecting a device happens in
+   * Settings, which unmounts this screen, so a mount is exactly the right
+   * moment to look.
+   */
+  const [hasToken] = useState(() => repo.getSyncSettings().token !== "");
 
   // The index is 13KB and the permission prompt is far slower, so fetching it
   // now is free and fetching it on first capture is a stall.
@@ -166,10 +207,51 @@ export function ScanScreen() {
     };
   }, []);
 
+  /**
+   * Answer one capture, server first, device if the server cannot.
+   *
+   * The fallback is silent to the shutter and loud in the UI: scanning a pile
+   * must not stop to report a network blip, but a row that says "device" when
+   * the user asked for "server" has to be visible, or a server that quietly
+   * died looks exactly like one that is working.
+   */
+  const resolve = useCallback(
+    async (key: number, canvas: HTMLCanvasElement, hash: Uint32Array) => {
+      const apply = (patch: Partial<Capture>) =>
+        setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+      // A confident match needs no decision; an unsure one must not be
+      // pre-answered, or the review turns into rubber-stamping.
+      const settle = (result: ScanResult, via: Via, note: string | null) =>
+        apply({ result, via, note, choice: result.confident ? 0 : null });
+
+      if (engine === "server") {
+        try {
+          const result = await recogniseRemote(canvas, repo.getSyncSettings().token, index);
+          setEngineNote(null);
+          settle(result, "server", result.reason);
+          return;
+        } catch (err) {
+          const why = err instanceof Error ? err.message : "the server did not answer";
+          // A refused token stays refused, so stop asking. Anything else is
+          // transient — keep trying the server on the next card, because a
+          // stack takes minutes and a service restart takes seconds.
+          if (err instanceof RecogniserAuthError) setEngine("device");
+          setEngineNote(index ? `${why} — recognising on device.` : why);
+        }
+      }
+
+      if (!index) {
+        apply({ result: null, via: null, note: "No server and no index — nothing could identify this." });
+        return;
+      }
+      settle(identify(index, hash, 3), "device", null);
+    },
+    [engine, index, repo],
+  );
+
   const capture = useCallback(() => {
     const framed = hashFrame();
-    if (!framed || !index) return;
-    const result = identify(index, framed.hash, 3);
+    if (!framed) return;
 
     // A thumbnail of what the camera actually saw. Reviewing a list of names
     // with no picture is guesswork; this is how you catch the one that went
@@ -179,20 +261,22 @@ export function ScanScreen() {
     thumb.height = Math.round((THUMB_WIDTH * CAPTURE_HEIGHT) / CAPTURE_WIDTH);
     thumb.getContext("2d")?.drawImage(framed.canvas, 0, 0, thumb.width, thumb.height);
 
+    const key = nextKey.current++;
     setQueue((prev) => [
       ...prev,
       {
-        key: nextKey.current++,
+        key,
         thumb: thumb.toDataURL("image/jpeg", 0.6),
-        result,
-        // A confident match needs no decision; an unsure one must not be
-        // pre-answered, or the review turns into rubber-stamping.
-        choice: result.confident ? 0 : null,
+        result: null,
+        via: null,
+        note: null,
+        choice: null,
         finish: "normal",
         rejected: false,
       },
     ]);
-  }, [index, hashFrame]);
+    void resolve(key, framed.canvas, framed.hash);
+  }, [hashFrame, resolve]);
 
   const live = phase.at === "live";
 
@@ -204,8 +288,10 @@ export function ScanScreen() {
    * the entire budget — the same hash answers "has it stopped moving" and
    * "is this still the card I just took".
    */
+  const canRecognise = engine === "server" || index !== null;
+
   useEffect(() => {
-    if (!auto || !live || !ready || !index || reviewing) return;
+    if (!auto || !live || !ready || !canRecognise || reviewing) return;
     const timer = window.setInterval(() => {
       const framed = hashFrame();
       if (!framed) return;
@@ -215,7 +301,7 @@ export function ScanScreen() {
       if (decision.capture) capture();
     }, 100);
     return () => window.clearInterval(timer);
-  }, [auto, live, ready, index, reviewing, hashFrame, capture]);
+  }, [auto, live, ready, canRecognise, reviewing, hashFrame, capture]);
 
   const update = (key: number, patch: Partial<Capture>) =>
     setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
@@ -229,7 +315,7 @@ export function ScanScreen() {
     // toggling would un-mark precisely those.
     addManyOwned(
       kept.flatMap((c) => {
-        const card = c.result.candidates[c.choice as number]?.card;
+        const card = c.result?.candidates[c.choice as number]?.card;
         return card ? [{ cardId: card.id, finish: c.finish, setId: card.setId }] : [];
       }),
     );
@@ -254,7 +340,7 @@ export function ScanScreen() {
         ) : (
           <ul className={styles.review}>
             {queue.map((c) => {
-              const chosen = c.choice === null ? null : c.result.candidates[c.choice];
+              const chosen = c.choice === null || !c.result ? null : c.result.candidates[c.choice];
               return (
                 <li
                   key={c.key}
@@ -263,13 +349,16 @@ export function ScanScreen() {
                 >
                   <img className={styles.thumb} src={c.thumb} alt="" />
                   <div className={styles.rowBody}>
-                    {c.result.candidates.length === 0 ? (
+                    {!c.result ? (
+                      <span className={styles.sub}>{c.note ?? "Recognising…"}</span>
+                    ) : c.result.candidates.length === 0 ? (
                       <span className={styles.sub}>No match found</span>
                     ) : chosen && c.result.confident ? (
                       <>
                         <span className={styles.name}>{chosen.card.name}</span>
                         <span className={styles.sub}>
                           {chosen.card.setName} · {chosen.card.number} · {chosen.distance} bits
+                          {c.result.runnerUp ? `, ${c.result.runnerUp.distance - chosen.distance} clear` : ""}
                         </span>
                       </>
                     ) : (
@@ -286,13 +375,27 @@ export function ScanScreen() {
                             >
                               {cand.card.name}
                               <span className={styles.optionSub}>
-                                {cand.card.setName} · {cand.card.number}
+                                {cand.card.setName} · {cand.card.number} · {cand.distance} bits
                               </span>
                             </button>
                           ))}
                         </div>
                       </>
                     )}
+
+                    {/*
+                      Which recogniser answered, per row and not just per
+                      session. The engine can change mid-batch — one timeout
+                      falls this card back to the device and the next one goes
+                      to the server again — so a single banner would describe
+                      the wrong rows.
+                    */}
+                    {c.via ? (
+                      <span className={styles.via} data-testid="via">
+                        {c.via === "server" ? "Server" : "On device"}
+                        {c.note ? ` · ${c.note}` : ""}
+                      </span>
+                    ) : null}
 
                     <div className={styles.rowActions}>
                       {(["normal", "reverse"] as CollectFinish[]).map((f) => (
@@ -399,8 +502,11 @@ export function ScanScreen() {
               </p>
             ) : (
               <p className={styles.hint}>
-                Line each card up inside the frame and keep going. Nothing is uploaded, and nothing is added
-                until you review.
+                Line each card up inside the frame and keep going.{" "}
+                {engine === "server"
+                  ? "Each capture is sent to your server to identify."
+                  : "Recognition runs on this device."}{" "}
+                Nothing is added until you review.
               </p>
             )}
           </div>
@@ -422,18 +528,38 @@ export function ScanScreen() {
         >
           {auto ? "Auto on" : "Auto off"}
         </button>
+        <button
+          type="button"
+          className={`${styles.chip} ${engine === "server" ? styles.chipOn : ""}`}
+          aria-pressed={engine === "server"}
+          data-testid="engine"
+          onClick={() => {
+            setEngineNote(null);
+            setEngine((e) => (e === "server" ? "device" : "server"));
+          }}
+        >
+          {engine === "server" ? "Server" : "On device"}
+        </button>
         <span className={styles.autoNote}>
-          {auto ? "Hold a card in the frame — it captures itself" : "Tap to capture each card"}
+          {engineNote
+            ? engineNote
+            : engine === "server" && !hasToken
+              ? "Connect this device in Settings to use the server"
+              : auto
+                ? "Hold a card in the frame — it captures itself"
+                : "Tap to capture each card"}
         </span>
       </div>
 
       <div className={styles.strip} aria-label="Scanned this session">
         {queue.length === 0 ? (
           <span className={styles.stripEmpty}>
-            {indexError
-              ? indexError
-              : index
-                ? `${index.cards.length.toLocaleString()} cards indexed from your sets`
+            {index
+              ? `${index.cards.length.toLocaleString()} cards indexed from your sets${engine === "server" ? " · server recognising" : ""}`
+              : indexError
+                ? engine === "server"
+                  ? `${indexError} — the server is the only recogniser`
+                  : indexError
                 : "Loading cards…"}
           </span>
         ) : (
@@ -457,10 +583,10 @@ export function ScanScreen() {
             type="button"
             className={styles.shutter}
             onClick={capture}
-            disabled={!index || !ready}
+            disabled={!canRecognise || !ready}
             data-testid="capture"
           >
-            {!index ? "Loading cards…" : !ready ? "Focusing…" : auto ? autoHint(hint) : "Capture"}
+            {!canRecognise ? "Loading cards…" : !ready ? "Focusing…" : auto ? autoHint(hint) : "Capture"}
           </button>
         ) : (
           <button
