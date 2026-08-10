@@ -221,6 +221,48 @@ test.describe("card scanner", () => {
     expect(held, `a re-scanned card was removed instead of kept (${chosen})`).toBeGreaterThanOrEqual(2);
   });
 
+  test("lets you name the card by hand when recognition got it wrong", async ({ page }) => {
+    // The repair path for the 8.6% the gate refuses. It reads the index already
+    // in memory, so it must work with no further network at all.
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    // Recorded only while the picker is open. Choosing a card legitimately goes
+    // on to fetch that set's printings for the finish chips; browsing 20,205
+    // cards must not.
+    const requests: string[] = [];
+    const listener = (r: { url: () => string }) => requests.push(r.url());
+    page.on("request", listener);
+
+    await page.getByTestId("pick-by-set").click();
+    const dialog = page.getByRole("dialog", { name: "Pick the card by set" });
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByLabel("Set").selectOption("base1");
+    await dialog.getByLabel("Filter by number or name").fill("Charizard");
+    await expect(dialog.getByRole("button", { name: /Charizard/ })).toHaveCount(1);
+    page.off("request", listener);
+
+    await dialog
+      .getByRole("button", { name: /Charizard/ })
+      .first()
+      .click();
+
+    await expect(dialog).toBeHidden();
+    const row = page.getByTestId("review-row").first();
+    await expect(row).toContainText("Charizard");
+    await expect(row).toContainText("named by hand");
+    // A hand-named row is a decided row, so it becomes committable.
+    await expect(page.getByRole("button", { name: /Add 1 card/ })).toBeEnabled();
+
+    expect(
+      requests.filter((u) => !u.startsWith("data:")),
+      `browsing the picker went to the network: ${requests.join(", ")}`,
+    ).toHaveLength(0);
+  });
+
   test("captures on its own once a card holds still", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
     await startCamera(page, { auto: true });

@@ -6,10 +6,17 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import { artRect, detail, perceptualHash } from "../../scan/phash.ts";
 import { guideRect, guideStyle } from "../../scan/frame.ts";
-import { loadCardIndex, identify, type CardIndex, type ScanResult } from "../../scan/cardIndex.ts";
+import {
+  loadCardIndex,
+  identify,
+  type CardIndex,
+  type IndexedCard,
+  type ScanResult,
+} from "../../scan/cardIndex.ts";
 import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
 import { ScanFinishes } from "./ScanFinishes.tsx";
+import { ScanCardPicker } from "./ScanCardPicker.tsx";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
 
@@ -74,13 +81,29 @@ interface Capture {
   note: string | null;
   /** Index into candidates, or null when nothing has been chosen yet. */
   choice: number | null;
+  /**
+   * Named by hand, overriding whatever was recognised.
+   *
+   * Kept beside the result rather than written over it so the original
+   * candidates survive: changing your mind after correcting a row should not
+   * mean rescanning the card.
+   */
+  manual: IndexedCard | null;
   finish: CollectFinish;
   rejected: boolean;
 }
 
+/** What this row will file, however it was decided. */
+function chosenOf(c: Capture): { card: IndexedCard; distance: number | null } | null {
+  if (c.manual) return { card: c.manual, distance: null };
+  if (c.choice === null || !c.result) return null;
+  const candidate = c.result.candidates[c.choice];
+  return candidate ? { card: candidate.card, distance: candidate.distance } : null;
+}
+
 /** Ready to commit: kept, and something was actually identified. */
 function isKept(c: Capture): boolean {
-  return !c.rejected && c.choice !== null;
+  return !c.rejected && chosenOf(c) !== null;
 }
 
 export function ScanScreen() {
@@ -114,6 +137,8 @@ export function ScanScreen() {
     repo.getSyncSettings().token ? "server" : "device",
   );
   const [engineNote, setEngineNote] = useState<string | null>(null);
+  /** Key of the capture being named by hand, or null. */
+  const [picking, setPicking] = useState<number | null>(null);
   /**
    * Read once, not per render: the auto loop re-renders at 10fps and this is a
    * localStorage read and a JSON parse. Connecting a device happens in
@@ -282,6 +307,7 @@ export function ScanScreen() {
         via: null,
         note: null,
         choice: null,
+        manual: null,
         finish: "normal",
         rejected: false,
       },
@@ -326,7 +352,7 @@ export function ScanScreen() {
     // toggling would un-mark precisely those.
     addManyOwned(
       kept.flatMap((c) => {
-        const card = c.result?.candidates[c.choice as number]?.card;
+        const card = chosenOf(c)?.card;
         return card ? [{ cardId: card.id, finish: c.finish, setId: card.setId }] : [];
       }),
     );
@@ -335,7 +361,7 @@ export function ScanScreen() {
     setReviewing(false);
   };
 
-  const unsure = queue.filter((c) => c.choice === null && !c.rejected).length;
+  const unsure = queue.filter((c) => chosenOf(c) === null && !c.rejected).length;
   const keeping = queue.filter(isKept).length;
 
   if (reviewing) {
@@ -346,12 +372,27 @@ export function ScanScreen() {
         headerRight={`${keeping}/${queue.length}`}
         canGoBack
       >
+        {picking !== null && index ? (
+          <ScanCardPicker
+            index={index}
+            // The set is usually right even when the card is not — two reprints
+            // that confuse the hash are frequently from the same era, and it
+            // saves scrolling 174 sets to the one already on screen.
+            initialSetId={queue.find((c) => c.key === picking)?.result?.candidates[0]?.card.setId}
+            onCancel={() => setPicking(null)}
+            onPick={(card) => {
+              update(picking, { manual: card, rejected: false, finish: "normal" });
+              setPicking(null);
+            }}
+          />
+        ) : null}
+
         {queue.length === 0 ? (
           <p className={styles.hint}>Nothing scanned yet.</p>
         ) : (
           <ul className={styles.review}>
             {queue.map((c) => {
-              const chosen = c.choice === null || !c.result ? null : c.result.candidates[c.choice];
+              const chosen = chosenOf(c);
               return (
                 <li
                   key={c.key}
@@ -360,7 +401,14 @@ export function ScanScreen() {
                 >
                   <img className={styles.thumb} src={c.thumb} alt="" />
                   <div className={styles.rowBody}>
-                    {!c.result ? (
+                    {c.manual ? (
+                      <>
+                        <span className={styles.name}>{c.manual.name}</span>
+                        <span className={styles.sub}>
+                          {c.manual.setName} · {c.manual.number} · named by hand
+                        </span>
+                      </>
+                    ) : !c.result ? (
                       <span className={styles.sub}>{c.note ?? "Recognising…"}</span>
                     ) : c.result.candidates.length === 0 ? (
                       <span className={styles.sub}>No match found</span>
@@ -369,7 +417,9 @@ export function ScanScreen() {
                         <span className={styles.name}>{chosen.card.name}</span>
                         <span className={styles.sub}>
                           {chosen.card.setName} · {chosen.card.number} · {chosen.distance} bits
-                          {c.result.runnerUp ? `, ${c.result.runnerUp.distance - chosen.distance} clear` : ""}
+                          {c.result.runnerUp && chosen.distance !== null
+                            ? `, ${c.result.runnerUp.distance - chosen.distance} clear`
+                            : ""}
                         </span>
                       </>
                     ) : (
@@ -428,6 +478,20 @@ export function ScanScreen() {
                         onClick={() => update(c.key, { rejected: !c.rejected })}
                       >
                         {c.rejected ? "Rejected" : "Reject"}
+                      </button>
+                      {/*
+                        The way out when the right card is not among the three
+                        offered — which is the whole of the 8.6% the gate refuses,
+                        plus anything the camera never saw properly.
+                      */}
+                      <button
+                        type="button"
+                        className={styles.link}
+                        onClick={() => setPicking(c.key)}
+                        disabled={!index}
+                        data-testid="pick-by-set"
+                      >
+                        {c.manual ? "Change" : "Pick by set"}
                       </button>
                       {chosen ? (
                         <button

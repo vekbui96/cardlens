@@ -1,0 +1,106 @@
+/*
+  The picker is a repair path, so it is sized to be scanned quickly rather than
+  to look calm: the set is already chosen, the number is usually known, and the
+  list is there to confirm rather than to browse.
+*/
+
+.panel {
+  /* Taller than a prompt: a list of one row is as useless as no list. */
+  max-height: 82vh;
+  overflow: hidden;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--cl-gap-sm);
+  font: inherit;
+  color: var(--cl-fg);
+  background: var(--cl-surface);
+  border: 2px solid var(--cl-border);
+  border-radius: var(--cl-radius);
+}
+
+.select:focus-visible {
+  outline: var(--cl-focus-ring);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* The one scrolling region — the panel itself must not scroll away from the
+     search field, or filtering means scrolling back up to see the effect. */
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cl-gap-sm);
+  width: 100%;
+  /* 44px: a finger target, per the web shell's rule. */
+  min-height: 44px;
+  padding: var(--cl-gap-sm);
+  text-align: left;
+  font: inherit;
+  color: var(--cl-fg);
+  background: var(--cl-surface);
+  border: 2px solid var(--cl-border);
+  border-radius: var(--cl-radius);
+  cursor: pointer;
+}
+
+.option:hover,
+.option:focus-visible {
+  border-color: var(--cl-accent);
+  outline: none;
+}
+
+.number {
+  flex: 0 0 auto;
+  min-width: 3.5ch;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+}
+
+.optionName {
+  flex: 1 1 auto;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rarity {
+  flex: 0 0 auto;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.empty {
+  padding: var(--cl-gap);
+  color: var(--cl-fg-muted);
+}
+
+.count {
+  flex: 1 1 auto;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}

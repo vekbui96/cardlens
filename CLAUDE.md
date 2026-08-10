@@ -259,6 +259,13 @@ ecognition\.venv`; install/reinstall with
   - Comparing against the last _frame_ is not enough. A hand reaching in to
     straighten an already-scanned card re-armed the shutter and scanned it twice.
 
+- **A row can be named by hand** (`src/web/scan/ScanCardPicker.tsx`, "Pick by
+  set"). It reads the in-memory index — set list, collector numbers, names — so
+  browsing 20,205 cards costs **no network**, which matters because this is the
+  repair path for when recognition already failed. `Capture.manual` sits beside
+  `result` rather than overwriting it, so correcting a row does not throw away
+  the candidates you might want back.
+
 - **Finish chips in review come from the printings oracle**, not a fixed
   Normal/Reverse pair (`src/web/scan/ScanFinishes.tsx`). One component per row
   because printings are per SET and a batch spans several; React Query keys on
