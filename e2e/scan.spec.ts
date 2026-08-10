@@ -229,7 +229,9 @@ test.describe("card scanner", () => {
     // running and reporting, not that it fires — firing on a rolling gradient
     // would mean the stability rule was broken.
     await expect(page.getByRole("button", { name: "Auto on" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("capture")).toContainText(/Hold still|Scanned|Next card|Scanning/);
+    await expect(page.getByTestId("capture")).toContainText(
+      /Hold still|Scanned|Next card|Scanning|Show a card/,
+    );
   });
 
   test("can be turned off for one card at a time", async ({ page }) => {

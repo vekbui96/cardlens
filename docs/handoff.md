@@ -246,6 +246,11 @@ Nothing is half-built. The card **scanner** is the current thread.
   every reviewed row with which one did. The `Server` / `On device` chip beside
   the auto toggle forces either. Needs the collection token, same as sync — an
   unconnected device just scans locally.
+  - Auto-capture fires only on a **new subject**: settled, detailed enough to be
+    a card, and different from the last captured frame. It no longer photographs
+    the mat between two cards or re-scans one a hand passed over.
+  - Review offers the card's **real printings** from TCGdex, so pattern foils can
+    be marked at scan time instead of hunted down in the set list afterwards.
 - `#/showcase/...` — share a set as a link that carries its own data, one tile
   per printing, missing ones ghosted. Snapshot only; resharing is the update.
 

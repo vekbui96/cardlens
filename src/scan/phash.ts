@@ -118,6 +118,35 @@ export function downscaleGrey(
 }
 
 /**
+ * How much picture is in a region: the standard deviation of its greyscale, in
+ * luma units.
+ *
+ * Answers a question the hash cannot — "is there anything here at all". A
+ * perceptual hash is deliberately scale-free: it compares a region against its
+ * own median, so an empty desk and a card produce hashes of exactly the same
+ * shape and the same apparent confidence. That is correct for matching and
+ * useless for deciding whether to fire a shutter, which is why auto-capture
+ * previously photographed the mat between every pair of cards.
+ *
+ * Computed from the same 32×32 downscale the hash uses, so it is free on a path
+ * that already pays for one.
+ */
+export function detail(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  rect?: Rect,
+): number {
+  const grey = downscaleGrey(rgba, width, height, rect);
+  let sum = 0;
+  for (const v of grey) sum += v;
+  const mean = sum / grey.length;
+  let variance = 0;
+  for (const v of grey) variance += (v - mean) * (v - mean);
+  return Math.sqrt(variance / grey.length);
+}
+
+/**
  * Top-left BLOCK×BLOCK coefficients of the 2D DCT-II.
  *
  * Separable and truncated: only 8 of 32 output frequencies are ever read, so

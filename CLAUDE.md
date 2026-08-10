@@ -229,6 +229,27 @@ ecognition\.venv`; install/reinstall with
     bytes are what make "server and device agree" testable rather than hopeful.
   - `/api/recognize` is rate-limited at **300/min**, not the usual 60 — a scan
     burst tops out near 85/min per device and 60 throttled ordinary use.
+
+- **Auto-capture fires on a NEW subject, not on any change.** Three gates, in
+  `src/scan/autoCapture.ts`: the frame must settle, hold enough detail to be a
+  card at all (`MIN_DETAIL`), and differ from the last _captured_ hash
+  (`NEW_SUBJECT_BITS`) — or the guide must have been visibly empty since.
+  - `MIN_DETAIL = 16` is **measured**, not chosen: `node scripts/measure-detail.mjs`
+    puts 160 real cards at min 22.4 / median 42.3 and every synthetic empty frame
+    (mat, woodgrain, lit desk, a hand) under 11.4. Re-run it before touching the
+    number. A perceptual hash **cannot** answer "is anything there" — it compares
+    a region against its own median, so a bare desk hashes as confidently as a
+    Charizard, which is why the old rule photographed the mat between every pair
+    of cards.
+  - Comparing against the last _frame_ is not enough. A hand reaching in to
+    straighten an already-scanned card re-armed the shutter and scanned it twice.
+
+- **Finish chips in review come from the printings oracle**, not a fixed
+  Normal/Reverse pair (`src/web/scan/ScanFinishes.tsx`). One component per row
+  because printings are per SET and a batch spans several; React Query keys on
+  the set, so ten rows from one set cost one request. Falls back to
+  Normal/Reverse while loading — a row with no finishes cannot be committed, so
+  an absent server would make scanned cards silently unaddable.
 - The service-wide CSP is `default-src 'none'`, which is right for a JSON API
   and fatal for any HTML route — it blocks inline script and style. Set a
   per-route CSP, as `/api/recognize/bench` does. Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.

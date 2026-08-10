@@ -16,7 +16,7 @@
  *
  *   node scripts/build-card-index.mjs [setId...]
  */
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFile as execFileCb } from "node:child_process";
@@ -28,7 +28,21 @@ const execFile = promisify(execFileCb);
 
 /** Defaults to the sets actually being collected, most-held first. */
 const DEFAULT_SETS = ["rsv10pt5", "me2", "me5", "me3", "zsv10pt5", "me4", "sv8", "sv8pt5", "me1", "me2pt5"];
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+/**
+ * `--resume` keeps whatever the last run checkpointed and only builds the sets
+ * missing from it.
+ *
+ * A whole-catalog run is 20,460 images over a Tailscale Funnel, and it has now
+ * died part-way three times — out of memory once, and twice on a transient curl
+ * receive error forty minutes in. Checkpointing already meant a stopped run left
+ * a smaller index rather than none; this means the next run does not re-download
+ * the eight thousand cards it already has. Off by default, because a change to
+ * the HASH requires rebuilding everything and silently keeping old entries would
+ * mix two incompatible index formats in one file.
+ */
+const RESUME = rawArgs.includes("--resume");
+const args = rawArgs.filter((a) => !a.startsWith("--"));
 
 /** `all` builds the whole English catalog rather than just what is collected. */
 async function resolveSets() {
@@ -44,13 +58,51 @@ const HOST = "server-pc.tail0e4194.ts.net:8443";
 const FUNNEL_IP = "199.38.181.54";
 const OUT_DIR = "public/card-index";
 
-async function getJson(path) {
-  const { stdout } = await execFile(
-    "curl",
-    ["-s", "-m", "120", "--resolve", `${HOST}:${FUNNEL_IP}`, `https://${HOST}/api${path}`],
-    { maxBuffer: 512 * 1024 * 1024 },
-  );
-  return JSON.parse(stdout);
+/**
+ * The funnel drops a connection now and then, and curl exits non-zero when it
+ * does — which killed a run at set 91 of 168 with everything after it unbuilt.
+ * A transport failure is not an answer, so it is retried rather than thrown.
+ */
+async function getJson(path, attempts = 4) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const { stdout } = await execFile(
+        "curl",
+        ["-s", "-m", "120", "--resolve", `${HOST}:${FUNNEL_IP}`, `https://${HOST}/api${path}`],
+        { maxBuffer: 512 * 1024 * 1024 },
+      );
+      return JSON.parse(stdout);
+    } catch (err) {
+      if (attempt >= attempts) throw err;
+      console.log(`  ${path}: ${err.code ?? "failed"} (attempt ${attempt}/${attempts}) — retrying`);
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+}
+
+/**
+ * Everything a previous run got as far as writing.
+ *
+ * Returns null unless the three artifacts agree with each other — a half-written
+ * checkpoint is worse than none, because resuming from one would append fresh
+ * hashes to metadata they do not line up with and misname every card past the
+ * join.
+ */
+function readCheckpoint() {
+  let latest;
+  try {
+    latest = JSON.parse(readFileSync(`${OUT_DIR}/latest.json`, "utf8"));
+    const cards = JSON.parse(readFileSync(`${OUT_DIR}/cards-${latest.version}.json`, "utf8"));
+    const bin = readFileSync(`${OUT_DIR}/index-${latest.version}.bin`);
+    const words = new Uint32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
+    if (words.length !== cards.length * 2) return null;
+
+    const hashes = [];
+    for (let i = 0; i < cards.length; i++) hashes.push([words[i * 2], words[i * 2 + 1]]);
+    return { cards, hashes, sets: new Set(cards.map((c) => c.setId)) };
+  } catch {
+    return null;
+  }
 }
 
 async function mapLimit(items, limit, fn) {
@@ -123,10 +175,17 @@ await page.addScriptTag({ content: bundled.outputFiles[0].text });
  * Nothing survives a chunk here except 8 bytes and a little metadata per card.
  */
 const CHUNK = 100;
-const hashes = [];
-const downloaded = [];
+const checkpoint = RESUME ? readCheckpoint() : null;
+const hashes = checkpoint?.hashes ?? [];
+const downloaded = checkpoint?.cards ?? [];
+if (checkpoint) {
+  console.log(`Resuming from ${downloaded.length} cards across ${checkpoint.sets.size} sets`);
+} else if (RESUME) {
+  console.log("Nothing usable to resume from — building from scratch");
+}
 
 for (const setId of SETS) {
+  if (checkpoint?.sets.has(setId)) continue;
   const data = await setCards(setId);
   const cards = [];
   for (const c of data) {

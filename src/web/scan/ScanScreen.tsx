@@ -4,11 +4,12 @@ import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
-import { artRect, perceptualHash } from "../../scan/phash.ts";
+import { artRect, detail, perceptualHash } from "../../scan/phash.ts";
 import { guideRect, guideStyle } from "../../scan/frame.ts";
 import { loadCardIndex, identify, type CardIndex, type ScanResult } from "../../scan/cardIndex.ts";
 import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
+import { ScanFinishes } from "./ScanFinishes.tsx";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
 
@@ -35,6 +36,11 @@ import styles from "./ScanScreen.module.css";
  * scanner and a form. Captures queue silently; the questions are asked once,
  * at the end, over the whole batch — and only for the ones the artwork could
  * not settle on its own.
+ *
+ * Two of those questions cannot be avoided, and both are asked in review:
+ * WHICH card, when two printings share their artwork, and WHICH PRINTING, since
+ * a normal and a reverse holo are the same picture. The second is answered from
+ * the printings oracle rather than a fixed pair — see ScanFinishes.
  */
 
 const CAPTURE_WIDTH = 245;
@@ -201,8 +207,13 @@ export function ScanScreen() {
     // at, so resolution alone can never change a hash.
     ctx.drawImage(el, guide.x, guide.y, guide.w, guide.h, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
     const frame = ctx.getImageData(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    const art = artRect(CAPTURE_WIDTH, CAPTURE_HEIGHT);
     return {
-      hash: perceptualHash(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, artRect(CAPTURE_WIDTH, CAPTURE_HEIGHT)),
+      hash: perceptualHash(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, art),
+      // What the hash cannot say: whether there is anything in the guide at all.
+      // Only auto-capture reads it — a deliberate press means the user can see
+      // something the numbers cannot.
+      detail: detail(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, art),
       canvas,
     };
   }, []);
@@ -295,7 +306,7 @@ export function ScanScreen() {
     const timer = window.setInterval(() => {
       const framed = hashFrame();
       if (!framed) return;
-      const decision = decide(autoState.current, framed.hash, Date.now());
+      const decision = decide(autoState.current, framed.hash, framed.detail, Date.now());
       autoState.current = decision.state;
       setHint(decision.reason);
       if (decision.capture) capture();
@@ -398,17 +409,18 @@ export function ScanScreen() {
                     ) : null}
 
                     <div className={styles.rowActions}>
-                      {(["normal", "reverse"] as CollectFinish[]).map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          className={`${styles.chip} ${c.finish === f ? styles.chipOn : ""}`}
-                          aria-pressed={c.finish === f}
-                          onClick={() => update(c.key, { finish: f })}
-                        >
-                          {f === "normal" ? "Normal" : "Reverse"}
-                        </button>
-                      ))}
+                      {/*
+                        Only once a card is chosen: printings are per card, and
+                        offering finishes for a row that has not been identified
+                        would be asking which variant of nothing this is.
+                      */}
+                      {chosen ? (
+                        <ScanFinishes
+                          card={chosen.card}
+                          value={c.finish}
+                          onChange={(finish) => update(c.key, { finish })}
+                        />
+                      ) : null}
                       <button
                         type="button"
                         className={styles.chip}
