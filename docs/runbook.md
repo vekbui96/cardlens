@@ -59,7 +59,7 @@ curl -s -m 15 -o /dev/null -w "%{http_code}\n" https://server-pc.tail0e4194.ts.n
 Spring API with no root mapping, not an outage.
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"Get-Service cardlens,solid-website-api,recognition | Format-Table Name,Status\""
+ssh server-pc "powershell -NoProfile -Command \"Get-Service cardlens,solid-website-api,recognition | Format-Table Name,Status\""
 ```
 
 ### 4. Is it just this laptop?
@@ -99,7 +99,7 @@ and the integrations. Changing one of those is a server change even though it
 lives under `src/`.
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"git -C D:\services\cardlens pull --ff-only origin main; Restart-Service cardlens\""
+ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens pull --ff-only origin main; Restart-Service cardlens\""
 ```
 
 The server has been silently stale before — running validation that rejected
@@ -107,7 +107,7 @@ finishes the client could produce, so rows were dropped on sync and it looked
 like nothing happened. Confirm what it is actually on:
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"git -C D:\services\cardlens log --oneline -1\""
+ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens log --oneline -1\""
 ```
 
 ---
@@ -170,12 +170,27 @@ It drives a headed Chromium because PerimeterX captchas headless, so it needs
 the console session. SSH lands in session 0, which has no desktop:
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"Start-ScheduledTask -TaskName target-stock-checker\""
+ssh server-pc "powershell -NoProfile -Command \"Start-ScheduledTask -TaskName target-stock-checker\""
 ```
 
 Other server facts worth not rediscovering: **ICMP is blocked**, so ping is
 useless as a liveness check. **NSSM holds log files open**, so `Get-Content`
 and `ReadAllBytes` both fail — open with `FileShare::ReadWrite`.
+
+**Never reach the box by IP — every `ssh` above says `server-pc` on purpose.**
+The DHCP lease has moved three times (`.41` → `.42` → `.54`, measured 2026-08-19).
+These commands all used to read `ssh vebui@192.168.86.41`; after the lease moved
+they timed out against a perfectly healthy server, which looks exactly like the
+outage you are here to diagnose. If SSH by IP fails, re-resolve `server-pc.lan`
+before concluding anything — and do not write the new number down, fix it with a
+DHCP reservation on the router instead.
+
+`server-pc.lan` itself resolves through the router and **occasionally misses**,
+giving `ssh: Could not resolve hostname server-pc.lan`. Measured 2026-08-21: two
+misses in roughly a dozen attempts, both fixed by retrying immediately, with 6/6
+clean straight afterwards. **Retry once before treating it as an outage.** It is
+still much the safer default — a stale IP is wrong every single time once the
+lease moves, whereas the name is right on a retry.
 
 ---
 
