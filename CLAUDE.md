@@ -54,7 +54,7 @@ Two independent targets — the frontend alone is often not enough:
 gh workflow run "deploy-pages.yml" --repo vekbui96/cardlens
 
 # 2. Server (only when server/ or shared src/ changed)
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"git -C D:\services\cardlens fetch origin main --quiet; git -C D:\services\cardlens reset --hard origin/main --quiet; Restart-Service cardlens\""
+ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens fetch origin main --quiet; git -C D:\services\cardlens reset --hard origin/main --quiet; Restart-Service cardlens\""
 ```
 
 The server has been silently stale before, running validation that rejected finishes the client could produce — rows were dropped on sync and it looked like nothing happened. **After changing anything under `server/` or the shared `src/` files listed in `tsconfig.node.json`, deploy both.**
@@ -65,7 +65,7 @@ the cardlens checkout, and `api.py` caches it in a module global on first use
 Python service is restarted:
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"Restart-Service recognition\""
+ssh server-pc "powershell -NoProfile -Command \"Restart-Service recognition\""
 curl -s https://server-pc.tail0e4194.ts.net:8443/api/recognize/health -H "Authorization: Bearer $COLLECTION_TOKEN"
 ```
 
@@ -279,6 +279,7 @@ ecognition\.venv`; install/reinstall with
 - `/api/target/*` proxies to that bot's loopback API on :8788 (`server/targetBot.ts`). Three distinct tokens are involved and none is interchangeable: `TARGET_TOKEN` (device → cardlens), `TARGET_BOT_TOKEN` (cardlens → bot), `COLLECTION_TOKEN` (collection sync only). The Target token is deliberately separate from the collection one — these routes can add items to a real Target cart, and the collection token is spread across every syncing device.
 - **NSSM holds log files open.** `Get-Content` and `ReadAllBytes` both fail; open with `FileShare::ReadWrite`.
 - **ICMP is blocked** on SERVER-PC — ping is useless as a liveness check. Use SSH, or curl the funnel URL.
+- **Never hardcode the server's LAN IP — always `ssh server-pc`.** The DHCP lease has moved three times (`.41` → `.42` → `.54`, measured 2026-08-19). Every command in this file and in `docs/runbook.md` used to read `ssh vebui@192.168.86.41`; once the lease moved they all timed out against a perfectly healthy box, which is indistinguishable from an outage and cost a full triage pass to rule out. The `server-pc` alias in `~/.ssh/config` supplies the user and resolves `server-pc.lan`, which has survived all three moves. A DHCP reservation on the router is the real fix; until then, an IP written down anywhere is a latent false alarm.
 - Published via Tailscale Funnel: `https://server-pc.tail0e4194.ts.net` (:8080) and `:8443` (:8787).
 - **NordVPN on the laptop blocks Tailscale**, which makes `ts.net` names resolve to the tailnet IP and time out. Test external reachability with `curl --resolve <host>:<port>:199.38.181.54`.
 - PowerShell 5.1: native stderr under `$ErrorActionPreference='Stop'` becomes a terminating `NativeCommandError`; `Start-Process -PassThru` leaves `ExitCode` null until `WaitForExit()`.

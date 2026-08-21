@@ -46,7 +46,7 @@ On failure, `gh run view <id> --log-failed`. The usual cause is formatting.
 ## 5. Deploy the server (when step 2 says so)
 
 ```bash
-ssh vebui@192.168.86.41 "powershell -NoProfile -Command \"git -C D:\services\cardlens fetch origin main --quiet; git -C D:\services\cardlens reset --hard origin/main --quiet; Write-Host (git -C D:\services\cardlens rev-parse --short HEAD); Restart-Service cardlens; Start-Sleep -Seconds 8; (Get-Service cardlens).Status\""
+ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens fetch origin main --quiet; git -C D:\services\cardlens reset --hard origin/main --quiet; Write-Host (git -C D:\services\cardlens rev-parse --short HEAD); Restart-Service cardlens; Start-Sleep -Seconds 8; (Get-Service cardlens).Status\""
 ```
 
 ## 6. Verify it live
