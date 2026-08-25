@@ -40,6 +40,11 @@ label.chip {
   justify-content: center;
 }
 
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .chipBusy {
   opacity: 0.6;
   cursor: progress;
@@ -103,6 +108,46 @@ label.chip {
   background: var(--cl-bg);
 }
 
+/*
+ * The search sits at the TOP of the picker, above the set select: it is the
+ * broader question ("which card"), and the set list underneath answers the
+ * narrower one ("which of these").
+ */
+.searchForm {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  flex-wrap: wrap;
+  margin: 0 var(--cl-gap) var(--cl-gap-sm);
+}
+
+/* Narrow enough that the field, Search and Browse sets stay on ONE row at
+   phone width. Every row of chrome here is a row of the binder pushed off
+   screen, and the picker is meant to sit under the page it is filling. */
+.searchForm .input {
+  flex: 1 1 120px;
+  /* An <input> refuses to shrink past its `size` attribute's intrinsic width
+     unless told to, which is what pushed "Browse sets" onto a row of its own. */
+  min-width: 0;
+}
+
+/* A tap on a result opens its printings; this is the row they live in. */
+.chosen {
+  padding-bottom: var(--cl-gap-sm);
+}
+
+/* An inline retry inside a sentence — the surrounding text is the message, so
+   this must not become a second button-shaped thing competing with the chips. */
+.linkButton {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--cl-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .setPick {
   display: flex;
   align-items: center;
@@ -124,6 +169,24 @@ label.chip {
   border-radius: var(--cl-radius-sm, 8px);
   background: var(--cl-surface);
   color: var(--cl-fg);
+}
+
+/*
+ * Search results are a scrolling GRID, not the single sideways row a set uses.
+ * A set is browsed in collector order a few pockets at a time; a name search
+ * answers "every Charizard there is" and comes back with 108 of them, which is
+ * a great deal of sideways swiping to reach the one printing you meant.
+ */
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) var(--cl-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--cl-gap-sm);
+  /* Capped so the binder it is filling stays on screen above it. */
+  max-height: 32vh;
+  overflow-y: auto;
 }
 
 /* One row that scrolls sideways, so the binder above stays visible. */
@@ -172,6 +235,15 @@ label.chip {
   font-family: var(--cl-font-data);
   font-size: var(--cl-fs-small);
   color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The set a result came from, under its number. */
+.cardSet {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

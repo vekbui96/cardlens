@@ -10,6 +10,7 @@ import { fetchJson } from "../../services/http.ts";
 import { normalizeTcgplayerPricing } from "../pricing/normalize.ts";
 import {
   ProviderError,
+  FULL_SEARCH_LIMIT,
   type CardCatalogProvider,
   type CardPricingProvider,
   type FetchOpts,
@@ -23,6 +24,15 @@ import { toDetails, toRankable, toSet, toSummary } from "./map.ts";
 const DEFAULT_BASE_URL = "https://api.pokemontcg.io/v2";
 const PAGE_SIZE = 60;
 const RESULT_LIMIT = 40;
+/**
+ * A `full` search is ONE request at the API's maximum page, never paged.
+ *
+ * Measured against the live API, the busiest Pokémon names fit inside it —
+ * pikachu 177, mew 135, charizard 108, eevee 85, umbreon 44. Paging past it
+ * would spend extra requests on an endpoint that fails ~25% of the time in
+ * bursts, to complete queries so broad ("c*") that nobody reads the tail.
+ */
+const FULL_PAGE_SIZE = FULL_SEARCH_LIMIT;
 const SET_PAGE_SIZE = 250;
 
 const SELECT_FIELDS =
@@ -77,9 +87,10 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     const q = buildLuceneQuery(nq, opts?.rarities);
     if (!q) return [];
 
+    const pageSize = opts?.full ? FULL_PAGE_SIZE : PAGE_SIZE;
     const url =
       `${this.baseUrl}/cards?q=${encodeURIComponent(q)}` +
-      `&pageSize=${PAGE_SIZE}&select=${encodeURIComponent(SELECT_FIELDS)}`;
+      `&pageSize=${pageSize}&select=${encodeURIComponent(SELECT_FIELDS)}`;
 
     const json = await this.get(url, opts?.signal);
     const parsed = CardListResponseSchema.safeParse(json);
@@ -91,7 +102,7 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     const ranked = rankResults(query, rankable);
     // When filtering to a chase rarity, the most valuable cards are what matter.
     const ordered = opts?.rarities && opts.rarities.length > 0 ? [...ranked].sort(byPriceDesc) : ranked;
-    return ordered.slice(0, RESULT_LIMIT);
+    return opts?.full ? ordered : ordered.slice(0, RESULT_LIMIT);
   }
 
   async listSets(opts?: FetchOpts): Promise<PokemonSet[]> {

@@ -22,6 +22,7 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { BinderSearchResults } from "./BinderSearchResults.tsx";
 import { resizeToDataUrl } from "../../utils/imageResize.ts";
 import { uploadBinderImage } from "../../services/sync/binderImages.ts";
 import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
@@ -65,6 +66,11 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const [selected, setSelected] = useState<{ page: number; index: number } | null>(null);
   const [setId, setSetId] = useState("me5");
   const [setName, setSetName] = useState("Pitch Black");
+  const [searchInput, setSearchInput] = useState("");
+  /** The SUBMITTED query. Typing does not search: pokemontcg.io fails in bursts
+      and rate-limits, and a request per keystroke would spend that budget on
+      prefixes nobody asked about. */
+  const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
@@ -241,27 +247,68 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
 
       {selected ? (
         <div className={styles.picker}>
-          <div className={styles.pickerHead}>
-            {/* A plain select, not the SetSwitcher: that one NAVIGATES to a
-                set, which would abandon the binder mid-edit. */}
-            <label className={styles.setPick}>
-              <span className={styles.setPickLabel}>Cards from</span>
-              <select
-                className={styles.select}
-                value={setId}
-                onChange={(e) => {
-                  const next = (allSets ?? []).find((c) => c.id === e.target.value);
-                  setSetId(e.target.value);
-                  setSetName(next?.name ?? e.target.value);
+          {/* Searching by name is the only way to reach a card whose set you do
+              not remember — 218 sets in a dropdown is not a way to find one
+              card. The set list below still answers the other question, "fill
+              this binder from one set", which is how a master set gets built. */}
+          <form
+            className={styles.searchForm}
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearch(searchInput.trim());
+            }}
+          >
+            <input
+              className={styles.input}
+              type="search"
+              aria-label="Search every set"
+              placeholder="Search every set — e.g. Umbreon VMAX"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            <button type="submit" className={styles.chip} disabled={!searchInput.trim()}>
+              Search
+            </button>
+            {search ? (
+              <button
+                type="button"
+                className={styles.chip}
+                onClick={() => {
+                  setSearch("");
+                  setSearchInput("");
                 }}
               >
-                {(allSets ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                Browse sets
+              </button>
+            ) : null}
+          </form>
+
+          <div className={styles.pickerHead}>
+            {/* A plain select, not the SetSwitcher: that one NAVIGATES to a
+                set, which would abandon the binder mid-edit. Hidden while a
+                search is showing, because it would then label a list it is not
+                the source of. */}
+            {search ? null : (
+              <label className={styles.setPick}>
+                <span className={styles.setPickLabel}>Cards from</span>
+                <select
+                  className={styles.select}
+                  value={setId}
+                  onChange={(e) => {
+                    const next = (allSets ?? []).find((c) => c.id === e.target.value);
+                    setSetId(e.target.value);
+                    setSetName(next?.name ?? e.target.value);
+                  }}
+                >
+                  {(allSets ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {/* A photo, a divider, a proxy — anything the catalog has no entry
                 for. The file is resized here and stored on the server, so the
                 binder carries a 20-byte id rather than a data URI it would
@@ -294,43 +341,50 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             </p>
           ) : null}
 
-          <ul className={styles.cards}>
-            {view.cards.flatMap((card) => {
-              const finishes = view.finishesFor(card.collectorNumber, card.variants);
-              const held = ownedFinishes(card.id);
-              return (finishes.length > 0 ? finishes : held).map((finish) => {
-                const owned = held.includes(finish);
-                return (
-                  <li key={`${card.id}:${finish}`}>
-                    <button
-                      type="button"
-                      className={`${styles.card} ${owned ? "" : styles.cardWanted}`}
-                      aria-label={`${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}, ${
-                        owned ? "owned" : "not owned"
-                      }`}
-                      onClick={() =>
-                        place({
-                          kind: "card",
-                          cardId: card.id,
-                          finish,
-                          // Denormalised so the page renders offline and before
-                          // the catalog answers.
-                          name: card.name,
-                          imageSmall: card.imageSmall,
-                          collectorNumber: card.collectorNumber,
-                        })
-                      }
-                    >
-                      <CardImage src={card.imageSmall} alt="" size="thumb" />
-                      <span className={styles.cardMeta}>
-                        {card.collectorNumber} · {finishLabel(finish)}
-                      </span>
-                    </button>
-                  </li>
-                );
-              });
-            })}
-          </ul>
+          {search ? (
+            /* Keyed on the query so a new search starts at the results again
+               rather than on the printings of a card the user has moved on
+               from. */
+            <BinderSearchResults key={search} query={search} ownedFinishes={ownedFinishes} onPlace={place} />
+          ) : (
+            <ul className={styles.cards}>
+              {view.cards.flatMap((card) => {
+                const finishes = view.finishesFor(card.collectorNumber, card.variants);
+                const held = ownedFinishes(card.id);
+                return (finishes.length > 0 ? finishes : held).map((finish) => {
+                  const owned = held.includes(finish);
+                  return (
+                    <li key={`${card.id}:${finish}`}>
+                      <button
+                        type="button"
+                        className={`${styles.card} ${owned ? "" : styles.cardWanted}`}
+                        aria-label={`${card.name}, ${card.collectorNumber}, ${finishLabel(finish)}, ${
+                          owned ? "owned" : "not owned"
+                        }`}
+                        onClick={() =>
+                          place({
+                            kind: "card",
+                            cardId: card.id,
+                            finish,
+                            // Denormalised so the page renders offline and before
+                            // the catalog answers.
+                            name: card.name,
+                            imageSmall: card.imageSmall,
+                            collectorNumber: card.collectorNumber,
+                          })
+                        }
+                      >
+                        <CardImage src={card.imageSmall} alt="" size="thumb" />
+                        <span className={styles.cardMeta}>
+                          {card.collectorNumber} · {finishLabel(finish)}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                });
+              })}
+            </ul>
+          )}
         </div>
       ) : null}
 

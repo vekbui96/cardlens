@@ -1,0 +1,133 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  InputProvider,
+  CatalogProvider,
+  RepositoriesProvider,
+  LayoutModeProvider,
+} from "../../app/contexts.tsx";
+import { NavigationProvider } from "../../app/NavigationProvider.tsx";
+import { LibraryProvider } from "../../app/LibraryProvider.tsx";
+import { MockInputAdapter } from "../../integrations/meta/MockInputAdapter.ts";
+import { MockPokemonProvider } from "../../integrations/pokemon/index.ts";
+import { clearAllStorage } from "../../storage/versioned.ts";
+import { Repositories } from "../../storage/repositories.ts";
+import { emptyBinder, type CardSlot } from "../../models/binderLayout.ts";
+import { WebBinderScreen } from "./WebBinderScreen.tsx";
+
+const BINDER_ID = "binder-under-test";
+
+function harness(catalog: MockPokemonProvider = new MockPokemonProvider({})) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <InputProvider value={{ adapter: new MockInputAdapter(), mock: new MockInputAdapter() }}>
+          <RepositoriesProvider>
+            <CatalogProvider base={catalog}>
+              <LayoutModeProvider mode="web">
+                <NavigationProvider>
+                  <LibraryProvider>{children}</LibraryProvider>
+                </NavigationProvider>
+              </LayoutModeProvider>
+            </CatalogProvider>
+          </RepositoriesProvider>
+        </InputProvider>
+      </QueryClientProvider>
+    );
+  };
+}
+
+beforeEach(() => {
+  clearAllStorage();
+  new Repositories().saveBinder(emptyBinder(BINDER_ID, "Favourites", "9", Date.now()));
+  // No printings oracle in a unit test. 404 is the "this set is unknown"
+  // answer, which stops the hook falling through to the real TCGdex.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 404 })),
+  );
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+function placedCards(): CardSlot[] {
+  const binder = new Repositories().getBinders().find((b) => b.id === BINDER_ID);
+  return Object.values(binder?.pages[0].slots ?? {}).filter((s): s is CardSlot => s.kind === "card");
+}
+
+describe("WebBinderScreen search", () => {
+  it("finds a card in a set the picker is not showing, and places it", async () => {
+    // The whole point of the search: the binder defaults to Pitch Black, and
+    // Umbreon VMAX is in Evolving Skies. Without a name search it is reachable
+    // only by remembering that and finding the set among 218 in a dropdown.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    const result = await screen.findByRole("button", { name: /Umbreon VMAX, 215, Evolving Skies/ });
+    await user.click(result);
+
+    // Two taps, because a result carries no trustworthy printing list: the
+    // second names the printing the pocket holds.
+    await user.click(await screen.findByRole("button", { name: "Holofoil" }));
+
+    expect(placedCards()).toEqual([
+      expect.objectContaining({ cardId: "swsh7-215", finish: "holo", name: "Umbreon VMAX" }),
+    ]);
+  });
+
+  it("asks for every match, not the short list a focus ring gets", async () => {
+    // The 40-card cap is right for stepping through results one pinch at a
+    // time and wrong here: a Charizard missing from the picker is
+    // indistinguishable from a Charizard that does not exist.
+    const user = userEvent.setup();
+    const catalog = new MockPokemonProvider({});
+    const searchCards = vi.spyOn(catalog, "searchCards");
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness(catalog) });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Charizard");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findAllByRole("button", { name: /Charizard/ })).not.toHaveLength(0);
+
+    expect(searchCards).toHaveBeenCalledWith("Charizard", expect.objectContaining({ full: true }));
+  });
+
+  it("says so when nothing matches, rather than showing an empty strip", async () => {
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Zzzzz");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText(/No cards match/)).toBeInTheDocument();
+    expect(placedCards()).toEqual([]);
+  });
+
+  it("returns to the set list when the search is cleared", async () => {
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByRole("button", { name: /Umbreon VMAX/ });
+
+    // The set select is hidden while results are showing — it would otherwise
+    // label a list it is not the source of.
+    expect(screen.queryByLabelText("Cards from")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Browse sets" }));
+
+    expect(screen.queryByRole("button", { name: /Umbreon VMAX/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Cards from")).toBeInTheDocument();
+  });
+});
