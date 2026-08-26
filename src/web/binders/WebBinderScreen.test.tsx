@@ -100,6 +100,30 @@ describe("WebBinderScreen search", () => {
     expect(searchCards).toHaveBeenCalledWith("Charizard", expect.objectContaining({ full: true }));
   });
 
+  it("advances to the next pocket, so a second card is added and not swapped in", async () => {
+    // The bug this guards: the pocket stayed selected after a place, so every
+    // card picked after the first REPLACED it. The binder never grew past one
+    // card and nothing said why — it reads exactly like the search refusing to
+    // add anything.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Charizard");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    const place = async (name: RegExp) => {
+      await user.click((await screen.findAllByRole("button", { name }))[0]);
+      const chips = await screen.findAllByRole("button", { name: /^(Normal|Reverse Holo|Holofoil)$/ });
+      await user.click(chips[0]);
+    };
+
+    await place(/^Charizard ex, 125/);
+    await place(/^Charizard ex, 223/);
+
+    expect(placedCards()).toHaveLength(2);
+  });
+
   it("says so when nothing matches, rather than showing an empty strip", async () => {
     const user = userEvent.setup();
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });

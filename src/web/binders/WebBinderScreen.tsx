@@ -13,6 +13,7 @@ import {
   canRemoveLastPage,
   countBinder,
   fillSequential,
+  nextEmptyPocket,
   placeSlot,
   preferredFinish,
   reformat,
@@ -106,7 +107,14 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
 
   const place = (slot: BinderSlot | null) => {
     if (!selected) return;
-    commit(placeSlot(binder, selected.page, selected.index, slot, Date.now()));
+    const next = placeSlot(binder, selected.page, selected.index, slot, Date.now());
+    commit(next);
+    // Filling a pocket is a step in a sequence, so the selection moves on:
+    // leaving it put meant the NEXT card replaced the one just placed, and a
+    // binder that refuses to grow past one card looks like a broken picker.
+    // Clearing a pocket is an edit to that pocket alone — stay on it, or
+    // "Clear" would jump the selection away from what was just emptied.
+    if (slot) setSelected(nextEmptyPocket(next, selected));
   };
 
   /**

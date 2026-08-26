@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addPage,
+  nextEmptyPocket,
   canRemoveLastPage,
   countBinder,
   emptyBinder,
@@ -190,5 +191,36 @@ describe("addPage / removeLastPage", () => {
     const filled = placeSlot(addPage(b(), 2), 1, 0, { kind: "card", cardId: "me5-1", finish: "normal" }, 3);
     expect(canRemoveLastPage(filled)).toBe(false);
     expect(removeLastPage(filled, 4).pages).toHaveLength(2);
+  });
+});
+
+describe("nextEmptyPocket", () => {
+  it("gives the pocket after the one just filled", () => {
+    const b = placeSlot(base(), 0, 0, card("1"), NOW);
+    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ page: 0, index: 1 });
+  });
+
+  it("skips pockets that are already occupied", () => {
+    // Filling into a part-built page must not stop on a pocket that is taken —
+    // placing there would silently replace a card the user put there earlier.
+    let b = placeSlot(base(), 0, 0, card("1"), NOW);
+    b = placeSlot(b, 0, 1, card("2"), NOW);
+    b = placeSlot(b, 0, 2, card("3"), NOW);
+    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ page: 0, index: 3 });
+  });
+
+  it("carries on to the next page when a page fills up", () => {
+    let b = addPage(base(), NOW);
+    for (let i = 0; i < 9; i++) b = placeSlot(b, 0, i, card(String(i)), NOW);
+    expect(nextEmptyPocket(b, { page: 0, index: 8 })).toEqual({ page: 1, index: 0 });
+  });
+
+  it("returns null when the binder is full from here on", () => {
+    // Not a wrap to the start: a pocket before the current one was skipped on
+    // purpose as often as by accident, and quietly jumping backwards would
+    // place the next card where the user is not looking.
+    let b = base();
+    for (let i = 0; i < 9; i++) b = placeSlot(b, 0, i, card(String(i)), NOW);
+    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toBeNull();
   });
 });

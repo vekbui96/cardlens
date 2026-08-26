@@ -133,6 +133,32 @@ export function placeSlot(
   return { ...binder, pages, updatedAt: now };
 }
 
+/**
+ * The first empty pocket AFTER a position, or null once the binder is full.
+ *
+ * Filling a binder is a sequence, not a series of unrelated edits: the pocket
+ * stayed selected after a place, so every card picked after the first replaced
+ * the one before it and the binder never grew past a single card. Nothing said
+ * so, which reads exactly like the picker refusing to add anything.
+ *
+ * Forward only — never wrapping to the start. A pocket left empty behind the
+ * cursor was skipped on purpose as often as by accident (a card being chased,
+ * a run kept together), and jumping backwards would drop the next card
+ * somewhere the user is not looking.
+ */
+export function nextEmptyPocket(
+  binder: Binder,
+  from: { page: number; index: number },
+): { page: number; index: number } | null {
+  const spec = specFor(binder.format);
+  for (let page = from.page, index = from.index + 1; page < binder.pages.length; page++, index = 0) {
+    for (; index < spec.pockets; index++) {
+      if (!binder.pages[page]?.slots[index]) return { page, index };
+    }
+  }
+  return null;
+}
+
 /** Move a slot between pockets, including across pages. Swaps if the target is full. */
 export function moveSlot(
   binder: Binder,
