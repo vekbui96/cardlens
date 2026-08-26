@@ -40,13 +40,13 @@ Lucario ex — Scarlet & Violet Black Star Promo SVP 017 — Holo
 
 ## Reading the resolver output
 
-| Output | Meaning |
-|---|---|
-| `MISS ... catalog request failed` | Transient. pokemontcg.io fails ~25% of the time in bursts. **Re-run** — the disk cache keeps the successes, so only the failures are retried. |
-| `MISS ... no catalog set called "X"` | Add an alias to `ALIASES`, or the set genuinely is not in the catalog. |
-| `MISS ... is Gothita, not Riolu` | The set id or the number is wrong. **Never override this check.** |
-| `MISS ... unknown printing "X"` | Add a row to `FINISHES`. |
-| `DUPLICATE cardId\|finish x2` | The same printing twice. Usually a mistake in the list — ask. |
+| Output                               | Meaning                                                                                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MISS ... catalog request failed`    | Transient. pokemontcg.io fails ~25% of the time in bursts. **Re-run** — the disk cache keeps the successes, so only the failures are retried. |
+| `MISS ... no catalog set called "X"` | Add an alias to `ALIASES`, or the set genuinely is not in the catalog.                                                                        |
+| `MISS ... is Gothita, not Riolu`     | The set id or the number is wrong. **Never override this check.**                                                                             |
+| `MISS ... unknown printing "X"`      | Add a row to `FINISHES`.                                                                                                                      |
+| `DUPLICATE cardId\|finish x2`        | The same printing twice. Usually a mistake in the list — ask.                                                                                 |
 
 **Re-run until only genuine gaps remain.** A first run always loses a few lines to 500s.
 

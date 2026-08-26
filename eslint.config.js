@@ -36,7 +36,15 @@ export default tseslint.config(
     },
   },
   {
-    files: ["server/**/*.ts", "*.config.{ts,js}", "e2e/**/*.ts", "scripts/**/*.{ts,mjs}"],
+    files: [
+      "server/**/*.ts",
+      "*.config.{ts,js}",
+      "e2e/**/*.ts",
+      "scripts/**/*.{ts,mjs}",
+      // Skill tooling: Node scripts that ship beside their SKILL.md rather than
+      // in scripts/, so they travel with the instructions that explain them.
+      ".claude/skills/**/*.mjs",
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },

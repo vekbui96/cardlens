@@ -254,6 +254,59 @@ label.chip {
   outline-offset: 2px;
 }
 
+/* --- Spreads ------------------------------------------------------------- */
+
+/*
+ * Two facing pages, with the spine between them.
+ *
+ * Both halves are 1fr whether or not the second exists, so page 1 and a
+ * trailing even page sit on the LEFT at the same size as any other page rather
+ * than stretching across the whole width. A binder open at its first page does
+ * not have a double-width page in it.
+ */
+.spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--cl-gap-sm);
+  align-items: start;
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  position: relative;
+}
+
+/* The spine. Drawn on the gap rather than as a border on either page, so it
+   reads as one binder rather than two pages that happen to be adjacent. */
+.spread::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--cl-surface-raised);
+  border-radius: 1px;
+}
+
+/* Nothing to divide when only one page is showing. */
+.spread[data-single]::before {
+  display: none;
+}
+
+/*
+ * A phone cannot show two 9-pocket pages and stay legible — three columns
+ * either side of a 390px screen is a 55px pocket. Below the point where that
+ * bites, the spread stacks and the binder reads one page at a time, which is
+ * how you hold it on a phone anyway.
+ */
+@media (max-width: 560px) {
+  .spread {
+    grid-template-columns: 1fr;
+  }
+
+  .spread::before {
+    display: none;
+  }
+}
+
 /* --- The pocket sheet ---------------------------------------------------- */
 
 /*

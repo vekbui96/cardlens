@@ -19,6 +19,7 @@ import {
   reformat,
   removeLastPage,
   specFor,
+  toSpreads,
   type BinderFormat,
   type BinderSlot,
 } from "../../models/binderLayout.ts";
@@ -267,19 +268,27 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           : "Tap a pocket to fill it."}
       </p>
 
-      {binder.pages.map((page, i) => (
-        <BinderPageView
-          key={i}
-          page={page}
-          format={binder.format}
-          owns={owns}
-          pageNumber={i + 1}
-          selectedIndex={selected?.page === i ? selected.index : null}
-          onSlotClick={(index) => {
-            setChosen(null);
-            setSelected((cur) => (cur?.page === i && cur.index === index ? null : { page: i, index }));
-          }}
-        />
+      {/* Laid out the way the binder actually falls open: page 1 alone, then
+          facing pairs. A half spread keeps its empty right side rather than
+          centring the page — that gap is where the next page goes, and the
+          binder should look like it is waiting for it. */}
+      {toSpreads(binder.pages.length).map((spread) => (
+        <div key={spread[0]} className={styles.spread} data-single={spread.length === 1 || undefined}>
+          {spread.map((i) => (
+            <BinderPageView
+              key={i}
+              page={binder.pages[i]}
+              format={binder.format}
+              owns={owns}
+              pageNumber={i + 1}
+              selectedIndex={selected?.page === i ? selected.index : null}
+              onSlotClick={(index) => {
+                setChosen(null);
+                setSelected((cur) => (cur?.page === i && cur.index === index ? null : { page: i, index }));
+              }}
+            />
+          ))}
+        </div>
       ))}
 
       {selected ? (

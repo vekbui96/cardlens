@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addPage,
   nextEmptyPocket,
+  toSpreads,
   canRemoveLastPage,
   countBinder,
   emptyBinder,
@@ -222,5 +223,32 @@ describe("nextEmptyPocket", () => {
     let b = base();
     for (let i = 0; i < 9; i++) b = placeSlot(b, 0, i, card(String(i)), NOW);
     expect(nextEmptyPocket(b, { page: 0, index: 0 })).toBeNull();
+  });
+});
+
+describe("toSpreads", () => {
+  it("stands page 1 on its own, then pairs 2|3 and 4|5", () => {
+    // Opening the cover shows one page; everything after it faces a neighbour.
+    expect(toSpreads(5)).toEqual([[0], [1, 2], [3, 4]]);
+  });
+
+  it("leaves the last page alone on the left when the count is even", () => {
+    // A binder that ends on an even page ends mid-spread — the right half is
+    // the next page you have not added yet.
+    expect(toSpreads(4)).toEqual([[0], [1, 2], [3]]);
+  });
+
+  it("handles one page, and no pages at all", () => {
+    expect(toSpreads(1)).toEqual([[0]]);
+    expect(toSpreads(0)).toEqual([]);
+  });
+
+  it("never pairs a page with itself or repeats one", () => {
+    // The pairing is off-by-one in three places; a page shown twice, or one
+    // missing entirely, is the failure that looks almost right.
+    for (const count of [1, 2, 3, 6, 7, 21]) {
+      const flat = toSpreads(count).flat();
+      expect(flat).toEqual([...Array(count).keys()]);
+    }
   });
 });

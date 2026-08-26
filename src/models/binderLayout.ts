@@ -159,6 +159,29 @@ export function nextEmptyPocket(
   return null;
 }
 
+/**
+ * Group page indices the way a physical binder falls open.
+ *
+ * Page 1 is alone: opening the cover shows one page, because there is nothing
+ * to its left. After that pages come in twos — 2|3, 4|5 — so a spread is always
+ * an EVEN page on the left and the ODD one that follows on its right. A binder
+ * with an even number of pages therefore ends on a half spread, the last page
+ * sitting on the left with its right side still to be filled.
+ *
+ * Returned as index pairs rather than rendered directly because the pairing is
+ * the part worth testing: it is off-by-one in three places at once, and getting
+ * it wrong shows a binder that reads 1|2, 3|4 — which is every page facing the
+ * wrong neighbour.
+ */
+export function toSpreads(pageCount: number): number[][] {
+  if (pageCount <= 0) return [];
+  const spreads: number[][] = [[0]];
+  for (let i = 1; i < pageCount; i += 2) {
+    spreads.push(i + 1 < pageCount ? [i, i + 1] : [i]);
+  }
+  return spreads;
+}
+
 /** Move a slot between pockets, including across pages. Swaps if the target is full. */
 export function moveSlot(
   binder: Binder,

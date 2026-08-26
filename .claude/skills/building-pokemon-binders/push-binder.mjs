@@ -22,7 +22,9 @@ const format = flag("format", "9");
 const pockets = format === "12" ? 12 : 9;
 
 if (!slotsPath || !name) {
-  console.error('usage: COLLECTION_TOKEN=... node push-binder.mjs slots.json --name "..." [--id <id>] [--dry]');
+  console.error(
+    'usage: COLLECTION_TOKEN=... node push-binder.mjs slots.json --name "..." [--id <id>] [--dry]',
+  );
   process.exit(1);
 }
 const token = process.env.COLLECTION_TOKEN;
