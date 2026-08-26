@@ -185,7 +185,7 @@ label.chip {
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: var(--cl-gap-sm);
   /* Capped so the binder it is filling stays on screen above it. */
-  max-height: 32vh;
+  max-height: 24vh;
   overflow-y: auto;
 }
 
@@ -250,6 +250,132 @@ label.chip {
 }
 
 .card:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- The pocket sheet ---------------------------------------------------- */
+
+/*
+ * Pinned to the bottom of the picker, under the card list rather than in place
+ * of it: choosing a printing used to replace the results, so the card being
+ * compared against vanished at the moment the comparison mattered.
+ */
+.sheet {
+  border-top: var(--cl-border);
+  padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap);
+  background: var(--cl-surface);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+}
+
+/* Small: the sheet identifies the card, the page above shows it off. */
+.sheetHead img,
+.sheetHead > div:first-child,
+.sheetImage {
+  width: 40px;
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: var(--cl-radius-art);
+  flex: 0 0 auto;
+}
+
+/* min-width:0 or a long card name refuses to shrink and pushes the Own toggle
+   and Clear off the right edge of a phone. */
+.sheetTitle {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sheetName {
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheetMeta {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheetPrompt {
+  margin: var(--cl-gap-sm) 0 6px;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.finishRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.finishRows > li {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+}
+
+/* The row IS the place button — full width, so the printing is a target the
+   thumb cannot miss rather than a chip among chips. */
+.finishPlace {
+  flex: 1 1 auto;
+  min-height: 48px;
+  padding: 0 14px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm, 8px);
+  background: var(--cl-bg);
+  font: inherit;
+  font-weight: 600;
+  color: var(--cl-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.finishPlace:hover {
+  border-color: var(--cl-accent);
+}
+
+/* Deliberately quieter than the place button beside it, and never the same
+   shape: putting a card in a pocket and saying you own one are different
+   claims, and a mis-tap on the wrong one writes to the collection. */
+.ownChip {
+  flex: 0 0 auto;
+  min-width: 72px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: var(--cl-border);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.ownChipOn {
+  background: var(--cl-accent);
+  border-color: transparent;
+  color: var(--cl-on-accent);
+}
+
+.finishPlace:focus-visible,
+.ownChip:focus-visible {
   outline: var(--cl-focus-ring);
   outline-offset: 2px;
 }

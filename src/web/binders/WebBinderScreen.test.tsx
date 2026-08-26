@@ -124,6 +124,59 @@ describe("WebBinderScreen search", () => {
     expect(placedCards()).toHaveLength(2);
   });
 
+  it("offers the printings in a sheet under the results, not in place of them", async () => {
+    // The results have to stay on screen: choosing between a card's printings
+    // is a comparison, and swapping the list out removes what it is against.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+
+    expect(await screen.findByText(/Which printing goes in pocket 1/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Umbreon VMAX, 215/ })).toBeInTheDocument();
+  });
+
+  it("marks a printing owned from the sheet, without putting it in the binder", async () => {
+    // Ownership and arrangement are separate claims. Saying you hold a copy
+    // must not fill a pocket with it — the whole point of a binder holding
+    // cards you do not own yet is that the two are independent.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+    await user.click(await screen.findByRole("button", { name: "Own Holofoil" }));
+
+    expect(new Repositories().isOwnedFinish("swsh7-215", "holo")).toBe(true);
+    expect(placedCards()).toEqual([]);
+  });
+
+  it("lets a card already in a pocket be marked owned, without finding it again", async () => {
+    // The repair path for the common case: you laid the binder out planning
+    // it, then pulled the card out of a box. Before this the answer had to be
+    // given again on the set screen, from memory.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+    await user.click(await screen.findByRole("button", { name: "Holofoil" }));
+
+    // Placing moved the selection on; come back to the pocket it landed in.
+    await user.click(screen.getByRole("button", { name: /^Pocket 1, Umbreon VMAX/ }));
+    await user.click(await screen.findByRole("button", { name: "Own Holofoil" }));
+
+    expect(new Repositories().isOwnedFinish("swsh7-215", "holo")).toBe(true);
+    expect(placedCards()).toHaveLength(1);
+  });
+
   it("says so when nothing matches, rather than showing an empty strip", async () => {
     const user = userEvent.setup();
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });

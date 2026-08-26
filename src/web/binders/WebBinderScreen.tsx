@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
@@ -23,7 +23,9 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import type { PokemonCardSummary } from "../../models/cards.ts";
 import { BinderSearchResults } from "./BinderSearchResults.tsx";
+import { BinderPocketSheet } from "./BinderPocketSheet.tsx";
 import { resizeToDataUrl } from "../../utils/imageResize.ts";
 import { uploadBinderImage } from "../../services/sync/binderImages.ts";
 import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
@@ -72,6 +74,10 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
       and rate-limits, and a request per keystroke would spend that budget on
       prefixes nobody asked about. */
   const [search, setSearch] = useState("");
+  /** A search result awaiting a printing. Held here, not in the results list,
+      so the sheet that asks can sit at the BOTTOM of the picker while the
+      results stay on screen above it. */
+  const [chosen, setChosen] = useState<PokemonCardSummary | null>(null);
   const [uploading, setUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
@@ -85,6 +91,24 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
       slot.kind === "image" ? true : ownedFinishes(slot.cardId).includes(slot.finish),
     [ownedFinishes],
   );
+
+  /**
+   * Keep the pocket being filled on screen.
+   *
+   * The picker is a sticky half of a phone display, so the page it is filling
+   * scrolls out from under it — and after a place the selection moves to a
+   * pocket that may be further down still. Without this the binder is filled
+   * blind: cards land somewhere and the only evidence is the counter.
+   */
+  const selectedKey = selected ? `${selected.page}:${selected.index}` : null;
+  const lastScrolled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedKey || selectedKey === lastScrolled.current) return;
+    lastScrolled.current = selectedKey;
+    document
+      .querySelector(`[data-pocket="${selectedKey}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selectedKey]);
 
   if (!binder) {
     return (
@@ -105,6 +129,9 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
    */
   const commit = (next: typeof binder) => saveBinder(next);
 
+  /** What the selected pocket already holds — a card, or nothing to describe. */
+  const selectedSlot = (selected ? binder.pages[selected.page]?.slots[selected.index] : null) ?? null;
+
   const place = (slot: BinderSlot | null) => {
     if (!selected) return;
     const next = placeSlot(binder, selected.page, selected.index, slot, Date.now());
@@ -115,6 +142,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
     // Clearing a pocket is an edit to that pocket alone — stay on it, or
     // "Clear" would jump the selection away from what was just emptied.
     if (slot) setSelected(nextEmptyPocket(next, selected));
+    setChosen(null);
   };
 
   /**
@@ -247,9 +275,10 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           owns={owns}
           pageNumber={i + 1}
           selectedIndex={selected?.page === i ? selected.index : null}
-          onSlotClick={(index) =>
-            setSelected((cur) => (cur?.page === i && cur.index === index ? null : { page: i, index }))
-          }
+          onSlotClick={(index) => {
+            setChosen(null);
+            setSelected((cur) => (cur?.page === i && cur.index === index ? null : { page: i, index }));
+          }}
         />
       ))}
 
@@ -292,12 +321,12 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             ) : null}
           </form>
 
-          <div className={styles.pickerHead}>
-            {/* A plain select, not the SetSwitcher: that one NAVIGATES to a
-                set, which would abandon the binder mid-edit. Hidden while a
-                search is showing, because it would then label a list it is not
-                the source of. */}
-            {search ? null : (
+          {/* The whole row goes while a search is up. The select would label a
+              list it is not the source of, and custom art has nothing to do
+              with a name search — and on a phone this row costs a row of
+              pockets, which is the thing the picker exists to fill. */}
+          {search ? null : (
+            <div className={styles.pickerHead}>
               <label className={styles.setPick}>
                 <span className={styles.setPickLabel}>Cards from</span>
                 <select
@@ -316,32 +345,29 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                   ))}
                 </select>
               </label>
-            )}
-            {/* A photo, a divider, a proxy — anything the catalog has no entry
+              {/* A photo, a divider, a proxy — anything the catalog has no entry
                 for. The file is resized here and stored on the server, so the
                 binder carries a 20-byte id rather than a data URI it would
                 re-send on every edit. */}
-            <label className={`${styles.chip} ${uploading ? styles.chipBusy : ""}`}>
-              {uploading ? "Uploading…" : "Add image"}
-              <input
-                type="file"
-                accept="image/*"
-                className={styles.fileInput}
-                disabled={uploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  // Reset first: picking the same file twice in a row fires no
-                  // change event otherwise, so a failed upload could not be
-                  // retried without choosing a different picture.
-                  e.target.value = "";
-                  if (file) void addImage(file);
-                }}
-              />
-            </label>
-            <button type="button" className={styles.chip} onClick={() => place(null)}>
-              Clear pocket
-            </button>
-          </div>
+              <label className={`${styles.chip} ${uploading ? styles.chipBusy : ""}`}>
+                {uploading ? "Uploading…" : "Add image"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className={styles.fileInput}
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Reset first: picking the same file twice in a row fires no
+                    // change event otherwise, so a failed upload could not be
+                    // retried without choosing a different picture.
+                    e.target.value = "";
+                    if (file) void addImage(file);
+                  }}
+                />
+              </label>
+            </div>
+          )}
 
           {imageError ? (
             <p className={styles.error} role="alert">
@@ -353,7 +379,13 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             /* Keyed on the query so a new search starts at the results again
                rather than on the printings of a card the user has moved on
                from. */
-            <BinderSearchResults key={search} query={search} ownedFinishes={ownedFinishes} onPlace={place} />
+            <BinderSearchResults
+              key={search}
+              query={search}
+              ownedFinishes={ownedFinishes}
+              onChoose={setChosen}
+              compact={Boolean(chosen)}
+            />
           ) : (
             <ul className={styles.cards}>
               {view.cards.flatMap((card) => {
@@ -393,6 +425,19 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               })}
             </ul>
           )}
+
+          {/* Last in the picker, so "which printing" is asked where the thumb
+              already is, under the list it was asked about — and so a filled
+              pocket can be marked owned without finding the card in the
+              catalog a second time. */}
+          <BinderPocketSheet
+            chosen={chosen}
+            slot={selectedSlot}
+            pocketLabel={`pocket ${selected.index + 1}`}
+            onPlace={place}
+            onCancel={() => setChosen(null)}
+            onClear={() => place(null)}
+          />
         </div>
       ) : null}
 

@@ -88,6 +88,10 @@ export function BinderPageView({
                 <button
                   type="button"
                   className={className}
+                  /* The web shell scrolls the selected pocket back into view
+                     after a place; it needs to find that one button among the
+                     several pressable things on the screen. */
+                  data-pocket={`${pageNumber - 1}:${index}`}
                   aria-label={label}
                   aria-pressed={selectedIndex === index}
                   onClick={() => onSlotClick?.(index)}
