@@ -70,6 +70,45 @@ const FOIL_LABELS: Record<string, string> = {
   tinsel: "Tinsel",
 };
 
+/**
+ * Foils that are the same print run as their base type, and so may borrow its
+ * price when no price of their own exists.
+ *
+ * These are PATTERNS pressed into an ordinary card: a Poké Ball reverse and a
+ * plain reverse come out of the same packs in the same numbers, and providers
+ * do not model them separately, so falling back is the only way to price them
+ * at all.
+ *
+ * A STAMP is not this. A staff promo, a Comic-Con stamp, a Burger King Lucario
+ * or a League prize is a different, usually far scarcer object that happens to
+ * share a collector number with the card underneath it. Pricing one at the base
+ * card's price is not an approximation, it is a made-up number — and it looked
+ * exactly like a real one in the binder total until a staff-stamped Umbreon
+ * VMAX priced itself at $2.4k.
+ *
+ * Unknown foils are deliberately NOT in this set. A new ball foil will read
+ * "n/a" until it is added here, which is a visible gap; the alternative is a
+ * confident wrong price, which is not.
+ */
+const PATTERN_FOILS = new Set([
+  "pokeball",
+  "masterball",
+  "friendball",
+  "loveball",
+  "quickball",
+  "team-rocket",
+  "energy",
+  "cosmos",
+  "tinsel",
+  "cracked-ice",
+]);
+
+/** May this printing take its base type's price when it has none of its own? */
+export function pricesAsBaseType(finish: Finish): boolean {
+  const { foil } = parseFinish(finish);
+  return foil ? PATTERN_FOILS.has(foil) : false;
+}
+
 /** Turn an unknown foil into something readable rather than showing a raw key. */
 function humanize(raw: string): string {
   const spaced = raw.replace(/[-_]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");

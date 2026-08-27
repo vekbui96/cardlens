@@ -114,3 +114,32 @@ describe("printingPrice", () => {
     expect(printingPrice(buildPrintingIndex({}), "999", "normal")).toBeUndefined();
   });
 });
+
+describe("printingPrice and foils", () => {
+  const index = buildPrintingIndex({
+    "215": [{ type: "holo" }],
+    "50": [{ type: "reverse" }],
+  })!;
+
+  it("lets a pattern foil borrow its base reverse price", () => {
+    // Providers do not model pattern foils at all, so without this a Poké Ball
+    // reverse prices at nothing even though it is the same print run.
+    index.prices["50|reverse"] = 4.25;
+    expect(printingPrice(index, "50", "reverse:pokeball")).toBe(4.25);
+  });
+
+  it("refuses to price a STAMP at the base card's price", () => {
+    // A staff promo is a different, scarcer object that happens to share a
+    // number. Borrowing here produced a $2.4k staff Umbreon in a binder total —
+    // a made-up number that looked exactly like a real one.
+    index.prices["215|holo"] = 2400;
+    expect(printingPrice(index, "215", "holo:staff")).toBeUndefined();
+    expect(printingPrice(index, "215", "holo:jumbo")).toBeUndefined();
+    expect(printingPrice(index, "215", "normal:comic-con-2009")).toBeUndefined();
+  });
+
+  it("still never crosses types", () => {
+    // A holo price answering for a reverse would be wrong in both directions.
+    expect(printingPrice(index, "215", "reverse")).toBeUndefined();
+  });
+});

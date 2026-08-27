@@ -3,6 +3,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
 import { availableFinishes, type CollectFinish, type PokemonCardSummary } from "../../models/cards.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { formatUsd } from "../../utils/format.ts";
 import { setIdFromCardId } from "../../utils/cardId.ts";
 import { imageSlotSrc } from "../../services/sync/binderImages.ts";
 import type { BinderSlot, CardSlot } from "../../models/binderLayout.ts";
@@ -56,6 +57,7 @@ export function BinderPocketSheet({
   onPlace,
   onCancel,
   onClear,
+  priceFor,
 }: {
   chosen: PokemonCardSummary | null;
   slot: BinderSlot | null;
@@ -63,6 +65,8 @@ export function BinderPocketSheet({
   onPlace: (slot: CardSlot) => void;
   onCancel: () => void;
   onClear: () => void;
+  /** Market price for a pocket, for the full figure the badge has no room for. */
+  priceFor: (slot: BinderSlot) => number | undefined;
 }) {
   const card = slot?.kind === "card" ? slot : null;
   const cardId = chosen?.id ?? card?.cardId ?? "";
@@ -162,9 +166,11 @@ export function BinderPocketSheet({
         <CardImage src={card.imageSmall} alt="" size="thumb" />
         <div className={styles.sheetTitle}>
           <span className={styles.sheetName}>{card.name ?? card.cardId}</span>
+          {/* The pocket badge is abbreviated to fit ("$1.2k"); here there is
+              room for the real number. */}
           <span className={styles.sheetMeta}>
             {card.collectorNumber ? `${card.collectorNumber} · ` : ""}
-            {finishLabel(card.finish)}
+            {finishLabel(card.finish)} · {formatUsd(priceFor(card))}
           </span>
         </div>
         <OwnToggle cardId={card.cardId} finish={card.finish} />

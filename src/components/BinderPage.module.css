@@ -143,3 +143,26 @@ button.pocket:focus-visible {
     transform: none;
   }
 }
+
+/*
+ * The price sits on the art, bottom-right, because a pocket has no room for a
+ * row beneath it — a 9-pocket page on a phone is already three columns of
+ * thumbnail. Right-aligned so a column of prices reads down the page.
+ */
+.price {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(4, 6, 10, 0.82);
+  color: var(--cl-fg);
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  line-height: 1.3;
+}
+
+/* "Don't own" already occupies the bottom edge; sit above it rather than on it. */
+.priceAboveTag {
+  bottom: 22px;
+}

@@ -27,6 +27,7 @@ export function BinderPageView({
   onSlotClick,
   selectedIndex,
   pageNumber,
+  priceFor,
 }: {
   page: PageData;
   format: BinderFormat;
@@ -36,6 +37,14 @@ export function BinderPageView({
   onSlotClick?: (index: number) => void;
   selectedIndex?: number | null;
   pageNumber: number;
+  /**
+   * Market price per pocket. Omit to show no prices at all.
+   *
+   * Returning undefined is meaningful and common — a stamp or promo rides on a
+   * finish nothing prices — so it renders "n/a" rather than nothing. A blank
+   * where a price belongs reads as "still loading" forever.
+   */
+  priceFor?: (slot: BinderSlot) => number | undefined;
 }) {
   const spec = specFor(format);
   const interactive = typeof onSlotClick === "function";
@@ -51,7 +60,8 @@ export function BinderPageView({
         {Array.from({ length: spec.pockets }, (_, index) => {
           const slot = page.slots[index];
           const held = slot ? owns(slot) : false;
-          const label = slotLabel(slot, index, held);
+          const label =
+            slotLabel(slot, index, held) + (priceFor && slot ? `, ${formatBinderPrice(priceFor(slot))}` : "");
 
           const inner = slot ? (
             <>
@@ -68,6 +78,11 @@ export function BinderPageView({
                   the point of planning a binder, so it must be placeable and
                   visibly distinct from one you hold. */}
               {!held ? <span className={styles.wantedTag}>Don’t own</span> : null}
+              {priceFor ? (
+                <span className={`${styles.price} ${held ? "" : styles.priceAboveTag}`}>
+                  {formatBinderPrice(priceFor(slot))}
+                </span>
+              ) : null}
             </>
           ) : (
             <span className={styles.emptyMark} aria-hidden="true" />
@@ -109,6 +124,13 @@ export function BinderPageView({
       </ul>
     </section>
   );
+}
+
+/** Compact enough for a pocket: "$12.34", "$1.2k", or "n/a". */
+export function formatBinderPrice(price: number | undefined): string {
+  if (price === undefined || !Number.isFinite(price) || price <= 0) return "n/a";
+  if (price >= 1000) return `$${(price / 1000).toFixed(price >= 10_000 ? 0 : 1)}k`;
+  return `$${price.toFixed(price >= 100 ? 0 : 2)}`;
 }
 
 function slotLabel(slot: BinderSlot | undefined, index: number, held: boolean): string {

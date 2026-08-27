@@ -1,5 +1,5 @@
 import type { Printing } from "../integrations/tcgdex/client.ts";
-import { isLikelyPackPrinting, makeFinish, parseFinish, type Finish } from "./finishes.ts";
+import { isLikelyPackPrinting, makeFinish, parseFinish, pricesAsBaseType, type Finish } from "./finishes.ts";
 import type { EurAverages } from "./movement.ts";
 
 export interface SetPrintingIndex {
@@ -101,14 +101,19 @@ function unpadded(collectorNumber: string): string {
  * on the card, so without this an exact-match lookup finds nothing and the row
  * totals as $0 with no indication anything is missing.
  *
- * A base-type price is the right stand-in: a patterned reverse and a plain
- * reverse are the same print run wherever both exist. Crossing *types* is not —
- * a holo price must never answer for a reverse — so only the foil is dropped.
+ * A base-type price is the right stand-in FOR A PATTERN: a patterned reverse
+ * and a plain reverse are the same print run wherever both exist. Crossing
+ * *types* is not — a holo price must never answer for a reverse — so only the
+ * foil is dropped.
+ *
+ * It is not a stand-in for a STAMP. A staff promo or a League prize shares its
+ * collector number with the card underneath and nothing else, so it keeps only
+ * its exact key and reads as unpriced. See pricesAsBaseType.
  */
 function lookupKeys(collectorNumber: string, finish: Finish): string[] {
   const numbers = [collectorNumber, unpadded(collectorNumber), collectorNumber.padStart(3, "0")];
   const { type } = parseFinish(finish);
-  const finishes = type === finish ? [finish] : [finish, type];
+  const finishes = type === finish || !pricesAsBaseType(finish) ? [finish] : [finish, type];
   return finishes.flatMap((f) => numbers.map((n) => `${n}|${f}`));
 }
 

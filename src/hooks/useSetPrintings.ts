@@ -15,8 +15,12 @@ const client = new TcgdexClient();
  *
  * Falls back to fetching TCGdex directly, so the feature still works with the
  * home server switched off — just expensively.
+ *
+ * Exported because the binder asks the same question of thirty sets at once
+ * (see useBinderValue). One definition, or the two paths drift on which server
+ * they trust first.
  */
-async function loadPrintings(
+export async function loadPrintings(
   setId: string,
   setName: string,
   signal?: AbortSignal,

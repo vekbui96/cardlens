@@ -4,6 +4,7 @@ import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
 import { BinderPageView } from "../../components/BinderPage.tsx";
 import { useSets } from "../../hooks/useSets.ts";
+import { useBinderValue } from "../../hooks/useBinderValue.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
@@ -24,6 +25,7 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { formatUsd } from "../../utils/format.ts";
 import type { PokemonCardSummary } from "../../models/cards.ts";
 import { BinderSearchResults } from "./BinderSearchResults.tsx";
 import { BinderPocketSheet } from "./BinderPocketSheet.tsx";
@@ -85,6 +87,8 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   // ALL sets, not just collected ones: a binder is a plan, and planning a
   // set you have not started is the common case.
   const { data: allSets } = useSets();
+  // Priced per printing, one request per SET rather than per card.
+  const value = useBinderValue(binder);
   const view = useSetView(setId, setName, { rarities: null, wantPrintings: true });
 
   const owns = useMemo(
@@ -281,6 +285,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               format={binder.format}
               owns={owns}
               pageNumber={i + 1}
+              priceFor={value.priceFor}
               selectedIndex={selected?.page === i ? selected.index : null}
               onSlotClick={(index) => {
                 setChosen(null);
@@ -446,6 +451,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             onPlace={place}
             onCancel={() => setChosen(null)}
             onClear={() => place(null)}
+            priceFor={value.priceFor}
           />
         </div>
       ) : null}
@@ -453,6 +459,12 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
       <p className={styles.footnote}>
         {counts.cards} card{counts.cards === 1 ? "" : "s"} across {binder.pages.length} page
         {binder.pages.length === 1 ? "" : "s"} · {spec.label}
+        {/* The total is only ever "the part we know". Saying how many cards are
+            unpriced alongside it is what keeps it from reading as the whole
+            answer — stamps and promos price at nothing, and a binder of them
+            would otherwise look worthless rather than unmeasured. */}
+        {value.isLoading ? " · pricing…" : ` · ${formatUsd(value.total)}`}
+        {!value.isLoading && value.unpriced > 0 ? ` (${value.unpriced} unpriced)` : ""}
       </p>
     </Screen>
   );
