@@ -45,9 +45,37 @@ On failure, `gh run view <id> --log-failed`. The usual cause is formatting.
 
 ## 5. Deploy the server (when step 2 says so)
 
+**First, did `package.json` gain a dependency?** The checkout at
+`D:\services\cardlens` has its own `node_modules`, so a `git reset --hard`
+brings the new `import` and not the package it names — and the service then
+fails to start on a module it cannot resolve. Adding `compression` took the
+service down exactly this way on 2026-08-27.
+
+```bash
+git diff <last-deployed-sha>..HEAD -- package.json | grep '^+ *"'
+```
+
+If anything comes back, install **before** restarting, and use `npm.cmd`
+through cmd. PowerShell's execution policy blocks `npm.ps1`, so
+`ssh server-pc "powershell ... npm install"` returns a `PSSecurityException`
+buried among the other output, installs nothing, and looks like it worked:
+
+```bash
+ssh server-pc "cd /d D:\services\cardlens && npm.cmd install --no-audit --no-fund"
+```
+
+**Never `--omit=dev`.** The service is `tsx server/index.ts` and `tsx` is a
+devDependency, so a production-only install deletes the thing that runs it.
+
+Then restart:
+
 ```bash
 ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens fetch origin main --quiet; git -C D:\services\cardlens reset --hard origin/main --quiet; Write-Host (git -C D:\services\cardlens rev-parse --short HEAD); Restart-Service cardlens; Start-Sleep -Seconds 8; (Get-Service cardlens).Status\""
 ```
+
+A status of `Paused` or `Stopped` rather than `Running` is almost always a
+missing module. `Restart-Service` reports it as a `ServiceCommandException`,
+which reads like a permissions problem and is not.
 
 ## 6. Verify it live
 
