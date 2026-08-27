@@ -6,6 +6,30 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## Most recent work — Home performance (2026-08-27)
+
+Home was measured on the live site before anything was changed, and the measuring
+is the part worth repeating: `.claude/skills/optimizing-cardlens/SKILL.md` has
+the procedure.
+
+What it found and what was done:
+
+- Home priced the collection by asking `/api/catalog/cards` **once per set** —
+  nineteen calls, 4.5–6.7s each, several failing and retrying at 9s and 18s,
+  settling on "480 of 973 printings priced". Now one `/api/catalog/prices` call
+  against a 12-hour disk cache: **213ms median, 4ms on a revisit inside the hour.**
+- **No response this server sent was compressed.** `compression()` is mounted
+  ahead of the routes now; 113KB of price index became 19KB on the wire.
+- The collection graph drew a flat window along the bottom edge, so a steady
+  973-printing collection read as "you have nothing". Flat series are centred.
+- Smaller: the web Home chunk is warmed from `main.tsx` rather than waited for,
+  and there is an inline favicon (every load was taking a 404 for one).
+
+Still open, measured and deliberately not done: Home makes **19 `/api/printings`
+calls**, one per set. They run in parallel and cost 760ms wall clock cold, which
+did not justify a second batching endpoint yet. Batch them the way
+`/api/catalog/prices` is batched if that number ever matters.
+
 ## What this app is now
 
 It started as card search for Meta Ray-Ban Display glasses. It is now a **collection tracker** for master-set collectors, with:
@@ -24,24 +48,28 @@ It started as card search for Meta Ray-Ban Display glasses. It is now a **collec
 | Server (cardlens) | `https://server-pc.tail0e4194.ts.net:8443` via Tailscale Funnel                |
 | Collection data   | `D:/services/data/collection.json` on SERVER-PC                                |
 | Sync token        | `COLLECTION_TOKEN` in `D:\services\cardlens\.env` — NOT in the repo            |
-| Real collection   | ~93 rows, 50 cards, all in Pitch Black (`me5`)                                 |
+| Real collection   | 973 printings across 19 sets (measured live 2026-08-27)                        |
 | Printings cache   | `D:/services/data/printings/` (30-day TTL, cache version **4**)                |
+| Catalog prices    | `D:/services/data/catalog-prices/` (12-hour TTL, cache version **1**)          |
 | Target bot        | `D:\services\target-stock-checker`, scheduled task, watchlist in `products.db` |
 | Target token      | `TARGET_TOKEN` in `D:\services\cardlens\.env` — separate from the sync token   |
 | Binders           | `D:/services/data/binders.json` + `binder-images/`, synced, live               |
 | Shares            | `D:/services/data/shares.json`, revocable, public GET by id                    |
 | Recognition       | `recognition` service, loopback :8200, fronted at `/api/recognize`             |
-| Deployed at       | Server on `7654b3b` (verified live). **Pages still on `da2b975`** — see below  |
+| Deployed at       | Both on `c9e5272`, loaded in a browser and verified 2026-08-27                 |
 
 Server endpoints: `/api/health`, `/api/collection`, `/api/collection/merge`,
 `/api/binders`, `/api/binders/merge`, `/api/binders/images`,
 `/api/printings/:setId`, `/api/catalog/cards`, `/api/catalog/sets`,
+`/api/catalog/prices?sets=a,b,c` (batched, disk-cached — Home's pricing),
 `/api/set-information/:setId`, `/api/sealed/:setId?name=`, `/api/target/*`,
 plus the companion relay. All three `binders` routes are live.
 
-**Pages currently publishes from the `gh-pages` BRANCH, not Actions** — see the
-deployment note below. Pushing to `main` does NOT update the site until that is
-switched back.
+**Pages publishes from Actions again.** Pushing to `main` updates the site;
+verified on 2026-08-27 by pushing and watching the served `index-*.js` hash
+change. Note that GitHub serves `index.html` cacheably, so a browser that has
+the page open will keep loading the OLD bundle after a deploy — check the hash
+in the served HTML, not what the tab happens to be running.
 
 ## Target restock tab (`#/target`)
 
