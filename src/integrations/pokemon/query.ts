@@ -1,9 +1,24 @@
 import type { NormalizedQuery } from "../../services/search/normalize.ts";
 
-/** Escape a value for use in a pokemontcg.io Lucene query token. */
+/**
+ * Escape a value for use in a pokemontcg.io Lucene query token.
+ *
+ * Punctuation becomes a SPACE, never nothing. Deleting it glued the halves of a
+ * name together — "Lucario-GX" searched as `name:lucariogx*` and "Farfetch'd"
+ * as `name:farfetchd*` — and a prefix that matches no card returns zero results
+ * rather than an error, so every hyphenated and apostrophised Pokémon in the
+ * catalog was simply unfindable and said "No cards found" about itself.
+ *
+ * As a separator it is also more accurate than a deletion: the punctuation in
+ * these names is a word boundary, which is exactly what a space means to the
+ * tokeniser that reads the result.
+ */
 export function escapeLuceneValue(value: string): string {
   // Keep it conservative: alphanumerics + spaces only for the wildcard token.
-  return value.replace(/[^a-z0-9 ]/gi, "").trim();
+  return value
+    .replace(/[^a-z0-9 ]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Set ids are alphanumeric with hyphens (e.g. "sv3", "swsh7", "base1"). */

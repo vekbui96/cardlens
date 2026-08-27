@@ -27,7 +27,26 @@ describe("buildLuceneQuery", () => {
 });
 
 describe("escapeLuceneValue", () => {
-  it("strips punctuation that would break the query", () => {
-    expect(escapeLuceneValue("farfetch'd")).toBe("farfetchd");
+  it("turns punctuation into a separator rather than deleting it", () => {
+    // Deleting it glued the halves together and the query matched nothing:
+    // "farfetchd" and "lucariogx" are not prefixes of any card in the catalog,
+    // and a prefix that matches nothing returns zero results rather than an
+    // error — so the card said "No cards found" about itself.
+    expect(escapeLuceneValue("farfetch'd")).toBe("farfetch d");
+    expect(escapeLuceneValue("lucario-gx")).toBe("lucario gx");
+    expect(escapeLuceneValue("type: null")).toBe("type null");
+  });
+
+  it("leaves an ordinary name alone", () => {
+    expect(escapeLuceneValue("umbreon vmax")).toBe("umbreon vmax");
+  });
+});
+
+describe("buildLuceneQuery with punctuation", () => {
+  it("searches the first WORD of a hyphenated name, not the mashed-together one", () => {
+    // `name:lucario*` finds Lucario-GX; `name:lucariogx*` finds nothing.
+    expect(buildLuceneQuery(normalizeQuery("Lucario-GX"))).toBe("name:lucario*");
+    expect(buildLuceneQuery(normalizeQuery("Farfetch'd"))).toBe("name:farfetch*");
+    expect(buildLuceneQuery(normalizeQuery("Mr. Mime"))).toBe("name:mr*");
   });
 });
