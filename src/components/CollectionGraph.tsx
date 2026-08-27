@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { axisTicks, buildHistory, HISTORY_RANGES, type HistoryRange } from "../models/history.ts";
+import {
+  axisTicks,
+  buildHistory,
+  graphGeometry,
+  HISTORY_RANGES,
+  type HistoryRange,
+} from "../models/history.ts";
 import styles from "./CollectionGraph.module.css";
 
 /**
@@ -36,24 +42,9 @@ export function CollectionGraph({
   const history = useMemo(() => buildHistory(stamps, range), [stamps, range]);
   const { points, endTotal, added, undated } = history;
 
-  const geom = useMemo(() => {
-    const t0 = points[0].t;
-    const t1 = points[points.length - 1].t;
-    const span = Math.max(1, t1 - t0);
-    const max = Math.max(1, ...points.map((p) => p.total));
-    const innerW = W - PAD.left - PAD.right;
-    const innerH = H - PAD.top - PAD.bottom;
-
-    const x = (t: number) => PAD.left + ((t - t0) / span) * innerW;
-    // Floor at the window's starting total rather than at zero: a collection
-    // that grew 1140 -> 1145 should read as a gentle rise, not a flat line
-    // pinned to the top of a chart whose axis starts at nothing.
-    const floor = Math.min(...points.map((p) => p.total));
-    const range = Math.max(1, max - floor);
-    const y = (v: number) => PAD.top + innerH - ((v - floor) / range) * innerH;
-
-    return { x, y, t0, t1, max, floor, baseline: PAD.top + innerH };
-  }, [points]);
+  // Pure, and in models/history.ts, so the flat-window case is asserted rather
+  // than eyeballed — see graphGeometry.
+  const geom = useMemo(() => graphGeometry(points, { width: W, height: H, pad: PAD }), [points]);
 
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${geom.x(p.t)},${geom.y(p.total)}`).join(" ");
   const area = `${line} L${geom.x(points[points.length - 1].t)},${geom.baseline} L${geom.x(points[0].t)},${geom.baseline} Z`;

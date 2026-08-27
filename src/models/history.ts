@@ -98,6 +98,66 @@ export function buildHistory(
   return { points, startTotal, endTotal: running, added: inWindow.length, undated };
 }
 
+export interface GraphBox {
+  width: number;
+  height: number;
+  pad: { top: number; right: number; bottom: number; left: number };
+}
+
+export interface GraphGeometry {
+  /** Epoch ms -> x. */
+  x: (t: number) => number;
+  /** Printings owned -> y. */
+  y: (v: number) => number;
+  t0: number;
+  t1: number;
+  baseline: number;
+  /** Nothing changed across the window, so there is no shape to draw. */
+  flat: boolean;
+}
+
+/**
+ * Map a history onto an SVG box.
+ *
+ * Pulled out of the chart so the one case that is easy to get wrong and
+ * impossible to notice can be asserted rather than eyeballed.
+ *
+ * The y axis floors at the window's LOWEST total rather than at zero: a
+ * collection that grew 1140 -> 1145 should read as a gentle rise, not a flat
+ * line pinned to the top of an axis starting at nothing.
+ *
+ * **A window where nothing changed is the case that broke.** floor equals max,
+ * so every point mapped to `(v - floor) / range` = 0 and the line was drawn
+ * along the very bottom edge — which is where a chart puts zero. A collection
+ * of 973 printings, steady for ninety days, therefore rendered as a line on the
+ * floor under a tall empty box, reading as "you have nothing" rather than "no
+ * change this period", and spending the largest element on Home saying it.
+ * Flat series are centred instead, and the fill becomes a band at that level.
+ */
+export function graphGeometry(points: HistoryPoint[], box: GraphBox): GraphGeometry {
+  const { width, height, pad } = box;
+  const t0 = points[0].t;
+  const t1 = points[points.length - 1].t;
+  const span = Math.max(1, t1 - t0);
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+
+  const totals = points.map((p) => p.total);
+  const max = Math.max(...totals);
+  const floor = Math.min(...totals);
+  const flat = max === floor;
+  const range = Math.max(1, max - floor);
+
+  return {
+    x: (t: number) => pad.left + ((t - t0) / span) * innerW,
+    y: (v: number) => (flat ? pad.top + innerH / 2 : pad.top + innerH - ((v - floor) / range) * innerH),
+    t0,
+    t1,
+    baseline: pad.top + innerH,
+    flat,
+  };
+}
+
 /** Ticks for the x axis: first, middle-ish and last, never one per point. */
 export function axisTicks(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= 2) return points;
