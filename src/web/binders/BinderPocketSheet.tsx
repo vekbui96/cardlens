@@ -109,9 +109,12 @@ export function BinderPocketSheet({
           <CardImage src={chosen.imageSmall} alt="" size="thumb" />
           <div className={styles.sheetTitle}>
             <span className={styles.sheetName}>{chosen.name}</span>
-            <span className={styles.sheetMeta}>
-              {chosen.collectorNumber} · {chosen.setName}
-            </span>
+            {/* The set gets its own line above the details. Run together on one
+                line it was the half that fell off the end of a phone — and the
+                set is the part that tells two cards with the same number and
+                the same name apart. */}
+            <span className={styles.sheetSet}>{chosen.setName}</span>
+            <span className={styles.sheetMeta}>{chosen.collectorNumber}</span>
           </div>
           <button type="button" className={styles.chip} onClick={onCancel}>
             Back
@@ -183,11 +186,11 @@ export function BinderPocketSheet({
         <CardImage src={card.imageSmall} alt="" size="thumb" />
         <div className={styles.sheetTitle}>
           <span className={styles.sheetName}>{card.name ?? card.cardId}</span>
+          <span className={styles.sheetSet}>{placedSetName ?? "Unknown set"}</span>
           {/* The pocket badge is abbreviated to fit ("$1.2k"); here there is
               room for the real number. */}
           <span className={styles.sheetMeta}>
             {card.collectorNumber ? `${card.collectorNumber} · ` : ""}
-            {placedSetName ? `${placedSetName} · ` : ""}
             {finishLabel(card.finish)} · {formatUsd(priceFor(card))}
           </span>
         </div>

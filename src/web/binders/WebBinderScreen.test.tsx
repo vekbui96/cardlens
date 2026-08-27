@@ -211,7 +211,11 @@ describe("WebBinderScreen search", () => {
 
     await user.click(screen.getByRole("button", { name: /^Pocket 1, Umbreon VMAX/ }));
 
-    expect(await screen.findByText(/215 · Evolving Skies · Holofoil/)).toBeInTheDocument();
+    // Scoped to the sheet: the results grid names sets too, so a bare text
+    // query would pass on a result tile even if the sheet said nothing.
+    const sheet = (await screen.findByRole("button", { name: "Own Holofoil" })).closest("div")?.parentElement;
+    expect(sheet?.textContent).toContain("Evolving Skies");
+    expect(sheet?.textContent).toContain("215 · Holofoil");
   });
 
   it("says so when nothing matches, rather than showing an empty strip", async () => {

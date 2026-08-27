@@ -363,13 +363,23 @@ label.chip {
   white-space: nowrap;
 }
 
+/* The set, on its own line between the card's name and its details. Brighter
+   than the details line because it is doing identifying work, not describing. */
+.sheetSet {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Wraps rather than ellipsising, unlike the name and set above it. Those are
+   one unbreakable phrase each; this is a list of short facts, and the price is
+   the one at the end — the exact thing an ellipsis would eat. */
 .sheetMeta {
   font-family: var(--cl-font-data);
   font-size: var(--cl-fs-small);
   color: var(--cl-fg-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sheetPrompt {
