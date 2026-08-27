@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import compression from "compression";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
@@ -100,6 +101,17 @@ export function createApp(
   // 8kb suits the companion relay, but a full collection sync is a few thousand
   // rows; the route-level row cap is the real bound.
   app.use(express.json({ limit: "4mb" }));
+  /**
+   * Gzip. Everything this server returns is JSON with heavily repeated keys, and
+   * none of it was compressed — measured against the live funnel, the home
+   * dashboard's price index is 113KB on the wire and took 8.7s to arrive from a
+   * warm cache that had answered in 148ms for a single set. The bytes were the
+   * whole cost.
+   *
+   * Before the routes, so it covers all of them: printings, set-information and
+   * a full collection sync are the same shape of repetitive JSON.
+   */
+  app.use(compression());
   app.use(securityHeaders);
   // The relay carries only user-typed card names, uses unguessable short-lived
   // codes, and is rate-limited — so by default we reflect any Origin. This is

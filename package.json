@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pok\u00e9mon card search & pricing Web App for Meta Ray-Ban Display glasses",
+  "description": "Pokémon card search & pricing Web App for Meta Ray-Ban Display glasses",
   "engines": {
     "node": ">=20"
   },
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.16",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "react": "^18.3.1",
@@ -40,6 +41,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/node": "^22.9.0",
