@@ -1,6 +1,7 @@
 import { CardImage } from "../../components/CardImage.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
+import { useSets } from "../../hooks/useSets.ts";
 import { availableFinishes, type CollectFinish, type PokemonCardSummary } from "../../models/cards.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -70,6 +71,22 @@ export function BinderPocketSheet({
 }) {
   const card = slot?.kind === "card" ? slot : null;
   const cardId = chosen?.id ?? card?.cardId ?? "";
+  /**
+   * Which set a placed card came from.
+   *
+   * A slot stores the card's id, number, name and art but NOT its set — the
+   * denormalised fields exist to paint the page offline, and a set name is not
+   * needed for that. It is needed the moment you tap the pocket and ask "which
+   * Riolu is this", because the number alone does not say: a binder like this
+   * holds four cards numbered 17, from four different sets.
+   *
+   * Recovered from the id rather than stored, so every binder already in the
+   * wild gains it without a migration.
+   */
+  const { data: allSets } = useSets();
+  const placedSetName = card
+    ? (allSets ?? []).find((s) => s.id === setIdFromCardId(card.cardId))?.name
+    : undefined;
   const setName = chosen?.setName ?? "";
   const { index, isLoading } = useSetPrintings(setIdFromCardId(cardId), setName, Boolean(chosen));
   const collectorNumber = chosen?.collectorNumber ?? card?.collectorNumber ?? "";
@@ -170,6 +187,7 @@ export function BinderPocketSheet({
               room for the real number. */}
           <span className={styles.sheetMeta}>
             {card.collectorNumber ? `${card.collectorNumber} · ` : ""}
+            {placedSetName ? `${placedSetName} · ` : ""}
             {finishLabel(card.finish)} · {formatUsd(priceFor(card))}
           </span>
         </div>

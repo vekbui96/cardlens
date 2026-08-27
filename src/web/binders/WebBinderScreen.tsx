@@ -277,7 +277,16 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           centring the page — that gap is where the next page goes, and the
           binder should look like it is waiting for it. */}
       {toSpreads(binder.pages.length).map((spread) => (
-        <div key={spread[0]} className={styles.spread} data-single={spread.length === 1 || undefined}>
+        <div
+          key={spread[0]}
+          className={styles.spread}
+          data-single={spread.length === 1 || undefined}
+          // Page 1 opens on the RIGHT, against the inside front cover — the
+          // same reason a book's first page is a right-hand page. Every later
+          // lone page is a trailing even one, which sits on the left with its
+          // facing side still to be added.
+          data-cover={spread[0] === 0 || undefined}
+        >
           {spread.map((i) => (
             <BinderPageView
               key={i}

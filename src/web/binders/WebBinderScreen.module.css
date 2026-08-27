@@ -267,7 +267,10 @@ label.chip {
 .spread {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--cl-gap-sm);
+  /* A real binder has the two pages meet at a gutter, not butt together. The
+     gap is deliberately wider than the app's usual one so the spine has room
+     to read as a spine rather than as a divider between two lists. */
+  gap: var(--cl-gap-lg);
   align-items: start;
   margin: 0 var(--cl-gap) var(--cl-gap);
   position: relative;
@@ -289,6 +292,13 @@ label.chip {
 /* Nothing to divide when only one page is showing. */
 .spread[data-single]::before {
   display: none;
+}
+
+/* The opening page sits in the RIGHT column, leaving the inside front cover
+   blank beside it. Without this it lands in column 1 and the binder appears to
+   start on a left-hand page, which no binder does. */
+.spread[data-cover] > * {
+  grid-column: 2;
 }
 
 /*

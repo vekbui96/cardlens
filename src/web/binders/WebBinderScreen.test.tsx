@@ -177,6 +177,43 @@ describe("WebBinderScreen search", () => {
     expect(placedCards()).toHaveLength(1);
   });
 
+  it("opens on a right-hand page, and pairs the rest facing each other", async () => {
+    // A binder opens against its inside front cover, so page 1 is a RIGHT-hand
+    // page — the CSS keys the column off these attributes, so they are the
+    // contract worth pinning. A trailing even page is NOT marked: it is a lone
+    // page on the left, with its facing side still to be added.
+    const user = userEvent.setup();
+    const { container } = render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    // One page to start; grow to four so the last spread is a lone even page.
+    const addPage = screen.getByRole("button", { name: "Add page" });
+    for (let i = 0; i < 3; i++) await user.click(addPage);
+
+    const spreads = [...container.querySelectorAll("[data-single], [data-cover]")];
+    expect(spreads).toHaveLength(2);
+    expect(spreads[0].hasAttribute("data-cover")).toBe(true);
+    expect(spreads[1].hasAttribute("data-cover")).toBe(false);
+    expect(screen.getByLabelText("Page 2").parentElement).toBe(screen.getByLabelText("Page 3").parentElement);
+  });
+
+  it("names the set a placed card came from", async () => {
+    // The number alone does not identify a card in a binder like this: a Riolu
+    // collection holds four cards numbered 17, from four different sets. The
+    // slot does not store the set, so this is recovered from the card id.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+    await user.click(await screen.findByRole("button", { name: "Holofoil" }));
+
+    await user.click(screen.getByRole("button", { name: /^Pocket 1, Umbreon VMAX/ }));
+
+    expect(await screen.findByText(/215 · Evolving Skies · Holofoil/)).toBeInTheDocument();
+  });
+
   it("says so when nothing matches, rather than showing an empty strip", async () => {
     const user = userEvent.setup();
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
