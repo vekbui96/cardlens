@@ -23,7 +23,9 @@
   },
   // The server shares the collection merge rule with the client rather than
   // reimplementing it — two copies of a convergence rule that drift is how a
-  // sync system loses data. These two files are the shared surface.
+  // sync system loses data. The files below are that shared surface; the
+  // pricing pair is there for the same reason, since server and device must
+  // agree on which tcgplayer key a printing is priced under.
   "include": [
     "vite.config.ts",
     "playwright.config.ts",
@@ -36,6 +38,8 @@
     "src/models/games.ts",
     "src/models/sealed.ts",
     "src/integrations/providers.ts",
+    "src/integrations/pricing/normalize.ts",
+    "src/integrations/pokemon/schema.ts",
     "src/integrations/tcgdex/client.ts",
     "src/integrations/tcgdex/schema.ts"
   ]

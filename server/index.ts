@@ -3,6 +3,7 @@ import cors from "cors";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
+import { CatalogPriceStore } from "./catalogPrices.ts";
 import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
 import { ShareStore } from "./shareStore.ts";
@@ -19,6 +20,12 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
 const POKEMONTCG_BASE = "https://api.pokemontcg.io/v2";
 const POKEMONTCG_API_KEY = process.env.POKEMONTCG_API_KEY ?? "";
 const MAX_INPUT_LENGTH = 100;
+/**
+ * Sets one price request may name. A collection spanning more than this is
+ * priced in several requests rather than being refused — but an unbounded list
+ * would let one URL trigger arbitrarily many upstream fetches.
+ */
+const MAX_PRICE_SETS = 60;
 const COLLECTION_TOKEN = process.env.COLLECTION_TOKEN ?? "";
 /**
  * Separate from COLLECTION_TOKEN on purpose. The collection token is entered on
@@ -32,6 +39,7 @@ const TARGET_TOKEN = process.env.TARGET_TOKEN ?? "";
 const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collection.json";
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
+const CATALOG_PRICES_DIR = process.env.CATALOG_PRICES_DIR ?? "D:/services/data/catalog-prices";
 /**
  * The card recogniser, on loopback. Tailscale Funnel only permits 443, 8443 and
  * 10000, and two are already spent — so this service fronts it rather than the
@@ -740,6 +748,13 @@ export function createApp(
     throw new UpstreamError(last.status);
   }
 
+  /**
+   * Prices for whole sets, cached hard. Constructed here rather than passed in
+   * because it must fetch through loadCatalog above — the retry-and-stale
+   * policy is worth more to this than to anything else on the server.
+   */
+  const catalogPrices = new CatalogPriceStore(CATALOG_PRICES_DIR, loadCatalog);
+
   /** Stream a catalog path straight to a client. */
   async function proxy(path: string, res: Response): Promise<void> {
     try {
@@ -802,6 +817,56 @@ export function createApp(
     // which TCGdex set it came from. The client accepts either shape, so the two
     // halves can deploy in either order.
     res.json({ setId, cards, printings: printings ?? null });
+  });
+
+  /**
+   * Market prices for every set a collection holds, in one request.
+   *
+   * Home prices the whole collection, so it needed the catalog oracle for all
+   * of them at once and was asking set by set through the plain proxy: measured
+   * live, nineteen calls at 4.5-6.7s each, several never completing. This is one
+   * call against a twelve-hour disk cache.
+   *
+   * **Partial success is the point.** One set that cannot be priced must not
+   * cost the other eighteen their numbers, so failures are named in `missing`
+   * and everything else is still returned. Home already knows how to say
+   * "480 of 973 printings priced"; an empty body would make it say nothing.
+   */
+  app.get("/api/catalog/prices", proxyLimiter, async (req, res) => {
+    const requested = String(req.query.sets ?? "")
+      .split(",")
+      .map((id) => id.trim().replace(/[^A-Za-z0-9._-]/g, ""))
+      .filter(Boolean);
+    const setIds = [...new Set(requested)].slice(0, MAX_PRICE_SETS);
+
+    if (setIds.length === 0) {
+      res.status(400).json({ error: "sets_required" });
+      return;
+    }
+
+    const indexes = await Promise.all(
+      setIds.map((setId) =>
+        catalogPrices.get(setId).then(
+          (prices) => ({ setId, prices }),
+          (err: unknown) => {
+            console.warn(`[cardlens] catalog prices unavailable for ${setId}:`, err);
+            return { setId, prices: null };
+          },
+        ),
+      ),
+    );
+
+    const prices: Record<string, number> = {};
+    const missing: string[] = [];
+    for (const { setId, prices: found } of indexes) {
+      if (found === null) missing.push(setId);
+      else Object.assign(prices, found);
+    }
+
+    // Every id is globally unique, so one flat map across sets cannot collide —
+    // the same reason the device keeps a single index rather than nesting.
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json({ prices, missing });
   });
 
   app.get("/api/catalog/sets", proxyLimiter, async (req, res) => {

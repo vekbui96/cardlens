@@ -130,6 +130,39 @@ Detection is by **shape**, not size: the glasses are small AND square, a phone i
 
 **The server caches printings** (`/api/printings/:setId`) so devices make one 8KB request instead of 120 requests and 280KB.
 
+### Home prices the WHOLE collection, so pricing is batched and cached hard
+
+`/api/catalog/prices?sets=a,b,c` -> `{ prices: { "<cardId>|<priceKey>": number }, missing: [] }`,
+backed by `server/catalogPrices.ts`: one compact index per set, on disk, 12h TTL.
+
+Home is the only screen that needs the second oracle for every set at once, and
+it used to get it by asking `/api/catalog/cards` once per set. That proxy is a
+pass-through with a **60-second** memory cache, so every visit was a fresh
+upstream run against an API that fails ~25% of the time. **Measured on the live
+site: nineteen concurrent calls, 4.5-6.7s each, several failing and retrying at
+9s and 18s, and Home settling on "480 of 973 printings priced."**
+
+Two things were wrong. The **payload** — Home wants `cardId -> price` and was
+being sent full card summaries, images and embedded set objects included, 250 at
+a time, and discarding all of it (`select=id,tcgplayer` is a fiftieth of the
+bytes). And the **lifetime** — market prices move daily at most, so a 60s TTL
+buys nothing and costs a full upstream run per visit. Measured after: **8669ms
+cold, 97ms warm.**
+
+- **Partial success is deliberate.** One set that cannot be priced is named in
+  `missing` and the rest are still returned — Home can say "480 of 973 priced",
+  but it cannot say anything at all from an empty body.
+- **An empty index is never persisted.** Empty is a legitimate answer
+  (pokemontcg.io prices 0/120 Pitch Black) but is indistinguishable from a
+  response that arrived malformed, and caching that strands the set for 12h.
+- The device keys prices `<cardId>|<priceKey>` and so does the server, via the
+  **shared** `normalizeTcgplayerPricing` — it folds `unlimited` onto `normal`
+  and `1stEdition*` onto the first-edition keys. A second copy of that mapping
+  here would drift, and the symptom is a silently unpriced collection. Both
+  pricing files are in `tsconfig.node.json` for that reason.
+- `useCatalogPrices` keeps the old per-set path behind `enabled`, for the mock
+  catalog and for the window where Pages has shipped and the server has not.
+
 ## Domain model
 
 ### Printings are `type` or `type:foil` strings
