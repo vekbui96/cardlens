@@ -59,6 +59,25 @@ ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens fetc
 
 The server has been silently stale before, running validation that rejected finishes the client could produce — rows were dropped on sync and it looked like nothing happened. **After changing anything under `server/` or the shared `src/` files listed in `tsconfig.node.json`, deploy both.**
 
+**A new npm dependency is a step BEFORE the restart, and `npm` is not callable
+over SSH.** The service runs from `D:\services\cardlens` with its own
+`node_modules`, so `git reset --hard` brings the import but not the package, and
+the service then fails to start on a module it cannot resolve. Adding
+`compression` did exactly that on 2026-08-27.
+
+Worse, the obvious fix looks like it worked and did not: PowerShell's execution
+policy blocks `npm.ps1`, so `ssh server-pc "powershell ... npm install"` returns
+a `PSSecurityException` amid the other output and installs nothing. Use
+`npm.cmd` through cmd:
+
+```bash
+ssh server-pc "cd /d D:\services\cardlens && npm.cmd install --no-audit --no-fund"
+ssh server-pc "powershell -NoProfile -Command \"Restart-Service cardlens\""
+```
+
+**Never `--omit=dev` here.** The service is `tsx server/index.ts` and `tsx` is a
+devDependency, so a production-only install removes the very thing that runs it.
+
 **A card-index rebuild is a THIRD target.** `recognition` reads its index from
 the cardlens checkout, and `api.py` caches it in a module global on first use
 (`if _index is None`) — so pulling new index files changes nothing until the
