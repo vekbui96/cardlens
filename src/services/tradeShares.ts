@@ -1,5 +1,6 @@
 import { companionBase } from "./companionApi.ts";
 import { fetchJson } from "./http.ts";
+import { ProviderError } from "../integrations/providers.ts";
 
 /**
  * Managing the trade link for a binder.
@@ -48,10 +49,10 @@ export async function createTradeLink(token: string, binderId: string): Promise<
     });
   } catch (err) {
     // The one failure with a fix the user can act on, so it gets its own type
-    // rather than being flattened into "could not share".
-    if (err instanceof Error && /\b409\b|binder_not_synced/.test(err.message)) {
-      throw new BinderNotSyncedError();
-    }
+    // rather than being flattened into "could not share". Read from the typed
+    // status rather than from the message text, which is a format and not an
+    // interface — see ProviderError.
+    if (err instanceof ProviderError && err.status === 409) throw new BinderNotSyncedError();
     throw err;
   }
 

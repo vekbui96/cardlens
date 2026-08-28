@@ -162,6 +162,45 @@
   color: var(--cl-gold);
 }
 
+/*
+ * Share fell back to a snapshot, said out loud.
+ *
+ * Not styled as an error — nothing failed from the user's side, and a link was
+ * produced — but not as a passing toast either: the old 2.5-second flash of
+ * "Snapshot link copied" was the whole bug. It is a standing block that holds
+ * its own retry, so the sentence explaining the problem and the button that
+ * fixes it are the same object.
+ */
+.shareFallback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  margin: var(--cl-gap-sm) var(--cl-gap) 0;
+  padding: var(--cl-gap-sm) var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+}
+
+/* `flex: 1 1 12rem` rather than `1fr`: below roughly a phone's width the text
+   takes its own line and the retry sits under it, instead of squeezing the
+   44px button down to a sliver. */
+.shareFallbackText {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+@media (min-width: 1000px) {
+  .shareFallback {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+}
+
 .summary {
   margin: 0;
   padding: var(--cl-gap) var(--cl-gap) 0;

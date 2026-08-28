@@ -45,9 +45,11 @@ export async function fetchJson(url: string, options: FetchJsonOptions = {}): Pr
       ...(options.headers ? { headers: options.headers } : {}),
       ...(options.body !== undefined ? { body: options.body } : {}),
     });
-    if (res.status === 404) throw new ProviderError("Not found", "not-found");
-    if (res.status === 429) throw new ProviderError("Rate limited", "rate-limit");
-    if (!res.ok) throw new ProviderError(`Request failed (${res.status})`, "network");
+    // The status rides on the error rather than only in its text — callers that
+    // need to tell 401 from 503 should not be parsing a sentence to do it.
+    if (res.status === 404) throw new ProviderError("Not found", "not-found", { status: 404 });
+    if (res.status === 429) throw new ProviderError("Rate limited", "rate-limit", { status: 429 });
+    if (!res.ok) throw new ProviderError(`Request failed (${res.status})`, "network", { status: res.status });
     return (await res.json()) as unknown;
   } catch (err) {
     if (err instanceof ProviderError) throw err;

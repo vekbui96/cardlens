@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import { MockPokemonProvider } from "../../integrations/pokemon/index.ts";
 import type * as PokemonCatalog from "../../integrations/pokemon/index.ts";
 import { MOCK_CARDS } from "../../integrations/pokemon/fixtures.ts";
 import type { RawCard } from "../../integrations/pokemon/schema.ts";
+import { Repositories } from "../../storage/repositories.ts";
 import { WebSetCardsScreen } from "./WebSetCardsScreen.tsx";
 
 // The aggregate endpoint switches itself off under mocks; these tests drive the
@@ -105,6 +106,47 @@ function serveCustom(
       return Promise.reject(new TypeError(`unexpected fetch: ${href}`));
     }),
   );
+}
+
+/**
+ * The set data, plus a /api/share whose answer the test chooses.
+ *
+ * Sharing is the only path on this screen that talks to the companion server,
+ * and how it FAILS is the whole subject of those tests, so the share route is a
+ * parameter. The collection and binder routes answer emptily because giving the
+ * device a token makes LibraryProvider sync on mount — an unrouted request
+ * there would fail these tests for a reason that has nothing to do with sharing.
+ */
+function serveShare(share: () => Promise<Response>) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: RequestInfo | URL) => {
+      const href = String(url);
+      if (href.includes("/share")) return share();
+      if (href.includes("/collection")) return json({ rows: [], at: 1 });
+      if (href.includes("/binders")) return json({ binders: [], at: 1 });
+      if (href.includes("/set-information/")) {
+        return json({ setId: SET_ID, cards: { data: setCards }, printings: PRINTINGS });
+      }
+      if (href.includes("/printings/")) return json(PRINTINGS);
+      return Promise.reject(new TypeError(`unexpected fetch: ${href}`));
+    }),
+  );
+}
+
+/** A sync token on this device. Without one the screen never asks the server at all. */
+function connect() {
+  new Repositories().setSyncSettings({ token: "test-token" });
+}
+
+/**
+ * A readable clipboard. Called AFTER userEvent.setup(), which installs a stub
+ * of its own — the last definition wins, and this is the one the test can read.
+ */
+function clipboardSpy() {
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  return writeText;
 }
 
 /**
@@ -351,5 +393,134 @@ describe("WebSetCardsScreen", () => {
 
     const restored = await allSlots();
     expect(restored[0]).toHaveAccessibleName(/Cheap Card/);
+  });
+});
+
+/**
+ * Sharing, and the fallback that used to happen silently.
+ *
+ * The snapshot fallback is deliberate — a shareable link beats an error — but
+ * it swaps a live link for a ~2,000-character frozen one, and it used to say so
+ * only in a chip that reverted after 2.5 seconds. That is the "silent early
+ * return" shape this codebase keeps being bitten by: the action appears to
+ * succeed and the collector keeps marking cards into a link that has already
+ * stopped listening. These tests pin the three things that fix it — the cause
+ * is named, the freeze is stated, and the retry is one tap away.
+ */
+describe("WebSetCardsScreen sharing", () => {
+  it("says the server could not be reached rather than quietly copying a snapshot", async () => {
+    const user = userEvent.setup();
+    const writeText = clipboardSpy();
+    connect();
+    serveShare(() => Promise.reject(new TypeError("connection refused")));
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(/server could not be reached/i);
+    // Not just "offline": what was copied is a different object, and saying so
+    // is the entire point of the notice.
+    expect(notice).toHaveTextContent(/frozen at what you own right now/i);
+
+    // The fallback itself is intact — a link was still produced and copied.
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#/showcase/"));
+    expect(await screen.findByRole("button", { name: "Snapshot link copied" })).toBeInTheDocument();
+  });
+
+  it("names a missing token instead of blaming the server", async () => {
+    // Two different failures with two different fixes: entering a token here,
+    // versus waiting for a machine that is switched off. One message for both
+    // would send the user to look at the wrong one.
+    const user = userEvent.setup();
+    clipboardSpy();
+    const fetchMock = vi.fn();
+    serveShare(() => {
+      fetchMock();
+      return Promise.reject(new TypeError("should never be asked"));
+    });
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(/not connected to the server/i);
+    expect(notice).toHaveTextContent(/Collection screen/);
+    // A device with no token cannot mint a link, so it must not pretend to try.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes a rejected token from an unreachable server", async () => {
+    // 401 stays broken until someone re-enters the token, exactly as sync
+    // treats it. Calling it "offline" would have the user power-cycling a
+    // server that is answering perfectly well.
+    const user = userEvent.setup();
+    clipboardSpy();
+    connect();
+    serveShare(() => Promise.resolve(new Response(null, { status: 401 })));
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(/rejected this device's sync token/i);
+    expect(notice).not.toHaveTextContent(/could not be reached/i);
+  });
+
+  it("says the server has sync switched off rather than calling it unreachable", async () => {
+    // 503 is `requireToken` with no COLLECTION_TOKEN set on the server. The
+    // machine is up and answering; the fix is in its .env, and no amount of
+    // retrying from the device will reach it.
+    const user = userEvent.setup();
+    clipboardSpy();
+    connect();
+    serveShare(() => Promise.resolve(new Response(null, { status: 503 })));
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(/sync switched off/i);
+    expect(notice).not.toHaveTextContent(/could not be reached/i);
+  });
+
+  it("gets a live link from the notice, one tap after the failure", async () => {
+    const user = userEvent.setup();
+    const writeText = clipboardSpy();
+    connect();
+    let up = false;
+    serveShare(() => (up ? json({ id: "abc123" }) : Promise.reject(new TypeError("connection refused"))));
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await screen.findByRole("alert");
+
+    up = true;
+    await user.click(screen.getByRole("button", { name: "Try live link" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#/live/abc123")));
+    // The notice clears on success, which is what makes the retry visibly
+    // resolve rather than leaving a warning standing over a working link.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Live link copied" })).toBeInTheDocument();
+  });
+
+  it("says nothing extra when the live link works", async () => {
+    const user = userEvent.setup();
+    const writeText = clipboardSpy();
+    connect();
+    serveShare(() => json({ id: "abc123" }));
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#/live/abc123")));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

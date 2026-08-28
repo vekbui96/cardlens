@@ -13,6 +13,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import { companionBase } from "../../services/companionApi.ts";
 import { fetchJson } from "../../services/http.ts";
+import { ProviderError } from "../../integrations/providers.ts";
 import { CardSheet } from "./CardSheet.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
 import { encodeShowcase } from "../../models/showcase.ts";
@@ -20,6 +21,59 @@ import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
 import styles from "./WebSetCardsScreen.module.css";
 
+/**
+ * Why a live link could not be minted.
+ *
+ * Four causes with four different fixes, so they are four values rather than
+ * one "it failed": entering a token here, re-entering a token here, setting one
+ * on the SERVER, and waiting for a machine that is switched off are not the same
+ * instruction, and a single message would send the user to look at the wrong one.
+ */
+type ShareFallback = "no-token" | "rejected" | "disabled" | "unreachable";
+
+/**
+ * What to say when Share had to fall back to a snapshot.
+ *
+ * Every line names the CAUSE and then what the link actually is, because the
+ * snapshot is not merely a lesser link — it is a different object. It carries
+ * ~2,000 characters of encoded ownership and freezes at the moment it was made,
+ * so a collector who thinks they sent a live link will keep marking cards and
+ * wonder why the recipient never sees them.
+ */
+const SHARE_FALLBACK_NOTICE: Record<ShareFallback, string> = {
+  "no-token":
+    "This device is not connected to the server, so Share made a snapshot: it is frozen at what you own right now and will never update. Connect the device on the Collection screen, then try again.",
+  rejected:
+    "The server rejected this device's sync token, so Share made a snapshot: it is frozen at what you own right now and will never update. Re-enter the token on the Collection screen, then try again.",
+  disabled:
+    "The server has sync switched off (no COLLECTION_TOKEN), so it cannot hold a live link. Share made a snapshot: it is frozen at what you own right now and will never update.",
+  unreachable:
+    "The server could not be reached, so Share made a snapshot: it is frozen at what you own right now and will never update.",
+};
+
+/**
+ * Name the failure from what the request threw.
+ *
+ * Read from `ProviderError.status`, not from the message. The status used to be
+ * recoverable only by regex over `"Request failed (401)"` — a format rather than
+ * an interface, which stops matching the day someone rewords the string and
+ * fails silently into "could not be reached".
+ *
+ * 401 and 503 are the two worth separating, and they are the same two sync
+ * separates for the same reason: both stay broken until someone acts, and both
+ * come from a server that is answering perfectly well. Calling either "could not
+ * be reached" would have the user power-cycling a machine that is up.
+ * `requireToken` in server/index.ts is where the 503 comes from — COLLECTION_TOKEN
+ * unset there, which no amount of retrying from the device will fix.
+ *
+ * No status at all means there was no answer: a timeout, or nothing listening.
+ * That is the one case "unreachable" genuinely describes.
+ */
+function shareFallbackFrom(err: unknown): ShareFallback {
+  if (err instanceof ProviderError && err.status === 401) return "rejected";
+  if (err instanceof ProviderError && err.status === 503) return "disabled";
+  return "unreachable";
+}
 /**
  * A set as a grid of card images, for a phone.
  *
@@ -60,9 +114,20 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
    */
   const [showExcluded, setShowExcluded] = useState(false);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const [shared, setShared] = useState(false);
-  /** False means the server was unreachable and a snapshot link was copied instead. */
-  const [sharedLive, setSharedLive] = useState(true);
+  /** The transient "it worked" on the button; which kind of link it was matters. */
+  const [copied, setCopied] = useState<"live" | "snapshot" | null>(null);
+  /**
+   * Set when the last Share degraded to a snapshot, and deliberately NOT
+   * cleared on a timer.
+   *
+   * The button's confirmation flashes for 2.5 seconds, which is fine for "it
+   * worked" and useless for "it worked, but not the way you asked". This is the
+   * standing notice, and it stays until a live link actually succeeds.
+   */
+  const [shareFallback, setShareFallback] = useState<ShareFallback | null>(null);
+  /** Minting can take the full 8s request timeout; a dead button for that long
+      reads as a broken one, and invites a second press. */
+  const [sharing, setSharing] = useState(false);
 
   /**
    * The switcher swaps sets under a screen that stays mounted, so anything
@@ -216,63 +281,99 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   };
 
   /**
-   * Build a link that carries this set's ownership and copy it.
-   *
-   * The collection is local and syncs behind a token, so a shareable page has
-   * to bring its data with it. Keyed by collector number rather than card id:
-   * the recipient's app resolves names, art and prices from the public catalog,
-   * and the link stays short enough to paste into a chat.
-   */
-  /**
-   * Ask the server for this set's live link and copy it.
+   * Ask the server for this set's live link.
    *
    * A live link rather than the old encoded snapshot: what you share stays
    * current as you mark cards, instead of freezing at the moment you sent it.
-   * The server reuses one link per set, so pressing this twice does not leave a
-   * second live link you have forgotten about and cannot see to revoke.
+   * The server reuses one link per set, so asking twice does not leave a second
+   * live link you have forgotten about and cannot see to revoke.
    *
-   * Falls back to the snapshot link when the server cannot be reached — a
-   * shareable link is better than an error, and the snapshot path needs
-   * nothing but the device itself.
+   * Returns the reason instead of throwing, because the caller does not treat
+   * this as an error — it degrades to a snapshot — and the reason is the part
+   * the user has to be told.
    */
-  const share = async () => {
-    const origin = `${window.location.origin}${window.location.pathname}`;
-    let path: string;
+  const mintLiveLink = async (): Promise<{ path: string } | { failure: ShareFallback }> => {
+    // Not a silent guard: the caller still produces a link AND says why it is
+    // not the live one. A bare `return` here is the exact shape — an action
+    // that does nothing and reports nothing — that has caused most of the
+    // "it just doesn't work" bugs in this codebase.
+    const token = repo.getSyncSettings().token;
+    if (!token) return { failure: "no-token" };
 
     try {
-      const token = repo.getSyncSettings().token;
-      if (!token) throw new Error("no token");
       const created = (await fetchJson(`${companionBase()}/share`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ setId, setName }),
       })) as { id?: unknown };
-      if (typeof created?.id !== "string") throw new Error("no id");
-      path = screenToPath({ name: "live", shareId: created.id });
-      setSharedLive(true);
-    } catch {
-      const owned = view.cards.flatMap((card) =>
-        ownedFinishes(card.id).map((finish) => ({ collectorNumber: card.collectorNumber, finish })),
-      );
-      path = screenToPath({
-        name: "showcase",
-        setId,
-        setName,
-        payload: encodeShowcase({ setId, owned }),
-      });
-      setSharedLive(false);
+      if (typeof created?.id !== "string") throw new Error("the server returned no share id");
+      return { path: screenToPath({ name: "live", shareId: created.id }) };
+    } catch (err) {
+      // Logged as well as shown: the notice says which of three things to fix,
+      // the console says what actually came back.
+      console.warn("[cardlens] live share link failed, falling back to a snapshot:", err);
+      return { failure: shareFallbackFrom(err) };
     }
+  };
 
-    const url = `${origin}#${path}`;
+  /**
+   * Build a link that carries this set's ownership inside it.
+   *
+   * The collection is local and syncs behind a token, so a page shared without
+   * the server has to bring its data with it. Keyed by collector number rather
+   * than card id: the recipient's app resolves names, art and prices from the
+   * public catalog, and the link stays short enough to paste into a chat —
+   * ~2,000 characters for a real set, which is the ceiling this path lives
+   * under and the reason it is the fallback rather than the default.
+   */
+  const snapshotPath = () => {
+    const owned = view.cards.flatMap((card) =>
+      ownedFinishes(card.id).map((finish) => ({ collectorNumber: card.collectorNumber, finish })),
+    );
+    return screenToPath({
+      name: "showcase",
+      setId,
+      setName,
+      payload: encodeShowcase({ setId, owned }),
+    });
+  };
+
+  /**
+   * Share this set, and say WHICH link was shared.
+   *
+   * The snapshot fallback stays — a shareable link beats an error, and the
+   * snapshot path needs nothing but the device itself. What does not stay is
+   * the silence around it: this used to swap a live link for a frozen one and
+   * flash "Snapshot link copied" for 2.5s, so the collector kept marking cards
+   * into a link that had already stopped listening. The failure now gets a
+   * standing notice naming the cause, and the notice carries the retry, so a
+   * live link is one tap from the moment it failed.
+   */
+  const share = async () => {
+    setSharing(true);
     try {
-      // The share sheet where there is one — on a phone this is the difference
-      // between sharing a set and copying a string into another app by hand.
-      if (navigator.share) await navigator.share({ title: `${setName} — CardLens`, url });
-      else await navigator.clipboard.writeText(url);
-      setShared(true);
-      setTimeout(() => setShared(false), 2500);
-    } catch {
-      // Cancelling the share sheet rejects, and that is not a failure.
+      const minted = await mintLiveLink();
+      const failure = "failure" in minted ? minted.failure : null;
+      const path = "failure" in minted ? snapshotPath() : minted.path;
+
+      // Set from the mint, not from the copy: the server was unreachable
+      // whether or not the share sheet was then cancelled, and clearing it on
+      // success is what makes a retry visibly resolve.
+      setShareFallback(failure);
+
+      const url = `${window.location.origin}${window.location.pathname}#${path}`;
+      try {
+        // The share sheet where there is one — on a phone this is the difference
+        // between sharing a set and copying a string into another app by hand.
+        if (navigator.share) await navigator.share({ title: `${setName} — CardLens`, url });
+        else await navigator.clipboard.writeText(url);
+        setCopied(failure ? "snapshot" : "live");
+        setTimeout(() => setCopied(null), 2500);
+      } catch {
+        // Cancelling the share sheet rejects, and that is not a failure.
+      }
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -335,11 +436,35 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           type="button"
           className={styles.chip}
           onClick={() => void share()}
-          disabled={view.cards.length === 0}
+          disabled={view.cards.length === 0 || sharing}
         >
-          {shared ? (sharedLive ? "Live link copied" : "Snapshot link copied") : "Share"}
+          {sharing
+            ? "Sharing…"
+            : copied === "live"
+              ? "Live link copied"
+              : copied === "snapshot"
+                ? "Snapshot link copied"
+                : "Share"}
         </button>
       </div>
+
+      {/*
+       * Outside the sticky filter bar on purpose: it is a message about what
+       * just happened, not a control, and pinning it to the top would either
+       * eat a row of the grid forever or scroll away from the button it
+       * explains. role="alert" so it is announced rather than merely drawn.
+       */}
+      {shareFallback ? (
+        <div className={styles.shareFallback} role="alert">
+          <p className={styles.shareFallbackText}>{SHARE_FALLBACK_NOTICE[shareFallback]}</p>
+          {/* The retry lives in the notice so the fix is where the problem is
+              stated. Offered even for a missing token: the token may have been
+              entered in another tab since, and re-checking costs nothing. */}
+          <button type="button" className={styles.chip} disabled={sharing} onClick={() => void share()}>
+            Try live link
+          </button>
+        </div>
+      ) : null}
 
       {view.isLoading ? <LoadingState label="Loading set…" /> : null}
       {/* retryFocused is a glasses affordance — there is no focus ring here. */}
