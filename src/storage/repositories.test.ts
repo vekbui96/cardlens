@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Repositories, MAX_RECENT_SEARCHES, MAX_FAVORITES } from "./repositories.ts";
 import { VersionedStore, createMemoryStorage, type StorageLike } from "./versioned.ts";
-import type { PokemonCardSummary } from "../models/cards.ts";
+import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
 import type { Binder } from "../models/binderLayout.ts";
 
 function repo() {
@@ -186,6 +186,139 @@ describe("collection", () => {
     const store = new VersionedStore(createMemoryStorage());
     store.write("collection", [{ nope: true }]);
     expect(new Repositories(store).getCollection()).toEqual([]);
+  });
+});
+
+describe("setting many printings at once", () => {
+  // Tombstones prune at 180 days, so every timestamp here is relative to now.
+  const NOW = Date.now();
+
+  it("fills a card and clears it again, in one write each way", () => {
+    const r = repo();
+    const entries = (owned: boolean) =>
+      ["normal", "reverse", "holo"].map((finish) => ({
+        cardId: "sv1-1",
+        finish: finish as CollectFinish,
+        setId: "sv1",
+        owned,
+      }));
+
+    r.setOwnedMany(entries(true));
+    expect(r.ownedFinishes("sv1-1").sort()).toEqual(["holo", "normal", "reverse"]);
+
+    r.setOwnedMany(entries(false));
+    expect(r.ownedFinishes("sv1-1")).toEqual([]);
+  });
+
+  it("removes by tombstone, never by dropping the row", () => {
+    // A missing row is indistinguishable from "never seen", so a deletion
+    // expressed that way resurrects on the next sync from a stale device.
+    const r = repo();
+    r.addOwned("sv1-1", "normal", "sv1");
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "normal", setId: "sv1", owned: false }]);
+
+    const row = r.getPrintings().find((p) => p.cardId === "sv1-1" && p.finish === "normal");
+    expect(row).toBeDefined();
+    expect(row?.deletedAt).toBeGreaterThan(0);
+  });
+
+  it("keeps the original row's fields on the tombstone", () => {
+    // The tombstone must be built from the row that exists, not synthesised. A
+    // fresh one loses the `at` the merge rule resolves ties against.
+    //
+    // Timestamps are relative to now on purpose: tombstones prune at 180 days,
+    // so a hardcoded epoch is deleted as ancient before any assertion sees it.
+    const markedAt = NOW - 1000;
+    const r = repo();
+    r.addOwned("sv1-1", "normal", "sv1", markedAt);
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "normal", owned: false }], NOW);
+
+    const row = r.getPrintings().find((p) => p.cardId === "sv1-1");
+    expect(row?.at).toBe(markedAt);
+    expect(row?.setId).toBe("sv1");
+    expect(row?.deletedAt).toBe(NOW);
+  });
+
+  it("does not tombstone a printing that was never owned", () => {
+    // Writing one anyway would resurrect-then-kill a row that never existed,
+    // and ship it to every other device.
+    const r = repo();
+    r.setOwnedMany([{ cardId: "sv1-9", finish: "normal", owned: false }]);
+    expect(r.getPrintings().filter((p) => p.cardId === "sv1-9")).toEqual([]);
+  });
+
+  it("canonicalises finishes on write, as the single-row path does", () => {
+    // Writing raw while reading canonical put "holofoil" and "holo" in the
+    // store as two rows for one printing, and both survived the merge.
+    const r = repo();
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "holofoil" as CollectFinish, setId: "sv1", owned: true }]);
+    expect(r.ownedFinishes("sv1-1")).toEqual(["holo"]);
+
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "holofoil" as CollectFinish, owned: false }]);
+    expect(r.ownedFinishes("sv1-1")).toEqual([]);
+  });
+
+  it("resurrects a tombstoned printing when it is marked again", () => {
+    const r = repo();
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "normal", setId: "sv1", owned: false }]);
+    r.addOwned("sv1-1", "normal", "sv1", NOW - 2000);
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "normal", setId: "sv1", owned: false }], NOW - 1000);
+    r.setOwnedMany([{ cardId: "sv1-1", finish: "normal", setId: "sv1", owned: true }], NOW);
+
+    expect(r.ownedFinishes("sv1-1")).toEqual(["normal"]);
+  });
+
+  it("agrees with toggleOwned in a loop, which is what it replaces", () => {
+    // The assertion that actually discriminates: the batch must be
+    // indistinguishable from the loop it replaces, tombstones included.
+    const looped = repo();
+    const batched = repo();
+    const finishes: CollectFinish[] = ["normal", "reverse"];
+
+    // Near now, so the tombstones both sides write survive pruning and the
+    // comparison is between two populated collections rather than two empty ones.
+    for (const finish of finishes) looped.addOwned("sv1-1", finish, "sv1", NOW - 1000);
+    batched.setOwnedMany(
+      finishes.map((finish) => ({ cardId: "sv1-1", finish, setId: "sv1", owned: true })),
+      NOW - 1000,
+    );
+    for (const finish of finishes) looped.removeOwned("sv1-1", finish, NOW);
+    batched.setOwnedMany(
+      finishes.map((finish) => ({ cardId: "sv1-1", finish, setId: "sv1", owned: false })),
+      NOW,
+    );
+
+    const norm = (rows: ReturnType<typeof looped.getPrintings>) =>
+      [...rows].sort((a, b) => `${a.cardId}|${a.finish}`.localeCompare(`${b.cardId}|${b.finish}`));
+    expect(norm(batched.getPrintings())).toEqual(norm(looped.getPrintings()));
+  });
+
+  it("writes once for a whole batch, not once per entry", () => {
+    // The point of the method. Counting writes is the only way to assert it:
+    // the resulting rows are identical either way, which is exactly why the
+    // slow version survived so long.
+    let writes = 0;
+    const backing = createMemoryStorage();
+    const counting: StorageLike = {
+      getItem: (k) => backing.getItem(k),
+      setItem: (k, v) => {
+        if (k.endsWith(":collection")) writes += 1;
+        backing.setItem(k, v);
+      },
+      removeItem: (k) => backing.removeItem(k),
+    };
+    const r = new Repositories(new VersionedStore(counting));
+
+    r.setOwnedMany(
+      (["normal", "reverse", "holo", "firstEdition"] as CollectFinish[]).map((finish) => ({
+        cardId: "sv1-1",
+        finish,
+        setId: "sv1",
+        owned: true,
+      })),
+    );
+
+    expect(writes).toBe(1);
   });
 });
 

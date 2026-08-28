@@ -428,6 +428,67 @@ export class Repositories {
     return this.getCollection();
   }
 
+  /**
+   * Set many printings owned or not owned in ONE merge and ONE write.
+   *
+   * The symmetric partner to addManyOwned, which can only add. The triple-pinch
+   * bulk mark needs both directions — it fills a card, or clears it when it was
+   * already complete — and was calling toggleOwned once per printing, so a
+   * four-printing card did four full read-merge-prune-serialise-write passes
+   * over the entire collection.
+   *
+   * Measured in the browser on the real collection: one pass is 0.48ms at 973
+   * rows, so today this is invisible. At the 20,000-row cap the storage layer
+   * allows it is 13ms a pass, and a four-printing burst is **52ms** — on a
+   * laptop, for the one gesture that exists to make bulk marking fast, on a
+   * device far slower than this one. That is the trade this fixes; it is not
+   * worth reaching for at a thousand rows.
+   *
+   * Semantics are unchanged, deliberately. Same canonicalisation on write, same
+   * OR-Set merge, and a removal is still a tombstone built from the row that
+   * exists rather than a fresh one — a synthesised tombstone would lose the
+   * original `at`, `setId` and `game` that the merge rule resolves against.
+   * Only the number of times the collection is rewritten changes.
+   */
+  setOwnedMany(
+    entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[],
+    now = Date.now(),
+  ): OwnedCard[] {
+    if (entries.length === 0) return this.getCollection();
+    const game = this.game;
+    // Read the live rows ONCE. removeOwned re-derives this per call, which is
+    // most of what made the loop quadratic.
+    const liveByKey = new Map(
+      livePrintings(this.ownRows()).map((r) => [`${r.cardId}|${r.finish}`, r] as const),
+    );
+
+    const rows: OwnedPrinting[] = [];
+    for (const entry of entries) {
+      const finish = canonicalFinish(entry.finish);
+      if (entry.owned) {
+        rows.push({
+          cardId: entry.cardId,
+          setId: entry.setId ?? setIdFromCardId(entry.cardId),
+          finish,
+          // Re-marking clears any tombstone by writing a newer `at`, which is
+          // how the merge rule expects a resurrection to be expressed.
+          at: now,
+          ...(game === DEFAULT_GAME ? {} : { game }),
+        });
+        continue;
+      }
+      // Nothing live to tombstone means it is not owned, which is the state
+      // being asked for — writing a tombstone anyway would resurrect-then-kill
+      // a row that never existed.
+      const existing = liveByKey.get(`${entry.cardId}|${finish}`);
+      if (existing) rows.push({ ...existing, deletedAt: now });
+    }
+
+    if (rows.length === 0) return this.getCollection();
+    this.writePrintings(mergePrintings(this.getPrintings(), rows));
+    return this.getCollection();
+  }
+
   /** Removes one finish, or every finish of the card when `finish` is omitted. */
   removeOwned(cardId: string, rawFinish?: CollectFinish, now = Date.now()): OwnedCard[] {
     const finish = rawFinish === undefined ? undefined : canonicalFinish(rawFinish);

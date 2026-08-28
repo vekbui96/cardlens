@@ -38,6 +38,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   const {
     ownedFinishes,
     toggleOwned,
+    setOwnedMany,
     excludedFinishes,
     toggleExcluded,
     ownedCountsBySet,
@@ -393,10 +394,19 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           excluded={excludedFinishes(openCard.id)}
           onToggleExcluded={(finish: CollectFinish) => toggleExcluded(openCard.id, finish, setId)}
           onRemoveAll={() => {
-            // Toggle each held printing off rather than deleting rows: the
-            // collection is an OR-Set, so a removal must be a tombstone or a
-            // stale device resurrects it on the next sync.
-            for (const finish of ownedFinishes(openCard.id)) toggleOwned(openCard.id, finish, setId);
+            // Tombstones, not deleted rows: the collection is an OR-Set, so a
+            // removal expressed as a missing row is indistinguishable from
+            // "never seen" and a stale device resurrects it on the next sync.
+            // One write for the card -- this looped toggleOwned, which rewrote
+            // the whole collection once per printing held.
+            setOwnedMany(
+              ownedFinishes(openCard.id).map((finish) => ({
+                cardId: openCard.id,
+                finish,
+                setId,
+                owned: false,
+              })),
+            );
             setOpenCardId(null);
           }}
           storageDegraded={storageDegraded}

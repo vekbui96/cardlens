@@ -60,15 +60,35 @@ Set cards hold 6h; a released set's card list never changes. Printings hold 30 d
 
 ## Frontend
 
-### 5. Every mark rewrites the entire collection
+### 5. Every mark rewrites the entire collection — **done for the bulk paths**
 
 `addOwned` → `getPrintings()` → parse all rows → `mergePrintings` → `JSON.stringify` the lot → `localStorage.setItem`. That is O(n) per toggle on the main thread.
 
 Worse, `markWholeCard` calls `toggleOwned` once per printing, so a triple-pinch on a 4-printing card does four full read-merge-write cycles, each re-rendering every subscriber.
 
-**Fix:** a batch mutation that applies many changes in one read-merge-write, plus debounced persistence (write to memory immediately, flush to `localStorage` on idle). Keep the OR-Set semantics exactly as they are — this is about how often the write happens, not what it means.
+**Fixed by** `Repositories.setOwnedMany` — the symmetric partner to
+`addManyOwned`, which could only add. The triple-pinch bulk mark and the web
+"remove all printings" action both looped `toggleOwned`, so a four-printing card
+did four full read-merge-prune-serialise-write passes over the whole collection.
+OR-Set semantics are untouched: same canonicalisation on write, same merge, and
+a removal is still a tombstone built from the row that exists.
 
-**Effect:** the only item here that will be _felt_ on a large collection. Worth doing before the collection grows past a few thousand rows.
+**Measured, in the browser, before deciding** — and it is worth writing down that
+the estimate above was wrong about the urgency:
+
+| Collection                                      | One write | Four-printing burst |
+| ----------------------------------------------- | --------- | ------------------- |
+| 973 rows (the real one, today)                  | 0.48ms    | 1.92ms              |
+| 5,000 rows                                      | 2.66ms    | 10.6ms              |
+| 20,000 rows (the cap `MAX_COLLECTION` enforces) | 13ms      | **52ms**            |
+
+So this was never going to be felt at today's size, and would have been badly
+felt at the cap — on a device slower than the laptop those numbers came from,
+on the one gesture whose whole purpose is speed.
+
+**Still open:** the single-mark path (`toggleOwned`) is unchanged, and debounced
+persistence is not built. Neither is worth it yet at 0.48ms a write; the batch
+paths were, because they multiply it.
 
 ### 6. Long lists render every row
 
@@ -76,11 +96,15 @@ Ascended Heroes is 295 cards, each with an image and badges. All of them mount.
 
 **Fix:** windowing. On the glasses only ~5 rows are visible, so this is a large saving; do it there first.
 
-### 7. Images are unoptimised
+### 7. Images are unoptimised — **done, and this entry was stale**
 
-Thumbnails load at full size with no `loading="lazy"`, no `decoding="async"`, no width/height hints, so the browser also has no layout box until each lands.
+`CardImage` already sets `loading="lazy"` and `decoding="async"`, and requests a
+width-constrained WebP from the image CDN (120px thumb, 320px large) with a
+fallback chain to the original URL. The wrapper carries the layout box in CSS,
+so there is no shift to fix either.
 
-**Fix:** all three attributes. Cheap, and the biggest byte saving available on a tethered connection.
+Checked before starting work on it, which is the only reason it did not get
+"fixed" twice.
 
 ### 8. Provider recomputes on every collection change
 
@@ -101,11 +125,17 @@ Schemas validate pokemontcg.io responses client-side, but the proxy now sits in 
 ## Order
 
 1. ~~**Item 1**~~ — done; a set view is one request, not three
-2. **Item 5** — the only user-visible slowdown coming
-3. **Item 7** — cheap, helps the tethered device most
-4. **Item 2** — removes upstream dependence for the common path
-5. **Item 6** — needed once sets of 300 cards are routine
+2. ~~**Item 5**~~ — done for the bulk paths; single marks measured too cheap to bother
+3. ~~**Item 7**~~ — was already done; the entry was stale
+4. ~~**Item 2**~~ — done for prices (`server/catalogPrices.ts`, 12h disk cache).
+   Still open for `/api/catalog/sets` and single-card lookups, which remain on
+   the 60-second memory cache.
+5. **Item 6** — needed once sets of 300 cards are routine. The next real one.
 6. Items 3, 4, 8, 9 as cleanup
+
+**Read this list sceptically.** Three of its six entries turned out to be done
+or mis-ranked when measured. `.claude/skills/optimizing-cardlens/SKILL.md` has
+the procedure for checking before building.
 
 ## What NOT to do
 

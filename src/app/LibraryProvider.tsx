@@ -82,6 +82,15 @@ interface LibraryValue {
   addOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
   /** Mark a whole batch in one write — see Repositories.addManyOwned. */
   addManyOwned: (entries: { cardId: string; finish?: CollectFinish; setId?: string }[]) => void;
+  /**
+   * Set a batch of printings owned or not owned in one write.
+   *
+   * The bulk mark needs both directions, so addManyOwned cannot serve it — see
+   * Repositories.setOwnedMany for why the loop it replaces mattered.
+   */
+  setOwnedMany: (
+    entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[],
+  ) => void;
   /** Distinct cards per set. */
   ownedCountsBySet: Record<string, number>;
   /** Printings per set — the master-set numerator. */
@@ -201,6 +210,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const addManyOwned = useCallback(
     (entries: { cardId: string; finish?: CollectFinish; setId?: string }[]) => {
       setCollection(repo.addManyOwned(entries));
+      setStorageDegraded(repo.storageDegraded);
+    },
+    [repo],
+  );
+
+  const setOwnedMany = useCallback(
+    (entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[]) => {
+      setCollection(repo.setOwnedMany(entries));
       setStorageDegraded(repo.storageDegraded);
     },
     [repo],
@@ -425,6 +442,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       toggleExcluded,
       addOwned,
       addManyOwned,
+      setOwnedMany,
       ownedCountsBySet,
       ownedFinishCountsBySet,
       totalFinishesOwned,
@@ -458,6 +476,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       toggleExcluded,
       addOwned,
       addManyOwned,
+      setOwnedMany,
       ownedCountsBySet,
       ownedFinishCountsBySet,
       totalFinishesOwned,
