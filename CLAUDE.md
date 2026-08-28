@@ -326,14 +326,14 @@ Sync failure is a status line, never a toast: the local write already succeeded.
 - **e2e runs on in-memory mocks** (`VITE_USE_MOCKS: "true"` in `playwright.config.ts`). `page.route` interception does nothing for catalog data, so network-failure behaviour cannot be tested there — use a component test with a provider you control.
 - **A hanging request is not an aborted one.** An abort settles the query and lets error/empty states through; a hang pins `isLoading` forever. The Collection screen bug (permanent "Loading sets…" on the glasses) only reproduces with a promise that never resolves.
 - **Verify a regression test actually fails without the fix.** Two attempts at the above passed against the bug before one reproduced it.
+- **`e2e/bulk-mark.spec.ts` races a real 1200ms window, and local parallelism starves it.** The triple-pinch is three `press()` calls, each a CDP round-trip, that must all land inside the burst window the product genuinely enforces. Measured 2026-08-28: **4/4 pass at `--workers=1`, roughly 3 failures in 5 full-suite runs at the default worker count.** The product is correct in both cases — the harness simply loses the race. CI was always covered (`workers: 1`, `retries: 2`); the block now carries `test.describe.configure({ retries: 2 })` so a local full run stops crying wolf. **Do not "fix" it by dispatching synthetic `KeyboardEvent`s in the page** — they never reach `KeyboardBackedInputAdapter`, so the test passes having exercised nothing. Tried, measured as consistently failing, reverted.
 - Tombstone tests need plausible epoch timestamps — `deletedAt: 300` is 1970 and gets pruned as ancient before any assertion sees it.
 
 ## Server operations
 
 - Windows services via NSSM: `solid-website-api` (:8080), `cardlens` (:8787),
   `recognition` (:8200, **loopback only**, auto-start). The recogniser is Python
-  in `D:\services
-ecognition\.venv`; install/reinstall with
+  in `D:\services\recognition\.venv`; install/reinstall with
   `06-install-recognition.ps1`. Its index is read from the cardlens checkout
   (`RECOGNITION_INDEX_DIR`), so a card-index rebuild ships with a cardlens deploy.
 - **Tailscale Funnel only permits 443, 8443 and 10000**, and 443/8443 are spent.
@@ -345,9 +345,26 @@ ecognition\.venv`; install/reinstall with
   not a rejected token. Both sides run the same hash over the same index file —
   the Python one is a line-by-line port with a parity test — so the answers are
   identical today. The server exists on this path so it can be given a bigger
-  index, OCR, or card detection **without reshipping the Pages bundle**; 1,730
-  of 20,205 cards are unresolvable by artwork alone and that is the whole gap.
-  - The fallback is not optional. SERVER-PC has been found powered off twice,
+  index, better hashing, or card detection **without reshipping the Pages
+  bundle**; 1,730 of 20,205 cards (8.6%) come back AMBIGUOUS and that is the gap.
+  - **OCR is NOT in that list, and believing it is costs a wasted week.**
+    `recogniseRemote` uploads the same **245x342** canvas the hash was taken
+    from — deliberately, so the server hashes exactly what the device would.
+    A collector number is ~2.5% of card height: **~8px** at that size, below
+    every OCR engine's floor, against **~31px** in the 886x1237 the guide crop
+    actually holds. The server can be given the OCR logic; it can never be given
+    the pixels. Reading the number needs a second, native-resolution crop sent
+    from the client — a Pages deploy, unavoidably. Measured 2026-08-28.
+  - **Only 652 of the 1,730 are exact hash ties.** The other 1,078 sit 2-7 bits
+    from their nearest neighbour, so "no better hash can touch them" is false
+    for 62% of the gap. The hash is 64-bit and greyscale only (`phash.ts`
+    Rec. 601 luma). Measure what a chroma channel or 128 bits does to those 1,078
+    BEFORE scoping OCR — it needs no client change, no dependency, and adds no
+    false-accept surface. If it works, OCR's target shrinks to 3.2%.
+  - A perfect OCR would take auto-accept from 91.4% to **99.6%**: the collector
+    number alone separates 1,639 of the 1,730 (94.7%). Of the 91 that survive,
+    73 fall to the printed denominator and **18 are irreducible** — Gym Heroes
+    vs Gym Challenge basic Energy share art, number and set total alike. - The fallback is not optional. SERVER-PC has been found powered off twice,
     and every capture records which recogniser answered so a silent failover
     cannot be mistaken for the server working.
   - Captures go as **PNG**, not JPEG: 245×342 is small either way, and lossless

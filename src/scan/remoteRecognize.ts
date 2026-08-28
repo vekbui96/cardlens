@@ -8,9 +8,17 @@ import { apiBaseUrl } from "../services/sync/http.ts";
  * against the same index file, so today this answers identically to
  * `identify()` — the parity test in that service exists to keep it that way.
  * What it buys is a recogniser that can be **upgraded without reshipping the
- * app**: a larger index, OCR disambiguation for the 82 cards artwork can never
- * separate, card detection. None of that fits in a 13KB static asset.
+ * app**: a larger index, better hashing, card detection. None of that fits in a
+ * 13KB static asset.
  *
+ * **OCR is the exception, and the exception is structural.** `recogniseRemote`
+ * uploads the SAME 245x342 canvas the hash was taken from, deliberately, so the
+ * server hashes exactly what the device would have. A collector number is about
+ * 2.5% of card height — roughly 8px at that size, below every OCR engine's
+ * floor, and about 31px in the 886x1237 the guide crop actually holds. So the
+ * server can be given the OCR *logic* alone, but never the *pixels*: reading
+ * the number requires the client to send a second, native-resolution crop, and
+ * that is a Pages deploy. Measured 2026-08-28; do not scope OCR as server-only. *
  * What it costs is a round trip and a dependency on a machine that has been
  * found powered off twice. So this is never the only path — the caller keeps
  * the on-device index loaded and falls back to it, which is why the errors

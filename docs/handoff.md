@@ -6,12 +6,22 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
-## Most recent work — the trade binder (2026-08-28)
+## Most recent work — the trade binder and 4-pocket (2026-08-28)
 
-**Committed and tested, NOT yet deployed.** `server/` changed, so both targets
-need it — see `docs/runbook.md`. No new npm dependency, so no `npm.cmd install`
-step; no `.env` change either.
+**Shipped as `8f82cbe`, both targets, verified live.** Pages serves a bundle
+containing `4-pocket` and the lazy `TradeShareScreen` chunk; the server answers
+`POST /api/share/binder` with 401 rather than 404, so the route exists rather
+than hitting a catch-all. No new npm dependency and no `.env` change.
 
+Note the commit message names the trade binder and 4-pocket but the commit also
+carries the **binder value on the list** feature and two extractions
+(`marketPrice.ts`, `binderValue.ts`). History was left alone rather than
+rewritten on a pushed `main`.
+
+**The server step mattered more than usual here.** Until it updated, its
+`parseBinder` rejected `format: "4"` — so a 4-pocket binder would have synced up
+and been silently dropped. Frontend-newer-than-server is normally survivable in
+this app; it is NOT survivable for a new enum value the server has to accept.
 A binder can now be offered for trade: copies and condition per pocket, a total
 priced per copy, and a public revocable link. `CLAUDE.md` holds the durable
 rules; the state of play is:
@@ -243,22 +253,30 @@ directions:
 ## Open, in the order I would do them
 
 1. ~~**Binder sync.**~~ **Done, but NOT yet deployed** — see the section above.
-2. **The silent snapshot fallback.** When the server is unreachable, Share quietly
-   encodes the whole collection into a ~2,000-character URL and the button says
-   "Snapshot link copied", which is easy to miss. It should say the server could
-   not be reached and keep the live option one tap away.
-3. **The IN_STOCK false positive.** redsky reports `['DISCONTINUED','IN_STOCK',
+2. ~~**The silent snapshot fallback.**~~ **Done.** Share now names WHICH of four
+   things went wrong — no token on this device, a rejected token, sync switched
+   off at the server, or the server unreachable — and says the link it made is
+   frozen and will never update. The notice stands until a live link actually
+   succeeds (the 2.5s chip flash was the bug) and carries a "Try live link"
+   button, so the fix is one tap from where the problem is stated. The snapshot
+   fallback itself is unchanged: a link is still always produced.
+   - `fetchJson` flattens every status into `ProviderError("Request failed
+(401)", "network")`, so 401/503 are recovered by probing the message — the
+     same thing `services/tradeShares.ts` does for its 409. The clean fix is a
+     `status` field on `ProviderError`, or moving this call onto `syncRequest`,
+     which already maps those statuses to named errors. Worth doing next time
+     either file is open.3. **The IN_STOCK false positive.** redsky reports `['DISCONTINUED','IN_STOCK',
 'OUT_OF_STOCK','UNAVAILABLE']` for TCIN 93565639 and `check_target` calls that
-   IN_STOCK because one entry says so — while the product page has Pickup, Delivery
-   and Shipping all unavailable. It has read "in stock" for weeks. Requiring a
-   shipping-capable fulfilment would fix it.
-4. **Auto-buy.** Fully specced in `docs/superpowers/plans/2026-06-30-autobuy.md`
+     IN_STOCK because one entry says so — while the product page has Pickup, Delivery
+     and Shipping all unavailable. It has read "in stock" for weeks. Requiring a
+     shipping-capable fulfilment would fix it.
+3. **Auto-buy.** Fully specced in `docs/superpowers/plans/2026-06-30-autobuy.md`
    (target-stock-checker repo). Blocked by a permission guardrail mid-session, and
    deliberately not worked around. **Before anything places an order,
    `ORDER_TOTAL_SEL` must be verified against a real order-review page** —
    `_parse_price` takes the FIRST dollar amount, so a selector whose text starts
    with a subtotal means a $200 order passes a $100 cap.
-5. **RDP on SERVER-PC.** Registry, service and firewall are set; the listener never
+4. **RDP on SERVER-PC.** Registry, service and firewall are set; the listener never
    came up because `TermService` cannot restart in place. A reboot should finish it.
 
 ## Traps found the hard way this session
