@@ -226,10 +226,68 @@ watermark past binder edits that were never sent.
 Binder ids must be unique across DEVICES, not just one — they are the key the
 merge converges on.
 
+### Binder formats are gated in THREE places, and only one can lose data
+
+`BINDER_SPECS` / `BINDER_FORMATS` / `isBinderFormat` in `models/binderLayout.ts`
+are the source. The gates are `models/binderParse.ts` (what may be stored),
+`isBinder` in `storage/repositories.ts` (what may be READ back), and the format
+pickers. **Never spell the formats out at a gate** — use `isBinderFormat`.
+
+The read gate is the dangerous one. It listed `"9" || "12"` inline, so adding
+4-pocket produced a binder that saved and then vanished on the very next read:
+created, gone, nothing said. Every unit test passed, because none of them went
+through a storage round trip. `repositories.test.ts` now round-trips every
+format in `BINDER_FORMATS`.
+
+**4-pocket has no facing pages** (`hasFacingPages`). Two 2-column pages abreast
+read as one 4-across grid, which is exactly what a 12-pocket page looks like —
+the formats would be indistinguishable at a glance. Screens call `pageGroups`,
+never `toSpreads` directly; `toSpreads` still owns the off-by-one pairing and is
+tested on its own.
+
+### A trade binder is a flag on a binder, not a second kind of object
+
+`forTrade` on the binder; `quantity` and `condition` on a card slot. Collectors
+build a trade binder exactly the way they build any other, and a set binder
+becomes a trade binder the afternoon they decide to sell it — two types would
+mean two screens, two sync paths and two merge rules for one thing. The flag
+changes what the binder AFFORDS, never what it can hold.
+
+- **Absent means one copy, and unstated condition.** Neither is written when it
+  holds the default: a quantity of 1 is stored as no quantity at all, and
+  `forTrade: false` as no flag. Every binder that predates trading has neither, and re-writing them to say "1" would stamp `updatedAt` on all of them and push the
+  lot through sync to record nothing. Worse, two ways to spell the same value is
+  how last-write-wins starts ping-ponging between devices that agree.
+  `slotQuantity` is the single reader.
+- **Unstated condition is NOT near mint.** It is a real answer and has to stay
+  reachable, which is why pressing a grade it already has clears it.
+- **Condition never changes a price.** The oracles publish one market price per
+  printing and say nothing about what condition it assumes, so any multiplier
+  ("LP is 85% of NM") would be a number this app invented and then printed
+  beside real ones. It is shown next to the price and left to the traders.
+- **Copies multiply the total; pockets are what get counted as priced.** A trade
+  binder is the first thing here where "how many cards" and "how many pockets"
+  diverge, and reporting "23 of 24 priced" over a total that summed forty cards
+  would be a quiet lie about what was measured. `countBinder` returns both.
+- **Validation is shared, like the merge rule.** `src/models/binderParse.ts`
+  decides both what the server may STORE and what the trade page may DRAW. Two
+  validators that drift fail the same way two merge rules do: the ends disagree
+  about what a binder is and a pocket vanishes at one of them. The server's
+  `binderStore.ts` re-exports it, so callers and tests see no change.
+
+Trade links reuse the share store — same id space, same 16 random bytes, same
+revocation, same 404 for revoked and never-existed alike. `Share` is a tagged
+union and a row with **no `kind` is a set share**, because there is a live
+`shares.json` on the server full of them.
+
+`POST /api/share/binder` **refuses with 409 `binder_not_synced`** when the
+server holds no copy of the binder. Minting a link that 404s for whoever it was
+sent to is worse than refusing, and "share a binder you just made" is the normal
+first-time case.
+
 ### Custom binder art lives on the server, never in the binder
 
-A binder is pushed **whole** on every edit, so an inline data URI would go
-through the sync endpoint on every pocket move and into the localStorage budget
+A binder is pushed **whole** on every edit, so an inline data URI would gothrough the sync endpoint on every pocket move and into the localStorage budget
 this app has already exhausted once. So: the client resizes to ≤900px JPEG,
 `POST /api/binders/images` stores the bytes, and the slot carries a 20-byte
 `imageId`.

@@ -1,12 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import {
-  buildPrintingIndex,
-  printingEur,
-  printingPrice,
-  type SetPrintingIndex,
-} from "../models/printingIndex.ts";
-import { catalogPrice } from "../models/catalogPrice.ts";
+import { buildPrintingIndex, printingEur, type SetPrintingIndex } from "../models/printingIndex.ts";
+import { collectorNumberFromCardId, marketPrice } from "../models/marketPrice.ts";
 import { aggregateMovement, type Movement } from "../models/movement.ts";
 import { valueCollection, type CollectionValue, type ValuableRow } from "../models/value.ts";
 import { printingsCache } from "../storage/caches.ts";
@@ -105,24 +100,25 @@ export function useCollectionValue(
       prices.set(setId, buildPrintingIndex(q.data?.byNumber));
     });
 
-    // Collector number is the tail of the card id — the same join the rest of
-    // the app makes, because TCGdex keys printings by number, not by card id.
-    const numberOf = (cardId: string) => cardId.slice(cardId.indexOf("-") + 1);
-
-    // Same order of preference as the owned-cards list: TCGdex, then the
-    // catalog. If these two ever disagree the Home total and the list of the
-    // very printings behind it would stop adding up.
-    const value = valueCollection(
-      rows,
-      (row) =>
-        printingPrice(prices.get(row.setId), numberOf(row.cardId), row.finish) ??
-        catalogPrice(catalogPrices, row.cardId, row.finish),
+    // TCGdex, then the catalog — the one rule, shared with the owned-cards
+    // list rather than restated here. See models/marketPrice.ts for why: if
+    // the two ever disagreed, Home's total and the list of the very printings
+    // behind it would stop adding up.
+    const value = valueCollection(rows, (row) =>
+      marketPrice(
+        prices.get(row.setId),
+        catalogPrices,
+        row.cardId,
+        collectorNumberFromCardId(row.cardId),
+        row.finish,
+      ),
     );
 
     const movement = aggregateMovement(
-      rows.map((row) => printingEur(prices.get(row.setId), numberOf(row.cardId), row.finish)),
+      rows.map((row) =>
+        printingEur(prices.get(row.setId), collectorNumberFromCardId(row.cardId), row.finish),
+      ),
     );
-
     return { ...value, pending, failed, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
   }, [rows, setIds, catalogPrices, queries.map((q) => q.dataUpdatedAt).join(",")]);

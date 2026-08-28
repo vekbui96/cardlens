@@ -31,6 +31,8 @@ export function screenToPath(screen: Screen): string {
     // drift from what is actually being shared.
     case "live":
       return `/live/${encodeURIComponent(screen.shareId)}`;
+    case "trade":
+      return `/trade/${encodeURIComponent(screen.shareId)}`;
     case "binder":
       return `/binder/${encodeURIComponent(screen.binderId)}`;
     default:
@@ -89,6 +91,9 @@ export function pathToScreen(path: string): Screen | null {
   }
   if (head === "live" && rest.length >= 1) {
     return { name: "live", shareId: rest[0] };
+  }
+  if (head === "trade" && rest.length >= 1) {
+    return { name: "trade", shareId: rest[0] };
   }
   return null;
 }

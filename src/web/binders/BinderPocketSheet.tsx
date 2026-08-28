@@ -7,7 +7,15 @@ import { finishLabel } from "../../models/finishes.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { setIdFromCardId } from "../../utils/cardId.ts";
 import { imageSlotSrc } from "../../services/sync/binderImages.ts";
-import type { BinderSlot, CardSlot } from "../../models/binderLayout.ts";
+import {
+  conditionLabel,
+  slotQuantity,
+  TRADE_CONDITIONS,
+  withCondition,
+  withQuantity,
+  type BinderSlot,
+  type CardSlot,
+} from "../../models/binderLayout.ts";
 import styles from "./WebBinderScreen.module.css";
 
 /**
@@ -56,18 +64,32 @@ export function BinderPocketSheet({
   slot,
   pocketLabel,
   onPlace,
+  onUpdate,
   onCancel,
   onClear,
   priceFor,
+  forTrade,
 }: {
   chosen: PokemonCardSummary | null;
   slot: BinderSlot | null;
   pocketLabel: string;
   onPlace: (slot: CardSlot) => void;
+  /**
+   * Rewrite what is already in the pocket, WITHOUT moving on to the next one.
+   *
+   * Separate from `onPlace` because placing is a step in a sequence — the
+   * selection advances so the binder can be filled card after card — and
+   * counting copies is an edit to the pocket you are looking at. Sharing one
+   * callback would make the second copy of a card jump the selection away from
+   * the pocket the user was still working on.
+   */
+  onUpdate: (slot: CardSlot) => void;
   onCancel: () => void;
   onClear: () => void;
   /** Market price for a pocket, for the full figure the badge has no room for. */
   priceFor: (slot: BinderSlot) => number | undefined;
+  /** Offer copies and condition. Only a trade binder has any use for them. */
+  forTrade: boolean;
 }) {
   const card = slot?.kind === "card" ? slot : null;
   const cardId = chosen?.id ?? card?.cardId ?? "";
@@ -199,6 +221,99 @@ export function BinderPocketSheet({
           Clear
         </button>
       </div>
+
+      {forTrade ? <TradeControls card={card} onUpdate={onUpdate} priceFor={priceFor} /> : null}
+    </div>
+  );
+}
+
+/**
+ * How many, and in what shape — the two things a trade is actually about.
+ *
+ * Only offered on a binder marked for trade. On any other binder a pocket holds
+ * one card because that is what a pocket is, and asking "how many?" about a set
+ * binder is a question with no meaning.
+ */
+function TradeControls({
+  card,
+  onUpdate,
+  priceFor,
+}: {
+  card: CardSlot;
+  onUpdate: (slot: CardSlot) => void;
+  priceFor: (slot: BinderSlot) => number | undefined;
+}) {
+  const copies = slotQuantity(card);
+  const unit = priceFor(card);
+
+  return (
+    <div className={styles.trade}>
+      <div className={styles.tradeRow}>
+        <span className={styles.tradeLabel} id="copies-label">
+          Copies
+        </span>
+        {/* A stepper, not a number field. A phone keyboard over a sheet pinned
+            to the bottom of the picker covers the thing being counted, and the
+            answer is almost always within a tap or two of one. */}
+        <div className={styles.stepper} role="group" aria-labelledby="copies-label">
+          <button
+            type="button"
+            className={styles.step}
+            aria-label="One fewer copy"
+            disabled={copies <= 1}
+            onClick={() => onUpdate(withQuantity(card, copies - 1))}
+          >
+            −
+          </button>
+          <span className={styles.count} aria-live="polite">
+            {copies}
+          </span>
+          <button
+            type="button"
+            className={styles.step}
+            aria-label="One more copy"
+            onClick={() => onUpdate(withQuantity(card, copies + 1))}
+          >
+            +
+          </button>
+        </div>
+        {/* What the stack is worth, which is the number the owner is deciding
+            against — the pocket badge shows the price of one. */}
+        {copies > 1 && unit !== undefined ? (
+          <span className={styles.tradeTotal}>{formatUsd(unit * copies)} total</span>
+        ) : null}
+      </div>
+
+      <div className={styles.tradeRow}>
+        <span className={styles.tradeLabel} id="condition-label">
+          Condition
+        </span>
+        <div className={styles.grades} role="group" aria-labelledby="condition-label">
+          {TRADE_CONDITIONS.map((grade) => {
+            const on = card.condition === grade;
+            return (
+              <button
+                key={grade}
+                type="button"
+                className={`${styles.grade} ${on ? styles.gradeOn : ""}`}
+                aria-pressed={on}
+                aria-label={conditionLabel(grade)}
+                // Pressing the grade a card already has clears it. Unstated is
+                // a real answer and has to be reachable again — it is not the
+                // same claim as "near mint".
+                onClick={() => onUpdate(withCondition(card, on ? null : grade))}
+              >
+                {grade}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className={styles.tradeNote}>
+        Condition is shown to whoever opens the link. It never changes the price — the market price is for the
+        card, and what a played copy is worth is yours to agree.
+      </p>
     </div>
   );
 }

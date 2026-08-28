@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -68,7 +68,51 @@ describe("ShareStore", () => {
 
   it("survives a restart", () => {
     const share = new ShareStore(file).createOrReuse("me5", "Pitch Black");
-    expect(new ShareStore(file).get(share.id)?.setId).toBe("me5");
+    const reloaded = new ShareStore(file).get(share.id);
+    expect(reloaded?.kind).toBe("set");
+    expect(reloaded?.kind === "set" && reloaded.setId).toBe("me5");
+  });
+  it("reuses one live link per binder, and keeps its name current", () => {
+    const store = new ShareStore(file);
+    const a = store.createOrReuseBinder("b1", "Trades");
+    const b = store.createOrReuseBinder("b1", "Trade binder");
+    expect(b.id).toBe(a.id);
+    expect(b.binderName).toBe("Trade binder");
+    expect(store.live()).toHaveLength(1);
+  });
+
+  it("keeps set and binder links in one id space without confusing them", () => {
+    // Both kinds share an id space, a revocation path and a 404. What they must
+    // never share is a lookup: asking for a set must not reuse a binder's link.
+    const store = new ShareStore(file);
+    const set = store.createOrReuse("me5", "Pitch Black");
+    const binder = store.createOrReuseBinder("me5", "A binder that happens to be called me5");
+    expect(binder.id).not.toBe(set.id);
+    expect(store.get(set.id)?.kind).toBe("set");
+    expect(store.get(binder.id)?.kind).toBe("binder");
+    expect(store.live()).toHaveLength(2);
+  });
+
+  it("reports a binder's live link, so the owner can see what is shared", () => {
+    const store = new ShareStore(file);
+    expect(store.liveForBinder("b1")).toBeNull();
+    const share = store.createOrReuseBinder("b1", "Trades");
+    expect(store.liveForBinder("b1")?.id).toBe(share.id);
+    store.revoke(share.id);
+    expect(store.liveForBinder("b1")).toBeNull();
+  });
+
+  it("reads a row written before binder shares existed as a set share", () => {
+    // There is a live shares.json on the server full of these. An untagged row
+    // could only ever have been a set, and must keep working.
+    writeFileSync(
+      file,
+      JSON.stringify([{ id: "legacy-id-0000000000", setId: "me5", setName: "Pitch Black", createdAt: 1 }]),
+      "utf8",
+    );
+    const share = new ShareStore(file).get("legacy-id-0000000000");
+    expect(share?.kind).toBe("set");
+    expect(share?.kind === "set" && share.setId).toBe("me5");
   });
 
   it("boots on a corrupt file rather than throwing", () => {

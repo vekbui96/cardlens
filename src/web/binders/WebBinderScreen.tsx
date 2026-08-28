@@ -11,6 +11,7 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import {
   addPage,
+  BINDER_FORMATS,
   canRemoveLastPage,
   countBinder,
   fillSequential,
@@ -19,9 +20,10 @@ import {
   preferredFinish,
   reformat,
   removeLastPage,
+  setShowValue,
   specFor,
-  toSpreads,
-  type BinderFormat,
+  hasFacingPages,
+  pageGroups,
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
@@ -29,6 +31,7 @@ import { formatUsd } from "../../utils/format.ts";
 import type { PokemonCardSummary } from "../../models/cards.ts";
 import { BinderSearchResults } from "./BinderSearchResults.tsx";
 import { BinderPocketSheet } from "./BinderPocketSheet.tsx";
+import { BinderTradeBar } from "./BinderTradeBar.tsx";
 import { resizeToDataUrl } from "../../utils/imageResize.ts";
 import { uploadBinderImage } from "../../services/sync/binderImages.ts";
 import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
@@ -151,6 +154,18 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   };
 
   /**
+   * Rewrite the selected pocket and STAY on it.
+   *
+   * Counting a second copy is an edit to the pocket in front of you, not the
+   * next step in filling the binder — so unlike `place` it does not advance the
+   * selection. Sharing one function would move the sheet off the card the user
+   * is still counting.
+   */
+  const update = (slot: BinderSlot) => {
+    if (!selected) return;
+    commit(placeSlot(binder, selected.page, selected.index, slot, Date.now()));
+  };
+  /**
    * Resize on the device, upload, then place the id.
    *
    * The order matters: the pocket is only filled once the server holds the
@@ -188,7 +203,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
     >
       <div className={styles.controls}>
         <div className={styles.formats} role="group" aria-label="Binder format">
-          {(["9", "12"] as BinderFormat[]).map((f) => (
+          {BINDER_FORMATS.map((f) => (
             <button
               key={f}
               type="button"
@@ -214,8 +229,22 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
         >
           Remove page
         </button>
+        {/* Off by default. Pricing a binder is a request per set it spans, and
+            the binders list asks for nothing otherwise — so this is opt-in on
+            the binders that represent money rather than on all of them. The
+            total is shown one screen up, where you are choosing between them. */}
+        <button
+          type="button"
+          className={`${styles.chip} ${binder.showValue ? styles.chipOn : ""}`}
+          aria-pressed={Boolean(binder.showValue)}
+          onClick={() => commit(setShowValue(binder, !binder.showValue, Date.now()))}
+        >
+          {binder.showValue ? "✓ Show value in list" : "Show value in list"}
+        </button>
       </div>
-
+      {/* Its own row above the card picker, because offering a binder is a
+          statement about the whole thing, not an edit to a pocket. */}
+      <BinderTradeBar binder={binder} onSave={commit} />
       <div className={styles.controls}>
         <label className={styles.setPick}>
           <span className={styles.setPickLabel}>Set</span>
@@ -276,17 +305,22 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           facing pairs. A half spread keeps its empty right side rather than
           centring the page — that gap is where the next page goes, and the
           binder should look like it is waiting for it. */}
-      {toSpreads(binder.pages.length).map((spread) => (
+      {pageGroups(binder.pages.length, binder.format).map((spread) => (
         <div
           key={spread[0]}
           className={styles.spread}
           data-single={spread.length === 1 || undefined}
+          // A format with no facing pages is one page per row, full width —
+          // not half a spread with an empty side waiting for a neighbour that
+          // is never coming. See hasFacingPages.
+          data-solo={!hasFacingPages(binder.format) || undefined}
           // Page 1 opens on the RIGHT, against the inside front cover — the
           // same reason a book's first page is a right-hand page. Every later
           // lone page is a trailing even one, which sits on the left with its
-          // facing side still to be added.
-          data-cover={spread[0] === 0 || undefined}
+          // facing side still to be added. Meaningless without facing pages.
+          data-cover={(hasFacingPages(binder.format) && spread[0] === 0) || undefined}
         >
+          {" "}
           {spread.map((i) => (
             <BinderPageView
               key={i}
@@ -295,6 +329,9 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               owns={owns}
               pageNumber={i + 1}
               priceFor={value.priceFor}
+              // The owner sees the same marks the recipient will, so what is
+              // laid out here is what gets sent — no separate preview to drift.
+              trade={Boolean(binder.forTrade)}
               selectedIndex={selected?.page === i ? selected.index : null}
               onSlotClick={(index) => {
                 setChosen(null);
@@ -343,7 +380,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               </button>
             ) : null}
           </form>
-
           {/* The whole row goes while a search is up. The select would label a
               list it is not the source of, and custom art has nothing to do
               with a name search — and on a phone this row costs a row of
@@ -391,13 +427,11 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               </label>
             </div>
           )}
-
           {imageError ? (
             <p className={styles.error} role="alert">
               {imageError}
             </p>
           ) : null}
-
           {search ? (
             /* Keyed on the query so a new search starts at the results again
                rather than on the printings of a card the user has moved on
@@ -448,7 +482,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               })}
             </ul>
           )}
-
           {/* Last in the picker, so "which printing" is asked where the thumb
               already is, under the list it was asked about — and so a filled
               pocket can be marked owned without finding the card in the
@@ -458,16 +491,25 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
             slot={selectedSlot}
             pocketLabel={`pocket ${selected.index + 1}`}
             onPlace={place}
+            onUpdate={update}
             onCancel={() => setChosen(null)}
             onClear={() => place(null)}
             priceFor={value.priceFor}
-          />
+            forTrade={Boolean(binder.forTrade)}
+          />{" "}
         </div>
       ) : null}
 
       <p className={styles.footnote}>
-        {counts.cards} card{counts.cards === 1 ? "" : "s"} across {binder.pages.length} page
-        {binder.pages.length === 1 ? "" : "s"} · {spec.label}
+        {/* On a trade binder the count that matters is COPIES — twelve pockets
+            can hold thirty cards, and thirty is what is being offered. */}
+        {binder.forTrade
+          ? `${counts.copies} card${counts.copies === 1 ? "" : "s"} in ${counts.cards} pocket${
+              counts.cards === 1 ? "" : "s"
+            }`
+          : `${counts.cards} card${counts.cards === 1 ? "" : "s"}`}{" "}
+        across {binder.pages.length} page
+        {binder.pages.length === 1 ? "" : "s"} · {spec.label}{" "}
         {/* The total is only ever "the part we know". Saying how many cards are
             unpriced alongside it is what keeps it from reading as the whole
             answer — stamps and promos price at nothing, and a binder of them

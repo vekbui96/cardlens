@@ -15,8 +15,7 @@ import type { CollectFinish } from "./cards.ts";
  */
 
 /** The Vault X formats, as pockets per page side. */
-export type BinderFormat = "9" | "12";
-
+export type BinderFormat = "4" | "9" | "12";
 export interface BinderSpec {
   format: BinderFormat;
   label: string;
@@ -28,14 +27,74 @@ export interface BinderSpec {
 /**
  * Columns × rows per page side.
  *
- * 9-pocket is 3×3. 12-pocket is 4×3 — four across, three down — which is worth
- * stating because a 12-pocket could equally be 3×4 and the difference decides
- * whether a page reads in rows of four or rows of three.
+ * 4-pocket is 2×2. 9-pocket is 3×3. 12-pocket is 4×3 — four across, three down —
+ * which is worth stating because a 12-pocket could equally be 3×4 and the
+ * difference decides whether a page reads in rows of four or rows of three.
  */
 export const BINDER_SPECS: Record<BinderFormat, BinderSpec> = {
+  "4": { format: "4", label: "4-pocket", cols: 2, rows: 2, pockets: 4 },
   "9": { format: "9", label: "9-pocket", cols: 3, rows: 3, pockets: 9 },
   "12": { format: "12", label: "12-pocket", cols: 4, rows: 3, pockets: 12 },
 };
+
+/** Every format, in the order the pickers offer them. */
+export const BINDER_FORMATS: readonly BinderFormat[] = ["4", "9", "12"];
+
+/** Narrows an untrusted value to a known format. The one gate on ingest. */
+export function isBinderFormat(value: unknown): value is BinderFormat {
+  return typeof value === "string" && (BINDER_FORMATS as readonly string[]).includes(value);
+}
+/**
+ * Whether this format is read as facing pages.
+ *
+ * 4-pocket is not, and that is a real difference rather than a preference. Its
+ * page is two columns wide, so two of them side by side read as one four-across
+ * grid — which is precisely what a 12-pocket page looks like, and the two would
+ * be indistinguishable at a glance. A 4-pocket binder also holds the big cards
+ * (jumbo promos, top-loaders), so halving the width to fit a facing page throws
+ * away the one thing the format is for.
+ */
+export function hasFacingPages(format: BinderFormat): boolean {
+  return format !== "4";
+}
+/**
+ * How a card is graded, in the vocabulary a trade is actually negotiated in.
+ *
+ * Recorded, and deliberately NEVER applied to a price. The oracles publish one
+ * market price per printing and say nothing about what condition it assumes, so
+ * any multiplier here — "LP is 85% of NM" — would be a number this app invented
+ * and then presented beside real ones. The condition is shown next to the price
+ * and the two are left to the people trading, which is where that judgement
+ * belongs anyway.
+ *
+ * Absent means unstated, which is not the same as near mint: a binder filled
+ * before this existed must not start claiming every card in it is NM.
+ */
+export type TradeCondition = "NM" | "LP" | "MP" | "HP" | "DMG";
+
+export const TRADE_CONDITIONS: readonly TradeCondition[] = ["NM", "LP", "MP", "HP", "DMG"];
+
+const CONDITION_LABELS: Record<TradeCondition, string> = {
+  NM: "Near mint",
+  LP: "Lightly played",
+  MP: "Moderately played",
+  HP: "Heavily played",
+  DMG: "Damaged",
+};
+
+export function conditionLabel(condition: TradeCondition): string {
+  return CONDITION_LABELS[condition] ?? condition;
+}
+
+export function isTradeCondition(value: unknown): value is TradeCondition {
+  return typeof value === "string" && (TRADE_CONDITIONS as readonly string[]).includes(value);
+}
+
+/**
+ * Bound on copies in one pocket. Generous against a real bulk pocket, absurd
+ * against abuse — the same rule the rest of the sync payload is sized by.
+ */
+export const MAX_SLOT_QUANTITY = 999;
 
 /** A card from the catalog, owned or not. */
 export interface CardSlot {
@@ -46,8 +105,19 @@ export interface CardSlot {
   name?: string;
   imageSmall?: string;
   collectorNumber?: string;
+  /**
+   * Copies of this printing behind the one pocket, for a binder held open to
+   * be traded from. Absent means one.
+   *
+   * Absent rather than defaulted to 1 on write, because every binder that
+   * already exists has no quantity at all and re-writing them to say "1" would
+   * touch `updatedAt` on all of them and push the lot through sync to record
+   * nothing. `slotQuantity` is the only reader.
+   */
+  quantity?: number;
+  /** Unstated when absent. See TradeCondition — it never changes a price. */
+  condition?: TradeCondition;
 }
-
 /** Anything that is not a catalog card — a photo, a divider, a proxy. */
 export interface ImageSlot {
   kind: "image";
@@ -80,8 +150,31 @@ export interface Binder {
   name: string;
   format: BinderFormat;
   pages: BinderPage[];
-  createdAt: number;
-  /** Last edit. The sync watermark and the last-write-wins key — see storage/binders.ts. */
+  /**
+   * This binder is what the owner will trade away, not what they are keeping.
+   *
+   * A flag on the binder rather than a separate kind of object, because the
+   * two are the same artefact: collectors build a trade binder in exactly the
+   * way they build any other, and a set binder becomes a trade binder the
+   * afternoon they decide to sell it. Making it a type would mean two screens,
+   * two sync paths and two merge rules for one thing.
+   *
+   * It changes what the binder AFFORDS — quantities, conditions, a shareable
+   * link priced per copy — never what it can hold.
+   */
+  forTrade?: boolean;
+  /**
+   * Show what this binder is worth on the binders list, one screen up.
+   *
+   * Off by default, and opt-in per binder rather than a global preference,
+   * because the cost is per binder and so is the interest. Pricing one binder
+   * means asking the printings oracle once for every SET it touches — the Riolu
+   * binder alone spans thirty — and the list screen currently asks for nothing
+   * at all. A collector wants the total on the two or three binders that
+   * represent money, not on the master-set binder they are still filling.
+   */
+  showValue?: boolean;
+  createdAt: number; /** Last edit. The sync watermark and the last-write-wins key — see storage/binders.ts. */
   updatedAt: number;
   /**
    * When it was deleted. Present means gone, not "never existed".
@@ -108,6 +201,59 @@ export function slotKey(slot: BinderSlot): string {
 }
 
 /**
+ * Copies behind a pocket. One unless the pocket says otherwise.
+ *
+ * The single reader of `quantity`, so "absent means one" is stated once. A
+ * fractional or negative count is treated as one rather than dropped: it can
+ * only arrive from a hand-edited file or a future client, and a pocket that
+ * silently values at zero is the failure this codebase keeps being bitten by.
+ */
+export function slotQuantity(slot: BinderSlot): number {
+  if (slot.kind !== "card") return 1;
+  const n = slot.quantity;
+  if (typeof n !== "number" || !Number.isFinite(n)) return 1;
+  return Math.min(MAX_SLOT_QUANTITY, Math.max(1, Math.floor(n)));
+}
+
+/**
+ * A pocket holding a different number of copies.
+ *
+ * One copy is written as no `quantity` at all rather than `quantity: 1`, so
+ * counting a pocket back down to one leaves the slot byte-identical to one that
+ * never carried a quantity. Two ways to say the same thing is how a merge rule
+ * starts producing spurious conflicts.
+ */
+export function withQuantity(slot: CardSlot, quantity: number): CardSlot {
+  const n = Math.min(MAX_SLOT_QUANTITY, Math.max(1, Math.floor(quantity)));
+  const { quantity: _dropped, ...rest } = slot;
+  return n === 1 ? rest : { ...rest, quantity: n };
+}
+
+/** A pocket graded, or ungraded again when passed null. */
+export function withCondition(slot: CardSlot, condition: TradeCondition | null): CardSlot {
+  const { condition: _dropped, ...rest } = slot;
+  return condition ? { ...rest, condition } : rest;
+}
+
+/** Turn trading on or off for a whole binder. */
+export function setForTrade(binder: Binder, forTrade: boolean, now: number): Binder {
+  if (Boolean(binder.forTrade) === forTrade) return binder;
+  const { forTrade: _dropped, ...rest } = binder;
+  return forTrade ? { ...rest, forTrade: true, updatedAt: now } : { ...rest, updatedAt: now };
+}
+
+/**
+ * Show or hide this binder's total on the list screen.
+ *
+ * Returns the binder UNCHANGED when the flag already holds that value, like
+ * setForTrade: saving pushes a binder through sync, and toggling to what it
+ * already says would manufacture an edit for every other device to pull.
+ */
+export function setShowValue(binder: Binder, showValue: boolean, now: number): Binder {
+  if (Boolean(binder.showValue) === showValue) return binder;
+  const { showValue: _dropped, ...rest } = binder;
+  return showValue ? { ...rest, showValue: true, updatedAt: now } : { ...rest, updatedAt: now };
+} /**
  * Put a slot at a position, growing the binder if the page does not exist yet.
  *
  * Pure: returns a new binder. Placing onto an occupied pocket REPLACES it,
@@ -182,6 +328,20 @@ export function toSpreads(pageCount: number): number[][] {
   return spreads;
 }
 
+/**
+ * How a binder's pages are grouped for display, given its format.
+ *
+ * The one call every screen should make. `toSpreads` answers the harder half —
+ * the off-by-one pairing that puts page 1 alone against the inside cover — and
+ * is kept separate because that is the part worth testing on its own; this
+ * decides whether pairing applies at all.
+ *
+ * A 4-pocket binder is read one page at a time. See hasFacingPages.
+ */
+export function pageGroups(pageCount: number, format: BinderFormat): number[][] {
+  if (hasFacingPages(format)) return toSpreads(pageCount);
+  return Array.from({ length: Math.max(0, pageCount) }, (_, i) => [i]);
+}
 /** Move a slot between pockets, including across pages. Swaps if the target is full. */
 export function moveSlot(
   binder: Binder,
@@ -276,21 +436,31 @@ export interface BinderCounts {
   pockets: number;
   cards: number;
   images: number;
+  /**
+   * Cards including duplicates, which is what a trade binder is counted in.
+   *
+   * Kept separate from `cards` rather than replacing it: "12 pockets" and "20
+   * cards" answer different questions — how big the binder is, and how much is
+   * in it — and a trade binder is the first thing here where they diverge.
+   */
+  copies: number;
 }
 
 export function countBinder(binder: Binder): BinderCounts {
   const spec = specFor(binder.format);
   let cards = 0;
   let images = 0;
+  let copies = 0;
   for (const page of binder.pages) {
     for (const slot of Object.values(page.slots)) {
-      if (slot.kind === "card") cards++;
-      else images++;
+      if (slot.kind === "card") {
+        cards++;
+        copies += slotQuantity(slot);
+      } else images++;
     }
   }
-  return { filled: cards + images, pockets: binder.pages.length * spec.pockets, cards, images };
+  return { filled: cards + images, pockets: binder.pages.length * spec.pockets, cards, images, copies };
 }
-
 /**
  * Re-flow a binder into a different format.
  *

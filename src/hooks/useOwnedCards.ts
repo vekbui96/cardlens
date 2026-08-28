@@ -4,8 +4,8 @@ import { useCatalog } from "../app/contexts.tsx";
 import { useLibrary } from "../app/LibraryProvider.tsx";
 import { useSets } from "./useSets.ts";
 import { printingsQuery } from "./useCollectionValue.ts";
-import { buildPrintingIndex, printingPrice } from "../models/printingIndex.ts";
-import { catalogPrice } from "../models/catalogPrice.ts";
+import { buildPrintingIndex } from "../models/printingIndex.ts";
+import { collectorNumberFromCardId, marketPrice } from "../models/marketPrice.ts";
 import { useCatalogPrices } from "./useCatalogPrices.ts";
 import type { OwnedPrintingRow } from "../models/ownedSort.ts";
 import { setCardsCache } from "../storage/caches.ts";
@@ -59,6 +59,18 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
 
   const catalogPrices = useCatalogPrices(setIds);
 
+  /**
+   * When each query set last settled, as one string apiece.
+   *
+   * The query arrays are new objects every render, so they cannot be
+   * dependencies themselves — only the data inside them matters. Named here
+   * rather than computed inline in the dependency array because a dependency
+   * ESLint cannot read statically is one it cannot check, and an unchecked
+   * dependency list is exactly where a stale memo hides.
+   */
+  const cardsSettledAt = cardQueries.map((q) => q.dataUpdatedAt).join(",");
+  const pricesSettledAt = priceQueries.map((q) => q.dataUpdatedAt).join(",");
+
   return useMemo(() => {
     const cardsBySet = new Map<
       string,
@@ -86,17 +98,13 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     for (const card of collection) {
       const setId = card.setId ?? card.id.slice(0, card.id.lastIndexOf("-"));
       const info = cardsBySet.get(setId)?.get(card.id);
-      // Collector number is the tail of the card id when the catalog has not
-      // answered yet, so a row can list before its name arrives.
-      const number = info?.number ?? card.id.slice(card.id.indexOf("-") + 1);
+      // The catalog's own number when it has answered, and the card id's tail
+      // until then, so a row can list before its name arrives.
+      const number = info?.number ?? collectorNumberFromCardId(card.id);
       for (const finish of card.finishes) {
-        // TCGdex first, pokemontcg.io second. Neither covers this collection
-        // alone: TCGdex has no tcgplayer block for promos and older cards,
-        // pokemontcg.io prices none of the modern sets. Both are TCGplayer
-        // market prices in USD, so mixing them in one total is sound.
-        const price =
-          printingPrice(pricesBySet.get(setId), number, finish) ??
-          catalogPrice(catalogPrices, card.id, finish);
+        // TCGdex first, pokemontcg.io second — the one rule, shared with
+        // Home's total rather than restated here. See models/marketPrice.ts.
+        const price = marketPrice(pricesBySet.get(setId), catalogPrices, card.id, number, finish);
         rows.push({
           cardId: card.id,
           setId,
@@ -114,12 +122,5 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
 
     return { rows, pending };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query arrays are new each render; their settled data is what matters
-  }, [
-    collection,
-    setIds,
-    setNames,
-    catalogPrices,
-    cardQueries.map((q) => q.dataUpdatedAt).join(","),
-    priceQueries.map((q) => q.dataUpdatedAt).join(","),
-  ]);
+  }, [collection, setIds, setNames, catalogPrices, cardsSettledAt, pricesSettledAt]);
 }

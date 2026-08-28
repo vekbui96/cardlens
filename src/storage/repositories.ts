@@ -11,7 +11,7 @@ import {
   type OwnedPrinting,
 } from "./printings.ts";
 import { evictCaches, VersionedStore } from "./versioned.ts";
-import type { Binder } from "../models/binderLayout.ts";
+import { isBinderFormat, type Binder } from "../models/binderLayout.ts";
 import { binderTombstone, liveBinders, mergeBinders, pruneBinderTombstones } from "./binders.ts";
 
 /** Spec limits. */
@@ -132,9 +132,13 @@ function isBinder(value: unknown): value is Binder {
   return (
     typeof v.id === "string" &&
     typeof v.name === "string" &&
-    (v.format === "9" || v.format === "12") &&
-    Array.isArray(v.pages) &&
-    // Both timestamps are required, not cosmetic: they ARE the last-write-wins
+    // The shared guard, NOT a format list written out again. This spelled the
+    // formats out for itself and so silently dropped every 4-pocket binder on
+    // the read after it was saved — created, gone, with nothing said. It is the
+    // third place formats are gated (here, models/binderParse.ts on ingest, and
+    // the pickers); only this one could make a binder vanish.
+    isBinderFormat(v.format) &&
+    Array.isArray(v.pages) && // Both timestamps are required, not cosmetic: they ARE the last-write-wins
     // key. A record missing one would make every merge involving it NaN, which
     // loses whichever side it is compared against.
     typeof v.createdAt === "number" &&

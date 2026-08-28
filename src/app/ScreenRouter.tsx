@@ -87,6 +87,14 @@ const WebBinderScreen = lazy(() =>
 const LiveShowcaseScreen = lazy(() =>
   import("../web/showcase/LiveShowcaseScreen.tsx").then((m) => ({ default: m.LiveShowcaseScreen })),
 );
+/**
+ * A trade link someone was sent. Like the showcase screens, most visitors who
+ * open it will never open another screen in this app — so it is lazy, and it
+ * asks for nothing the visitor has to have (no token, no collection).
+ */
+const TradeShareScreen = lazy(() =>
+  import("../web/trade/TradeShareScreen.tsx").then((m) => ({ default: m.TradeShareScreen })),
+);
 const ShowcaseScreen = lazy(() =>
   import("../web/showcase/ShowcaseScreen.tsx").then((m) => ({ default: m.ShowcaseScreen })),
 );
@@ -157,6 +165,8 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       // Falls back to Collection on the glasses for the same reason showcase
       // does: they have no way to open a link.
       return isWeb ? <LiveShowcaseScreen shareId={screen.shareId} /> : <CollectionScreen />;
+    case "trade":
+      return isWeb ? <TradeShareScreen shareId={screen.shareId} /> : <CollectionScreen />;
     case "showcase":
       return isWeb ? (
         <ShowcaseScreen setId={screen.setId} setName={screen.setName} payload={screen.payload} />

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Repositories, MAX_RECENT_SEARCHES, MAX_FAVORITES } from "./repositories.ts";
 import { VersionedStore, createMemoryStorage, type StorageLike } from "./versioned.ts";
 import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
-import type { Binder } from "../models/binderLayout.ts";
+import { BINDER_FORMATS, type Binder } from "../models/binderLayout.ts";
 
 function repo() {
   return new Repositories(new VersionedStore(createMemoryStorage()));
@@ -611,6 +611,29 @@ describe("binders", () => {
     pages: [{ slots: {} }],
     createdAt: updatedAt,
     updatedAt,
+  });
+
+  it("survives a round trip in every format it offers", () => {
+    // The read guard used to spell the formats out for itself, so a 4-pocket
+    // binder was written and then silently dropped on the very next read — it
+    // was created, and then it was simply gone, with nothing said. Any format
+    // the picker can produce must come back out.
+    const r = repo();
+    for (const format of BINDER_FORMATS) {
+      r.saveBinder({ ...binder(`b-${format}`, `Binder ${format}`, Date.now()), format });
+    }
+    expect(
+      r
+        .getBinders()
+        .map((b) => b.format)
+        .sort(),
+    ).toEqual([...BINDER_FORMATS].sort());
+  });
+
+  it("still refuses a format nothing can render", () => {
+    const r = repo();
+    r.saveBinder({ ...binder("b1", "Nonsense", Date.now()), format: "18" as never });
+    expect(r.getBinders()).toEqual([]);
   });
 
   it("hides a deleted binder but keeps a tombstone to sync", () => {

@@ -50,7 +50,7 @@ export default defineConfig({
     {
       name: "phone",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
+      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders|trade)\.spec\.ts/,
     },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec

@@ -315,8 +315,21 @@ label.chip {
   .spread::before {
     display: none;
   }
-}
 
+  /*
+   * Undo the cover rule along with the second column it depends on.
+   *
+   * `grid-column: 2` does NOT fall back when the grid drops to one column — it
+   * creates an implicit second track and puts page 1 in it. The opening page
+   * then rendered at half width, jammed against the right edge with its pockets
+   * squeezed to about a third of the size of every other page's, and an empty
+   * half-screen beside it. Found by screenshotting the trade page on a phone;
+   * the builder had it too, for as long as spreads have existed.
+   */
+  .spread[data-cover] > * {
+    grid-column: auto;
+  }
+}
 /* --- The pocket sheet ---------------------------------------------------- */
 
 /*
@@ -536,4 +549,209 @@ label.chip {
   font-size: var(--cl-fs-small);
   color: var(--cl-error);
   cursor: pointer;
+}
+
+/* --- Trading ------------------------------------------------------------- */
+
+/*
+ * The "For trade" marker in the binder list.
+ *
+ * Gold, because in this app gold means "worth something" and that is exactly
+ * what marking a binder for trade declares. A word rather than a dot: state
+ * this app cares about is never carried by colour alone.
+ */
+.tradeTag {
+  margin-left: var(--cl-gap-sm);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--cl-gold-dim, rgba(242, 181, 68, 0.16));
+  color: var(--cl-gold, var(--cl-price));
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+/*
+ * Copies and condition, inside the pocket sheet.
+ *
+ * Below the card it is describing rather than beside it: the sheet is already
+ * a four-column row on a phone, and a stepper wedged into it would be two
+ * 24px targets. A rule above separates "what is in this pocket" from "what I
+ * am offering", which are genuinely different questions.
+ */
+.trade {
+  margin-top: var(--cl-gap-sm);
+  padding-top: var(--cl-gap-sm);
+  border-top: var(--cl-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+}
+
+.tradeRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-sm);
+}
+
+.tradeLabel {
+  min-width: 5.5em;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  padding: 2px;
+}
+
+/* 40px square: a thumb target, and the two are pressed repeatedly. */
+.step {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg);
+  font: inherit;
+  font-size: var(--cl-fs-heading);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.step:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.count {
+  min-width: 2.5em;
+  text-align: center;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-heading);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.tradeTotal {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+.grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-xs);
+}
+
+/*
+ * The grades keep their abbreviations, which is what collectors write on a
+ * listing and what fits five buttons across a phone. The accessible name spells
+ * each one out.
+ */
+.grade {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-surface);
+  color: var(--cl-fg-muted);
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.gradeOn {
+  border-color: var(--cl-accent);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.grade:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.tradeNote {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  line-height: 1.45;
+  color: var(--cl-fg-dim);
+}
+
+/*
+ * A format with no facing pages — 4-pocket. One page per row, full width.
+ *
+ * Not a half-width spread with an empty side: that gap means "the facing page
+ * goes here", and in a binder read one page at a time there is no facing page
+ * to wait for. The cover rule is reset for the same reason — page 1 sits
+ * against the inside front cover only when there is a spread to be the right
+ * half of.
+ */
+.spread[data-solo] {
+  /*
+   * Capped and centred rather than stretched. Two columns across a 1180px
+   * shell would draw each pocket at nearly 600px — a card rendered bigger
+   * than it is in life, which reads as a bug rather than as a big card.
+   * Below the cap it simply fills, so a phone is unaffected.
+   */
+  grid-template-columns: minmax(0, 520px);
+  justify-content: center;
+}
+
+.spread[data-solo]::before {
+  display: none;
+}
+
+.spread[data-solo] > * {
+  grid-column: auto;
+}
+
+/*
+ * A binder's total on the list row.
+ *
+ * Gold, the app's "worth something" accent, and in the data font so a column of
+ * them lines up down the list — which is the whole reason to put the figure
+ * here rather than only inside the binder.
+ */
+.binderValue {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+/* What the total leaves out, attached to it rather than left to be inferred. */
+.binderValueNote {
+  font-weight: 400;
+  color: var(--cl-fg-dim);
+}
+
+/* Said out loud rather than left blank: a figure that appears out of nothing
+   reads as a number that changed. */
+.binderValuePending {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
 }

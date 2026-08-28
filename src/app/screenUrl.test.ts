@@ -83,4 +83,19 @@ describe("live share links", () => {
     const screen = { name: "showcase", setId: "me5", setName: "Pitch Black", payload: "AbC" } as const;
     expect(pathToScreen(screenToPath(screen))).toEqual(screen);
   });
+
+  it("round-trips a trade link", () => {
+    const screen = { name: "trade", shareId: "abc-123_XYZ" } as const;
+    const path = screenToPath(screen);
+    expect(path).toBe("/trade/abc-123_XYZ");
+    expect(pathToScreen(path)).toEqual(screen);
+  });
+
+  it("keeps trade and live links distinct", () => {
+    // They share an id space on the server, so the PATH is the only thing that
+    // says which page an id should open. Crossing them would send a visitor to
+    // a screen that reports the link as dead.
+    expect(pathToScreen("/trade/xyz")).toEqual({ name: "trade", shareId: "xyz" });
+    expect(pathToScreen("/live/xyz")).toEqual({ name: "live", shareId: "xyz" });
+  });
 });

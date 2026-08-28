@@ -6,6 +6,7 @@ import {
   type BinderPage as PageData,
   type BinderSlot,
 } from "../models/binderLayout.ts";
+import { formatBinderPrice, pocketAddress, spokenStock, stockLabel } from "../models/binderPocket.ts";
 import styles from "./BinderPage.module.css";
 
 /**
@@ -28,6 +29,7 @@ export function BinderPageView({
   selectedIndex,
   pageNumber,
   priceFor,
+  trade,
 }: {
   page: PageData;
   format: BinderFormat;
@@ -45,10 +47,22 @@ export function BinderPageView({
    * where a price belongs reads as "still loading" forever.
    */
   priceFor?: (slot: BinderSlot) => number | undefined;
+  /**
+   * Render this page as a trade list rather than as a layout.
+   *
+   * It adds two marks a binder you are building has no use for: the POCKET
+   * ADDRESS, because a trade is negotiated by saying "page 2, pocket 5" out
+   * loud and counting pockets on a screen is the friction that costs; and the
+   * STOCK — copies and grade — because those are what the other collector is
+   * actually deciding about.
+   *
+   * A flag rather than a second component, so a pocket looks and behaves the
+   * same in both places and the grid geometry stays in one file.
+   */
+  trade?: boolean;
 }) {
   const spec = specFor(format);
   const interactive = typeof onSlotClick === "function";
-
   return (
     <section className={styles.page} aria-label={`Page ${pageNumber}`}>
       <header className={styles.head}>
@@ -60,9 +74,13 @@ export function BinderPageView({
         {Array.from({ length: spec.pockets }, (_, index) => {
           const slot = page.slots[index];
           const held = slot ? owns(slot) : false;
+          // Screen readers get the address spelled out rather than "2 dot 5",
+          // and the stock as words rather than a multiplication sign.
           const label =
-            slotLabel(slot, index, held) + (priceFor && slot ? `, ${formatBinderPrice(priceFor(slot))}` : "");
-
+            (trade ? `Page ${pageNumber}, ` : "") +
+            slotLabel(slot, index, held) +
+            (trade && slot ? spokenStock(slot) : "") +
+            (priceFor && slot ? `, ${formatBinderPrice(priceFor(slot))}` : "");
           const inner = slot ? (
             <>
               {slot.kind === "card" ? (
@@ -78,11 +96,20 @@ export function BinderPageView({
                   the point of planning a binder, so it must be placeable and
                   visibly distinct from one you hold. */}
               {!held ? <span className={styles.wantedTag}>Don’t own</span> : null}
+              {trade ? <span className={styles.address}>{pocketAddress(pageNumber, index)}</span> : null}
+              {/* Only rendered when there is something to say. A binder of
+                  single ungraded copies stays as clean as one that has never
+                  been traded from. */}
+              {trade && stockLabel(slot) ? (
+                <span className={`${styles.stock} ${held ? "" : styles.stockAboveTag}`}>
+                  {stockLabel(slot)}
+                </span>
+              ) : null}
               {priceFor ? (
                 <span className={`${styles.price} ${held ? "" : styles.priceAboveTag}`}>
                   {formatBinderPrice(priceFor(slot))}
                 </span>
-              ) : null}
+              ) : null}{" "}
             </>
           ) : (
             <span className={styles.emptyMark} aria-hidden="true" />
@@ -124,13 +151,6 @@ export function BinderPageView({
       </ul>
     </section>
   );
-}
-
-/** Compact enough for a pocket: "$12.34", "$1.2k", or "n/a". */
-export function formatBinderPrice(price: number | undefined): string {
-  if (price === undefined || !Number.isFinite(price) || price <= 0) return "n/a";
-  if (price >= 1000) return `$${(price / 1000).toFixed(price >= 10_000 ? 0 : 1)}k`;
-  return `$${price.toFixed(price >= 100 ? 0 : 2)}`;
 }
 
 function slotLabel(slot: BinderSlot | undefined, index: number, held: boolean): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBinderPrice } from "./BinderPage.tsx";
+import { formatBinderPrice } from "../models/binderPocket.ts";
 
 describe("formatBinderPrice", () => {
   it("says n/a rather than nothing when a pocket has no price", () => {

@@ -40,12 +40,13 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 /**
  * A stored image id: random stem, known extension, nothing else.
  *
- * This is the whole path defence. The id goes straight into a filename, so the
- * pattern admits no slash, no dot beyond the extension separator, and no
- * traversal — `..jpg` fails the 8-character minimum stem.
+ * Defined in models/binderParse.ts and re-exported here, so the validator that
+ * ACCEPTS an id and the store that has to SERVE it can never disagree — an id
+ * one allows and the other refuses is a permanently broken pocket.
  */
-export const IMAGE_ID_PATTERN = /^[A-Za-z0-9_-]{8,48}\.(jpg|png|webp)$/;
+import { IMAGE_ID_PATTERN } from "../src/models/binderParse.ts";
 
+export { IMAGE_ID_PATTERN };
 const DATA_URL = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/;
 
 export class ImageTooLargeError extends Error {

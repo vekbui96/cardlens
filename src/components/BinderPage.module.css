@@ -166,3 +166,56 @@ button.pocket:focus-visible {
 .priceAboveTag {
   bottom: 22px;
 }
+
+/*
+ * Trade marks. Three corners, each doing one job: where the card is, what is
+ * behind it, what it costs. Only the price is ever shown outside a trade view.
+ */
+
+/*
+ * The pocket address, top-left and deliberately quiet.
+ *
+ * It is a coordinate, not a headline — the loud thing on a pocket should stay
+ * the card art. But it has to be legible enough to read out loud without
+ * leaning in, which is why it is mono and sits on its own scrim rather than
+ * being dimmed into the artwork.
+ */
+.address {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(4, 6, 10, 0.82);
+  color: var(--cl-fg-muted);
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+/*
+ * Copies and grade, bottom-left, facing the price across the card.
+ *
+ * Gold, because in this app gold means "worth something" — and the count is
+ * the multiplier on the figure opposite it. The two belong to the same
+ * sentence and are placed to be read as one.
+ */
+.stock {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(4, 6, 10, 0.82);
+  color: var(--cl-gold, var(--cl-price));
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+/* "Don't own" owns the bottom edge; sit above it rather than on it. */
+.stockAboveTag {
+  bottom: 22px;
+}

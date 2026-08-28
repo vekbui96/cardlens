@@ -1,0 +1,369 @@
+/*
+ * The trade page.
+ *
+ * Nothing new is invented here. The palette, the type scale and the two
+ * accents come from web-theme.css, where gold already means "finished, or worth
+ * something" — which is the whole subject of this page, so gold leads and blue
+ * recedes to the things you can press. A page about money that introduced a
+ * third accent would say the app's own colour language is not trusted.
+ *
+ * The one structural idea is the POCKET ADDRESS. It is set in the data font,
+ * it looks the same on a pocket and at the head of a list row, and it is the
+ * only thing on the page that appears in both views — because it is what the
+ * two people trading will say to each other.
+ */
+
+.brand {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--cl-accent);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* --- The head ------------------------------------------------------------ */
+
+.hero {
+  padding: var(--cl-gap-lg) var(--cl-gap) var(--cl-gap);
+}
+
+/*
+ * The eyebrow states what KIND of page this is before it says whose.
+ *
+ * A visitor arrives from a pasted link with no context at all, and "for trade"
+ * is the fact that decides whether the rest of the page is interesting to them.
+ * Tracked and small rather than loud: it is a label, and the binder's name is
+ * the headline.
+ */
+.eyebrow {
+  margin: 0 0 2px;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+.name {
+  margin: 0;
+  font-size: var(--cl-fs-display);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.meta {
+  margin: var(--cl-gap-xs) 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+/*
+ * The total, in the data font because it is a measurement rather than a
+ * headline. Tabular figures so it does not jitter as prices settle in — the
+ * number arrives in stages while nineteen sets answer, and a total that
+ * reflows on every one reads as instability rather than as progress.
+ */
+.total {
+  margin: var(--cl-gap) 0 0;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+/*
+ * What the total does NOT cover, directly beneath it and deliberately not
+ * hidden behind a tooltip. Whole sets have no market price at all, and a
+ * binder of them must read as unmeasured rather than as worthless.
+ */
+.totalNote {
+  margin: 2px 0 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+/* --- Controls ------------------------------------------------------------ */
+
+.views,
+.sorts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  padding: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.sortLabel {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.chip {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  background: var(--cl-surface);
+  color: var(--cl-fg-muted);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  cursor: pointer;
+}
+
+.chipOn {
+  border-color: var(--cl-accent);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font-weight: 650;
+}
+
+.chip:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- The binder ---------------------------------------------------------- */
+
+/*
+ * The same spread geometry as the builder, and for the same reason: the owner
+ * and the visitor have to be looking at one object. Duplicated rather than
+ * shared because WebBinderScreen.module.css is a builder's stylesheet and
+ * importing it here would drag a picker, a sheet and a search form along.
+ */
+.spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--cl-gap-lg);
+  align-items: start;
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  position: relative;
+}
+
+/* The spine. Drawn on the gap so it reads as one binder rather than as two
+   pages that happen to be adjacent. */
+.spread::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--cl-surface-raised);
+  border-radius: 1px;
+}
+
+.spread[data-single]::before {
+  display: none;
+}
+
+/* Page 1 opens on the right, against the inside front cover. */
+.spread[data-cover] > * {
+  grid-column: 2;
+}
+
+@media (max-width: 560px) {
+  .spread {
+    grid-template-columns: 1fr;
+  }
+
+  .spread::before {
+    display: none;
+  }
+
+  /*
+   * Undo the cover rule along with the second column it depends on.
+   *
+   * `grid-column: 2` does NOT fall back when the grid drops to one column — it
+   * creates an implicit second track and puts page 1 in it. The opening page
+   * then rendered at half width, jammed against the right edge with its pockets
+   * squeezed to about a third of the size of every other page's, and an empty
+   * half-screen beside it. Found by screenshotting the trade page on a phone;
+   * the builder had it too, for as long as spreads have existed.
+   */
+  .spread[data-cover] > * {
+    grid-column: auto;
+  }
+}
+/* --- The list ------------------------------------------------------------ */
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap);
+}
+
+.row + .row {
+  border-top: var(--cl-border);
+}
+
+/*
+ * The whole row is the control. A row that is mostly inert with one small
+ * "show" link asks a thumb to hit a target it cannot see the edges of.
+ */
+.rowButton {
+  display: grid;
+  grid-template-columns: auto 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--cl-gap-sm);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--cl-gap-sm) 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowButton:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--cl-radius-sm);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rowButton:hover .rowName {
+    color: var(--cl-accent-strong);
+  }
+}
+
+/*
+ * The pocket address, leading the row.
+ *
+ * It comes first because it is what the visitor will say out loud — "have you
+ * still got two dot five" — and a coordinate buried at the end of a row is one
+ * the reader has to hunt for every time. Fixed width so the column stays
+ * straight down the list even when a page number reaches two digits.
+ */
+.address {
+  min-width: 3.2em;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cl-gold, #f2b544) 12%, transparent);
+  color: var(--cl-gold, var(--cl-price));
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/*
+ * CardImage renders a sized WRAPPER around its img (54x76 for a thumb), so
+ * styling the img alone does nothing to the space the row gives it — the rows
+ * were half again as tall as they needed to be, and the extra width was taken
+ * out of the card's name. Same `> div` idiom BinderPage.module.css uses to
+ * reach it.
+ */
+.rowButton > div {
+  width: 44px;
+  height: 61px;
+  border-radius: var(--cl-radius-art);
+}
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMoney {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  white-space: nowrap;
+}
+
+.rowLine {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-body);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+/*
+ * The arithmetic behind the line total, and only when there is any: with one
+ * copy this would restate the number directly above it. Written as "4 × $0.17"
+ * rather than "$0.17 each" because the multiplication is the thing being
+ * checked, and it belongs in the money column rather than trailing the card's
+ * name where it competed with the condition for the last of the width.
+ */
+.rowUnit {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-dim);
+}
+
+/* --- Notes --------------------------------------------------------------- */
+
+.notice {
+  margin: 0;
+  padding: var(--cl-gap-lg) var(--cl-gap);
+  color: var(--cl-fg-muted);
+  text-align: center;
+}
+
+.footnote {
+  margin: var(--cl-gap-lg) 0 0;
+  padding: var(--cl-gap) var(--cl-gap) var(--cl-gap-lg);
+  border-top: var(--cl-border);
+  font-size: var(--cl-fs-small);
+  line-height: 1.5;
+  color: var(--cl-fg-dim);
+}
+
+/*
+ * A format with no facing pages — 4-pocket. One page per row, full width.
+ *
+ * Not a half-width spread with an empty side: that gap means "the facing page
+ * goes here", and in a binder read one page at a time there is no facing page
+ * to wait for. The cover rule is reset for the same reason — page 1 sits
+ * against the inside front cover only when there is a spread to be the right
+ * half of.
+ */
+.spread[data-solo] {
+  /*
+   * Capped and centred rather than stretched. Two columns across a 1180px
+   * shell would draw each pocket at nearly 600px — a card rendered bigger
+   * than it is in life, which reads as a bug rather than as a big card.
+   * Below the cap it simply fills, so a phone is unaffected.
+   */
+  grid-template-columns: minmax(0, 520px);
+  justify-content: center;
+}
+
+.spread[data-solo]::before {
+  display: none;
+}
+
+.spread[data-solo] > * {
+  grid-column: auto;
+}

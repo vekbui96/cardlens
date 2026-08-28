@@ -2,39 +2,69 @@ import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import type { SetPrintings } from "../integrations/tcgdex/client.ts";
 import { buildPrintingIndex, printingPrice, type SetPrintingIndex } from "../models/printingIndex.ts";
-import type { Binder, BinderSlot, CardSlot } from "../models/binderLayout.ts";
+import type { Binder, BinderSlot } from "../models/binderLayout.ts";
+import { cardSlotsOf, lineTotal, summariseBinderValue } from "../models/binderValue.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import { printingsCache } from "../storage/caches.ts";
 import { loadPrintings } from "./useSetPrintings.ts";
 import { useSets } from "./useSets.ts";
 
+/**
+ * Query options for one set's printings.
+ *
+ * Exported so every binder screen uses the SAME queryKey — the one
+ * `useSetPrintings` uses — and so the list screen and the binder screen cannot
+ * drift into two shapes for one question. A second key would mean re-fetching a
+ * 120-295 card set and two caches that can disagree about what a printing costs.
+ * `useCollectionValue.printingsQuery` exists for the same reason on its side.
+ */
+export function setPrintingsQuery(setId: string, setName: string | undefined) {
+  const cached = printingsCache.get(setId);
+  return {
+    queryKey: ["set-printings", setId] as const,
+    queryFn: ({ signal }: { signal?: AbortSignal }) => loadPrintings(setId, setName ?? setId, signal),
+    // Held until the set list answers. The server matches sets by NAME, so
+    // asking before the name is known would ask the wrong question — and cache
+    // the wrong answer under the right key.
+    enabled: Boolean(setName),
+    staleTime: 30 * 24 * 60 * 60_000,
+    retry: 1,
+    ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),
+  };
+}
+
 export interface BinderValue {
-  /** USD market price for one pocket, or undefined when nothing prices it. */
+  /**
+   * USD market price for ONE copy of what a pocket holds, or undefined when
+   * nothing prices it.
+   *
+   * Per copy rather than per pocket, because this is what the pocket badge
+   * shows and a badge reading "$180" beside "x2" is the arithmetic the viewer
+   * can check. `lineTotalFor` is the multiplied figure.
+   */
   priceFor: (slot: BinderSlot) => number | undefined;
-  /** Summed market price of the pockets that have one. */
+  /** Unit price times the copies behind the pocket. */
+  lineTotalFor: (slot: BinderSlot) => number | undefined;
+  /** Summed line totals of the pockets that carry a price. */
   total: number;
-  /** How many cards carry a price, and how many do not. */
+  /** How many POCKETS carry a price, and how many do not. */
   priced: number;
   unpriced: number;
+  /** Copies behind the priced pockets — what `total` is actually the sum over. */
+  pricedCopies: number;
   /** True while any set is still being asked about. */
   isLoading: boolean;
 }
 
 const EMPTY: BinderValue = {
   priceFor: () => undefined,
+  lineTotalFor: () => undefined,
   total: 0,
   priced: 0,
   unpriced: 0,
+  pricedCopies: 0,
   isLoading: false,
 };
-
-/** Every card slot in the binder, in page order. */
-function cardSlots(binder: Binder | null): CardSlot[] {
-  if (!binder) return [];
-  return binder.pages.flatMap((page) =>
-    Object.values(page.slots).filter((s): s is CardSlot => s.kind === "card"),
-  );
-}
 
 /**
  * What a binder is worth, priced per PRINTING.
@@ -55,33 +85,23 @@ function cardSlots(binder: Binder | null): CardSlot[] {
  * (`holo:staff`, `normal:comic-con-2009`), and pokemontcg.io prices no card in
  * some sets. Those pockets read "n/a" and are counted separately, so a total is
  * always "the part we know", never a guess presented as a fact.
+ *
+ * Copies multiply. A trade binder stacks duplicates behind one pocket, so the
+ * total is over COPIES while `priced` and `unpriced` count POCKETS — the two
+ * genuinely differ there, and reporting "23 of 24 priced" against a total that
+ * summed forty cards would be a quiet lie about what was measured.
  */
 export function useBinderValue(binder: Binder | null): BinderValue {
   const { data: allSets } = useSets();
 
   const setNames = useMemo(() => new Map((allSets ?? []).map((s) => [s.id, s.name] as const)), [allSets]);
 
-  const slots = useMemo(() => cardSlots(binder), [binder]);
+  const slots = useMemo(() => cardSlotsOf(binder), [binder]);
   const setIds = useMemo(() => [...new Set(slots.map((s) => setIdFromCardId(s.cardId)))].sort(), [slots]);
 
   const results = useQueries({
-    queries: setIds.map((setId) => {
-      const name = setNames.get(setId);
-      const cached = printingsCache.get(setId);
-      return {
-        queryKey: ["set-printings", setId],
-        queryFn: ({ signal }: { signal?: AbortSignal }) => loadPrintings(setId, name ?? setId, signal),
-        // Held until the set list answers. The server matches sets by NAME, so
-        // asking before the name is known would ask the wrong question — and
-        // cache the wrong answer under the right key.
-        enabled: Boolean(name),
-        staleTime: 30 * 24 * 60 * 60_000,
-        retry: 1,
-        ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),
-      };
-    }),
+    queries: setIds.map((setId) => setPrintingsQuery(setId, setNames.get(setId))),
   });
-
   const indexes = useMemo(() => {
     const map = new Map<string, SetPrintingIndex | null>();
     setIds.forEach((setId, i) => {
@@ -101,26 +121,24 @@ export function useBinderValue(binder: Binder | null): BinderValue {
     [indexes],
   );
 
-  const { total, priced } = useMemo(() => {
-    let sum = 0;
-    let n = 0;
-    for (const slot of slots) {
-      const price = priceFor(slot);
-      if (price !== undefined) {
-        sum += price;
-        n += 1;
-      }
-    }
-    return { total: sum, priced: n };
-  }, [slots, priceFor]);
+  /** Unit price times the copies behind the pocket. See models/binderValue.ts. */
+  const lineTotalFor = useCallback((slot: BinderSlot) => lineTotal(slot, priceFor(slot)), [priceFor]);
 
+  // The arithmetic is pure and lives in the model, where it can be tested
+  // without react-query, nineteen set fetches and a React render.
+  const { total, priced, unpriced, pricedCopies } = useMemo(
+    () => summariseBinderValue(slots, priceFor),
+    [slots, priceFor],
+  );
   if (!binder) return EMPTY;
 
   return {
     priceFor,
+    lineTotalFor,
     total,
     priced,
-    unpriced: slots.length - priced,
+    unpriced,
+    pricedCopies,
     isLoading: results.some((r) => r.isLoading),
   };
 }

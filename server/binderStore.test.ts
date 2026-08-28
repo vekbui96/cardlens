@@ -62,6 +62,40 @@ describe("parseSlot", () => {
     });
   });
 
+  it("carries the trade fields through the whitelist", () => {
+    // The other half of the whitelist trap. `quantity` and `condition` are
+    // written on the device and must be named here or a trade binder syncs as
+    // one copy of everything, ungraded, with nothing said about it.
+    expect(
+      parseSlot({ kind: "card", cardId: "me5-4", finish: "normal", quantity: 3, condition: "LP" }),
+    ).toEqual({ kind: "card", cardId: "me5-4", finish: "normal", quantity: 3, condition: "LP" });
+  });
+
+  it("normalises one copy to no quantity, so two clients converge", () => {
+    // A client sending `quantity: 1` and one sending nothing must produce the
+    // same bytes, or last-write-wins ping-pongs between them forever.
+    expect(parseSlot({ kind: "card", cardId: "me5-4", finish: "normal", quantity: 1 })).toEqual(
+      parseSlot({ kind: "card", cardId: "me5-4", finish: "normal" }),
+    );
+  });
+
+  it("clamps a hostile quantity instead of dropping the card", () => {
+    // The card and its position are the valuable part. Refusing the whole slot
+    // over a bad count would silently empty a pocket that has a real card in it.
+    expect(parseSlot({ kind: "card", cardId: "me5-4", finish: "normal", quantity: 1e9 })).toMatchObject({
+      quantity: 999,
+    });
+    expect(parseSlot({ kind: "card", cardId: "me5-4", finish: "normal", quantity: -3 })).toEqual(
+      parseSlot({ kind: "card", cardId: "me5-4", finish: "normal" }),
+    );
+  });
+
+  it("drops an unknown condition rather than trusting it into the store", () => {
+    const slot = parseSlot({ kind: "card", cardId: "me5-4", finish: "normal", condition: "MINT-ISH" });
+    expect(slot).not.toBeNull();
+    expect("condition" in (slot as object)).toBe(false);
+  });
+
   it("rejects an image slot with neither an id nor a src", () => {
     expect(parseSlot({ kind: "image", label: "nothing" })).toBeNull();
   });
@@ -105,6 +139,15 @@ describe("parseBinder", () => {
     // permanently — the same failure the collection guards against.
     expect(parseBinder(binder({ updatedAt: Infinity }))).toBeNull();
     expect(parseBinder(binder({ updatedAt: -1 }))).toBeNull();
+  });
+
+  it("carries the trade flag, and stores only its true form", () => {
+    expect(parseBinder(binder({ forTrade: true }))?.forTrade).toBe(true);
+    // A binder taken off trade must be byte-identical to one never on it.
+    expect("forTrade" in (parseBinder(binder({ forTrade: false })) as object)).toBe(false);
+    // Only the boolean `true` counts. A truthy string from a hand-edited file
+    // must not put a binder on the market.
+    expect("forTrade" in (parseBinder({ ...binder(), forTrade: "yes" }) as object)).toBe(false);
   });
 
   it("rejects an unknown format", () => {

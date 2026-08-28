@@ -249,3 +249,90 @@ describe("WebBinderScreen search", () => {
     expect(screen.getByText("Cards from")).toBeInTheDocument();
   });
 });
+
+describe("WebBinderScreen trading", () => {
+  /** Put a card in pocket 1 and open the sheet on it. */
+  async function seedAndOpen(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+    await user.click(await screen.findByRole("button", { name: "Holofoil" }));
+    await user.click(screen.getByRole("button", { name: /^Pocket 1, Umbreon VMAX/ }));
+  }
+
+  it("offers copies and condition only on a binder marked for trade", async () => {
+    // A pocket in a set binder holds one card because that is what a pocket is.
+    // "How many?" is a question with no meaning there.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await seedAndOpen(user);
+    expect(screen.queryByRole("button", { name: "One more copy" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+    expect(screen.getByRole("button", { name: "One more copy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lightly played" })).toBeInTheDocument();
+  });
+
+  it("counts copies without moving off the pocket being counted", async () => {
+    // Placing a card advances to the next empty pocket, because filling a
+    // binder is a sequence. Counting a second copy is an edit to the pocket in
+    // front of you — sharing one path would move the sheet off it mid-count.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await seedAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await user.click(screen.getByRole("button", { name: "One more copy" }));
+    await user.click(screen.getByRole("button", { name: "One more copy" }));
+
+    expect(placedCards()[0].quantity).toBe(3);
+    // Still on pocket 1. In trade mode the pocket announces its page too, so
+    // the address a collector would say out loud is in the accessible name.
+    expect(screen.getByRole("button", { name: /^Page 1, Pocket 1, Umbreon VMAX.*3 copies/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("×3")).toBeInTheDocument();
+  });
+
+  it("will not count below one copy", async () => {
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await seedAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+    expect(screen.getByRole("button", { name: "One fewer copy" })).toBeDisabled();
+  });
+
+  it("clears a grade by pressing it again, because unstated is a real answer", async () => {
+    // Ungraded is not the same claim as near mint, so it has to be reachable
+    // again after a mis-tap.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await seedAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+
+    await user.click(screen.getByRole("button", { name: "Lightly played" }));
+    expect(placedCards()[0].condition).toBe("LP");
+
+    await user.click(screen.getByRole("button", { name: "Lightly played" }));
+    expect(placedCards()[0].condition).toBeUndefined();
+  });
+
+  it("keeps the counts when a binder is taken off trade", async () => {
+    // Changing your mind about selling must not silently discard the counting.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await seedAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await user.click(screen.getByRole("button", { name: "One more copy" }));
+    await user.click(screen.getByRole("button", { name: "✓ For trade" }));
+
+    expect(placedCards()[0].quantity).toBe(2);
+    expect(screen.queryByRole("button", { name: "One more copy" })).not.toBeInTheDocument();
+  });
+});

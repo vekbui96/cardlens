@@ -141,3 +141,135 @@ function onePixelPng(): Buffer {
     "base64",
   );
 }
+
+test.describe("binder spreads on a phone", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone project only");
+  });
+
+  test("opens page 1 at full width once the spread stacks", async ({ page }) => {
+    // `grid-column: 2` puts page 1 against the inside front cover on a wide
+    // screen. It does NOT fall back when the spread collapses to one column —
+    // it creates an implicit second track — so page 1 rendered at half width
+    // against an empty left half, with pockets a third the size of every other
+    // page's. Live for as long as spreads have existed; found by screenshotting.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Phone spread");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    const spread = page.locator("[data-cover]");
+    await expect(spread).toBeVisible();
+    const spreadBox = await spread.boundingBox();
+    const pageBox = await page.getByLabel("Page 1").boundingBox();
+
+    // The page fills its spread rather than sitting in half of it.
+    expect(pageBox!.width).toBeGreaterThan(spreadBox!.width * 0.9);
+  });
+});
+
+test.describe("4-pocket binders", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone project only");
+  });
+
+  test("offers the format and lays it out two by two", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Jumbos");
+    await page.getByRole("button", { name: "4-pocket", exact: true }).click();
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    // Four pockets, not nine.
+    await expect(page.getByRole("button", { name: /Pocket \d, empty/ })).toHaveCount(4);
+    await expect(page.getByRole("button", { name: "Pocket 5, empty" })).toHaveCount(0);
+  });
+
+  test("never puts two 4-pocket pages side by side", async ({ page }) => {
+    // Two 2-column pages abreast read as one 4-across grid, which is exactly a
+    // 12-pocket page — the formats would be indistinguishable at a glance.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Jumbos");
+    await page.getByRole("button", { name: "4-pocket", exact: true }).click();
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    await page.getByRole("button", { name: "Add page" }).click();
+    await page.getByRole("button", { name: "Add page" }).click();
+    await expect(page.getByLabel(/^Page \d$/)).toHaveCount(3);
+
+    // Every page is alone in its row: three pages, three distinct parents.
+    const rows = await page.evaluate(
+      () =>
+        new Set([...document.querySelectorAll('[aria-label^="Page "]')].map((el) => el.parentElement)).size,
+    );
+    expect(rows).toBe(3);
+    // And page 1 is not shoved into a right-hand column it has no facing page for.
+    const row = page.locator("[data-solo]").first();
+    const rowBox = await row.boundingBox();
+    const pageBox = await page.getByLabel("Page 1").boundingBox();
+    expect(pageBox!.width).toBeGreaterThan(rowBox!.width * 0.9);
+  });
+});
+
+test.describe("binder value on the list", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone project only");
+  });
+
+  test("shows nothing until a binder asks to be priced", async ({ page }) => {
+    // The list makes no pricing requests at all by default — one request per
+    // set per binder is not a cost to pay for a screen you are passing through.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Quiet");
+    await page.getByRole("button", { name: "Create binder" }).click();
+    // Back to the list by URL rather than by the header control: it also
+    // proves the row is drawn from stored state, not from anything left in
+    // memory by the screen that just wrote it.
+    await page.goto("/?ui=web#/binders");
+
+    await expect(page.getByText("Quiet")).toBeVisible();
+    await expect(page.getByText("Pricing…")).toHaveCount(0);
+  });
+
+  test("carries the total back to the page before, once toggled on", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("The good one");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    // Put a real, priced card in it.
+    await page.getByRole("button", { name: "Pocket 1, empty" }).click();
+    await page.getByLabel("Cards from").selectOption({ label: "Obsidian Flames" });
+    await page
+      .getByRole("button", { name: /, (owned|not owned)$/ })
+      .first()
+      .click();
+
+    await page.getByRole("button", { name: "Show value in list" }).click();
+    await expect(page.getByRole("button", { name: "✓ Show value in list" })).toBeVisible();
+
+    // Back to the list by URL rather than by the header control: it also
+    // proves the row is drawn from stored state, not from anything left in
+    // memory by the screen that just wrote it.
+    await page.goto("/?ui=web#/binders");
+
+    // A dollar figure on the row, and never $0.00 for a binder holding a card
+    // the oracle can price.
+    const row = page.locator("li", { hasText: "The good one" }).first();
+    await expect(row.getByText(/^\$\d/)).toBeVisible({ timeout: 15000 });
+    await expect(row.getByText("$0.00")).toHaveCount(0);
+  });
+
+  test("keeps the toggle after a reload, because it rides on the binder", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Sticky");
+    await page.getByRole("button", { name: "Create binder" }).click();
+    await page.getByRole("button", { name: "Show value in list" }).click();
+
+    await page.reload();
+    await expect(page.getByRole("button", { name: "✓ Show value in list" })).toBeVisible();
+  });
+});

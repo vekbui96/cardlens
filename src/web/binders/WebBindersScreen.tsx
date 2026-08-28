@@ -1,14 +1,43 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { useBindersValue } from "../../hooks/useBindersValue.ts";
+import type { BinderValueSummary } from "../../models/binderValue.ts";
+import { formatUsd } from "../../utils/format.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
-import { countBinder, emptyBinder, specFor, type BinderFormat } from "../../models/binderLayout.ts";
+import {
+  BINDER_FORMATS,
+  countBinder,
+  emptyBinder,
+  specFor,
+  type BinderFormat,
+} from "../../models/binderLayout.ts";
 import styles from "./WebBinderScreen.module.css";
 
 /**
- * Ids must be unique across DEVICES, not just this one, because they are the
- * key binders converge on: two phones that both minted "b1" would merge into
+ * A binder's total, on the row.
+ *
+ * "Pricing…" rather than a blank or a zero while the sets answer: a total that
+ * appears out of nothing looks like a number that changed, and $0.00 is the one
+ * thing this figure must never say when it simply does not know yet.
+ */
+function BinderTotal({ summary, loading }: { summary?: BinderValueSummary; loading: boolean }) {
+  if (!summary || (loading && summary.priced === 0)) {
+    return <span className={styles.binderValuePending}>Pricing…</span>;
+  }
+  return (
+    <span className={styles.binderValue}>
+      {formatUsd(summary.total)}
+      {summary.unpriced > 0 ? (
+        <span className={styles.binderValueNote}> · {summary.unpriced} unpriced</span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Ids must be unique across DEVICES, not just this one, because they are the * key binders converge on: two phones that both minted "b1" would merge into
  * one binder and the older arrangement would vanish. The clock alone is not
  * enough — two devices creating a binder in the same millisecond is unlikely
  * but the failure is silent and permanent — so it carries randomness too.
@@ -31,6 +60,15 @@ export function WebBindersScreen() {
   const [name, setName] = useState("");
   const [format, setFormat] = useState<BinderFormat>("9");
 
+  /**
+   * Only the binders that asked to be priced.
+   *
+   * Filtered HERE rather than inside the hook so the cost is visible at the
+   * call site: each binder in this list is a request per set it spans, and this
+   * screen makes none otherwise.
+   */
+  const priced = useMemo(() => binders.filter((b) => b.showValue), [binders]);
+  const values = useBindersValue(priced);
   const create = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
@@ -52,7 +90,7 @@ export function WebBindersScreen() {
           aria-label="Binder name"
         />
         <div className={styles.formats} role="group" aria-label="Binder format">
-          {(["9", "12"] as BinderFormat[]).map((f) => (
+          {BINDER_FORMATS.map((f) => (
             <button
               key={f}
               type="button"
@@ -87,11 +125,25 @@ export function WebBindersScreen() {
                     style={{ flexDirection: "column", alignItems: "flex-start" }}
                     onClick={() => push({ name: "binder", binderId: binder.id })}
                   >
-                    <span className={styles.binderName}>{binder.name}</span>
+                    <span className={styles.binderName}>
+                      {binder.name}
+                      {/* A binder that is on offer looks like any other in this
+                          list, and "which one did I mark for trade" is the
+                          question the list exists to answer at a glance. */}
+                      {binder.forTrade ? <span className={styles.tradeTag}>For trade</span> : null}
+                    </span>
                     <span className={styles.binderMeta}>
                       {specFor(binder.format).label} · {counts.filled}/{counts.pockets} filled ·{" "}
                       {binder.pages.length} page{binder.pages.length === 1 ? "" : "s"}
+                      {binder.forTrade && counts.copies !== counts.cards ? ` · ${counts.copies} cards` : ""}
                     </span>
+                    {/* The headline figure, for binders that asked for one. The
+                        unpriced count rides with it rather than being dropped:
+                        whole sets have no market price, and a total that hid
+                        that would read as the whole answer. */}
+                    {binder.showValue ? (
+                      <BinderTotal summary={values.byId.get(binder.id)} loading={values.isLoading} />
+                    ) : null}{" "}
                   </button>
                   <button type="button" className={styles.danger} onClick={() => deleteBinder(binder.id)}>
                     Delete

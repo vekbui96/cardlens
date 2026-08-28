@@ -32,8 +32,17 @@ export type Screen =
   | { name: "live"; shareId: string }
   /** Web only: binders you lay out yourself. */
   | { name: "binders" }
-  | { name: "binder"; binderId: string };
-
+  | { name: "binder"; binderId: string }
+  /**
+   * Web only: somebody's binder, offered for trade, read live from the server.
+   *
+   * Its own screen rather than a mode of `live` because the two answer opposite
+   * questions. A live set share says what its owner HAS — progress through a
+   * set, drawn against their collection. A trade share says what its owner will
+   * GIVE UP, priced per copy and addressed by pocket so the two of you can talk
+   * about it. Same share id space; different page.
+   */
+  | { name: "trade"; shareId: string };
 export type ScreenName = Screen["name"];
 
 export interface NavState {

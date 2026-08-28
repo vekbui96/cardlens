@@ -9,6 +9,7 @@ import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
 import { ShareStore } from "./shareStore.ts";
 import { BinderStore, MAX_BINDERS_PER_REQUEST, parseBinder } from "./binderStore.ts";
+import { isLiveBinder } from "../src/storage/binders.ts";
 import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderImages.ts";
 import { callRecogniser, recogniserHealth, MAX_IMAGE_BYTES as MAX_RECOGNITION_BYTES } from "./recognition.ts";
 
@@ -519,19 +520,21 @@ export function createApp(
     await relay(res, "POST", "/api/target/pause", { paused: body.paused });
   });
 
-  // --- Live set shares -------------------------------------------------------
+  // --- Live shares: a set's progress, or a binder offered for trade ----------
   /**
-   * A link that re-reads the collection instead of carrying a copy of it.
+   * A link that re-reads the data instead of carrying a copy of it.
    *
    * GET is deliberately UNAUTHENTICATED - the whole point is handing the link
    * to somebody who has no token. The id is the credential, so it is 16 random
    * bytes and the route says nothing about whether an unknown id ever existed.
    *
-   * Only the printings for ONE set are returned, and only what is owned:
-   * excluded printings are the owner's private bookkeeping about what they
-   * intend to chase, not a claim about what they hold.
-   */
-  const shareLimiter = rateLimiter(120, 60_000);
+   * Two kinds, one id space and one revocation path. A SET share returns the
+   * printings for that one set, and only what is owned: excluded printings are
+   * the owner's private bookkeeping about what they intend to chase, not a
+   * claim about what they hold. A BINDER share returns that one binder as laid
+   * out, which is a trade list — see the handler for why the collection is not
+   * consulted for it at all.
+   */ const shareLimiter = rateLimiter(120, 60_000);
 
   app.post("/api/share", shareLimiter, requireToken, (req, res) => {
     const body = req.body as { setId?: unknown; setName?: unknown };
@@ -548,6 +551,31 @@ export function createApp(
     res.json({ shares: shares.live() });
   });
 
+  /**
+   * A trade link for one binder.
+   *
+   * Refuses when this server does not hold the binder yet, rather than minting
+   * a link that would 404 for whoever it was sent to. The binder lives on the
+   * device until sync pushes it, so "share a binder you have not synced" is the
+   * normal first-time case and has to say so — a dead link handed to another
+   * collector is the silent failure this codebase keeps being bitten by.
+   */
+  app.post("/api/share/binder", shareLimiter, requireToken, (req, res) => {
+    const body = req.body as { binderId?: unknown };
+    const binderId = typeof body?.binderId === "string" ? body.binderId.trim().slice(0, 64) : "";
+    if (!binderId) {
+      res.status(400).json({ error: "binder_id_required" });
+      return;
+    }
+
+    const binder = binders.all().find((b) => b.id === binderId && isLiveBinder(b));
+    if (!binder) {
+      res.status(409).json({ error: "binder_not_synced" });
+      return;
+    }
+
+    res.json(shares.createOrReuseBinder(binder.id, binder.name));
+  });
   app.delete("/api/share/:id", shareLimiter, requireToken, (req, res) => {
     const id = String(req.params.id ?? "").slice(0, 64);
     if (!shares.revoke(id)) {
@@ -567,6 +595,31 @@ export function createApp(
       return;
     }
 
+    /**
+     * A traded binder is returned whole, as its owner laid it out.
+     *
+     * The binder already carries a denormalised name, art and collector number
+     * per pocket, so the page paints without the recipient's browser resolving
+     * anything — and it prices itself from the PUBLIC printings endpoint, which
+     * is why no price is computed here.
+     *
+     * The collection is not consulted at all. What a trade binder offers is
+     * stated by the binder; whether the owner also happens to own a second copy
+     * of something is their private bookkeeping, exactly as excluded printings
+     * are on a set share.
+     */
+    if (share.kind === "binder") {
+      const binder = binders.all().find((b) => b.id === share.binderId && isLiveBinder(b));
+      // Deleting a binder kills its link. Same 404 as an unknown id, because a
+      // recipient learning that a binder "used to exist" is the same leak.
+      if (!binder) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json({ kind: "binder", binder, at: Date.now() });
+      return;
+    }
+
     const owned = collection
       .all()
       .filter((r) => r.setId === share.setId && r.at > (r.deletedAt ?? 0) && !r.excluded)
@@ -582,7 +635,9 @@ export function createApp(
         at: r.at,
       }));
 
-    res.json({ setId: share.setId, setName: share.setName, owned, at: Date.now() });
+    // `kind` is additive: clients built before binder shares existed ignore it,
+    // and it is what lets a newer one tell the two payloads apart.
+    res.json({ kind: "set", setId: share.setId, setName: share.setName, owned, at: Date.now() });
   });
 
   // --- Printings (TCGdex, cached server-side) --------------------------------

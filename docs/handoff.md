@@ -6,7 +6,45 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
-## Most recent work — Home performance (2026-08-27)
+## Most recent work — the trade binder (2026-08-28)
+
+**Committed and tested, NOT yet deployed.** `server/` changed, so both targets
+need it — see `docs/runbook.md`. No new npm dependency, so no `npm.cmd install`
+step; no `.env` change either.
+
+A binder can now be offered for trade: copies and condition per pocket, a total
+priced per copy, and a public revocable link. `CLAUDE.md` holds the durable
+rules; the state of play is:
+
+- **`forTrade` on the binder, `quantity` + `condition` on a card slot.** Not a
+  second kind of object — see CLAUDE.md for why, and for why none of the three
+  is written when it holds its default.
+- **`#/trade/:shareId`** is the recipient's page. No token, no collection, no
+  account. Two views of one binder — the binder as laid out, and a list sorted
+  by value — bound together by the **pocket address** (`2·5`), which is how the
+  two collectors will actually name a card to each other. Tapping a list row
+  scrolls to that pocket and lights it.
+- **Validation now lives in `src/models/binderParse.ts`**, shared by the server
+  and the trade page. This was a move, not a rewrite: `server/binderStore.ts`
+  re-exports `parseSlot` / `parseBinder` / `MAX_BINDERS_PER_REQUEST`, and
+  `IMAGE_ID_PATTERN` moved with it (re-exported from `binderImages.ts`). It is
+  in `tsconfig.node.json`.
+- **`Share` is a tagged union now.** Legacy untagged rows read as set shares —
+  there is a live `shares.json` on the server full of them, and it is covered by
+  a test rather than assumed.
+- **Fixed on the way past: binder spreads were broken on phones.** Page 1 sat at
+  half width against an empty half-screen, in the BUILDER as well, for as long
+  as spreads have existed. Cause is in the traps list below. Regression test is
+  `e2e/binders.spec.ts` "opens page 1 at full width once the spread stacks", and
+  it was confirmed to fail without the fix.
+- **Not built, deliberately: condition does not adjust a price.** The oracles
+  publish one market price per printing and never say what condition it assumes,
+  so a multiplier would be invented. It is displayed and left to the traders.
+- **Nothing has been traded between two real people yet.** The link is exercised
+  end to end against a real server in `e2e/trade.spec.ts` — push, mint, open
+  with no token, revoke — but nobody has sent one to another collector.
+
+## Earlier — Home performance (2026-08-27)
 
 Home was measured on the live site before anything was changed, and the measuring
 is the part worth repeating: `.claude/skills/optimizing-cardlens/SKILL.md` has
@@ -225,8 +263,15 @@ directions:
 
 ## Traps found the hard way this session
 
-- **`1fr` is `minmax(auto, 1fr)`.** A `white-space: nowrap` label sets a grid
-  track's min-content width and squeezes its neighbours — the ellipsis never
+- **`grid-column: N` does not fall back when the grid collapses to one column.**
+  It creates an implicit Nth track and puts the element in it. The binder
+  spread's cover rule (`.spread[data-cover] > * { grid-column: 2 }`) was never
+  undone in the ≤560px media query, so on a phone page 1 rendered at half width
+  jammed against the right edge, with pockets a third the size of every other
+  page's — live for as long as spreads have existed and found only by
+  screenshotting the page rather than asserting on it. Undo a column assignment
+  in the same media query that removes the column.
+- **`1fr` is `minmax(auto, 1fr)`.** A `white-space: nowrap` label sets a grid track's min-content width and squeezes its neighbours — the ellipsis never
   engages because the track grows instead. Use `minmax(0, 1fr)` plus
   `min-width: 0`. This is why the showcase looked right and the set grid did not.
 - **A sticky header owns its own stacking context.** No z-index on a backdrop
@@ -361,4 +406,4 @@ Full detail in `CLAUDE.md`; the shortlist:
 - ~~`collection.json` has no backup~~ — done. `D:\services\scripts\backup-collection.ps1` runs under scheduled task `cardlens-backup` (daily 03:00 and at startup), refuses to snapshot unparseable or empty JSON, skips identical snapshots, keeps 30.
 - SERVER-PC BIOS: **AC Recovery → Power On** is not set, so it stays off after a power cut. It has been found powered off twice.
 - `solid-website-api` deploy key not registered, so that server rebuilds sideloaded source rather than pulling. Does not affect CardLens.
-- `useCollectionValue` still has no direct test, and it computes what the collection is worth. The refactor onto the shared lookup was verified equivalent by review, not by a test.
+- ~~`useCollectionValue` has no direct test~~ — **closed, and the note was partly wrong.** Its arithmetic was already pure and tested in `models/value.ts` (6 tests) and `models/movement.ts` (9). What genuinely was untested and duplicated is the ORACLE ORDER — TCGdex first, catalog second — written out once in `useCollectionValue` for Home's total and again in `useOwnedCards` for the list of the very printings behind that total, with only a comment asking them to agree. It is now `models/marketPrice.ts`, used by both and covered, including the smp-SM210 fallback and the refusal to price a patterned foil off the plain reverse key. `models/binderValue.ts` did the same for the binder totals.
