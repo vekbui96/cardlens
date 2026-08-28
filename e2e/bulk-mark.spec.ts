@@ -90,6 +90,26 @@ async function triplePinch(page: Page): Promise<void> {
   await select(page);
 }
 
+/**
+ * This block races a real 1200ms window, so it is retried locally too.
+ *
+ * The gesture is three pinches inside the burst window the product actually
+ * enforces (CLAUDE.md: 500ms felt broken on a neural band, 1200ms works). Each
+ * `press()` is a CDP round-trip, and locally Playwright runs many workers —
+ * under that contention three round-trips can outlast 1200ms, the burst reads
+ * as three ordinary marks, and the test fails having exercised the product
+ * correctly. Measured: 4/4 pass at `--workers=1`, roughly 3-in-5 with the
+ * default worker count.
+ *
+ * CI already had cover (`workers: 1`, `retries: 2`); this gives the same
+ * locally rather than leaving a test that cries wolf on every full run.
+ *
+ * **Do not "fix" this by dispatching synthetic KeyboardEvents in the page.**
+ * They never reach the input adapter, so the test passes without exercising
+ * anything — tried, and reverted.
+ */
+test.describe.configure({ retries: 2 });
+
 test.describe("triple-pinch bulk mark", () => {
   // Playwright requires an object-destructuring first argument here.
   // eslint-disable-next-line no-empty-pattern
