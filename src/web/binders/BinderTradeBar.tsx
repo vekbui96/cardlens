@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRepositories } from "../../app/contexts.tsx";
 import { screenToPath } from "../../app/screenUrl.ts";
 import { setForTrade, type Binder } from "../../models/binderLayout.ts";
@@ -34,6 +34,7 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const labelId = useId();
 
   /**
    * Ask the server what is already shared.
@@ -114,37 +115,49 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
   };
 
   return (
-    <div className={styles.controls}>
-      <button
-        type="button"
-        className={`${styles.chip} ${binder.forTrade ? styles.chipOn : ""}`}
-        aria-pressed={Boolean(binder.forTrade)}
-        onClick={() => onSave(setForTrade(binder, !binder.forTrade, Date.now()))}
-      >
-        {binder.forTrade ? "✓ For trade" : "For trade"}
-      </button>
+    <div className={styles.settingRow}>
+      <span className={styles.settingLabel} id={labelId}>
+        Trading
+      </span>
+      <div className={styles.settingControls} role="group" aria-labelledby={labelId}>
+        <button
+          type="button"
+          className={`${styles.chip} ${binder.forTrade ? styles.chipOn : ""}`}
+          aria-pressed={Boolean(binder.forTrade)}
+          onClick={() => onSave(setForTrade(binder, !binder.forTrade, Date.now()))}
+        >
+          {binder.forTrade ? "✓ For trade" : "For trade"}
+        </button>
 
-      {binder.forTrade ? (
-        <>
-          <button type="button" className={styles.chip} disabled={busy} onClick={() => void share()}>
-            {copied ? "Link copied" : busy ? "Working…" : link ? "Copy trade link" : "Share for trade"}
-          </button>
-          {/* Only offered when there is something to stop. A "stop sharing"
-              button on a binder that was never shared is a control that does
-              nothing, which is how this codebase has been bitten before. */}
-          {link ? (
-            <button type="button" className={styles.chip} disabled={busy} onClick={() => void stopSharing()}>
-              Stop sharing
+        {binder.forTrade ? (
+          <>
+            <button type="button" className={styles.chip} disabled={busy} onClick={() => void share()}>
+              {copied ? "Link copied" : busy ? "Working…" : link ? "Copy trade link" : "Share for trade"}
             </button>
-          ) : null}
-        </>
-      ) : null}
+            {/* Only offered when there is something to stop. A "stop sharing"
+                button on a binder that was never shared is a control that does
+                nothing, which is how this codebase has been bitten before. */}
+            {link ? (
+              <button
+                type="button"
+                className={styles.chip}
+                disabled={busy}
+                onClick={() => void stopSharing()}
+              >
+                Stop sharing
+              </button>
+            ) : null}
+          </>
+        ) : null}
 
-      {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      ) : null}
+        {/* Inside the row, so the message sits under the buttons that caused it
+            rather than at the foot of the whole panel. */}
+        {error ? (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -11,16 +11,13 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import {
   addPage,
-  BINDER_FORMATS,
   canRemoveLastPage,
   countBinder,
   fillSequential,
   nextEmptyPocket,
   placeSlot,
   preferredFinish,
-  reformat,
   removeLastPage,
-  setShowValue,
   specFor,
   hasFacingPages,
   pageGroups,
@@ -31,7 +28,7 @@ import { formatUsd } from "../../utils/format.ts";
 import type { PokemonCardSummary } from "../../models/cards.ts";
 import { BinderSearchResults } from "./BinderSearchResults.tsx";
 import { BinderPocketSheet } from "./BinderPocketSheet.tsx";
-import { BinderTradeBar } from "./BinderTradeBar.tsx";
+import { BinderSettings } from "./BinderSettings.tsx";
 import { resizeToDataUrl } from "../../utils/imageResize.ts";
 import { uploadBinderImage } from "../../services/sync/binderImages.ts";
 import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
@@ -201,23 +198,13 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
       headerRight={`${counts.filled}/${counts.pockets}`}
       canGoBack
     >
+      {/* Page actions only. Everything that configures the binder itself —
+          pocket size, pricing on the list, trading — lives in Settings below,
+          because those are decided once and these are pressed constantly. */}
       <div className={styles.controls}>
-        <div className={styles.formats} role="group" aria-label="Binder format">
-          {BINDER_FORMATS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              className={`${styles.chip} ${binder.format === f ? styles.chipOn : ""}`}
-              aria-pressed={binder.format === f}
-              onClick={() => commit(reformat(binder, f, Date.now()))}
-            >
-              {specFor(f).label}
-            </button>
-          ))}
-        </div>
         <button type="button" className={styles.chip} onClick={() => commit(addPage(binder, Date.now()))}>
           Add page
-        </button>
+        </button>{" "}
         {/* Only offered when it would do something, and only for an EMPTY last
             page — removing one that holds cards would destroy them with no
             undo. */}
@@ -229,22 +216,8 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
         >
           Remove page
         </button>
-        {/* Off by default. Pricing a binder is a request per set it spans, and
-            the binders list asks for nothing otherwise — so this is opt-in on
-            the binders that represent money rather than on all of them. The
-            total is shown one screen up, where you are choosing between them. */}
-        <button
-          type="button"
-          className={`${styles.chip} ${binder.showValue ? styles.chipOn : ""}`}
-          aria-pressed={Boolean(binder.showValue)}
-          onClick={() => commit(setShowValue(binder, !binder.showValue, Date.now()))}
-        >
-          {binder.showValue ? "✓ Show value in list" : "Show value in list"}
-        </button>
       </div>
-      {/* Its own row above the card picker, because offering a binder is a
-          statement about the whole thing, not an edit to a pocket. */}
-      <BinderTradeBar binder={binder} onSave={commit} />
+      <BinderSettings binder={binder} onSave={commit} />{" "}
       <div className={styles.controls}>
         <label className={styles.setPick}>
           <span className={styles.setPickLabel}>Set</span>
@@ -292,7 +265,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           Fill with one of each
         </button>
       </div>
-
       {/* Changing format keeps reading order, not positions — a 4-wide page has
           no pocket matching the 9th of a 3-wide one. */}
       <p className={styles.hint}>
@@ -300,7 +272,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           ? `Pocket ${selected.index + 1} on page ${selected.page + 1} selected — pick a card below, or clear it.`
           : "Tap a pocket to fill it."}
       </p>
-
       {/* Laid out the way the binder actually falls open: page 1 alone, then
           facing pairs. A half spread keeps its empty right side rather than
           centring the page — that gap is where the next page goes, and the
@@ -341,7 +312,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           ))}
         </div>
       ))}
-
       {selected ? (
         <div className={styles.picker}>
           {/* Searching by name is the only way to reach a card whose set you do
@@ -499,7 +469,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           />{" "}
         </div>
       ) : null}
-
       <p className={styles.footnote}>
         {/* On a trade binder the count that matters is COPIES — twelve pockets
             can hold thirty cards, and thirty is what is being offered. */}

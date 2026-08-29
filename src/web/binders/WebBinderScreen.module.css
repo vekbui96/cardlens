@@ -755,3 +755,76 @@ label.chip {
   font-size: var(--cl-fs-small);
   color: var(--cl-fg-dim);
 }
+
+/* --- Binder settings ----------------------------------------------------- */
+
+/*
+ * Settings the binder carries, opened on demand.
+ *
+ * A panel rather than a modal: changing the pocket size re-flows every page and
+ * marking a binder for trade changes what each pocket shows, so the binder has
+ * to stay visible underneath while you do it. A dialog would cover the thing
+ * being configured.
+ */
+.settings {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+  padding: var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap);
+}
+
+/*
+ * Label on the left, controls on the right, wrapping to two lines when the
+ * screen is narrow. The label column is fixed so the controls line up down the
+ * panel rather than stepping in and out with the length of each word.
+ */
+.settingRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-sm);
+}
+
+.settingLabel {
+  min-width: 7em;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg-muted);
+}
+
+.settingControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-sm);
+  min-width: 0;
+}
+
+/*
+ * What is switched on, readable without opening the panel.
+ *
+ * Gold, the app's "worth something" accent, and a word rather than a dot —
+ * state this app cares about is never carried by colour alone. A binder quietly
+ * still on offer is exactly the thing you want to notice from the outside.
+ */
+.settingTag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--cl-gold-dim, rgba(242, 181, 68, 0.16));
+  color: var(--cl-gold, var(--cl-price));
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.settingNote {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  line-height: 1.45;
+  color: var(--cl-fg-dim);
+}

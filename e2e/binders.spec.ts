@@ -248,8 +248,11 @@ test.describe("binder value on the list", () => {
       .first()
       .click();
 
-    await page.getByRole("button", { name: "Show value in list" }).click();
-    await expect(page.getByRole("button", { name: "✓ Show value in list" })).toBeVisible();
+    // A binder setting, so it lives in the Settings panel rather than on the
+    // toolbar — the toolbar is for what you press while laying pages out.
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Show value", exact: true }).click();
+    await expect(page.getByRole("button", { name: "✓ Show value" })).toBeVisible();
 
     // Back to the list by URL rather than by the header control: it also
     // proves the row is drawn from stored state, not from anything left in
@@ -267,9 +270,16 @@ test.describe("binder value on the list", () => {
     await page.goto("/?ui=web#/binders");
     await page.getByLabel("Binder name").fill("Sticky");
     await page.getByRole("button", { name: "Create binder" }).click();
-    await page.getByRole("button", { name: "Show value in list" }).click();
+    // A binder setting, so it lives in the Settings panel rather than on the
+    // toolbar — the toolbar is for what you press while laying pages out.
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Show value", exact: true }).click();
 
     await page.reload();
-    await expect(page.getByRole("button", { name: "✓ Show value in list" })).toBeVisible();
+    // Collapsed again after a reload, so the state reads from the tag beside
+    // the Settings button rather than from the control itself.
+    await expect(page.getByText("Priced in list")).toBeVisible();
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("button", { name: "✓ Show value" })).toBeVisible();
   });
 });

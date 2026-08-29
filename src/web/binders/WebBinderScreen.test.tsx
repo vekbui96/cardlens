@@ -251,6 +251,16 @@ describe("WebBinderScreen search", () => {
 });
 
 describe("WebBinderScreen trading", () => {
+  /**
+   * Trade is a binder SETTING, so it lives in the Settings panel rather than on
+   * the toolbar, and the panel is collapsed by default. The toolbar is for the
+   * things you press while laying a binder out; this is decided once.
+   */
+  async function markForTrade(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+  }
+
   /** Put a card in pocket 1 and open the sheet on it. */
   async function seedAndOpen(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
@@ -270,7 +280,7 @@ describe("WebBinderScreen trading", () => {
     await seedAndOpen(user);
     expect(screen.queryByRole("button", { name: "One more copy" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await markForTrade(user);
     expect(screen.getByRole("button", { name: "One more copy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lightly played" })).toBeInTheDocument();
   });
@@ -283,7 +293,7 @@ describe("WebBinderScreen trading", () => {
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
 
     await seedAndOpen(user);
-    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await markForTrade(user);
     await user.click(screen.getByRole("button", { name: "One more copy" }));
     await user.click(screen.getByRole("button", { name: "One more copy" }));
 
@@ -302,7 +312,7 @@ describe("WebBinderScreen trading", () => {
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
 
     await seedAndOpen(user);
-    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await markForTrade(user);
     expect(screen.getByRole("button", { name: "One fewer copy" })).toBeDisabled();
   });
 
@@ -313,7 +323,7 @@ describe("WebBinderScreen trading", () => {
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
 
     await seedAndOpen(user);
-    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await markForTrade(user);
 
     await user.click(screen.getByRole("button", { name: "Lightly played" }));
     expect(placedCards()[0].condition).toBe("LP");
@@ -328,11 +338,73 @@ describe("WebBinderScreen trading", () => {
     render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
 
     await seedAndOpen(user);
-    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await markForTrade(user);
     await user.click(screen.getByRole("button", { name: "One more copy" }));
     await user.click(screen.getByRole("button", { name: "✓ For trade" }));
 
     expect(placedCards()[0].quantity).toBe(2);
     expect(screen.queryByRole("button", { name: "One more copy" })).not.toBeInTheDocument();
+  });
+});
+
+describe("WebBinderScreen settings", () => {
+  it("keeps page actions on the toolbar and settings behind the panel", async () => {
+    // The split the panel exists for: things pressed constantly stay out,
+    // things decided once move in.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.getByRole("button", { name: "Add page" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove page" })).toBeInTheDocument();
+
+    expect(screen.queryByRole("button", { name: "9-pocket" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "For trade" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show value" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("button", { name: "9-pocket" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "For trade" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show value" })).toBeInTheDocument();
+    // Add page does not move into the panel — it stays where it was.
+    expect(screen.getByRole("button", { name: "Add page" })).toBeInTheDocument();
+  });
+
+  it("says the panel is a disclosure, so a screen reader can tell it is collapsed", async () => {
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const toggle = screen.getByRole("button", { name: "Settings" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("changes the pocket size from inside the panel", async () => {
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "4-pocket" }));
+
+    // Four pockets, not nine — the binder actually re-flowed.
+    expect(screen.getAllByRole("button", { name: /Pocket \d, empty/ })).toHaveLength(4);
+    expect(new Repositories().getBinders().find((b) => b.id === BINDER_ID)?.format).toBe("4");
+  });
+
+  it("shows what is switched on without opening the panel", async () => {
+    // A binder quietly still on offer is exactly the thing worth noticing from
+    // the outside, so the state is legible with the panel shut.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.queryByText("For trade")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "For trade" }));
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.queryByRole("button", { name: "✓ For trade" })).not.toBeInTheDocument();
+    expect(screen.getByText("For trade")).toBeInTheDocument();
   });
 });
