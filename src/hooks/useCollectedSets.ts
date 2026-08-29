@@ -11,6 +11,16 @@ export interface CollectedSet {
   printings: number;
   finishes: Partial<Record<CollectFinish, number>>;
   total?: number;
+  /**
+   * The printed denominator — the base-set size, when the set has one.
+   *
+   * Carried, not consumed: turning it into a base tier needs the collector
+   * NUMBER of every owned card, and this hook only has counts. Feed it and the
+   * owned numbers to `models/setCompletion.ts`; never divide by it here, since
+   * a numerator that includes secret rares over a base denominator is the one
+   * mistake that makes an unfinished set look complete.
+   */
+  printedTotal?: number;
   /** 0–1, or undefined when the set's size isn't known yet. */
   ratio?: number;
 }
@@ -45,6 +55,7 @@ export function useCollectedSets(): CollectedSet[] {
           finishes: finishesBySet[setId] ?? {},
           setName: set?.name ?? setId,
           owned,
+          ...(set?.printedTotal ? { printedTotal: set.printedTotal } : {}),
           ...(total ? { total, ratio: Math.min(1, owned / total) } : {}),
         };
       })

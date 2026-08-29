@@ -4,6 +4,14 @@ import type { RawCard } from "./schema.ts";
  * Deterministic fixtures mirroring the shape of real pokemontcg.io cards (incl.
  * tcgplayer prices with varying finishes). Used by MockPokemonProvider, the
  * DevPanel toggles, unit tests, and Playwright flows.
+ *
+ * Every set carries its REAL `total` and `printedTotal`. They were absent
+ * entirely until the completion tiers went in, and MockPokemonProvider builds
+ * its set list out of these embedded set objects — so under mocks no set had a
+ * size, and no e2e run had ever rendered a progress bar. Real numbers keep the
+ * mock catalog honest and give the tiers something to partition: Base is
+ * 102/102 and has one tier, while `sv3-223` and `swsh7-215` are both past their
+ * printed totals and are over-number cards.
  */
 export const MOCK_CARDS: RawCard[] = [
   {
@@ -21,6 +29,8 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Scarlet & Violet",
       releaseDate: "2023/08/11",
       ptcgoCode: "OBF",
+      total: 230,
+      printedTotal: 197,
     },
     images: {
       small: "https://images.pokemontcg.io/sv3/223.png",
@@ -49,6 +59,8 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Scarlet & Violet",
       releaseDate: "2023/08/11",
       ptcgoCode: "OBF",
+      total: 230,
+      printedTotal: 197,
     },
     images: {
       small: "https://images.pokemontcg.io/sv3/125.png",
@@ -71,7 +83,16 @@ export const MOCK_CARDS: RawCard[] = [
     artist: "Mitsuhiro Arita",
     rarity: "Rare Holo",
     nationalPokedexNumbers: [6],
-    set: { id: "base1", name: "Base", series: "Base", releaseDate: "1999/01/09", ptcgoCode: "BS" },
+    // 102/102: no secrets, so Base has a single completion tier.
+    set: {
+      id: "base1",
+      name: "Base",
+      series: "Base",
+      releaseDate: "1999/01/09",
+      ptcgoCode: "BS",
+      total: 102,
+      printedTotal: 102,
+    },
     images: {
       small: "https://images.pokemontcg.io/base1/4.png",
       large: "https://images.pokemontcg.io/base1/4_hires.png",
@@ -100,6 +121,8 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Sword & Shield",
       releaseDate: "2020/09/25",
       ptcgoCode: "CPA",
+      total: 80,
+      printedTotal: 73,
     },
     images: {
       small: "https://images.pokemontcg.io/swsh45sv/SV107.png",
@@ -129,6 +152,8 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Sword & Shield",
       releaseDate: "2020/08/14",
       ptcgoCode: "DAA",
+      total: 201,
+      printedTotal: 189,
     },
     images: {
       small: "https://images.pokemontcg.io/swsh3/20.png",
@@ -151,7 +176,16 @@ export const MOCK_CARDS: RawCard[] = [
     artist: "Mitsuhiro Arita",
     rarity: "Common",
     nationalPokedexNumbers: [25],
-    set: { id: "base1", name: "Base", series: "Base", releaseDate: "1999/01/09", ptcgoCode: "BS" },
+    // 102/102: no secrets, so Base has a single completion tier.
+    set: {
+      id: "base1",
+      name: "Base",
+      series: "Base",
+      releaseDate: "1999/01/09",
+      ptcgoCode: "BS",
+      total: 102,
+      printedTotal: 102,
+    },
     images: {
       small: "https://images.pokemontcg.io/base1/58.png",
       large: "https://images.pokemontcg.io/base1/58_hires.png",
@@ -179,6 +213,10 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Sword & Shield",
       releaseDate: "2021/08/27",
       ptcgoCode: "EVS",
+      // 215 is past the printed 203, so this card is over-number: it counts
+      // toward master and never toward base.
+      total: 237,
+      printedTotal: 203,
     },
     images: {
       small: "https://images.pokemontcg.io/swsh7/215.png",
@@ -207,6 +245,8 @@ export const MOCK_CARDS: RawCard[] = [
       series: "Scarlet & Violet",
       releaseDate: "2023/06/09",
       ptcgoCode: "PAL",
+      total: 279,
+      printedTotal: 193,
     },
     images: {
       small: "https://images.pokemontcg.io/sv2/106.png",

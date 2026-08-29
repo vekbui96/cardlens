@@ -29,6 +29,9 @@ export function toSet(raw: RawSet): PokemonSet {
     ...(raw.series ? { series: raw.series } : {}),
     ...(raw.releaseDate ? { releaseDate: raw.releaseDate } : {}),
     ...(typeof raw.total === "number" ? { total: raw.total } : {}),
+    // Fetched and parsed all along, then dropped here — which is why the app
+    // could only ever offer one completion tier. See models/setCompletion.ts.
+    ...(typeof raw.printedTotal === "number" ? { printedTotal: raw.printedTotal } : {}),
     ...(raw.images?.symbol ? { symbolImage: raw.images.symbol } : {}),
     ...(raw.images?.logo ? { logoImage: raw.images.logo } : {}),
   };

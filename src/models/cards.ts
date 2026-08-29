@@ -166,7 +166,17 @@ export interface PokemonSet {
   code?: string;
   series?: string;
   releaseDate?: string;
+  /** Every card in the set, secret rares and over-number cards included. */
   total?: number;
+  /**
+   * The denominator printed on the cards themselves ("12/84") — the size of the
+   * base set, without secrets. Present on 174/174 sets and never 0.
+   *
+   * Kept beside `total` rather than folded into it because they are two
+   * different achievements: see models/setCompletion.ts, which is the only
+   * place allowed to decide what either number means.
+   */
+  printedTotal?: number;
   symbolImage?: string;
   logoImage?: string;
 }

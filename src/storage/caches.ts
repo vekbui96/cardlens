@@ -25,10 +25,10 @@ export const searchCache = new TtlCache<PokemonCardSummary[]>("cache:search", SE
  * before `variants` existed, would render without them for up to a week with no
  * refetch. Bump the suffix whenever toSet/toSummary gains a field the UI reads.
  */
-export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v2", 7 * DAY, 2);
-// v3: summaries carry `variantPrices`, which the collection reads to price a
-// printing TCGdex has no number for. A device holding v2 entries would keep
-// serving summaries without it and show those printings as unpriced.
+// v3: sets carry `printedTotal`, which is the base-completion denominator. A
+// device holding v2 entries would keep serving sets without it for up to a
+// week, and every one of them would silently show a single tier.
+export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v3", 7 * DAY, 2);
 /**
  * Eight, not thirty. Measured: one set costs ~58KB here and ~49KB in the
  * printings cache below, and a 295-card set is over twice that — thirty entries
@@ -37,6 +37,9 @@ export const setsCache = new TtlCache<PokemonSet[]>("cache:sets:v2", 7 * DAY, 2)
  * left a mark silently fails to save. Eight sets is far more than anyone
  * revisits inside a 6h TTL, and it leaves the irreplaceable data room.
  */
+// v3: summaries carry `variantPrices`, which the collection reads to price a
+// printing TCGdex has no number for. A device holding v2 entries would keep
+// serving summaries without it and show those printings as unpriced.
 export const setCardsCache = new TtlCache<PokemonCardSummary[]>("cache:set-cards:v3", SEARCH_TTL_MS, 8);
 
 /**

@@ -42,6 +42,11 @@ export const SetSchema = z.object({
   series: z.string().optional(),
   releaseDate: z.string().optional(),
   ptcgoCode: z.string().optional(),
+  // The live API does send these on the embedded set, and the mock provider
+  // builds its whole set list out of card.set — without them nothing under
+  // mocks has a set size, so no bar and no completion tier can ever render.
+  total: z.number().optional(),
+  printedTotal: z.number().optional(),
 });
 
 export const CardSchema = z.object({
