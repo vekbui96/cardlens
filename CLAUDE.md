@@ -386,8 +386,26 @@ Sync failure is a status line, never a toast: the local write already succeeded.
   - Comparing against the last _frame_ is not enough. A hand reaching in to
     straighten an already-scanned card re-armed the shutter and scanned it twice.
 
-- **An unsettled row SHOWS the card's collector number, and never reads it.**
-  1,730 of 20,205 cards are reprints with identical artwork, and the printed
+- **The accept gate is ASYMMETRIC, and both recognisers carry it.**
+  `margin >= (distance <= 2 ? 8 : 10)` — `MIN_MARGIN` / `MIN_MARGIN_DRIFTED` /
+  `NEAR_EXACT` in `src/scan/phash.ts`, mirrored in `cardrec/judge.py` on
+  SERVER-PC. Scanning is server-first and the client trusts the server's
+  verdict, so **these must always move together**; a change to one alone is
+  either inert or a silent parity break. The Python is not in this repo and not
+  under git — see `docs/handoff.md`.
+  - A blanket `MIN_MARGIN = 8` produced **2 false accepts** at 20,205 cards
+    (`ex3-86` filed as `pop3-11`, `bw2-32` as `mcd12-6`), both at distance 4
+    under crop error. It was clean at 1,709 cards: **a gate measured against a
+    small index expires when the index grows.** `validate-recognition.mjs`
+    builds its own index from the sets it is given and structurally cannot see
+    crowding — re-run `scripts/measure-gate-safety.mjs` after every
+    `build-card-index.mjs all`.
+  - A blanket 10 was measured and **rejected**: same safety, but it refuses 312
+    cards a perfect capture would have matched. The asymmetric rule costs none
+    of them, because a flawless capture sits at distance 0.
+  - **A measurement whose answer must be zero cannot be taken on a sample** —
+    the second leak fell outside a stride sample and was missed entirely.
+- **An unsettled row SHOWS the card's collector number, and never reads it.** 1,730 of 20,205 cards are reprints with identical artwork, and the printed
   number is usually the only thing separating them — but OCR to read it is
   blocked on pixels the server never receives (see above). So `numberBandRect`
   (`src/scan/frame.ts`) crops the band from the VIDEO at camera resolution —

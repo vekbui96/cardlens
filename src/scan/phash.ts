@@ -269,69 +269,159 @@ export interface Verdict {
 }
 
 /**
- * Measured, not guessed — `node scripts/validate-recognition.mjs me5 me3 me2`.
+ * Measured, not guessed — and re-measured, because the first measurement expired.
  *
- * Real cards put through six realistic scan distortions (camera resample, 3%
- * crop error, dim room, holo glare, 3° tilt, and all of them at once), swept
- * across both thresholds:
+ * The original sweep is `node scripts/validate-recognition.mjs me5 me3 me2`:
+ * real cards put through six realistic scan distortions (camera resample, 3%
+ * crop error, dim room, holo glare, 3° tilt, and all of them at once). It builds
+ * its own index out of the sets it is given, so this table was taken against a
+ * few hundred cards:
  *
  *   maxDistance  minMargin   autoAccepted   falseAccept
  *           10           6          76.0%            0%
  *           14           6          90.1%          0.1%
  *           16           4          94.6%          0.1%
  *           16           6          91.4%          0.1%
- *           16           8          84.9%            0%   ← chosen
+ *           16           8          84.9%            0%   ← chosen in 2026-08
  *           24           8          84.9%            0%
  *
- * Two things fall out of that table, and neither was obvious beforehand:
+ * Two things fell out of that table and both still hold:
  *
  * **The margin is the safety control, not the distance.** Every margin of 4 or
- * 6 leaks false accepts at every distance from 14 to 24; every margin of 8 is
- * clean at all of them. Tightening the distance instead — the intuitive move —
- * costs 9 points of auto-accept and fixes nothing that 8 does not fix better.
+ * 6 leaks false accepts at every distance from 14 to 24. Tightening the distance
+ * instead — the intuitive move — costs auto-accept and fixes nothing.
  *
  * **16 is the knee.** 18, 20 and 24 are identical to it, so a looser bound is
  * risk with no return.
  *
- * The chosen pair beats the obvious 10/6 on BOTH axes: more cards accepted
- * without asking, and no wrong ones. That matters because a false accept
- * silently files the wrong card and nobody ever notices, whereas being asked is
- * merely annoying.
+ * **What did NOT survive is the 0%.** A gate is only as safe as the crowd it
+ * judges against, and the index has grown from 1,709 cards to 20,205 since that
+ * sweep. Re-run over the SHIPPED index — `node scripts/measure-gate-safety.mjs
+ * fetch`, then `report` — every one of the 20,205 cards, all six distortions,
+ * 121,230 trials, each query searched against `index-*.bin` itself:
  *
- * **The sweep has now been re-run at full catalog size, and the pair holds.**
- * `node scripts/measure-index-crowding.mjs` over the shipped 20,205-card index,
- * feeding every card its own hash:
+ *   maxDistance  minMargin   autoAccepted   falseAccept   MATCHED     lost
+ *           16           6          57.9%   45 (0.037%)     92.8%     −277
+ *           16           7          47.7%    3 (0.002%)     91.6%      −32
+ *           16           8          45.9%    2 (0.002%)     91.4%        0   ← was shipped
+ *           16           9          37.7%    1 (0.001%)     90.1%      274
+ *           16          10          36.7%    0 (0.000%)     89.9%      312   ← chosen
+ *           16          11          30.2%    0 (0.000%)     84.5%    1,408
+ *           16          12          29.5%    0 (0.000%)     83.6%    1,590
  *
- * ```
- *                1,709 cards      20,205 cards
- * MATCHED             95.2%             91.4%
- * AMBIGUOUS            4.8%              8.6%
- * WRONG                   0                 0
- * exact ties             54               652
- * ```
+ * The two right-hand columns are a DIFFERENT question, measured the way
+ * `measure-index-crowding.mjs` measures it: every card fed its own hash, asking
+ * how far the nearest OTHER card is. That is a perfect capture, so it sits at
+ * distance 0 and MAX_DISTANCE cannot move it — the whole crowding cost of the
+ * gate is MIN_MARGIN's, and `lost` is how many of the 18,475 cards that
+ * auto-accepted at margin 8 no longer do. `autoAccepted` is not comparable with
+ * the first table's: same six distortions, an index thirty times larger.
  *
- * Twelve times the cards costs about four points of auto-accept and NOTHING in
- * correctness, which is the whole argument for gating on the margin rather than
- * on a weighted score. Crowding cannot produce a false accept here: two cards
- * that sit on top of each other have a margin of zero, and zero fails the gate.
- * It spends the growth on being asked more often instead.
+ * **The two false accepts at 16/8 are real and named.** Both under the crop-error
+ * render, both a reprint filed into the wrong set:
  *
- * What it is asked about is not random, either — the 1,730 ambiguous cards are
- * overwhelmingly Base Set against Base Set 2 against Legendary Collection,
- * which are the same artwork reprinted. No hash can separate those; only the
+ *   ex3-86  "Low Pressure System" (Dragon 86)  → pop3-11 (POP Series 3 11)
+ *           distance 4, runner-up 13, margin 9; the truth sat at 14
+ *   bw2-32  "Emolga" (Emerging Powers 32)      → mcd12-6 (McDonald's 2012 6)
+ *           distance 4, runner-up 12, margin 8; the truth sat at 12
+ *
+ * Note where they sit: **distance 4**, the tightest, most confident end of the
+ * accept region. A 3% crop error moved each query nearer to a different printing
+ * than to its own catalog image, and then left it looking lonely. No value of
+ * MAX_DISTANCE can catch that — the sweep confirms 10 leaks exactly as 16 does —
+ * which is the earlier finding sharpened: the margin is not merely the better
+ * control, it is the ONLY one.
+ *
+ * **10, specifically, because it is the knee.** 9 still admits ex3-86; 11 costs
+ * 1,408 cards instead of 312. The reason is the shape of the index: 312 cards
+ * sit 8–9 bits from their nearest rival and 1,278 sit 10–11, so 10 is the last
+ * step before the cliff. Where a capture is good the cost is small — the
+ * near-lossless renders drop 2.0 and 1.6 points — and the renders that pay most
+ * (crop error −17.3, tilt −19.3) are the ones already being asked about 60–70%
+ * of the time, and crop error is where both false accepts came from. The
+ * auto-accept given up there is precisely the auto-accept that was unsafe.
+ *
+ * **Do not read the zero as proof.** Both the distortions and the index entries
+ * are derived from the SAME catalog PNG, so every query is a deterministic
+ * transform of the truth; a real camera adds noise, a colour cast, focus, wear
+ * and a warp that is not a 3° rotation, all of which push a query away from its
+ * own entry — the direction that creates false accepts. 2 in 121,230 is a FLOOR
+ * on the real rate, and 0 at margin 10 means "this battery cannot break it", not
+ * "it cannot break". Nor does a margin remove the population: 1,278 cards still
+ * auto-accept with a rival 10–11 bits away, and they are what leaks next when
+ * the index grows again. **Re-run the sweep after every index rebuild.** This is
+ * the second time the pair has had to move; the durable fix is the collector
+ * number, not a bigger number here.
+ *
+ * The cards that stay ambiguous — 2,042 of 20,205 at margin 10, up from 1,730 at
+ * margin 8 — are not random. They are overwhelmingly Base Set against Base Set 2
+ * against Legendary Collection, the same artwork reprinted, and 652 of them
+ * share an EXACT hash with another card. No hash can separate those; only the
  * collector number can, which is what OCR is for.
+ *
+ * **`cardrec/judge.py` on SERVER-PC mirrors these two constants and must move
+ * with them.** Scanning is server-first and `toScanResult` trusts the service's
+ * own verdict (`confident: reply.status === "MATCHED"`), so a change here alone
+ * only tightens the offline fallback and silently breaks the parity the two
+ * recognisers are tested for.
  */
 export const MAX_DISTANCE = 16;
+/** The margin a near-exact hit must clear. See NEAR_EXACT. */
 export const MIN_MARGIN = 8;
+/**
+ * The margin everything else must clear.
+ *
+ * A blanket 10 was measured first and rejected: it buys the same safety and
+ * refuses 312 cards that a PERFECT capture would have matched, because on a
+ * flawless capture the true hit sits at distance 0 and its margin is whatever
+ * the catalog happens to give it.
+ */
+export const MIN_MARGIN_DRIFTED = 10;
+/**
+ * Where "this query barely moved" ends.
+ *
+ * Measured: across 121,230 trials, wrong top-1 hits achieve a margin of at most
+ * 2 at distance 0 and 6 at distance 2, but reach 9 at distance 4. A query that
+ * landed within 2 bits of a catalog image has not drifted far enough to have
+ * crossed to a twin; one that landed further has, and both real false accepts
+ * are at distance 4. Extending this to `d <= 4` re-admits both of them, which
+ * is what says the boundary is real rather than tuned past.
+ */
+export const NEAR_EXACT = 2;
 
+/**
+ * Whether a match may be accepted without asking.
+ *
+ * The margin is the safety control, and it is asymmetric: a hit that is nearly
+ * bit-identical to its catalog entry is trusted at 8, and anything that has
+ * drifted must clear 10. Measured against the same 121,230 trials, this is a
+ * strict improvement on a blanket 10 in every direction —
+ *
+ *   rule                          auto-accept  false accepts  MATCHED  cards lost
+ *   margin >= 8   (was shipped)         45.9%              2    91.4%           0
+ *   margin >= 10                        36.7%              0    89.9%         312
+ *   margin >= 8 if d<=2 else 10         37.4%              0    91.4%           0
+ *
+ * — and it is identical to a blanket 10 on a HELD-OUT battery of five geometric
+ * distortions the rule was not fitted to (2 leaks, the same two cards).
+ *
+ * **Neither is immunity.** On that held-out battery a blanket 8 leaks 13 times
+ * and this leaks twice; only a margin of 11 reached zero, and 11 costs 1,408
+ * cards. The measurements are synthetic transforms of the same catalog images
+ * that built the index, so every count here is a FLOOR — a real camera adds
+ * noise, wear and colour cast, all of which push a query away from its own
+ * entry, which is the direction that creates false accepts. The durable fix is
+ * the collector number, not a larger number here.
+ */
 export function judge(matches: Match[]): Verdict {
   const match = matches[0] ?? null;
   const runnerUp = matches[1] ?? null;
   if (!match) return { match: null, runnerUp: null, confident: false };
   const margin = runnerUp ? runnerUp.distance - match.distance : HASH_BITS;
+  const required = match.distance <= NEAR_EXACT ? MIN_MARGIN : MIN_MARGIN_DRIFTED;
   return {
     match,
     runnerUp,
-    confident: match.distance <= MAX_DISTANCE && margin >= MIN_MARGIN,
+    confident: match.distance <= MAX_DISTANCE && margin >= required,
   };
 }

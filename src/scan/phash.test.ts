@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ART_WINDOW,
   HASH_BITS,
+  MAX_DISTANCE,
+  MIN_MARGIN,
+  MIN_MARGIN_DRIFTED,
+  NEAR_EXACT,
   artRect,
   downscaleGrey,
   hamming,
@@ -197,15 +201,67 @@ describe("judge", () => {
     expect(judge([m(28), m(52, 1)]).confident).toBe(false);
   });
 
-  it("refuses a 6-bit margin, which is where the false accepts were", () => {
+  it("refuses a 6-bit margin, which is where the first false accepts were", () => {
     // Measured: every margin of 4 or 6 leaked ~0.1% confidently-wrong matches
-    // at every distance from 14 to 24; margin 8 was clean at all of them. This
-    // is the threshold protecting against filing the wrong card silently, so
-    // it gets a test rather than only a constant.
+    // at every distance from 14 to 24. This is the threshold protecting against
+    // filing the wrong card silently, so it gets a test rather than only a
+    // constant.
     expect(judge([m(9), m(15, 1)]).confident).toBe(false);
-    expect(judge([m(9), m(17, 1)]).confident).toBe(true);
+    expect(judge([m(9), m(19, 1)]).confident).toBe(true);
   });
 
+  it("refuses an 8-bit margin, which is where the SECOND false accepts were", () => {
+    // Margin 8 was clean when the index held 1,709 cards and is not clean now
+    // that it holds 20,205 — `node scripts/measure-gate-safety.mjs report` finds
+    // two confidently-wrong matches in 121,230 trials at 16/8 and none at 16/10.
+    // Both are below; this pair is the boundary they sit on.
+    expect(judge([m(9), m(17, 1)]).confident).toBe(false);
+    expect(judge([m(9), m(18, 1)]).confident).toBe(false);
+    expect(judge([m(9), m(19, 1)]).confident).toBe(true);
+  });
+
+  it("refuses the two measured false accepts, at their measured distances", () => {
+    // bw2-32 "Emolga" under a 3% crop error landed 4 bits from mcd12-6, the
+    // McDonald's 2012 reprint, with its own catalog image 12 bits away. Margin 8.
+    expect(judge([m(4), m(12, 1)]).confident).toBe(false);
+    // ex3-86 "Low Pressure System" landed 4 bits from pop3-11 the same way, with
+    // the truth at 14 and the next rival at 13. Margin 9 — which is why 9 was
+    // not enough and MIN_MARGIN is 10.
+    expect(judge([m(4), m(13, 1)]).confident).toBe(false);
+  });
+
+  it("keeps the margin as the safety control, not the distance", () => {
+    // Both measured false accepts sat at distance 4, the tightest and most
+    // confident end of the accept region, so no plausible MAX_DISTANCE refuses
+    // them — the sweep confirms 10 leaks exactly as 16 does. The refusal below
+    // has to come from the margin, and this asserts that it does rather than
+    // passing for the wrong reason if MAX_DISTANCE is ever tightened instead.
+    const verdict = judge([m(4), m(13, 1)]);
+    expect(verdict.match?.distance).toBeLessThan(MAX_DISTANCE);
+    expect(verdict.confident).toBe(false);
+    expect(MIN_MARGIN_DRIFTED).toBeGreaterThan(MIN_MARGIN);
+  });
+
+  it("trusts a near-exact hit at 8, and a drifted one only at 10", () => {
+    // The whole point of the asymmetry. A blanket 10 refuses 312 cards that a
+    // PERFECT capture would have matched — on a flawless capture the true hit
+    // sits at distance 0 and its margin is whatever the catalog gave it.
+    expect(judge([m(0), m(8, 1)]).confident).toBe(true);
+    expect(judge([m(2), m(10, 1)]).confident).toBe(true);
+
+    // The same 8-bit margin, from a query that has drifted, is refused.
+    expect(judge([m(3), m(11, 1)]).confident).toBe(false);
+    expect(judge([m(4), m(12, 1)]).confident).toBe(false);
+  });
+
+  it("does not let the lenient branch reach the measured false accepts", () => {
+    // Both sat at distance 4, outside NEAR_EXACT, so they take the strict
+    // branch. Widening NEAR_EXACT to 4 re-admits both — which is what says the
+    // boundary was measured rather than tuned past.
+    expect(NEAR_EXACT).toBeLessThan(4);
+    expect(judge([m(4), m(12, 1)]).confident).toBe(false); // bw2-32 -> mcd12-6
+    expect(judge([m(4), m(13, 1)]).confident).toBe(false); // ex3-86 -> pop3-11
+  });
   it("accepts the glare case: further away, but still unmistakable", () => {
     // The realistic worst case measured a mean distance of 12.2 with impostors
     // no closer than 12 bits. Refusing this is what dropped auto-accept to 75%.

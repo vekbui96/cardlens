@@ -54,6 +54,68 @@ rules; the state of play is:
   end to end against a real server in `e2e/trade.spec.ts` — push, mint, open
   with no token, revoke — but nobody has sent one to another collector.
 
+## The scanner's accept gate leaked, and is now asymmetric (2026-08-29)
+
+**Decided and shipped to BOTH recognisers.** The rule is
+`margin >= (distance <= 2 ? 8 : 10)`.
+Measured this session by `scripts/measure-gate-safety.mjs` (121,230 trials —
+20,205 cards x 6 distortions, searched against the SHIPPED index, parity
+confirmed 0/20,205 against `index-6defdc2b.bin`):
+
+- **The shipped 16/8 gate produces 2 false accepts.** `ex3-86` files as
+  `pop3-11`; `bw2-32` files as `mcd12-6`. Both at distance 4 — the most
+  confident end of the accept region — under crop error.
+- **They are not a knife-edge artefact.** Re-rendered across a band of crop
+  error, margin 8 fires 11 times on these two cards and is WRONG 9 of those 11
+  (2.5%-5% symmetric, plus off-centre). `phash.ts` itself notes the quad
+  detector is never exact, and the failure band straddles the 3% the author
+  called typical.
+- **Margin 8 has zero headroom.** Wrong top-1 hits achieve margins of 8 and 9.
+- **The leak is systematic, not specific to this index.** Uniform subsets: 0 of
+  9 seeds leak below 5,000 cards; 9 of 10 leak at >= 8,000. The index crossed
+  that band in one rebuild (1,709 -> 20,205).
+- `MAX_DISTANCE` is NOT a lever — 10/16/20/24 leak identically at every margin.
+- **A blanket `MIN_MARGIN = 10` was measured first and REJECTED.** It reaches 0
+  fitted leaks but costs 312 cards that a PERFECT capture would have matched,
+  because on a flawless capture the true hit sits at distance 0 and its margin
+  is whatever the catalog gave it. And it is not immunity: on a HELD-OUT battery
+  of five geometric distortions it was not fitted to, blanket 8 leaks 13 times
+  and blanket 10 still leaks twice.
+- **What shipped instead:** `margin >= (distance <= 2 ? 8 : 10)`. Measured on
+  the same trials it is a strict improvement on blanket 10 in every direction —
+  auto-accept 37.4% vs 36.7%, 0 fitted leaks either way, MATCHED **91.4% vs
+  89.9%**, and **0 cards lost vs 312** — and it is identical to blanket 10 on
+  the held-out battery (the same 2 leaks, the same 2 cards).
+- **The boundary is measured, not tuned.** Wrong top-1 hits reach a margin of at
+  most 2 at distance 0 and 6 at distance 2, but 9 at distance 4. Widening
+  `NEAR_EXACT` to 4 re-admits both original leaks.
+- **Still not immunity.** Only a margin of 11 reached zero on the held-out
+  battery, and it costs 1,408 cards. Every count here is a FLOOR: the batteries
+  are synthetic transforms of the same catalog images that built the index, and
+  a real camera adds noise, wear and colour cast — all of which push a query
+  away from its own entry, the direction that creates false accepts.
+  **Both recognisers carry it, and they had to move together.** `cardrec/judge.py`
+  on SERVER-PC (`D:\services\recognition\cardrec\`, **NOT in this repo and NOT
+  under git at all**) mirrors the constants, and `remoteRecognize` trusts the
+  server's verdict (`confident: reply.status === "MATCHED"`). Scanning is
+  server-first, so a TypeScript-only change would have tightened the offline
+  fallback, left the normal path leaking, and broken the parity test. Ported
+  2026-08-29, its 18 tests re-run there, `recognition` restarted, and the live
+  process verified to refuse both known leaks while still trusting a near-exact
+  hit at margin 8. A backup of the original sits at `cardrec/judge.py.bak-gate`.
+
+**That directory being outside version control is a real risk** — the only copy
+of the recogniser lives on one machine that has been found powered off twice.
+Worth putting under git.
+**Two traps worth keeping:**
+
+- **A gate measured against a small index expires when the index grows.**
+  `validate-recognition.mjs` builds its own index from the sets it is given, so
+  it structurally cannot see crowding. Re-run `measure-gate-safety.mjs` after
+  every `build-card-index.mjs all`.
+- **Sampling hid one of the two leaks.** `bw2-32` fell outside a stride sample.
+  A measurement whose answer must be zero cannot be taken on a sample.
+
 ## Earlier — Home performance (2026-08-27)
 
 Home was measured on the live site before anything was changed, and the measuring
