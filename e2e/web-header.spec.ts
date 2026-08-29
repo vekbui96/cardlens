@@ -23,15 +23,7 @@ test.describe("web app bar", () => {
 
     const menu = page.getByRole("menu", { name: "Go to" });
     await expect(menu).toBeVisible();
-    for (const label of [
-      "Sets",
-      "Collection",
-      "My cards",
-      "Sealed prices",
-      "Favorites",
-      "Recent",
-      "Popular",
-    ]) {
+    for (const label of ["Collection", "My cards", "Sealed prices", "Favorites", "Recent", "Popular"]) {
       await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
     // Search is a field in the panel, not a destination that opens a modal.
@@ -78,7 +70,9 @@ test.describe("web app bar", () => {
     await page.goto("/?ui=web#/sets");
     await page.getByRole("button", { name: "Open menu" }).click();
 
-    await expect(page.getByRole("menuitem", { name: /^Sets/ })).toHaveAttribute("aria-current", "page");
+    // /#/sets and /#/collection are one screen on the web, so either link
+    // lights the Collection entry — old links stay meaningful.
+    await expect(page.getByRole("menuitem", { name: /^Collection/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("menuitem", { name: /^Recent/ })).not.toHaveAttribute("aria-current", "page");
   });
 

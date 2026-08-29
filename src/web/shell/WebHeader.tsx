@@ -25,8 +25,10 @@ interface Destination {
 }
 
 const DESTINATIONS: Destination[] = [
-  { label: "Sets", hint: "Browse and track sets", screen: { name: "sets" } },
-  { label: "Collection", hint: "Progress through every set", screen: { name: "collection" } },
+  // One entry, not two. "Sets" and "Collection" were the same screen's worth of
+  // answer split in half, and you had to remember which you had opened to know
+  // whether you were seeing everything.
+  { label: "Collection", hint: "Your sets, their value, and every set", screen: { name: "collection" } },
   { label: "My cards", hint: "Every printing you own, by price", screen: { name: "owned" } },
   { label: "Scan", hint: "Point the camera at a card", screen: { name: "scan" } },
   { label: "Sealed prices", hint: "What packs and boxes cost now", screen: { name: "sealed" } },
@@ -134,7 +136,12 @@ export function WebHeader() {
             <div className={styles.destinations} role="menu" aria-label="Go to">
               {DESTINATIONS.map((d) => {
                 const count = countFor(d);
-                const current = d.screen.name === screen.name;
+                // `sets` and `collection` render one screen on the web, so a
+                // link to either — including the ones already pasted into
+                // chats — must light the same entry. Without this an old
+                // /#/sets link shows the right screen and marks nothing.
+                const here = screen.name === "sets" ? "collection" : screen.name;
+                const current = d.screen.name === here;
                 return (
                   <button
                     key={d.label}

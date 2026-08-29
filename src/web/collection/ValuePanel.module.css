@@ -105,3 +105,36 @@
   color: var(--cl-price);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * The expander for the rest of the sets.
+ *
+ * A full-width row rather than a chip: it is the last line of a list and reads
+ * as its continuation, which is what it is. Quiet by default — the numbers
+ * above it are the point, and this is a way to see more of them, not an action.
+ */
+.more {
+  display: block;
+  width: 100%;
+  margin-top: var(--cl-gap-xs);
+  padding: var(--cl-gap-sm);
+  border: none;
+  border-top: var(--cl-border);
+  background: none;
+  color: var(--cl-fg-muted);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .more:hover {
+    color: var(--cl-fg);
+  }
+}
+
+.more:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: -2px;
+}

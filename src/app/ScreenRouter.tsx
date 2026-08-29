@@ -143,9 +143,12 @@ function renderScreen(screen: ReturnType<typeof useNavigation>["screen"], isWeb:
       ) : (
         <SetCardsScreen setId={screen.setId} setName={screen.setName} />
       );
+    // One screen on the web: Sets and Collection answered nearly the same
+    // question from two menu entries, and Collection was a subset of Sets with
+    // a different row design. The glasses keep their own — a 600x600 additive
+    // display has room for a progress list and nothing else.
     case "collection":
-      return <CollectionScreen />;
-    // Reachable on the glasses only via a shared URL, which they have no way to
+      return isWeb ? <WebSetsScreen /> : <CollectionScreen />; // Reachable on the glasses only via a shared URL, which they have no way to
     // open — but falling back to Collection beats rendering nothing if it ever is.
     case "owned":
       return isWeb ? <WebOwnedCardsScreen /> : <CollectionScreen />;

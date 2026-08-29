@@ -1,28 +1,65 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { ToggleRow } from "../../components/ToggleRow.tsx";
+import { useTextEntry } from "../../app/TextEntryProvider.tsx";
+import { syncLine } from "../../features/collection/syncLine.ts";
 import styles from "./WebSetsScreen.module.css";
 
+const ValuePanel = lazy(() =>
+  import("../collection/ValuePanel.tsx").then((m) => ({ default: m.ValuePanel })),
+);
+
 /**
- * Sets, for a phone or a desktop.
+ * The collection AND the sets, which on the web are one screen.
  *
- * The glasses list a set as a line of text because that is all a 600x600
- * additive display has room for. Here the set's own logo is the fastest thing to
- * recognise, and the question a collector is actually asking — how far through
- * am I — deserves to be answered on this screen rather than one tap later.
+ * They used to be two menu entries answering nearly the same question. Sets
+ * listed every set with "In progress" first; Collection listed the sets you own
+ * cards from with the same progress on each. The second was a subset of the
+ * first with a different row design, and a collector had to remember which of
+ * the two they had opened to know whether they were seeing everything.
  *
- * Sets you have started come first. A tracker's landing screen should open on
- * what you are working on, not on whatever released most recently.
+ * So this screen is the whole answer: what the collection is worth, what needs
+ * syncing, what you are part-way through, and then everything else. The glasses
+ * keep their own `CollectionScreen` — a 600x600 additive display has room for a
+ * progress list and nothing else, which is exactly why these diverged.
+ *
+ * Sets you have started still come first. A tracker's landing screen should
+ * open on what you are working on, not on whatever released most recently.
  */
 export function WebSetsScreen() {
   const { openSet, pop } = useNavigation();
   const { data, isLoading, isError, refetch } = useSets();
-  const { ownedCountsBySet } = useLibrary();
+  const { ownedCountsBySet, collection, totalFinishesOwned, syncStatus, syncNow, setSyncToken } =
+    useLibrary();
+  const { provider: textProvider } = useTextEntry();
+  // No disconnect here. On the glasses it is a deliberate left-swipe on the
+  // sync row -- the only spare gesture there -- and forgetting a device's
+  // token is rare enough to be worth burying. A pointer has no equivalent,
+  // and the web shell never offered it either.
 
+  /**
+   * The sync row does the useful thing for the current state rather than
+   * opening a settings screen: connect when off, retry when stuck, disconnect
+   * when working. Same behaviour as the glasses Collection screen, because a
+   * device connected on one shell must look connected on the other.
+   */
+  const onSyncSelect = async () => {
+    if (syncStatus.state === "off" || syncStatus.state === "bad-token") {
+      const token = await textProvider.requestInput({
+        title: "Sync token",
+        placeholder: "paste from the server .env",
+      });
+      if (token) setSyncToken(token);
+      return;
+    }
+    if (syncStatus.state === "disabled") return; // nothing the device can fix
+    syncNow();
+  };
   const sets = useMemo(() => {
     const all = data ?? [];
     const started = all.filter((s) => (ownedCountsBySet[s.id] ?? 0) > 0);
@@ -79,16 +116,42 @@ export function WebSetsScreen() {
     );
   };
 
+  const completed = sets.started.filter((s) => s.total && ownedCountsBySet[s.id] === s.total).length;
+  const subtitle = collection.length
+    ? `${collection.length} cards · ${totalFinishesOwned} printings · ${sets.started.length} sets${
+        completed ? ` · ${completed} complete` : ""
+      }`
+    : "Nothing tracked yet";
+  const sync = syncLine(syncStatus);
+
   return (
-    <Screen title="Sets" headerLeft={<BackRow focused={false} onActivate={pop} />} canGoBack>
-      {isLoading ? <LoadingState label="Loading sets…" /> : null}
+    <Screen
+      title="Collection"
+      subtitle={subtitle}
+      headerLeft={<BackRow focused={false} onActivate={pop} />}
+      canGoBack
+    >
+      {/* Sync first: if the device is not connected, that is the thing most
+          worth knowing before reading any number below it. */}
+      <ToggleRow
+        label={sync.label}
+        hint={sync.hint}
+        on={sync.on}
+        focused={false}
+        onActivate={() => void onSyncSelect()}
+      />
+      {/* Lazy, so the glasses never download a table of prices they have no
+          room to draw. Shows the five most valuable sets and folds the rest. */}
+      <Suspense fallback={null}>
+        <ValuePanel />
+      </Suspense>
+      {isLoading ? <LoadingState label="Loading sets…" /> : null}{" "}
       {isError ? (
         <ErrorState message="Couldn’t load sets" onRetry={() => void refetch()} retryFocused={false} />
       ) : null}
       {!isLoading && !isError && sets.started.length + sets.rest.length === 0 ? (
         <EmptyState title="No sets loaded" hint="Try again in a moment." />
       ) : null}
-
       {sets.started.length > 0 ? (
         <>
           <h2 className={styles.group}>In progress</h2>
