@@ -5,7 +5,7 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
 import { artRect, detail, perceptualHash } from "../../scan/phash.ts";
-import { guideRect, guideStyle } from "../../scan/frame.ts";
+import { guideRect, guideStyle, numberBandRect } from "../../scan/frame.ts";
 import {
   loadCardIndex,
   identify,
@@ -69,6 +69,18 @@ interface Capture {
   key: number;
   thumb: string;
   /**
+   * The collector-number strip, shown only when recognition could not decide.
+   *
+   * 1,730 of 20,205 cards cannot be told apart by artwork at all — they are
+   * genuine reprints with identical art, and the number is the only thing that
+   * separates them. Rather than read it, which needs OCR and introduces a way
+   * to file the wrong card silently, this puts the pixels in front of the
+   * person who is already being asked "which one?".
+   *
+   * Dropped as soon as a row settles confidently, so a batch of thirty cards
+   * does not hold thirty full-resolution crops it will never show.
+   */
+  numberBand: string | null; /**
    * Null until an answer arrives.
    *
    * A server round trip cannot block the shutter — the next card is already
@@ -232,10 +244,27 @@ export function ScanScreen() {
     // at, so resolution alone can never change a hash.
     ctx.drawImage(el, guide.x, guide.y, guide.w, guide.h, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
     const frame = ctx.getImageData(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    /*
+     * The collector number, at the camera's own resolution.
+     *
+     * Cropped from the VIDEO, not from the 245x342 canvas above — that canvas
+     * exists so resolution can never change a hash, and the number is about 8px
+     * tall in it. Straight off a 1080p frame it is nearer 31px, which is the
+     * difference between a smudge and something a person can read.
+     *
+     * It is only ever shown to a human. Nothing here reads it, so it cannot
+     * produce a false accept — the failure this scanner is built to avoid.
+     */
+    const band = numberBandRect(guide);
+    const bandCanvas = document.createElement("canvas");
+    bandCanvas.width = band.w;
+    bandCanvas.height = band.h;
+    bandCanvas.getContext("2d")?.drawImage(el, band.x, band.y, band.w, band.h, 0, 0, band.w, band.h);
+
     const art = artRect(CAPTURE_WIDTH, CAPTURE_HEIGHT);
     return {
       hash: perceptualHash(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, art),
-      // What the hash cannot say: whether there is anything in the guide at all.
+      numberBand: bandCanvas, // What the hash cannot say: whether there is anything in the guide at all.
       // Only auto-capture reads it — a deliberate press means the user can see
       // something the numbers cannot.
       detail: detail(frame.data, CAPTURE_WIDTH, CAPTURE_HEIGHT, art),
@@ -257,9 +286,16 @@ export function ScanScreen() {
         setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
       // A confident match needs no decision; an unsure one must not be
       // pre-answered, or the review turns into rubber-stamping.
+      // A confident row will never show its number band, so the crop is
+      // released here rather than held for the life of the batch.
       const settle = (result: ScanResult, via: Via, note: string | null) =>
-        apply({ result, via, note, choice: result.confident ? 0 : null });
-
+        apply({
+          result,
+          via,
+          note,
+          choice: result.confident ? 0 : null,
+          ...(result.confident ? { numberBand: null } : {}),
+        });
       if (engine === "server") {
         try {
           const result = await recogniseRemote(canvas, repo.getSyncSettings().token, index);
@@ -303,6 +339,9 @@ export function ScanScreen() {
       {
         key,
         thumb: thumb.toDataURL("image/jpeg", 0.6),
+        // Higher quality than the thumbnail: this one exists to be READ, and
+        // JPEG artefacts on 3 small characters is exactly where they cost.
+        numberBand: framed.numberBand.toDataURL("image/jpeg", 0.92),
         result: null,
         via: null,
         note: null,
@@ -393,6 +432,32 @@ export function ScanScreen() {
           <ul className={styles.review}>
             {queue.map((c) => {
               const chosen = chosenOf(c);
+
+              /*
+               * The card's own number, for a row the scanner could not settle.
+               *
+               * Declared once and placed by each branch that needs it, so it
+               * lands directly UNDER the question and ABOVE the answer: you
+               * read the number, then choose. Rendered below the buttons it
+               * would arrive after the decision it exists to inform.
+               *
+               * Two branches want it. With candidates, they are reprints with
+               * identical artwork and the printed number is usually the only
+               * thing separating them. With none, this is what makes "Pick by
+               * set" a lookup rather than a guess.
+               *
+               * Shown, never read. Nothing here parses it, so it cannot file
+               * the wrong card — which is the failure OCR would introduce and
+               * the reason this stops short of it.
+               */
+              const numberBand = c.numberBand ? (
+                <img
+                  className={styles.numberBand}
+                  src={c.numberBand}
+                  alt="The bottom of the scanned card, where its collector number is printed"
+                  data-testid="number-band"
+                />
+              ) : null;
               return (
                 <li
                   key={c.key}
@@ -411,7 +476,10 @@ export function ScanScreen() {
                     ) : !c.result ? (
                       <span className={styles.sub}>{c.note ?? "Recognising…"}</span>
                     ) : c.result.candidates.length === 0 ? (
-                      <span className={styles.sub}>No match found</span>
+                      <>
+                        <span className={styles.sub}>No match found</span>
+                        {numberBand}
+                      </>
                     ) : chosen && c.result.confident ? (
                       <>
                         <span className={styles.name}>{chosen.card.name}</span>
@@ -425,7 +493,9 @@ export function ScanScreen() {
                     ) : (
                       <>
                         <span className={styles.sub}>{c.choice === null ? "Which one?" : "Chosen"}</span>
+                        {numberBand}
                         <div className={styles.picker} role="group" aria-label="Pick the card">
+                          {" "}
                           {c.result.candidates.map((cand, i) => (
                             <button
                               key={cand.card.id}
@@ -444,10 +514,8 @@ export function ScanScreen() {
                       </>
                     )}
 
-                    {/*
-                      Which recogniser answered, per row and not just per
-                      session. The engine can change mid-batch — one timeout
-                      falls this card back to the device and the next one goes
+                    {/*                      Which recogniser answered, per row and not just per
+                      session. The engine can change mid-batch — one timeout                      falls this card back to the device and the next one goes
                       to the server again — so a single banner would describe
                       the wrong rows.
                     */}

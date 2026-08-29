@@ -339,3 +339,26 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * The collector-number strip, on a row the scanner could not decide.
+ *
+ * Full width of the row and nothing else on its line, because the whole reason
+ * it is here is to be READ — the number is a few millimetres tall on the card
+ * and shrinking it again to sit beside something would undo the point of
+ * cropping it at camera resolution in the first place.
+ *
+ * A light background: it is a photograph of white cardstock, and on this
+ * near-black surface a dark frame around it makes the print harder to pick out,
+ * not easier.
+ */
+.numberBand {
+  display: block;
+  width: 100%;
+  margin: var(--cl-gap-xs) 0 var(--cl-gap-sm);
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-surface-raised);
+  /* The band is a wide, short strip; letting it keep its own ratio avoids
+     stretching the digits, which is the one distortion that costs legibility. */
+  object-fit: contain;
+}

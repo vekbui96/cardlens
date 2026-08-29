@@ -311,3 +311,39 @@ test.describe("the scanner on the glasses", () => {
     expect(chunks, "glasses downloaded the scanner chunk").toHaveLength(0);
   });
 });
+
+test.describe("the collector number on an unsettled row", () => {
+  test("is shown when the scanner could not decide", async ({ page }) => {
+    // 1,730 of 20,205 cards are reprints with identical artwork — the printed
+    // number is the only thing that separates them. Rather than read it, which
+    // needs OCR and adds a way to file the wrong card silently, the pixels go
+    // in front of the person already being asked which card this is.
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const band = page.getByTestId("number-band");
+    await expect(band).toBeVisible();
+
+    // A real crop, not a 0x0 canvas that renders as nothing — the silent
+    // early-return shape this codebase keeps being bitten by.
+    const width = await band.evaluate((el) => (el as HTMLImageElement).naturalWidth);
+    expect(width).toBeGreaterThan(0);
+  });
+
+  test("is cropped at camera resolution, not at the 245x342 the hash uses", async ({ page }) => {
+    // The whole point. At 245x342 a collector number is about 8px tall; the
+    // recognition canvas normalises to that size so resolution can never change
+    // a hash, which is exactly why the band cannot be taken from it.
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const band = page.getByTestId("number-band");
+    await expect(band).toBeVisible();
+    const natural = await band.evaluate((el) => (el as HTMLImageElement).naturalWidth);
+    expect(natural).toBeGreaterThan(245);
+  });
+});

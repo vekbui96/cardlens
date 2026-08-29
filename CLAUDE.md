@@ -386,8 +386,23 @@ Sync failure is a status line, never a toast: the local write already succeeded.
   - Comparing against the last _frame_ is not enough. A hand reaching in to
     straighten an already-scanned card re-armed the shutter and scanned it twice.
 
-- **A row can be named by hand** (`src/web/scan/ScanCardPicker.tsx`, "Pick by
-  set"). It reads the in-memory index — set list, collector numbers, names — so
+- **An unsettled row SHOWS the card's collector number, and never reads it.**
+  1,730 of 20,205 cards are reprints with identical artwork, and the printed
+  number is usually the only thing separating them — but OCR to read it is
+  blocked on pixels the server never receives (see above). So `numberBandRect`
+  (`src/scan/frame.ts`) crops the band from the VIDEO at camera resolution —
+  ~31px tall on a 1080p frame against ~8px in the 245x342 recognition canvas —
+  and `ScanScreen` puts it directly under "Which one?" and above the candidates,
+  so you read the number and then choose. **Reading it would introduce a way to
+  file the wrong card silently; showing it cannot.** The band takes the full
+  width of the bottom sixth rather than a per-era rectangle: the number is
+  bottom-left on modern cards, bottom-right on most older ones, promos carry an
+  alphanumeric with no denominator, and the card index stores no geometry to
+  drive a tighter crop. It sits entirely below `ART_WINDOW`, so it can never
+  perturb a hash. The crop is released as soon as a row settles confidently, so
+  a batch of thirty does not hold thirty full-resolution images it will never
+  show.
+- **A row can be named by hand** (`src/web/scan/ScanCardPicker.tsx`, "Pick by set"). It reads the in-memory index — set list, collector numbers, names — so
   browsing 20,205 cards costs **no network**, which matters because this is the
   repair path for when recognition already failed. `Capture.manual` sits beside
   `result` rather than overwriting it, so correcting a row does not throw away

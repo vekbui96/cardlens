@@ -49,3 +49,33 @@ export function guideStyle(frameWidth: number, frameHeight: number) {
     height: pct(r.h, frameHeight),
   };
 }
+
+/**
+ * How much of the card's height, at the bottom, the collector number lives in.
+ *
+ * Generous on purpose. The number is printed bottom-LEFT on modern cards
+ * (SWSH, SV) and bottom-RIGHT on most older ones, promos carry an alphanumeric
+ * like `SWSH001` with no denominator at all, and full-art layouts move it
+ * again. Building an era table to crop tighter would mean encoding a rule the
+ * card index cannot even express — it stores `id, name, number, setId, setName,
+ * rarity` and no geometry whatsoever.
+ *
+ * So this takes the full width of the bottom sixth and lets a human read it.
+ * It sits entirely below ART_WINDOW (which ends at y = 0.70), so it can never
+ * perturb the hash.
+ */
+const NUMBER_BAND_TOP = 0.84;
+
+/**
+ * The strip of the card that holds its collector number, in frame pixels.
+ *
+ * Taken from the guide at the camera's OWN resolution, which is the entire
+ * point: the recognition path normalises to 245x342 so that resolution can
+ * never change a hash, and at that size the number is about 8px tall — below
+ * what a person can read and below what any OCR engine will touch. In the
+ * 886x1237 a 1080p phone actually holds, it is about 31px.
+ */
+export function numberBandRect(guide: Rect): Rect {
+  const top = Math.round(guide.y + guide.h * NUMBER_BAND_TOP);
+  return { x: guide.x, y: top, w: guide.w, h: guide.y + guide.h - top };
+}
