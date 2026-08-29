@@ -554,3 +554,54 @@ test.describe("scan review at desktop size", () => {
     }
   });
 });
+
+test.describe("a pocket is a pocket, whatever the format", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop project only");
+  });
+
+  test("sizes a pocket by the card it holds, not by the page it is on", async ({ page }) => {
+    /**
+     * Every format used to be given the SAME page and divide it by its own
+     * column count: measured at 1440x900, a pocket was 141px in a 9-pocket
+     * binder, 104px in a 12 and 256px in a 4 — the same card at three sizes
+     * depending on which binder it was filed in. A binder does not work that
+     * way. The page is what gets wider with more columns.
+     *
+     * But 9 and 12 are the formats that sleeve ordinary 63x88mm cards, and they
+     * are the ones that must agree. **4-pocket exists because jumbo promos and
+     * top-loaders do not fit an ordinary pocket** — see hasFacingPages in
+     * models/binderLayout.ts, which turns facing pages off for that same
+     * reason. Drawing a jumbo at the standard size says the format is merely
+     * emptier, when what it actually is, is larger.
+     *
+     * Widths, not the page: a page meant to be 4 pockets across is allowed to
+     * be wider than one that is 3, and that is the point.
+     */ const widths: Record<string, number> = {};
+    for (const format of ["9-pocket", "12-pocket", "4-pocket"]) {
+      await page.goto("/?ui=web#/binders");
+      await page.getByLabel("Binder name").fill(`Format ${format}`);
+      await page.getByRole("button", { name: format, exact: true }).click();
+      await page.getByRole("button", { name: "Create binder" }).click();
+
+      const pocket = page.getByRole("button", { name: /Pocket 1, empty/ }).first();
+      await expect(pocket).toBeVisible();
+      widths[format] = (await pocket.boundingBox())!.width;
+    }
+
+    const standard = [widths["9-pocket"], widths["12-pocket"]];
+    const spread = Math.max(...standard) - Math.min(...standard);
+    expect(spread, `standard pockets differed: ${JSON.stringify(widths)}`).toBeLessThanOrEqual(1);
+
+    // The jumbo format is visibly bigger, not merely emptier.
+    expect(widths["4-pocket"], `4-pocket not larger: ${JSON.stringify(widths)}`).toBeGreaterThan(
+      Math.max(...standard) * 1.3,
+    );
+
+    // And nothing collapses: a pocket has to stay big enough to be a card you
+    // can look at, which is the other half of the bargain.
+    expect(Math.min(...standard), `pockets too small: ${JSON.stringify(widths)}`).toBeGreaterThan(120);
+  });
+});

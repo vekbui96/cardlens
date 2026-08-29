@@ -24,6 +24,22 @@
   height: 168px;
 }
 
+/*
+ * Sized from the outside.
+ *
+ * The two boxes above are fixed because the glasses need them to be. Everywhere
+ * a caller has real room — a binder pocket, a showcase tile — it is the caller
+ * that knows how much, and `width: 100%` on the img could never reach past the
+ * wrapper this component draws. The aspect ratio is stated here rather than
+ * left to the image so the box holds a card's shape before the bytes arrive,
+ * and the grid does not reflow when they do.
+ */
+.fill {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 5 / 7;
+}
+
 .placeholder {
   font-size: 28px;
   color: var(--cl-fg-dim);

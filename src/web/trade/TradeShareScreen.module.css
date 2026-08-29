@@ -377,9 +377,21 @@
  * is not one object. See WebBinderScreen.module.css for the measurements.
  */
 @media (min-width: 1000px) {
+  /* As many pockets wide as the format has columns, at the one pocket size in
+     styles/web-theme.css — so a card is the same size here as in the builder,
+     and the same size whichever format the binder is. --binder-cols is set on
+     this element by the screen. */
   .spread {
-    grid-template-columns: repeat(2, minmax(0, 440px));
+    --binder-page: calc(
+      var(--binder-cols, 3) * var(--cl-binder-pocket) + (var(--binder-cols, 3) - 1) * var(--cl-gap-sm)
+    );
+    --binder-page-drawn: min(var(--binder-page), (100% - var(--cl-gap-lg)) / 2);
+    grid-template-columns: repeat(2, minmax(0, var(--binder-page)));
     justify-content: center;
+  }
+
+  .spread[data-solo] {
+    grid-template-columns: minmax(0, var(--binder-page));
   }
 
   /* The inside front cover page 1 opens against, drawn rather than left blank. */
@@ -388,8 +400,8 @@
     position: absolute;
     top: 0;
     bottom: var(--cl-gap-lg);
-    left: calc(50% - 440px - var(--cl-gap-lg) / 2);
-    width: 440px;
+    left: calc(50% - var(--binder-page-drawn) - var(--cl-gap-lg) / 2);
+    width: var(--binder-page-drawn);
     border-radius: var(--cl-radius);
     background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
   }

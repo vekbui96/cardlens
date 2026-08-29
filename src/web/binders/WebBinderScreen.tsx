@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
@@ -290,6 +291,15 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           // lone page is a trailing even one, which sits on the left with its
           // facing side still to be added. Meaningless without facing pages.
           data-cover={(hasFacingPages(binder.format) && spread[0] === 0) || undefined}
+          // How many pockets across a page is, which on a wide screen is what
+          // the page is MADE of rather than what it gets divided into. The
+          // stylesheet needs it here, on the spread, because the cover leaf is
+          // drawn beside the page and CSS cannot read a child's custom
+          // property. See WebBinderScreen.module.css.
+          style={{ "--binder-cols": specFor(binder.format).cols } as CSSProperties}
+          // The format itself, so a 4-pocket page can draw the bigger
+          // pockets it exists for. See web-theme.css.
+          data-binder-format={binder.format}
         >
           {" "}
           {spread.map((i) => (

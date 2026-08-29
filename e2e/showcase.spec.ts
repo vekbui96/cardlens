@@ -115,6 +115,41 @@ test.describe("set showcase", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
+  test("gives the art the whole tile, on both shells", async ({ page, context }) => {
+    /**
+     * CardImage renders a sized WRAPPER around its img, so `.tile img { width:
+     * 100% }` only ever meant 100% of a 54px thumb. Measured before the fix:
+     * 54px of card in a 119px column on a phone and in a 235px column on a
+     * laptop — half to seven eighths of every pocket empty, and the page read
+     * as captions with a stamp beside them.
+     *
+     * Asserted against the tile rather than a pixel count, because the tile is
+     * a different width on each project and it is the RATIO that was wrong.
+     */
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.addInitScript((rows) => {
+      localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
+    }, OWNED);
+    await page.goto("/?ui=web#/set/sv3/Obsidian%20Flames");
+    await expect(page.getByRole("button", { name: /, (not )?owned$/ }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Share" }).click();
+    const url = await page.evaluate(() => navigator.clipboard.readText());
+    await page.goto(url.replace(/^https?:\/\/[^/]+/, ""));
+
+    const tile = page.getByTestId("showcase-slot").first();
+    await expect(tile).toBeVisible();
+    const tileBox = (await tile.boundingBox())!;
+    // The art's own box, which is the wrapper CardImage draws — not the img,
+    // which reports 100% of that wrapper whatever the wrapper is doing.
+    const artBox = (await tile.locator("button > div").boundingBox())!;
+
+    expect(artBox.width, `art ${artBox.width} in a ${tileBox.width} tile`).toBeGreaterThan(
+      tileBox.width * 0.95,
+    );
+    // Card-shaped, so the row does not jog when the image finally arrives.
+    expect(artBox.height / artBox.width).toBeGreaterThan(1.3);
+  });
+
   test("does not fall over on a link a chat client mangled", async ({ page }) => {
     await page.goto("/?ui=web#/showcase/sv3/Obsidian%20Flames/not-a-real-payload");
     // Nothing owned, but the set still renders — an error page helps nobody.

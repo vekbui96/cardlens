@@ -54,6 +54,40 @@ rules; the state of play is:
   end to end against a real server in `e2e/trade.spec.ts` — push, mint, open
   with no token, revoke — but nobody has sent one to another collector.
 
+## Web UI, reshaped (2026-08-29)
+
+**Shipped through `6db47d3`; the desktop pass is committed as `e572886` and NOT
+yet pushed.**
+
+- **Sets and Collection are one screen on the web.** They were two menu entries
+  answering nearly the same question, and Collection was a subset of Sets with a
+  different row design. `#/sets` still resolves and lights the Collection entry,
+  so pasted links keep working. The GLASSES keep their own `CollectionScreen` —
+  600x600 has room for a progress list and nothing else.
+- **The value panel folds to the five most valuable sets**, with the remainder
+  named and priced on the expander rather than merely hidden. It printed a row
+  per set before — nineteen of them, above the list the screen exists for.
+- **A binder's own settings live behind a Settings disclosure** (pocket size,
+  show-value-in-list, trading). Add page / Remove page stay on the toolbar: the
+  row was mixing things pressed constantly with things decided once. What is
+  switched on shows as a gold tag with the panel shut.
+- **The web app now has a real desktop layout.** `@media (min-width: 1000px)`
+  was already the convention and seven stylesheets used it; the rest read as a
+  phone with the sides pulled out. Binder toolbar no longer stacks, pockets are
+  capped near the 238px a 63x88mm card occupies at 96dpi, and a cover spread
+  draws a leaf in the empty track instead of a void.
+  - Two real defects surfaced that were not about width: the showcase drew
+    **54px of card art inside a 380px pocket** (CardImage hard-codes a 54x76
+    thumb, so a tile's `width: 100%` means 100% of that), and the scan screen's
+    collector-number band rendered **1055x230**, pushing the candidate buttons
+    it exists to be read beside off the bottom of the window.
+  - Nothing below 1000px changed. The phone is the layout confirmed on hardware.
+
+**`.claude/agents/` now holds `cardlens-frontend` and `cardlens-backend`**, so
+work routes to a brief that already knows this repo's traps. Agent definitions
+are read at session start — a newly added one is not available until the next
+session.
+
 ## The scanner's accept gate leaked, and is now asymmetric (2026-08-29)
 
 **Decided and shipped to BOTH recognisers.** The rule is

@@ -770,17 +770,38 @@ label.chip {
    * pockets at 177x248 (measured at 1440px). A real card is 63x88mm, which is
    * 238x333 CSS px at 96dpi — so that is three quarters of life size for
    * something being browsed nine at a time, and one spread stood ~690px tall
-   * with every later page below the fold. Capping a page at 440px puts a pocket
-   * at 141x197, the same order as the 120px card tiles the set grid draws at
-   * this width, and fits a whole spread on a 900px-tall laptop.
+   * with every later page below the fold.
    *
-   * Centred rather than left-aligned so the binder opens in the middle of the
-   * window. Below the cap the columns simply fill, so the phone is untouched,
-   * and `.spread[data-solo]` outranks this on specificity and keeps its own cap.
+   * The page was capped at a flat 440px for a while, which fixed that and
+   * introduced a subtler thing: every format got the SAME page and divided it
+   * by its own column count, so a pocket was 141px in a 9, 104px in a 12 and
+   * 256px in a 4. A binder does not work that way — a pocket is a pocket and
+   * the page is what changes size. So the page is now derived: as many pockets
+   * wide as the format has columns, at the one size in styles/web-theme.css.
+   *
+   * --binder-cols comes from the format and is set on this element by the
+   * screen; CSS cannot ask a page how many columns it was given.
+   *
+   * minmax(0, …) rather than a fixed track, so a window between 1000px and the
+   * full 1180px shell shrinks a 12-pocket spread to fit instead of overflowing
+   * it. Centred rather than left-aligned so the binder opens in the middle of
+   * the window. Below 1000px none of this applies and the page fills the
+   * viewport, so the phone is untouched.
    */
   .spread {
-    grid-template-columns: repeat(2, minmax(0, 440px));
+    --binder-page: calc(
+      var(--binder-cols, 3) * var(--cl-binder-pocket) + (var(--binder-cols, 3) - 1) * var(--cl-gap-sm)
+    );
+    /* What the track actually comes out as once the shrinking above bites —
+       the cover leaf has to match the page it stands beside. */
+    --binder-page-drawn: min(var(--binder-page), (100% - var(--cl-gap-lg)) / 2);
+    grid-template-columns: repeat(2, minmax(0, var(--binder-page)));
     justify-content: center;
+  }
+
+  /* One page per row, at the same pocket size as every other format. */
+  .spread[data-solo] {
+    grid-template-columns: minmax(0, var(--binder-page));
   }
 
   /*
@@ -792,7 +813,7 @@ label.chip {
    * a page that failed to render rather than as the cover. A faint leaf says
    * what the space is.
    *
-   * Positioned from the same 440px cap: the two tracks and the gutter are
+   * Positioned from the page's own width: the two tracks and the gutter are
    * centred, so the left one starts half a gutter plus one page left of centre.
    * It stops at the page's own 20px bottom margin rather than at the spread's
    * edge, so the leaf and the page end on the same line.
@@ -802,8 +823,8 @@ label.chip {
     position: absolute;
     top: 0;
     bottom: var(--cl-gap-lg);
-    left: calc(50% - 440px - var(--cl-gap-lg) / 2);
-    width: 440px;
+    left: calc(50% - var(--binder-page-drawn) - var(--cl-gap-lg) / 2);
+    width: var(--binder-page-drawn);
     border-radius: var(--cl-radius);
     background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
   }

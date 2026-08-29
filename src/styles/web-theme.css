@@ -182,3 +182,51 @@ body:has([data-shell="web"]) {
 [data-shell="web"] [role="dialog"] button {
   min-height: 44px;
 }
+
+/*
+ * One pocket size for every binder format, on a screen wide enough to have a
+ * choice about it.
+ *
+ * A pocket in a real binder is a pocket: the PAGE gets wider with more columns,
+ * it does not divide a fixed width by however many pockets a page holds. The
+ * app did the latter, because each format's page was capped at the same 440px
+ * — measured at 1440x900, a 9-pocket page drew 141px pockets, a 12-pocket page
+ * 104px and a 4-pocket page 256px, so the same card was three sizes depending
+ * on which binder it was filed in.
+ *
+ * 130px is what the widest format can afford, and is MEASURED rather than
+ * chosen: two facing 12-pocket pages are 4 pockets plus 3 gaps each, twice,
+ * plus the gutter, and that has to fit the spread's own 1116px at 1440x900.
+ * 132px missed by 4px and the 12-pocket page quietly shrank to a 131px pocket
+ * — the very inconsistency this is here to remove. It costs the 9-pocket page
+ * 11px per pocket and is the size every format can actually hold.
+ *
+ * Declared here rather than in either binder stylesheet because the builder and
+ * the trade page must draw one object; two copies of the figure is how they
+ * come to disagree. Nothing on the glasses can see it — [data-shell="web"] —
+ * and nothing below 1000px has it at all, where a page fills the viewport
+ * instead and the pockets follow from that.
+ */
+@media (min-width: 1000px) {
+  [data-shell="web"] {
+    --cl-binder-pocket: 130px;
+  }
+
+  /*
+   * 4-pocket holds BIGGER cards, so its pockets are bigger.
+   *
+   * One size for every format is right for 9 and 12, which both sleeve ordinary
+   * 63x88mm cards — a pocket is a pocket, and the page gets wider with more
+   * columns. It is wrong for 4-pocket, which exists precisely because jumbo
+   * promos and top-loaders do not fit an ordinary pocket (see hasFacingPages in
+   * models/binderLayout.ts, which turns facing pages off for the same reason).
+   * Drawing a jumbo at the same 130px as a standard card says the format is
+   * merely emptier, when what it actually is, is larger.
+   *
+   * 200px is a jumbo's proportion of a standard card, near enough: the oversized
+   * promos this format is for run about 1.5x on the short edge.
+   */
+  [data-shell="web"] [data-binder-format="4"] {
+    --cl-binder-pocket: 200px;
+  }
+}

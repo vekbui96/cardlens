@@ -74,10 +74,13 @@
   min-width: 0;
 }
 
+/*
+ * The art sizes itself from the tile — CardImage is asked for `fill`, so the
+ * wrapper it draws is the pocket. Stating width on the img alone did nothing
+ * here for as long as this screen existed: it was 100% of a 54px wrapper.
+ */
 .tile img,
 .tileMissing img {
-  width: 100%;
-  height: auto;
   border-radius: var(--cl-radius-art, 6px);
 }
 
@@ -296,25 +299,6 @@
 }
 
 @media (min-width: 1000px) {
-  /*
-   * The art, which was never getting bigger on its own.
-   *
-   * CardImage hard-codes a 54x76 thumb (components/CardImage.module.css), and
-   * `.tile img { width: 100% }` only ever meant 100% OF THAT. Measured at
-   * 1440x900: 54px of card in a 380px column, so ~86% of every pocket was
-   * empty and the page read as captions with a stamp beside them. The wrapper
-   * is sized from the outside rather than the component being changed —
-   * CardImage is shared with the glasses, where 54px is the whole point.
-   *
-   * 5/7 because that is a card, and the box has to hold the shape whether or
-   * not the image arrives — the same reason WebSetCardsScreen states it.
-   */
-  .zoom > div {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 5 / 7;
-  }
-
   /*
    * A page, kept page-shaped.
    *

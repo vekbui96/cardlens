@@ -221,7 +221,10 @@ export function ShowcaseView({
             held ? "" : ", missing"
           }`}
         >
-          <CardImage src={card.imageSmall} alt="" size="thumb" />
+          {/* fill, not thumb: a tile is a pocket on a page, and the column is
+              119px on a phone and 235px on a laptop. A fixed 54px thumb left
+              more than half of every one of them empty. */}
+          <CardImage src={card.imageSmall} alt="" size="fill" />
         </button>
         <span className={styles.name}>{card.name}</span>
         <span className={styles.meta}>

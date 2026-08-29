@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
@@ -223,6 +224,14 @@ function TradeView({ share, onBrand }: { share: TradeShare; onBrand: () => void 
               // visitor would be looking at differently shaped objects.
               data-solo={!hasFacingPages(binder.format) || undefined}
               data-cover={(hasFacingPages(binder.format) && spread[0] === 0) || undefined}
+              // The page is as many pockets wide as the format has columns, so
+              // a card is the same size in every format and in the builder.
+              // Set here rather than on the page because the cover leaf beside
+              // it needs the width too. See TradeShareScreen.module.css.
+              style={{ "--binder-cols": specFor(binder.format).cols } as CSSProperties}
+              // The format itself, so a 4-pocket page can draw the bigger
+              // pockets it exists for. See web-theme.css.
+              data-binder-format={binder.format}
             >
               {" "}
               {spread.map((i) => (
