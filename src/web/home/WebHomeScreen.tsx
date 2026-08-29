@@ -7,6 +7,8 @@ import { CollectionGraph } from "../../components/CollectionGraph.tsx";
 import { useLibraryValue } from "../../hooks/useLibraryValue.ts";
 import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
+import { tierLabel } from "../../features/collection/completionTier.ts";
+import { SetTierFigures } from "../../features/collection/SetTierFigures.tsx";
 import styles from "./WebHomeScreen.module.css";
 
 /**
@@ -27,6 +29,7 @@ export function WebHomeScreen() {
     collection,
     ownedCountsBySet,
     ownedFinishCountsBySet,
+    ownedNumbersBySet,
     totalFinishesOwned,
     finishesBySet,
     ownedStamps,
@@ -35,9 +38,22 @@ export function WebHomeScreen() {
   const { typeSearch } = useSearchAction();
   const value = useLibraryValue();
 
-  const resume = continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet);
-  const progress = topProgress(ownedCountsBySet, sets);
+  const resume = continueTarget(
+    collection,
+    sets,
+    ownedCountsBySet,
+    ownedFinishCountsBySet,
+    ownedNumbersBySet,
+  );
+  /*
+   * Base, not master: this list is "what can I finish". Ranking on the master
+   * tier buries the set three commons short behind one that only needs a chase
+   * card nobody pulls, which is the opposite of what a resume list is for.
+   */
+  const progress = topProgress(ownedCountsBySet, sets, ownedNumbersBySet);
   const setCount = Object.keys(ownedCountsBySet).length;
+  /** UPPERCASE only when the milestone is actually reached — see completionTier. */
+  const resumeWord = resume ? tierLabel(resume.tiers.tier) : null;
 
   return (
     /*
@@ -116,7 +132,29 @@ export function WebHomeScreen() {
               <span className={styles.resumeLabel}>Pick up where you left off</span>
               <span className={styles.resumeName}>{resume.setName}</span>
               <span className={styles.resumeMeta}>
-                {resume.total ? `${resume.cards}/${resume.total} cards` : `${resume.cards} cards`} ·{" "}
+                {/* The same figure the row for this set shows below, so coming
+                    back to a set is not a different number from the one that
+                    sent you there. ★ and the uppercase word carry the milestone
+                    where colour cannot. */}
+                {resume.tiers.tier !== "none" ? "★ " : ""}
+                {resume.tiers.baseTotal !== undefined
+                  ? `${resume.tiers.baseOwned}/${resume.tiers.baseTotal}`
+                  : resume.total
+                    ? `${resume.cards}/${resume.total}`
+                    : `${resume.cards} cards`}
+                {resumeWord ? (
+                  <span
+                    className={`${styles.tierWord} ${
+                      resume.tiers.tier === "master" ? styles.tierMaster : styles.tierBase
+                    }`}
+                  >
+                    {" "}
+                    {resumeWord}
+                  </span>
+                ) : resume.tiers.baseTotal !== undefined ? (
+                  <span className={styles.tierLabel}> base</span>
+                ) : null}
+                {" · "}
                 {resume.printings} printings
               </span>
             </button>
@@ -127,7 +165,6 @@ export function WebHomeScreen() {
               <h2 className={styles.group}>Closest to complete</h2>
               <ul className={styles.list}>
                 {progress.map((row) => {
-                  const pct = row.ratio !== undefined ? Math.round(row.ratio * 100) : null;
                   const printings = ownedFinishCountsBySet[row.setId] ?? row.cards;
                   const finishes = Object.keys(finishesBySet[row.setId] ?? {}).length;
                   return (
@@ -142,16 +179,7 @@ export function WebHomeScreen() {
                           {printings} printings
                           {finishes > 1 ? ` · ${finishes} finishes` : ""}
                         </span>
-                        <span className={styles.rowProgress}>
-                          {pct !== null ? (
-                            <span className={`${styles.bar} ${pct === 100 ? styles.barDone : ""}`}>
-                              <span className={styles.fill} style={{ width: `${pct}%` }} />
-                            </span>
-                          ) : null}
-                          <span className={`${styles.pct} ${pct === 100 ? styles.pctDone : ""}`}>
-                            {row.total ? `${row.cards}/${row.total}` : `${row.cards}`}
-                          </span>
-                        </span>
+                        <SetTierFigures tiers={row.tiers} owned={row.cards} className={styles.rowProgress} />
                       </button>
                     </li>
                   );

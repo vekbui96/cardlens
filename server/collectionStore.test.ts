@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CollectionStore, parseRow } from "./collectionStore.ts";
-import type { OwnedPrinting } from "../src/storage/printings.ts";
+import { optionalRowFields, type OwnedPrinting } from "../src/storage/printings.ts";
 
 let dir: string;
 let file: string;
@@ -214,5 +214,73 @@ describe("excluded printings", () => {
       expect(row).not.toBeNull();
       expect(row?.excluded).toBeUndefined();
     }
+  });
+});
+
+describe("collector numbers", () => {
+  it("keeps a number the client sent", () => {
+    expect(parseRow(row({ number: "101a" }))?.number).toBe("101a");
+  });
+
+  it("trims, and treats a blank or oversized number as absent", () => {
+    expect(parseRow(row({ number: "  4  " as string }))?.number).toBe("4");
+    for (const value of ["", "   ", "x".repeat(21), 60, null, {}]) {
+      const parsed = parseRow({ ...row(), number: value });
+      // Dropped ALONE, never fatal to the row. A lost number costs a declined
+      // base tier; a lost row costs the card.
+      expect(parsed).not.toBeNull();
+      expect(parsed?.number).toBeUndefined();
+    }
+  });
+
+  /**
+   * The two-whitelist trap, as a test.
+   *
+   * A field a client writes must be named in the device's read path
+   * (`toPrintings` in src/storage/repositories.ts) AND in this file's
+   * `parseRow`, or it survives one hop and silently vanishes at the other. That
+   * has cost this repo two bugs, and neither end's own tests could see it,
+   * because each end round-trips only itself.
+   *
+   * So the two parsers now spread ONE shared list of optional fields —
+   * `optionalRowFields` — and this walks a row through both of them plus a real
+   * file. It fails if `optionalRowFields` stops naming `number`, and it fails if
+   * either parser stops spreading it. The device's own half of the trip is
+   * covered where it lives, in src/storage/repositories.test.ts, which cannot be
+   * imported here: repositories.ts is not part of the shared server surface
+   * listed in tsconfig.node.json, and adding it there purely for a test would
+   * claim the server depends on code it never runs.
+   */
+  it("round-trips a collector number through both whitelists", () => {
+    // What the device stores, read back through the whitelist the device uses.
+    const stored = { cardId: "zsv10pt5-80", setId: "zsv10pt5", finish: "holo", at: NOW, number: "60" };
+    expect(optionalRowFields(stored).number).toBe("60");
+
+    // Over the wire and into the server's own whitelist, then to disk and back
+    // — a real file, so the JSON round trip is genuine rather than the same
+    // object being handed back.
+    const incoming = parseRow(JSON.parse(JSON.stringify(stored)));
+    expect(incoming?.number).toBe("60");
+    const store = new CollectionStore(file);
+    store.merge(incoming ? [incoming] : []);
+    const reloaded = new CollectionStore(file).all();
+    expect(reloaded.map((r) => r.number)).toEqual(["60"]);
+
+    // And back down to another device, through the device whitelist again. The
+    // point of storing it at all: the id says 80, the card says 60, and only one
+    // of those can decide whether this card is inside the printed run.
+    expect(reloaded.map((r) => optionalRowFields({ ...r }).number)).toEqual(["60"]);
+  });
+
+  it("does not let a server row that predates the field strip a number on merge", () => {
+    // The realistic first sync: the server holds ~973 rows written before
+    // numbers existed, and a device that has backfilled its copy pushes the
+    // same row, same stamp, WITH one. The merge is ties-to-the-tombstone, then
+    // ties-to-the-number — otherwise whichever side is merged first wins and
+    // the numbers are quietly stripped by the older data.
+    const store = new CollectionStore(file);
+    store.merge([{ cardId: "base1-4", setId: "base1", finish: "holo", at: NOW }]);
+    const merged = store.merge([{ cardId: "base1-4", setId: "base1", finish: "holo", at: NOW, number: "4" }]);
+    expect(merged.map((r) => r.number)).toEqual(["4"]);
   });
 });

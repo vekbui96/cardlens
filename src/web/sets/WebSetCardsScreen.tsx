@@ -8,6 +8,7 @@ import { binderPages } from "../../models/binder.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import type { CollectFinish } from "../../models/cards.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
+import { useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../app/contexts.tsx";
@@ -16,6 +17,9 @@ import { fetchJson } from "../../services/http.ts";
 import { ProviderError } from "../../integrations/providers.ts";
 import { CardSheet } from "./CardSheet.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
+import { SetTierStatus } from "../../features/collection/SetTierStatus.tsx";
+import { setTiers } from "../../models/setCompletion.ts";
+import { ownedIn } from "../../features/collection/completionTier.ts";
 import { encodeShowcase } from "../../models/showcase.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
@@ -97,8 +101,11 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     toggleExcluded,
     ownedCountsBySet,
     ownedFinishCountsBySet,
+    ownedNumbersBySet,
     storageDegraded,
   } = useLibrary();
+  const { data: sets } = useSets();
+  const set = sets?.find((s) => s.id === setId);
 
   const [rarityKey, setRarityKey] = useState("all");
   /** Master-setting is mostly "what am I still missing", so it gets a real control. */
@@ -379,7 +386,24 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
 
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
-  const progress = view.masterTotal ? `${ownedPrintings}/${view.masterTotal}` : `${ownedCards}`;
+  /*
+   * Three figures, each labelled, because they measure three different things:
+   * the base run, the whole set, and printings across it. This header used to
+   * show only the last of the three, unlabelled — so the same set read 197/408
+   * here and 197/230 in the switcher directly beneath, and nothing said why.
+   */
+  const progress = (
+    <SetTierStatus
+      tiers={setTiers(
+        {
+          ...(set?.total ? { total: set.total } : {}),
+          ...(set?.printedTotal ? { printedTotal: set.printedTotal } : {}),
+        },
+        ownedIn(setId, ownedNumbersBySet, ownedCards),
+      )}
+      {...(view.masterTotal ? { printings: { owned: ownedPrintings, total: view.masterTotal } } : {})}
+    />
+  );
 
   return (
     <Screen

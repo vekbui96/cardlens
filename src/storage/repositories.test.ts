@@ -695,3 +695,106 @@ describe("binders", () => {
     expect(r.getBinderRecords()).toEqual([]);
   });
 });
+
+describe("collector numbers on the collection", () => {
+  it("records the number a mark was made with", () => {
+    const r = repo();
+    r.addOwned("sv3pt5-4", "holo", "sv3pt5", 1_700_000_000_000, "4");
+    expect(r.getCollection().map((c) => c.number)).toEqual(["4"]);
+    expect(r.getOwnedNumbersBySet()).toEqual({ sv3pt5: ["4"] });
+  });
+
+  it("carries a number across a batch mark and a bulk set", () => {
+    const r = repo();
+    r.addManyOwned([{ cardId: "me5-1", setId: "me5", number: "1" }]);
+    r.setOwnedMany([{ cardId: "me5-2", setId: "me5", finish: "reverse", number: "2", owned: true }]);
+    expect(r.getOwnedNumbersBySet()).toEqual({ me5: ["1", "2"] });
+  });
+
+  it("omits a card whose number is unknown rather than guessing one", () => {
+    // The id is NOT a substitute: zsv10pt5-80 carries number "60". A guessed
+    // number would make setTiers report a wrong base tier; an omitted one makes
+    // it decline, which is the behaviour to preserve.
+    const r = repo();
+    r.addOwned("zsv10pt5-80", "holo", "zsv10pt5");
+    expect(r.getCollection()[0]?.number).toBeUndefined();
+    expect(r.getOwnedNumbersBySet()).toEqual({});
+  });
+
+  it("keeps duplicate numbers, because a set can print the same one twice", () => {
+    // cel25c has four cards numbered 15. Deduping would under-count a real
+    // collection against its own denominator.
+    const r = repo();
+    r.addOwned("cel25c-1", "holo", "cel25c", 1_700_000_000_000, "15");
+    r.addOwned("cel25c-2", "holo", "cel25c", 1_700_000_000_000, "15");
+    expect(r.getOwnedNumbersBySet()).toEqual({ cel25c: ["15", "15"] });
+  });
+
+  it("counts a card once however many printings of it are held", () => {
+    const r = repo();
+    r.addOwned("me5-1", "normal", "me5", 1_700_000_000_000, "1");
+    r.addOwned("me5-1", "reverse", "me5", 1_700_000_000_000, "1");
+    expect(r.getOwnedFinishCountsBySet()).toEqual({ me5: 2 });
+    expect(r.getOwnedNumbersBySet()).toEqual({ me5: ["1"] });
+  });
+
+  it("answers for the card when only one of its printings knows the number", () => {
+    // The normal was marked before the field existed and the reverse after.
+    const r = repo();
+    r.addOwned("me5-1", "normal", "me5");
+    r.addOwned("me5-1", "reverse", "me5", 1_700_000_000_000, "1");
+    expect(r.getOwnedNumbersBySet()).toEqual({ me5: ["1"] });
+  });
+});
+
+describe("backfilling numbers onto rows that predate the field", () => {
+  const catalog = [
+    { id: "zsv10pt5-80", collectorNumber: "60" },
+    { id: "me5-1", collectorNumber: "1" },
+  ];
+
+  it("fills an existing row from the set's card list", () => {
+    const r = repo();
+    r.addOwned("zsv10pt5-80", "holo", "zsv10pt5");
+    expect(r.getOwnedNumbersBySet()).toEqual({});
+    r.backfillNumbers(catalog);
+    // The card id says 80 and the card says 60 — which is exactly why this is
+    // read from the catalog rather than parsed out of the id.
+    expect(r.getOwnedNumbersBySet()).toEqual({ zsv10pt5: ["60"] });
+  });
+
+  it("never moves a timestamp", () => {
+    // `at` is when the card was collected — the growth chart's only input — and
+    // it is also the sync watermark, so bumping it would re-push the entire
+    // collection to report nothing new.
+    const r = repo();
+    r.addOwned("me5-1", "holo", "me5", 1_700_000_000_000);
+    r.backfillNumbers(catalog);
+    expect(r.ownedStamps()).toEqual([1_700_000_000_000]);
+    expect(r.getPrintings().map((p) => p.at)).toEqual([1_700_000_000_000]);
+  });
+
+  it("is idempotent, and reports having written nothing", () => {
+    const r = repo();
+    r.addOwned("me5-1", "holo", "me5");
+    expect(r.backfillNumbers(catalog)).not.toBeNull();
+    // The second pass must be a no-op the caller can detect, or a screen
+    // calling this on every load re-renders everything downstream forever.
+    expect(r.backfillNumbers(catalog)).toBeNull();
+    expect(r.backfillNumbers([])).toBeNull();
+  });
+
+  it("does not overwrite a number a mark already recorded", () => {
+    const r = repo();
+    r.addOwned("me5-1", "holo", "me5", 1_700_000_000_000, "1a");
+    expect(r.backfillNumbers(catalog)).toBeNull();
+    expect(r.getOwnedNumbersBySet()).toEqual({ me5: ["1a"] });
+  });
+
+  it("leaves rows the card list says nothing about alone", () => {
+    const r = repo();
+    r.addOwned("sv8-1", "holo", "sv8");
+    expect(r.backfillNumbers(catalog)).toBeNull();
+    expect(r.getOwnedNumbersBySet()).toEqual({});
+  });
+});

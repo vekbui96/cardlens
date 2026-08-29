@@ -54,6 +54,49 @@ describe("topProgress", () => {
   });
 
   it("caps the list", () => {
-    expect(topProgress({ me5: 5, sv1: 5 }, sets, 1)).toHaveLength(1);
+    expect(topProgress({ me5: 5, sv1: 5 }, sets, {}, 1)).toHaveLength(1);
+  });
+});
+
+/**
+ * "Closest to complete" is the list of what can be FINISHED, so it ranks the
+ * base run. Ranking on the master total buries the set three commons short of
+ * its printed denominator behind one that is half done but has few secrets.
+ */
+describe("topProgress with collector numbers", () => {
+  const tiered: PokemonSet[] = [
+    // 98% of the printed run, but only 21% of the whole set.
+    { id: "wide", name: "Wide", total: 900, printedTotal: 193 },
+    // Half the printed run, and 48% of the whole set — ahead on master alone.
+    { id: "flat", name: "Flat", total: 250, printedTotal: 240 },
+  ];
+  const numbers = (to: number) => Array.from({ length: to }, (_, i) => String(i + 1));
+
+  it("ranks by the base run once the numbers are known", () => {
+    const rows = topProgress({ wide: 190, flat: 120 }, tiered, { wide: numbers(190), flat: numbers(120) }, 3);
+    expect(rows.map((r) => r.setId)).toEqual(["wide", "flat"]);
+    expect(rows[0].tiers.baseTotal).toBe(193);
+    expect(rows[0].tiers.baseOwned).toBe(190);
+  });
+
+  it("falls back to the master tier when no numbers are available", () => {
+    // The state before the library records collector numbers, and after any row
+    // that never learned one. It must look like the app always did.
+    const rows = topProgress({ wide: 190, flat: 120 }, tiered, {}, 3);
+    expect(rows.map((r) => r.setId)).toEqual(["flat", "wide"]);
+    expect(rows[0].tiers.baseTotal).toBeUndefined();
+  });
+
+  it("carries both tiers onto the resume card", () => {
+    const target = continueTarget(
+      [owned("wide-190", "wide", 5)],
+      tiered,
+      { wide: 190 },
+      { wide: 190 },
+      { wide: numbers(190) },
+    );
+    expect(target?.tiers.baseOwned).toBe(190);
+    expect(target?.tiers.masterOwned).toBe(190);
+    expect(target?.tiers.tier).toBe("none");
   });
 });

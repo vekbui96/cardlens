@@ -17,6 +17,9 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
 import { useIsWeb } from "../../app/contexts.tsx";
+import { setTiers } from "../../models/setCompletion.ts";
+import { ownedIn } from "../collection/completionTier.ts";
+import { SetTierStatus } from "../collection/SetTierStatus.tsx";
 
 /**
  * Gap allowed between pinches on one card for them to count as a burst.
@@ -32,7 +35,14 @@ const BURST_COUNT = 3;
 /** Cards in a set, in collector-number order, with a swipe rarity filter. */
 export function SetCardsScreen({ setId, setName }: { setId: string; setName: string }) {
   const { openDetails, pop } = useNavigation();
-  const { ownedFinishes, toggleOwned, setOwnedMany, ownedCountsBySet, ownedFinishCountsBySet } = useLibrary();
+  const {
+    ownedFinishes,
+    toggleOwned,
+    setOwnedMany,
+    ownedCountsBySet,
+    ownedFinishCountsBySet,
+    ownedNumbersBySet,
+  } = useLibrary();
   const modalClosed = useScreenInputEnabled();
   const isWeb = useIsWeb();
   /**
@@ -70,9 +80,22 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   } = useSetView(setId, setName, { rarities: rarity.rarities, wantPrintings: collectMode });
 
   const { data: sets } = useSets();
-  const setTotal = sets?.find((s) => s.id === setId)?.total;
+  const set = sets?.find((s) => s.id === setId);
   const ownedCards = ownedCountsBySet[setId] ?? 0;
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
+  /**
+   * Both set sizes, from the one predicate. The header used to print a single
+   * unlabelled figure that was `197/230` here and `197/408` on the web screen
+   * for the same set — different tiers, different axes, and nothing on either
+   * saying so.
+   */
+  const tiers = setTiers(
+    {
+      ...(set?.total ? { total: set.total } : {}),
+      ...(set?.printedTotal ? { printedTotal: set.printedTotal } : {}),
+    },
+    ownedIn(setId, ownedNumbersBySet, ownedCards),
+  );
 
   /**
    * Finishes offered for marking: only the ones this set actually has, plus any
@@ -252,10 +275,15 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
   const collectFocused = itemIndex === 0;
   const finishFocused = collectMode && itemIndex === FINISH_ROW;
-  const cardProgress = setTotal ? `${ownedCards}/${setTotal}` : `${ownedCards}`;
   // While collecting, printings are the number being worked on; otherwise the
-  // card count is the useful one. One short string either way.
-  const headerStatus = collectMode && masterTotal ? `${ownedPrintings}/${masterTotal}` : cardProgress;
+  // two card tiers are. Labelled either way — an unlabelled ratio in this slot
+  // is exactly what made two screens look like they disagreed.
+  const headerStatus =
+    collectMode && masterTotal ? (
+      `${ownedPrintings}/${masterTotal} printings`
+    ) : (
+      <SetTierStatus tiers={tiers} />
+    );
 
   return (
     <Screen

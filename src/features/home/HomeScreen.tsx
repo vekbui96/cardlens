@@ -27,6 +27,7 @@ export function HomeScreen() {
     collection,
     ownedCountsBySet,
     ownedFinishCountsBySet,
+    ownedNumbersBySet,
     totalFinishesOwned,
     finishesBySet,
   } = useLibrary();
@@ -43,7 +44,9 @@ export function HomeScreen() {
    * touched makes the list unpredictable — the one thing that device cannot
    * afford. A phone has room and a pointer, so the shortcut is free there.
    */
-  const resume = isWeb ? continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet) : null;
+  const resume = isWeb
+    ? continueTarget(collection, sets, ownedCountsBySet, ownedFinishCountsBySet, ownedNumbersBySet)
+    : null;
   const setCount = Object.keys(ownedCountsBySet).length;
 
   const items: HomeItem[] = [
@@ -102,7 +105,7 @@ export function HomeScreen() {
       ? `${collection.length} cards · ${totalFinishesOwned} printings · ${setCount} ${setCount === 1 ? "set" : "sets"}`
       : "Search Pokémon cards";
 
-  const progress = isWeb ? topProgress(ownedCountsBySet, sets) : [];
+  const progress = isWeb ? topProgress(ownedCountsBySet, sets, ownedNumbersBySet) : [];
 
   return (
     <Screen title="CardLens" subtitle={subtitle}>
@@ -125,8 +128,7 @@ export function HomeScreen() {
               owned={row.cards}
               printings={ownedFinishCountsBySet[row.setId] ?? row.cards}
               finishes={finishesBySet[row.setId] ?? {}}
-              total={row.total}
-              ratio={row.ratio}
+              tiers={row.tiers}
             />
           ))}
         </div>

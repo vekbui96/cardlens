@@ -1,5 +1,5 @@
 import type { CollectFinish, PokemonCardSummary } from "../models/cards.ts";
-import { canonicalGame, DEFAULT_GAME, type TradingCardGame } from "../models/games.ts";
+import { DEFAULT_GAME, type TradingCardGame } from "../models/games.ts";
 import { canonicalFinish } from "../models/finishes.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import {
@@ -7,6 +7,8 @@ import {
   gamePrintings,
   livePrintings,
   mergePrintings,
+  optionalRowFields,
+  parseCollectorNumber,
   pruneTombstones,
   type OwnedPrinting,
 } from "./printings.ts";
@@ -52,6 +54,14 @@ export interface OwnedCard {
   setId: string;
   finishes: CollectFinish[];
   at: number;
+  /**
+   * The card's printed collector number, when the row knows it.
+   *
+   * Absent on every row written before the field existed, and never guessed
+   * from the id — see `OwnedPrinting.number`. A consumer that cannot classify a
+   * card must decline the answer, not approximate it.
+   */
+  number?: string;
 }
 
 /**
@@ -146,6 +156,18 @@ function isBinder(value: unknown): value is Binder {
   );
 }
 
+/**
+ * `{ number }` when there is one to write, and `{}` otherwise.
+ *
+ * Written only when known, exactly like `game` and `excluded`. Storing an empty
+ * string for "unknown" would give the field two spellings for one meaning, which
+ * is how a convergent store starts ping-ponging between devices that agree.
+ */
+function numberField(number: string | undefined): { number?: string } {
+  const parsed = parseCollectorNumber(number);
+  return parsed === undefined ? {} : { number: parsed };
+}
+
 function isCardSummary(value: unknown): value is PokemonCardSummary {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -173,15 +195,15 @@ function toPrintings(value: unknown): OwnedPrinting[] {
       // Legacy values (holofoil, pokeBall, ...) migrate to type:foil keys here,
       // so no stored row ever has to be rewritten.
       finish: canonicalFinish(v.finish),
-      // A whitelist parser drops what it does not name, so this line is what
-      // keeps a second game's rows from being read back as Pokémon. Held only
-      // when it is not the default, matching how it was written.
-      ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
+      // A whitelist parser drops what it does not name, and this device is only
+      // one of the two ends that has to name a field — the server's parseRow is
+      // the other. Both spread the SAME list (game, number, excluded) so a new
+      // field cannot reach one end and not the other, which is the failure that
+      // has cost this repo two bugs. Absent stays absent: a row that never
+      // learned its collector number must not acquire a guessed one on read.
+      ...optionalRowFields(v),
       at: typeof v.at === "number" ? v.at : 0,
       ...(typeof v.deletedAt === "number" ? { deletedAt: v.deletedAt } : {}),
-      // Only ever true. Dropping it here would lose every exclusion on reload,
-      // the same way the server's whitelist would lose it on sync.
-      ...(v.excluded === true ? { excluded: true as const } : {}),
     };
     return [row];
   }
@@ -359,12 +381,17 @@ export class Repositories {
       if (existing) {
         if (!existing.finishes.includes(row.finish)) existing.finishes.push(row.finish);
         existing.at = Math.min(existing.at, row.at);
+        // One card's printings all carry the same number, but they were not all
+        // written at the same time — a normal marked last year has no number and
+        // the reverse marked today does. Any row that knows it answers for the card.
+        if (existing.number === undefined && row.number !== undefined) existing.number = row.number;
       } else {
         byCard.set(row.cardId, {
           id: row.cardId,
           setId: row.setId,
           finishes: [row.finish],
           at: row.at,
+          ...(row.number === undefined ? {} : { number: row.number }),
         });
       }
     }
@@ -385,11 +412,18 @@ export class Repositories {
     return this.ownedFinishes(id).includes(canonicalFinish(finish));
   }
 
+  /**
+   * @param number The card's printed collector number, when the caller has the
+   * catalog card in hand. Optional and never derived from the id — a mark made
+   * without it stores no number and the base tier declines until the set's card
+   * list backfills one.
+   */
   addOwned(
     cardId: string,
     rawFinish: CollectFinish = "normal",
     setId = setIdFromCardId(cardId),
     now = Date.now(),
+    number?: string,
   ): OwnedCard[] {
     // Canonicalise on WRITE as well as read. Reads migrate legacy values, so a
     // raw write would put "holofoil" and "holo" in the store as two rows for
@@ -399,7 +433,14 @@ export class Repositories {
     // how the merge rule expects a resurrection to be expressed.
     this.writePrintings(
       mergePrintings(this.getPrintings(), [
-        { cardId, setId, finish, at: now, ...(this.game === DEFAULT_GAME ? {} : { game: this.game }) },
+        {
+          cardId,
+          setId,
+          finish,
+          at: now,
+          ...numberField(number),
+          ...(this.game === DEFAULT_GAME ? {} : { game: this.game }),
+        },
       ]),
     );
     return this.getCollection();
@@ -417,7 +458,7 @@ export class Repositories {
    * the collection is rewritten changes.
    */
   addManyOwned(
-    entries: { cardId: string; finish?: CollectFinish; setId?: string }[],
+    entries: { cardId: string; finish?: CollectFinish; setId?: string; number?: string }[],
     now = Date.now(),
   ): OwnedCard[] {
     if (entries.length === 0) return this.getCollection();
@@ -426,6 +467,7 @@ export class Repositories {
       setId: e.setId ?? setIdFromCardId(e.cardId),
       finish: canonicalFinish(e.finish ?? "normal"),
       at: now,
+      ...numberField(e.number),
       ...(this.game === DEFAULT_GAME ? {} : { game: this.game }),
     }));
     this.writePrintings(mergePrintings(this.getPrintings(), rows));
@@ -455,7 +497,7 @@ export class Repositories {
    * Only the number of times the collection is rewritten changes.
    */
   setOwnedMany(
-    entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[],
+    entries: { cardId: string; finish: CollectFinish; setId?: string; number?: string; owned: boolean }[],
     now = Date.now(),
   ): OwnedCard[] {
     if (entries.length === 0) return this.getCollection();
@@ -477,6 +519,7 @@ export class Repositories {
           // Re-marking clears any tombstone by writing a newer `at`, which is
           // how the merge rule expects a resurrection to be expressed.
           at: now,
+          ...numberField(entry.number),
           ...(game === DEFAULT_GAME ? {} : { game }),
         });
         continue;
@@ -508,11 +551,12 @@ export class Repositories {
     cardId: string,
     rawFinish: CollectFinish = "normal",
     setId = setIdFromCardId(cardId),
+    number?: string,
   ): OwnedCard[] {
     const finish = canonicalFinish(rawFinish);
     return this.isOwnedFinish(cardId, finish)
       ? this.removeOwned(cardId, finish)
-      : this.addOwned(cardId, finish, setId);
+      : this.addOwned(cardId, finish, setId, Date.now(), number);
   }
 
   /** Printings this card has that are deliberately not part of the master set. */
@@ -570,6 +614,76 @@ export class Repositories {
       counts[card.setId] = (counts[card.setId] ?? 0) + 1;
     }
     return counts;
+  }
+
+  /**
+   * The collector number of each owned CARD, grouped by set id.
+   *
+   * One entry per card, not per printing — the base/master split is a question
+   * about cards. Duplicates are kept: numbers are NOT unique inside a set
+   * (`cel25c` has four cards numbered 15), so deduping would under-count a real
+   * collection.
+   *
+   * A card whose number is unknown is OMITTED rather than guessed. The consumer
+   * (`setTiers`) declines a base tier rather than reporting a wrong one, and a
+   * short list is the input that makes it decline; an invented one is the input
+   * that makes it lie.
+   */
+  getOwnedNumbersBySet(): Record<string, string[]> {
+    const numbers: Record<string, string[]> = {};
+    for (const card of this.getCollection()) {
+      if (card.number === undefined) continue;
+      (numbers[card.setId] ??= []).push(card.number);
+    }
+    return numbers;
+  }
+
+  /**
+   * Fill in collector numbers on rows that never had one, from a set's card list.
+   *
+   * The migration for the rows that predate the field. Lazy rather than a
+   * one-shot upgrade because the numbers are not on the device to begin with —
+   * they arrive with a set's card list, one set at a time, and the alternatives
+   * are both worse: guessing from the card id is wrong (`zsv10pt5-80` is number
+   * 60), and downloading the whole 20,205-card index to Home to fix 973 rows
+   * costs 2.3MB for a progress bar.
+   *
+   * Two rules make this safe to call on every load:
+   *
+   * - **Stamps are never touched.** `at` is when the card was collected — the
+   *   growth chart's only input — and bumping it would both falsify that and
+   *   push the entire collection through sync to report nothing new.
+   * - **Only absent numbers are filled.** A row that already has one is left
+   *   exactly as it was, so this cannot overwrite what a mark recorded, and it
+   *   is idempotent: the second call writes nothing at all.
+   *
+   * Returns `null` when there was nothing to fill, so a caller can skip a React
+   * state update rather than re-render on every set load.
+   */
+  backfillNumbers(cards: { id: string; collectorNumber: string }[]): OwnedCard[] | null {
+    if (cards.length === 0) return null;
+    const byId = new Map<string, string>();
+    for (const c of cards) {
+      const number = parseCollectorNumber(c.collectorNumber);
+      if (number !== undefined) byId.set(c.id, number);
+    }
+    if (byId.size === 0) return null;
+
+    const rows = this.getPrintings();
+    let filled = 0;
+    const next = rows.map((row) => {
+      if (row.number !== undefined) return row;
+      const number = byId.get(row.cardId);
+      if (number === undefined) return row;
+      filled += 1;
+      return { ...row, number };
+    });
+    if (filled === 0) return null;
+
+    // Written straight through rather than merged: these are the same rows with
+    // one field added, so there is no second version to converge with.
+    this.writePrintings(next);
+    return this.getCollection();
   }
 
   /** Printings owned per set id — progress against a master set. */

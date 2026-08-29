@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_COLLECTOR_NUMBER_LENGTH,
   TOMBSTONE_TTL_MS,
   excludedPrintings,
   gamePrintings,
   isLive,
   livePrintings,
   mergePrintings,
+  parseCollectorNumber,
   pruneTombstones,
   type OwnedPrinting,
 } from "./printings.ts";
@@ -214,5 +216,57 @@ describe("excluded printings", () => {
     const skipped = { ...base, at: 100, excluded: true as const };
     const removed = { ...base, at: 100, deletedAt: 100 };
     expect(mergePrintings([skipped], [removed])).toEqual([removed]);
+  });
+});
+
+describe("collector numbers", () => {
+  const bare = row({ at: 100 });
+  const numbered = row({ at: 100, number: "4" });
+
+  it("survives a merge against the same row written before the field existed", () => {
+    // The realistic case: numbers are backfilled onto old rows WITHOUT touching
+    // `at` — bumping it would falsify when the card was collected and re-push
+    // the whole collection to say nothing new — so the two sides of a sync
+    // routinely hold one row at one stamp, with and without a number.
+    expect(mergePrintings([bare], [numbered])).toEqual([numbered]);
+  });
+
+  it("resolves by value, not by argument order", () => {
+    // Commutativity is the whole contract: the client merges local-into-remote
+    // and the server merges remote-into-local, on the same pair of rows.
+    expect(mergePrintings([numbered], [bare])).toEqual([numbered]);
+    expect(mergePrintings([numbered], [bare])).toEqual(mergePrintings([bare], [numbered]));
+  });
+
+  it("is idempotent and stable when both sides know the number", () => {
+    expect(mergePrintings([numbered], [numbered])).toEqual([numbered]);
+    const other = row({ at: 100, number: "60" });
+    // Two different numbers for one printing is a bug somewhere upstream, but
+    // the merge must still be deterministic rather than order-dependent.
+    expect(mergePrintings([numbered], [other])).toEqual(mergePrintings([other], [numbered]));
+  });
+
+  it("never outranks the tombstone rule", () => {
+    // A number is the weakest tiebreak. A deletion is still the stronger
+    // intent, and a tombstone has no use for a number anyway.
+    const removed = row({ at: 100, deletedAt: 100 });
+    expect(mergePrintings([numbered], [removed])).toEqual([removed]);
+  });
+});
+
+describe("parseCollectorNumber", () => {
+  it("accepts the shapes real sets actually print", () => {
+    // Deliberately NOT an allow-list of formats: 7.75% of collector numbers are
+    // non-numeric and sets keep inventing new shapes.
+    for (const n of ["4", "101a", "TG01", "SWSH001", "H1", "XY-P", "GG01"]) {
+      expect(parseCollectorNumber(n)).toBe(n);
+    }
+  });
+
+  it("trims, and rejects blank, oversized and non-string values", () => {
+    expect(parseCollectorNumber(" 4 ")).toBe("4");
+    for (const value of ["", "   ", "x".repeat(MAX_COLLECTOR_NUMBER_LENGTH + 1), 4, null, undefined, {}]) {
+      expect(parseCollectorNumber(value)).toBeUndefined();
+    }
   });
 });

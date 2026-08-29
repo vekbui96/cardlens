@@ -64,7 +64,12 @@ interface LibraryValue {
   isOwned: (id: string) => boolean;
   ownedFinishes: (id: string) => CollectFinish[];
   isOwnedFinish: (id: string, finish: CollectFinish) => boolean;
-  toggleOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
+  /**
+   * @param number The card's printed collector number, when the caller holds
+   * the catalog card. Recorded on the row so the base/master split is
+   * answerable away from the set screen — see `ownedNumbersBySet`.
+   */
+  toggleOwned: (cardId: string, finish?: CollectFinish, setId?: string, number?: string) => void;
   /** Printings this card has that are deliberately not part of the master set. */
   excludedFinishes: (id: string) => CollectFinish[];
   /** When each owned printing was marked — the growth chart's only input. */
@@ -79,9 +84,11 @@ interface LibraryValue {
    * and worst on the most complete sets. Two copies of the same card in one
    * batch would cancel out entirely.
    */
-  addOwned: (cardId: string, finish?: CollectFinish, setId?: string) => void;
+  addOwned: (cardId: string, finish?: CollectFinish, setId?: string, number?: string) => void;
   /** Mark a whole batch in one write — see Repositories.addManyOwned. */
-  addManyOwned: (entries: { cardId: string; finish?: CollectFinish; setId?: string }[]) => void;
+  addManyOwned: (
+    entries: { cardId: string; finish?: CollectFinish; setId?: string; number?: string }[],
+  ) => void;
   /**
    * Set a batch of printings owned or not owned in one write.
    *
@@ -89,12 +96,31 @@ interface LibraryValue {
    * Repositories.setOwnedMany for why the loop it replaces mattered.
    */
   setOwnedMany: (
-    entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[],
+    entries: { cardId: string; finish: CollectFinish; setId?: string; number?: string; owned: boolean }[],
   ) => void;
+  /**
+   * Fill in collector numbers on rows that predate the field, from a set's card
+   * list. Cheap and idempotent — see Repositories.backfillNumbers.
+   */
+  backfillNumbers: (cards: { id: string; collectorNumber: string }[]) => void;
   /** Distinct cards per set. */
   ownedCountsBySet: Record<string, number>;
   /** Printings per set — the master-set numerator. */
   ownedFinishCountsBySet: Record<string, number>;
+  /**
+   * The collector number of each owned CARD, by set id — the input `setTiers`
+   * needs to split a set into its base and master tiers.
+   *
+   * One entry per card, not per printing, and duplicates are kept: numbers are
+   * not unique inside a set (`cel25c` has four cards numbered 15), so deduping
+   * would under-count. An absent set id means nothing is owned there.
+   *
+   * **A card whose number is unknown is omitted, never guessed.** Card ids are
+   * not a substitute — `zsv10pt5-80` carries number "60" and collides with that
+   * set's real card 60. A short list makes `setTiers` decline the base tier,
+   * which is the behaviour to preserve; a guessed one would make it lie.
+   */
+  ownedNumbersBySet: Record<string, string[]>;
   /** Total printings held across every set. */
   totalFinishesOwned: number;
   /** How many of each finish are held overall. */
@@ -190,8 +216,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   );
 
   const toggleOwned = useCallback(
-    (cardId: string, finish: CollectFinish = "normal", setId?: string) => {
-      setCollection(setId ? repo.toggleOwned(cardId, finish, setId) : repo.toggleOwned(cardId, finish));
+    (cardId: string, finish: CollectFinish = "normal", setId?: string, number?: string) => {
+      // `undefined` reaches the repository's own defaults, so the two arms this
+      // used to have — one with a setId and one without — are the same call.
+      setCollection(repo.toggleOwned(cardId, finish, setId ?? undefined, number));
       // Read after the write: the repo only knows whether the device had room
       // once it has tried to use it.
       setStorageDegraded(repo.storageDegraded);
@@ -200,15 +228,15 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   );
 
   const addOwned = useCallback(
-    (cardId: string, finish: CollectFinish = "normal", setId?: string) => {
-      setCollection(setId ? repo.addOwned(cardId, finish, setId) : repo.addOwned(cardId, finish));
+    (cardId: string, finish: CollectFinish = "normal", setId?: string, number?: string) => {
+      setCollection(repo.addOwned(cardId, finish, setId ?? undefined, undefined, number));
       setStorageDegraded(repo.storageDegraded);
     },
     [repo],
   );
 
   const addManyOwned = useCallback(
-    (entries: { cardId: string; finish?: CollectFinish; setId?: string }[]) => {
+    (entries: { cardId: string; finish?: CollectFinish; setId?: string; number?: string }[]) => {
       setCollection(repo.addManyOwned(entries));
       setStorageDegraded(repo.storageDegraded);
     },
@@ -216,38 +244,74 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   );
 
   const setOwnedMany = useCallback(
-    (entries: { cardId: string; finish: CollectFinish; setId?: string; owned: boolean }[]) => {
+    (
+      entries: {
+        cardId: string;
+        finish: CollectFinish;
+        setId?: string;
+        number?: string;
+        owned: boolean;
+      }[],
+    ) => {
       setCollection(repo.setOwnedMany(entries));
       setStorageDegraded(repo.storageDegraded);
     },
     [repo],
   );
 
-  const { ownedCountsBySet, ownedFinishCountsBySet, totalFinishesOwned, finishTotals, finishesBySet } =
-    useMemo(() => {
-      const cards: Record<string, number> = {};
-      const finishes: Record<string, number> = {};
-      const totals: Partial<Record<CollectFinish, number>> = {};
-      const bySet: Record<string, Partial<Record<CollectFinish, number>>> = {};
-      let total = 0;
-      for (const card of collection) {
-        cards[card.setId] = (cards[card.setId] ?? 0) + 1;
-        finishes[card.setId] = (finishes[card.setId] ?? 0) + card.finishes.length;
-        total += card.finishes.length;
-        const set = (bySet[card.setId] ??= {});
-        for (const finish of card.finishes) {
-          totals[finish] = (totals[finish] ?? 0) + 1;
-          set[finish] = (set[finish] ?? 0) + 1;
-        }
+  /**
+   * Teach stored rows their collector numbers as a set's card list arrives.
+   *
+   * Only sets state when something was actually filled — the repository returns
+   * null otherwise. Without that, a screen calling this on every load of an
+   * already-migrated set would hand React a fresh collection array each time and
+   * re-render everything downstream forever.
+   */
+  const backfillNumbers = useCallback(
+    (cards: { id: string; collectorNumber: string }[]) => {
+      const next = repo.backfillNumbers(cards);
+      if (next) setCollection(next);
+    },
+    [repo],
+  );
+
+  const {
+    ownedCountsBySet,
+    ownedFinishCountsBySet,
+    ownedNumbersBySet,
+    totalFinishesOwned,
+    finishTotals,
+    finishesBySet,
+  } = useMemo(() => {
+    const cards: Record<string, number> = {};
+    const finishes: Record<string, number> = {};
+    const numbers: Record<string, string[]> = {};
+    const totals: Partial<Record<CollectFinish, number>> = {};
+    const bySet: Record<string, Partial<Record<CollectFinish, number>>> = {};
+    let total = 0;
+    for (const card of collection) {
+      cards[card.setId] = (cards[card.setId] ?? 0) + 1;
+      finishes[card.setId] = (finishes[card.setId] ?? 0) + card.finishes.length;
+      // One entry per CARD, and only when the number is known. A card that
+      // cannot be classified is left out so setTiers declines the base tier
+      // rather than reporting one built from a guess.
+      if (card.number !== undefined) (numbers[card.setId] ??= []).push(card.number);
+      total += card.finishes.length;
+      const set = (bySet[card.setId] ??= {});
+      for (const finish of card.finishes) {
+        totals[finish] = (totals[finish] ?? 0) + 1;
+        set[finish] = (set[finish] ?? 0) + 1;
       }
-      return {
-        ownedCountsBySet: cards,
-        ownedFinishCountsBySet: finishes,
-        totalFinishesOwned: total,
-        finishTotals: totals,
-        finishesBySet: bySet,
-      };
-    }, [collection]);
+    }
+    return {
+      ownedCountsBySet: cards,
+      ownedFinishCountsBySet: finishes,
+      ownedNumbersBySet: numbers,
+      totalFinishesOwned: total,
+      finishTotals: totals,
+      finishesBySet: bySet,
+    };
+  }, [collection]);
 
   // --- Sync ------------------------------------------------------------------
   const [sync, setSync] = useState<SyncSettings>(() => repo.getSyncSettings());
@@ -443,8 +507,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       addOwned,
       addManyOwned,
       setOwnedMany,
+      backfillNumbers,
       ownedCountsBySet,
       ownedFinishCountsBySet,
+      ownedNumbersBySet,
       totalFinishesOwned,
       finishTotals,
       finishesBySet,
@@ -477,8 +543,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       addOwned,
       addManyOwned,
       setOwnedMany,
+      backfillNumbers,
       ownedCountsBySet,
       ownedFinishCountsBySet,
+      ownedNumbersBySet,
       totalFinishesOwned,
       finishTotals,
       finishesBySet,

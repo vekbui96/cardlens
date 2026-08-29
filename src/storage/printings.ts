@@ -26,6 +26,22 @@ export interface OwnedPrinting {
    * on read, so old rows and new ones mean the same thing.
    */
   game?: TradingCardGame;
+  /**
+   * The card's printed collector number — `"4"`, `"101a"`, `"TG01"`, `"SWSH001"`.
+   *
+   * Stored, not derived. The card id is NOT a substitute: `zsv10pt5-80` carries
+   * `number: "60"` and collides with that set's real card 60, and `cel25c` has
+   * four different cards numbered `15`. Splitting a set into its base and
+   * master tiers (`models/setCompletion.ts`) is a question about numbers, so a
+   * number guessed from an id would report the wrong tier rather than none.
+   *
+   * **Optional, and absence is meaningful.** Every row written before this
+   * field existed lacks it, and a set whose owned cards cannot all be
+   * classified declines a base tier instead of reporting a wrong one. Rows are
+   * filled in as their set's card list is loaded (`Repositories.backfillNumbers`)
+   * and as cards are marked — never invented.
+   */
+  number?: string;
   /** When this printing was marked owned. */
   at: number;
   /** When it was un-marked. Present means "not owned", not "never owned". */
@@ -48,6 +64,68 @@ export interface OwnedPrinting {
 
 /** Tombstones older than this are dropped — see pruneTombstones. */
 export const TOMBSTONE_TTL_MS = 180 * 24 * 60 * 60_000;
+
+/**
+ * Bound on a stored collector number. The longest real ones are short
+ * (`SWSH001`, `XY-P`, `TG01`), so this is generous by an order of magnitude and
+ * exists only to stop a public endpoint storing an essay in the field.
+ */
+export const MAX_COLLECTOR_NUMBER_LENGTH = 20;
+
+/**
+ * Read an untrusted collector number, or `undefined`.
+ *
+ * Shared by the device's read path and the server's `parseRow` for the same
+ * reason the merge rule is: two validators that drift disagree about what a row
+ * is, and the field then survives one hop and vanishes at the other.
+ *
+ * Note what this does NOT do: it never rejects the row. A number that fails to
+ * parse costs a declined base tier; a rejected row costs the card. Collector
+ * numbers are not an allow-list either — sets keep inventing shapes (`TG01`,
+ * `GG01`, `H1`, `88a`, `XY-P`) — so this validates length and trims, nothing more.
+ */
+export function parseCollectorNumber(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_COLLECTOR_NUMBER_LENGTH) return undefined;
+  return trimmed;
+}
+
+/**
+ * Every OPTIONAL field a stored row may carry, read from an untrusted object.
+ *
+ * The one whitelist, spread by both of the two parsers that exist: the device's
+ * `toPrintings` (src/storage/repositories.ts) and the server's `parseRow`
+ * (server/collectionStore.ts). Those parsers cannot be merged — one reads its
+ * own localStorage and the other reads the public internet, so they disagree
+ * about what is fatal — but the LIST of optional fields is the same question at
+ * both ends, and keeping two copies of it is what has cost this repo two bugs:
+ * a field named at one end only is written by the device, accepted by nothing,
+ * and silently gone on the next sync.
+ *
+ * Adding a field here adds it to both ends at once. That is the point.
+ *
+ * Each field is written only when it is not the default, exactly as it was
+ * stored. Two spellings of one value ("absent" and "false", "absent" and "") is
+ * how a convergent store starts ping-ponging between devices that agree.
+ */
+export function optionalRowFields(
+  value: Record<string, unknown>,
+): Pick<OwnedPrinting, "game" | "number" | "excluded"> {
+  const game = canonicalGame(value.game);
+  const number = parseCollectorNumber(value.number);
+  return {
+    // An unrecognised game falls back to the default rather than being stored:
+    // an arbitrary string would partition the OR-Set into keys no client will
+    // ever look under.
+    ...(game === DEFAULT_GAME ? {} : { game }),
+    ...(number === undefined ? {} : { number }),
+    // Only `true` is meaningful, and only `true` is stored. Anything else is
+    // treated as absent rather than rejected: a client that sends `false` means
+    // "not excluded", which is what omitting it already says.
+    ...(value.excluded === true ? { excluded: true as const } : {}),
+  };
+}
 
 /** The game a row belongs to, with absence meaning the default. */
 export function rowGame(row: Pick<OwnedPrinting, "game">): TradingCardGame {
@@ -90,6 +168,16 @@ const stamp = rowStamp;
  * back when you exclude something you already own, and without this rule the
  * winner depended on map order, so the exclusion silently did nothing.
  * Restrictive intents win ties; both are one tap to undo.
+ *
+ * Last, and only when the two rows are otherwise the same write, the one that
+ * KNOWS its collector number wins. Numbers are backfilled onto existing rows
+ * without touching `at` — deliberately, because bumping it would rewrite when
+ * the card was collected and re-push the whole collection to say nothing new —
+ * so the two sides of a sync routinely hold the same row at the same stamp with
+ * and without a number. Without this rule the numberless copy wins whenever it
+ * happens to be merged first, and a device's first push to a server holding the
+ * old rows would silently strip every number it had just learned. Ordering is by
+ * value, not by argument position, so the merge stays commutative.
  */
 function pickWinner(a: OwnedPrinting, b: OwnedPrinting): OwnedPrinting {
   const sa = stamp(a);
@@ -97,6 +185,11 @@ function pickWinner(a: OwnedPrinting, b: OwnedPrinting): OwnedPrinting {
   if (sa !== sb) return sa > sb ? a : b;
   if (isLive(a) !== isLive(b)) return isLive(a) ? b : a;
   if (Boolean(a.excluded) !== Boolean(b.excluded)) return a.excluded ? a : b;
+  if (a.number !== b.number) {
+    if (a.number === undefined) return b;
+    if (b.number === undefined) return a;
+    return a.number < b.number ? a : b;
+  }
   return a;
 }
 

@@ -30,7 +30,19 @@ export function CollectionScreen() {
   // Same rows, same order as the set switcher on web — see useCollectedSets.
   const rows = useCollectedSets();
 
-  const completed = rows.filter((r) => r.ratio === 1).length;
+  /*
+   * Two milestones, counted by the one predicate in models/setCompletion.ts.
+   * `master` implies base, so a master-complete set is counted in both — "3
+   * base · 1 master" reads as "three finished, one of them all the way", which
+   * is how collectors talk about it. A ratio of exactly 1 used to stand in for
+   * this and disagreed with the star beside it on any set that rounded up.
+   */
+  const baseDone = rows.filter((r) => r.tiers.tier !== "none").length;
+  const masterDone = rows.filter((r) => r.tiers.tier === "master").length;
+  const milestones = [
+    ...(baseDone ? [`${baseDone} base`] : []),
+    ...(masterDone ? [`${masterDone} master`] : []),
+  ].join(" · ");
 
   /**
    * Selecting the sync row does the useful thing for the current state rather
@@ -78,7 +90,7 @@ export function CollectionScreen() {
 
   const subtitle = collection.length
     ? `${collection.length} cards · ${totalFinishesOwned} printings · ${rows.length} sets${
-        completed ? ` · ${completed} complete` : ""
+        milestones ? ` · ${milestones}` : ""
       }`
     : "Nothing tracked yet";
 
@@ -124,8 +136,7 @@ export function CollectionScreen() {
               owned={row.owned}
               printings={row.printings}
               finishes={row.finishes}
-              {...(row.total ? { total: row.total } : {})}
-              {...(row.ratio === undefined ? {} : { ratio: row.ratio })}
+              tiers={row.tiers}
             />
           )}
         />

@@ -8,6 +8,9 @@ import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { useTextEntry } from "../../app/TextEntryProvider.tsx";
 import { syncLine } from "../../features/collection/syncLine.ts";
+import { setTiers } from "../../models/setCompletion.ts";
+import { compareCompletion, ownedIn, tierLabel } from "../../features/collection/completionTier.ts";
+import { SetTierFigures } from "../../features/collection/SetTierFigures.tsx";
 import styles from "./WebSetsScreen.module.css";
 
 const ValuePanel = lazy(() =>
@@ -34,8 +37,15 @@ const ValuePanel = lazy(() =>
 export function WebSetsScreen() {
   const { openSet, pop } = useNavigation();
   const { data, isLoading, isError, refetch } = useSets();
-  const { ownedCountsBySet, collection, totalFinishesOwned, syncStatus, syncNow, setSyncToken } =
-    useLibrary();
+  const {
+    ownedCountsBySet,
+    ownedNumbersBySet,
+    collection,
+    totalFinishesOwned,
+    syncStatus,
+    syncNow,
+    setSyncToken,
+  } = useLibrary();
   const { provider: textProvider } = useTextEntry();
   // No disconnect here. On the glasses it is a deliberate left-swipe on the
   // sync row -- the only spare gesture there -- and forgetting a device's
@@ -60,18 +70,43 @@ export function WebSetsScreen() {
     if (syncStatus.state === "disabled") return; // nothing the device can fix
     syncNow();
   };
+  /**
+   * Three groups, not two.
+   *
+   * A set whose base run is finished is not "in progress" — it is the thing the
+   * heading promises you are still working on, and leaving it there means
+   * scrolling past your own trophies to find the sets that still need cards.
+   * Master-complete sets sort above base-complete ones inside the finished
+   * group, since once the ratio is base every base-complete set ties at 1.0.
+   */
   const sets = useMemo(() => {
     const all = data ?? [];
-    const started = all.filter((s) => (ownedCountsBySet[s.id] ?? 0) > 0);
-    const rest = all.filter((s) => (ownedCountsBySet[s.id] ?? 0) === 0);
-    return { started, rest };
-  }, [data, ownedCountsBySet]);
+    const tiersFor = (set: (typeof all)[number]) =>
+      setTiers(
+        {
+          ...(set.total ? { total: set.total } : {}),
+          ...(set.printedTotal ? { printedTotal: set.printedTotal } : {}),
+        },
+        ownedIn(set.id, ownedNumbersBySet, ownedCountsBySet[set.id] ?? 0),
+      );
+    const started = all
+      .filter((s) => (ownedCountsBySet[s.id] ?? 0) > 0)
+      .map((set) => ({ set, tiers: tiersFor(set), owned: ownedCountsBySet[set.id] ?? 0 }))
+      .sort(compareCompletion);
+    return {
+      inProgress: started.filter((s) => s.tiers.tier === "none"),
+      complete: started.filter((s) => s.tiers.tier !== "none"),
+      started,
+      rest: all
+        .filter((s) => (ownedCountsBySet[s.id] ?? 0) === 0)
+        .map((set) => ({ set, tiers: tiersFor(set), owned: 0 })),
+    };
+  }, [data, ownedCountsBySet, ownedNumbersBySet]);
 
-  const row = (set: (typeof sets.started)[number]) => {
-    const owned = ownedCountsBySet[set.id] ?? 0;
+  const row = ({ set, tiers, owned }: (typeof sets.started)[number]) => {
     const total = set.total;
-    const pct = total && total > 0 ? Math.min(100, Math.round((owned / total) * 100)) : null;
-    const done = pct === 100;
+    const base = tiers.baseTotal !== undefined;
+    const label = tierLabel(tiers.tier);
     return (
       <li key={set.id}>
         <button
@@ -79,7 +114,11 @@ export function WebSetsScreen() {
           className={styles.row}
           onClick={() => openSet(set.id, set.name)}
           aria-label={
-            total ? `${set.name}, ${owned} of ${total} cards` : `${set.name}, ${owned} cards tracked`
+            base
+              ? `${set.name}, base set ${tiers.baseOwned} of ${tiers.baseTotal}, master set ${tiers.masterOwned} of ${total}${label ? `, ${label} complete` : ""}`
+              : total
+                ? `${set.name}, ${owned} of ${total} cards${label ? `, ${label} complete` : ""}`
+                : `${set.name}, ${owned} cards tracked`
           }
         >
           {set.logoImage ? (
@@ -94,32 +133,34 @@ export function WebSetsScreen() {
             <span className={styles.meta}>
               {set.code ? <span className={styles.code}>{set.code}</span> : null}
               {set.releaseDate ? <span>{set.releaseDate.slice(0, 4)}</span> : null}
-              {total ? <span className={styles.count}>{total} cards</span> : null}
+              {/* The set size, but only where the row is not already showing it.
+                  A started row carries `197/230 master` on the right, and
+                  printing "230 cards" beside it was the same number twice — at
+                  the cost of the width that pushed the set NAME into an
+                  ellipsis on a 320px desktop column. */}
+              {total && owned === 0 ? <span className={styles.count}>{total} cards</span> : null}
             </span>
           </span>
-          {owned > 0 ? (
-            <span className={styles.progress}>
-              {/* Only when the set size is known. An empty bar reads as "0% done"
-                  rather than "we do not know how big this set is". */}
-              {pct !== null ? (
-                <span className={`${styles.bar} ${done ? styles.barDone : ""}`}>
-                  <span className={styles.fill} style={{ width: `${pct}%` }} />
-                </span>
-              ) : null}
-              <span className={`${styles.pct} ${done ? styles.pctDone : ""}`}>
-                {total ? `${owned}/${total}` : `${owned} held`}
-              </span>
-            </span>
-          ) : null}
+          {owned > 0 ? <SetTierFigures tiers={tiers} owned={owned} /> : null}
         </button>
       </li>
     );
   };
 
-  const completed = sets.started.filter((s) => s.total && ownedCountsBySet[s.id] === s.total).length;
+  /*
+   * Counted by the one predicate, not by `owned === total`. That expression
+   * disagreed with the two rounded percentages elsewhere on this screen, and it
+   * could only ever see the master tier. `master` implies base, so a
+   * master-complete set is counted in both figures.
+   */
+  const masterDone = sets.complete.filter((s) => s.tiers.tier === "master").length;
+  const milestones = [
+    ...(sets.complete.length ? [`${sets.complete.length} base`] : []),
+    ...(masterDone ? [`${masterDone} master`] : []),
+  ].join(" · ");
   const subtitle = collection.length
     ? `${collection.length} cards · ${totalFinishesOwned} printings · ${sets.started.length} sets${
-        completed ? ` · ${completed} complete` : ""
+        milestones ? ` · ${milestones}` : ""
       }`
     : "Nothing tracked yet";
   const sync = syncLine(syncStatus);
@@ -152,10 +193,18 @@ export function WebSetsScreen() {
       {!isLoading && !isError && sets.started.length + sets.rest.length === 0 ? (
         <EmptyState title="No sets loaded" hint="Try again in a moment." />
       ) : null}
-      {sets.started.length > 0 ? (
+      {sets.inProgress.length > 0 ? (
         <>
           <h2 className={styles.group}>In progress</h2>
-          <ul className={styles.list}>{sets.started.map(row)}</ul>
+          <ul className={styles.list}>{sets.inProgress.map(row)}</ul>
+        </>
+      ) : null}
+      {/* Finished sets are not something you are working on, so they sit under
+          their own heading rather than at the top of the working list. */}
+      {sets.complete.length > 0 ? (
+        <>
+          <h2 className={styles.group}>Completed</h2>
+          <ul className={styles.list}>{sets.complete.map(row)}</ul>
         </>
       ) : null}
       {sets.rest.length > 0 ? (

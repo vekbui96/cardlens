@@ -165,3 +165,69 @@ test.describe("set switcher on the glasses", () => {
     await expect(page.getByRole("button", { name: /Switch set/ })).toHaveCount(0);
   });
 });
+
+/**
+ * Two ways to finish a set, and the same answer on every surface.
+ *
+ * Obsidian Flames (sv3) is 230 cards with a printed denominator of 197. Holding
+ * 1..197 finishes the BASE set and leaves 33 secret rares outstanding — the case
+ * that used to read `197/230` in this switcher and `197/408` in the header a
+ * centimetre above it, with nothing on either saying which size it measured.
+ */
+const BASE_COMPLETE = Array.from({ length: 197 }, (_, i) => ({
+  cardId: `sv3-${i + 1}`,
+  setId: "sv3",
+  finish: "normal",
+  number: String(i + 1),
+  at: 1_700_000_000_000 + i,
+}));
+
+test.describe("set completion tiers", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone" && testInfo.project.name !== "desktop", "web shells only");
+  });
+
+  async function seedBaseComplete(page: Page) {
+    await page.addInitScript((rows) => {
+      localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
+    }, BASE_COMPLETE);
+  }
+
+  test("moves a base-complete set out from under In progress", async ({ page }) => {
+    await seedBaseComplete(page);
+    await page.goto("/?ui=web#/sets");
+
+    const completed = page.getByRole("heading", { name: "Completed" });
+    await expect(completed).toBeVisible();
+
+    // Under Completed, not under the heading that promises what you are still
+    // working on. Asserted by list membership rather than by pixel order: the
+    // desktop layout puts the lists in a grid.
+    const row = page.getByRole("button", { name: /Obsidian Flames/ });
+    await expect(row).toHaveAttribute("aria-label", /base set 197 of 197/);
+    await expect(row).toHaveAttribute("aria-label", /master set 197 of 230/);
+    await expect(row).toHaveAttribute("aria-label", /BASE complete/);
+
+    // Both figures on the row, each saying which set size it is.
+    await expect(row.getByText("197/197")).toBeVisible();
+    await expect(row.getByText("BASE")).toBeVisible();
+    await expect(row.getByText("197/230")).toBeVisible();
+  });
+
+  test("shows the base run in the switcher, not the master total alone", async ({ page }) => {
+    await seedBaseComplete(page);
+    await openObsidianFlames(page);
+
+    // The header carries both, labelled — the whole point of the feature.
+    await expect(page.getByText("base", { exact: true })).toBeVisible();
+    await expect(page.getByText("197/197")).toBeVisible();
+    await expect(page.getByText("master", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: /Switch set/ }).click();
+    const item = page.getByRole("menuitem", { name: /Obsidian Flames/ });
+    await expect(item).toContainText("197/197");
+    await expect(item).toContainText("BASE");
+  });
+});

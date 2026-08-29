@@ -1,0 +1,56 @@
+/*
+ * A stacked status block for the compact screen header.
+ *
+ * Right-aligned and tight-leaded: two labelled lines cost about the same height
+ * as the one unlabelled figure they replace once the line-height is pulled in,
+ * which is what makes this affordable on the glasses at all.
+ */
+.tiers {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  /* A step under --cl-fs-small on web: two labelled lines have to cost about
+     what the one unlabelled figure did, or they buy their clarity out of the
+     set NAME beside them. The glasses scale is untouched — there
+     --cl-fs-small is 18px and the block is read at arm's length. */
+  font-size: var(--cl-fs-small);
+  font-weight: 800;
+  color: var(--cl-fg-muted);
+  white-space: nowrap;
+}
+
+[data-shell="web"] .tiers {
+  font-size: 12px;
+}
+
+.line {
+  display: block;
+}
+
+/* The word that says which denominator this is. Lighter and dimmer, so the
+   figure stays the thing you read and the label is there when you need it. */
+.label {
+  font-weight: 500;
+  color: var(--cl-fg-dim);
+}
+
+/*
+ * The printings line is the third figure, and the first to go.
+ *
+ * Three labelled lines are ~185px of header, which on a phone pushed the set
+ * NAME into an ellipsis — and the name is the screen's identity, worth more
+ * than a figure the set list and Home both also carry. Desktop widens to 1180px
+ * and has the room, so it keeps all three. The two TIERS never drop: they are
+ * the pair this header exists to disambiguate.
+ */
+.dim {
+  display: none;
+  color: var(--cl-fg-dim);
+}
+
+@media (min-width: 1000px) {
+  .dim {
+    display: block;
+  }
+}

@@ -152,6 +152,34 @@
   background: var(--cl-accent);
 }
 
+/* Green for the base run, gold for the master set, and the word beside both —
+   see web-theme.css on why the colour can never stand alone. */
+.tierBase .barFill {
+  background: var(--cl-green);
+}
+
+.tierMaster .barFill {
+  background: var(--cl-gold);
+}
+
+.tierBase .itemCount {
+  color: var(--cl-green);
+}
+
+.tierMaster .itemCount {
+  color: var(--cl-gold);
+}
+
+.tierWord {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* Which denominator the figure is. */
+.itemTier {
+  color: var(--cl-fg-dim);
+}
+
 /* A destination, not a set: separated so it cannot be mistaken for one. */
 .itemAll {
   margin-top: var(--cl-gap-xs);

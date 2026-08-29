@@ -195,42 +195,29 @@
   color: var(--cl-fg-dim);
 }
 
+/* The progress cluster is SetTierFigures, shared with the sets list — one bar
+   and two labelled figures, so the two screens cannot drift apart again. */
 .rowProgress {
   grid-row: span 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--cl-gap-xs);
 }
 
-.bar {
-  width: 84px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--cl-surface-raised);
-  overflow: hidden;
+/* The resume card has no bar to tint, so its milestone rides on the word. */
+.tierWord {
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
-.fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--cl-accent);
+.tierBase {
+  color: var(--cl-green);
 }
 
-.barDone .fill {
-  background: var(--cl-gold);
-}
-
-.pct {
-  font-family: var(--cl-font-data);
-  font-size: var(--cl-fs-small);
-  font-variant-numeric: tabular-nums;
-  color: var(--cl-fg-muted);
-}
-
-.pctDone {
+.tierMaster {
   color: var(--cl-gold);
+}
+
+/* Which set size the figure measures, when it is not a milestone. */
+.tierLabel {
+  color: var(--cl-fg-dim);
 }
 
 .empty {

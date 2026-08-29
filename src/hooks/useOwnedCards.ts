@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useCatalog } from "../app/contexts.tsx";
 import { useLibrary } from "../app/LibraryProvider.tsx";
 import { useSets } from "./useSets.ts";
@@ -23,7 +23,7 @@ import { setCardsCache } from "../storage/caches.ts";
  * with useCollectionValue so a set is never fetched twice.
  */
 export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
-  const { collection } = useLibrary();
+  const { collection, backfillNumbers } = useLibrary();
   const { provider, sourceKey } = useCatalog();
   const { data: sets } = useSets();
 
@@ -70,6 +70,30 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
    */
   const cardsSettledAt = cardQueries.map((q) => q.dataUpdatedAt).join(",");
   const pricesSettledAt = priceQueries.map((q) => q.dataUpdatedAt).join(",");
+
+  /**
+   * Teach the stored rows their collector numbers, from the card lists this
+   * hook has already fetched.
+   *
+   * The migration for every row written before the field existed — there are
+   * roughly 973 of them and none can be repaired from its card id, because ids
+   * and numbers disagree (`zsv10pt5-80` is number 60, and `cel25c` has four
+   * cards numbered 15). This is the one place that already holds the card list
+   * of EVERY set the collection touches, so opening this screen once migrates
+   * the whole collection rather than a set at a time.
+   *
+   * Free: the lists are fetched for the rows below either way. Idempotent: the
+   * repository fills only absent numbers, never touches `at`, and reports back
+   * that it wrote nothing on the second pass, so this cannot loop.
+   */
+  useEffect(() => {
+    const known: { id: string; collectorNumber: string }[] = [];
+    for (const query of cardQueries) {
+      for (const card of query.data ?? []) known.push({ id: card.id, collectorNumber: card.collectorNumber });
+    }
+    if (known.length > 0) backfillNumbers(known);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; cardsSettledAt is when its data actually changed
+  }, [backfillNumbers, cardsSettledAt]);
 
   return useMemo(() => {
     const cardsBySet = new Map<

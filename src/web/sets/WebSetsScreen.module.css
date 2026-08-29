@@ -21,7 +21,10 @@
   /* Comfortably past the 44px thumb minimum: this is the screen you scan. */
   min-height: 72px;
   display: grid;
-  grid-template-columns: 72px 1fr auto;
+  /* minmax(0, …), not 1fr: a nowrap "279 cards" in the meta sets the track's
+     min-content width and squeezed the name into an ellipsis the moment the
+     progress cluster grew a second line. */
+  grid-template-columns: 72px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--cl-gap);
   padding: var(--cl-gap-sm) var(--cl-gap);
@@ -78,6 +81,8 @@
 .meta {
   display: flex;
   gap: var(--cl-gap-sm);
+  white-space: nowrap;
+  overflow: hidden;
   font-size: var(--cl-fs-small);
   color: var(--cl-fg-dim);
 }
@@ -86,45 +91,6 @@
 .code,
 .count {
   font-family: var(--cl-font-data);
-}
-
-.progress {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--cl-gap-xs);
-  min-width: 84px;
-}
-
-.bar {
-  width: 84px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--cl-surface-raised);
-  overflow: hidden;
-}
-
-.fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--cl-accent);
-}
-
-/* Gold is completion, everywhere it appears. */
-.barDone .fill {
-  background: var(--cl-gold);
-}
-
-.pct {
-  font-family: var(--cl-font-data);
-  font-size: var(--cl-fs-small);
-  font-variant-numeric: tabular-nums;
-  color: var(--cl-fg-muted);
-}
-
-.pctDone {
-  color: var(--cl-gold);
 }
 
 @media (min-width: 1000px) {

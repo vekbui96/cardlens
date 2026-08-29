@@ -33,6 +33,20 @@
   color: var(--cl-fg-muted);
 }
 
+/* Which set size the percentage is of. Dim, so it reads as a label on the
+   number rather than part of it. */
+.countTier {
+  color: var(--cl-fg-dim);
+}
+
+/* The milestone, reached. Uppercase in the markup and bold here — no colour, on
+   a display where black is transparent and every hue is already spoken for. */
+.tierDone {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--cl-fg);
+}
+
 /* 8px tall: thinner than this is hard to read on the 600x600 additive display,
    where thin dim shapes wash out against a bright background. */
 .track {

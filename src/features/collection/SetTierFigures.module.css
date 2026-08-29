@@ -1,0 +1,74 @@
+/*
+ * Web only in practice — rendered exclusively by screens under src/web, so the
+ * glasses cascade never meets it. It reads --cl-green and --cl-gold, which are
+ * defined under [data-shell="web"] and nowhere else.
+ */
+.progress {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cl-gap-xs);
+  min-width: 84px;
+}
+
+.bar {
+  width: 84px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cl-accent);
+}
+
+/* Green finishes the base run, gold the whole set. Both are shadowed by the ★
+   and the uppercase label in the markup — see the component's comment. */
+.fillBase {
+  background: var(--cl-green);
+}
+
+.fillMaster {
+  background: var(--cl-gold);
+}
+
+.figure,
+.second {
+  font-family: var(--cl-font-data);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.figure {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+}
+
+/* The other denominator: present so the two can never be confused, demoted so
+   the base run stays the figure you read. */
+.second {
+  font-size: 11px;
+  color: var(--cl-fg-dim);
+}
+
+.doneBase {
+  color: var(--cl-green);
+}
+
+.doneMaster {
+  color: var(--cl-gold);
+}
+
+/* Which set size the figure measures. */
+.word {
+  color: var(--cl-fg-dim);
+}
+
+.wordDone {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}

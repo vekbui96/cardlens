@@ -10,8 +10,13 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { canonicalFinish } from "../src/models/finishes.ts";
-import { canonicalGame, DEFAULT_GAME } from "../src/models/games.ts";
-import { mergePrintings, pruneTombstones, rowStamp, type OwnedPrinting } from "../src/storage/printings.ts";
+import {
+  mergePrintings,
+  optionalRowFields,
+  pruneTombstones,
+  rowStamp,
+  type OwnedPrinting,
+} from "../src/storage/printings.ts";
 
 /**
  * Server-side collection store: the sync hub between devices.
@@ -57,22 +62,18 @@ export function parseRow(value: unknown): OwnedPrinting | null {
   if (v.deletedAt !== undefined) {
     if (typeof v.deletedAt !== "number" || !Number.isFinite(v.deletedAt) || v.deletedAt < 0) return null;
   }
-  // Only `true` is meaningful, and only true is stored. Anything else is
-  // treated as absent rather than rejected: a client that sends `false` means
-  // "not excluded", which is what omitting it already says.
-
   return {
     cardId: v.cardId,
     setId: v.setId,
-    // Preserved, and only when it is not the default. parseRow is a whitelist,
+    // Every optional field, from the list SHARED with the device's own parser
+    // (`toPrintings` in src/storage/repositories.ts). parseRow is a whitelist,
     // so a field it does not name is silently dropped — which is how a client
     // that knew about a second game would have its rows handed back belonging
-    // to the first one. An unrecognised value falls back to the default rather
-    // than being stored: this endpoint is on the public internet, and an
-    // arbitrary string here would partition the OR-Set into keys no client
-    // will ever look under.
-    ...(canonicalGame(v.game) === DEFAULT_GAME ? {} : { game: canonicalGame(v.game) }),
-    ...(v.excluded === true ? { excluded: true as const } : {}),
+    // to the first one, and how a collector number written on the device would
+    // vanish on its first sync. Naming the fields in one place is what stops
+    // the two ends drifting; a field that fails to parse is dropped ALONE, so
+    // the row still stores.
+    ...optionalRowFields(v),
     // Canonicalised on ingest, matching the client. Without this the store
     // accumulates "holofoil" AND "holo" as separate OR-Set keys for one
     // printing, inflating every count on the server side. Applies to rows read

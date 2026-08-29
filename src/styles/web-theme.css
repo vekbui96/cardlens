@@ -67,6 +67,20 @@ body:has([data-shell="web"]) {
   --cl-gold: #f2b544;
   --cl-gold-dim: rgba(242, 181, 68, 0.16);
 
+  /*
+   * Green joins gold for the ONE thing that has two sizes: a set is finished
+   * twice over, once at its printed denominator (base) and once including the
+   * secret rares (master). Gold keeps the bigger achievement it already meant.
+   *
+   * Green and gold is precisely the pair that fails the common red-green
+   * deficiencies — a deutan sees two yellows — so neither ever appears without
+   * the word BASE or MASTER beside it. Jade rather than a leaf green: it keeps
+   * a blue component, which separates it from gold by lightness and by the
+   * blue-yellow axis as well as by hue.
+   */
+  --cl-green: #43d9a3;
+  --cl-green-dim: rgba(67, 217, 163, 0.16);
+
   --cl-price: var(--cl-gold);
   --cl-warn: #f2b544;
   --cl-error: #ff7a7a;

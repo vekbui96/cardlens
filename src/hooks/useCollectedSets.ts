@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { CollectFinish } from "../models/cards.ts";
 import { useLibrary } from "../app/LibraryProvider.tsx";
+import { setTiers, type SetTiers } from "../models/setCompletion.ts";
+import { compareCompletion, ownedIn } from "../features/collection/completionTier.ts";
 import { useSets } from "./useSets.ts";
 
 export interface CollectedSet {
@@ -11,18 +13,16 @@ export interface CollectedSet {
   printings: number;
   finishes: Partial<Record<CollectFinish, number>>;
   total?: number;
-  /**
-   * The printed denominator — the base-set size, when the set has one.
-   *
-   * Carried, not consumed: turning it into a base tier needs the collector
-   * NUMBER of every owned card, and this hook only has counts. Feed it and the
-   * owned numbers to `models/setCompletion.ts`; never divide by it here, since
-   * a numerator that includes secret rares over a base denominator is the one
-   * mistake that makes an unfinished set look complete.
-   */
+  /** The printed denominator — the base-set size, when the set has one. */
   printedTotal?: number;
-  /** 0–1, or undefined when the set's size isn't known yet. */
-  ratio?: number;
+  /**
+   * Both completion tiers, from `models/setCompletion.ts` — the single answer to
+   * "how far through is this set". Rows draw `baseRatio` where there is one and
+   * `masterRatio` otherwise, and never divide anything themselves: a numerator
+   * that includes secret rares over a base denominator is the one mistake that
+   * makes an unfinished set look complete.
+   */
+  tiers: SetTiers;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface CollectedSet {
  * a label rather than dropping out.
  */
 export function useCollectedSets(): CollectedSet[] {
-  const { ownedCountsBySet, ownedFinishCountsBySet, finishesBySet } = useLibrary();
+  const { ownedCountsBySet, ownedFinishCountsBySet, finishesBySet, ownedNumbersBySet } = useLibrary();
   const { data: sets } = useSets();
 
   return useMemo<CollectedSet[]>(() => {
@@ -56,9 +56,13 @@ export function useCollectedSets(): CollectedSet[] {
           setName: set?.name ?? setId,
           owned,
           ...(set?.printedTotal ? { printedTotal: set.printedTotal } : {}),
-          ...(total ? { total, ratio: Math.min(1, owned / total) } : {}),
+          ...(total ? { total } : {}),
+          tiers: setTiers(
+            { ...(total ? { total } : {}), ...(set?.printedTotal ? { printedTotal: set.printedTotal } : {}) },
+            ownedIn(setId, ownedNumbersBySet, owned),
+          ),
         };
       })
-      .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.owned - a.owned);
-  }, [sets, ownedCountsBySet, ownedFinishCountsBySet, finishesBySet]);
+      .sort(compareCompletion);
+  }, [sets, ownedCountsBySet, ownedFinishCountsBySet, finishesBySet, ownedNumbersBySet]);
 }
