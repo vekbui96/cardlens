@@ -362,3 +362,47 @@
      stretching the digits, which is the one distortion that costs legibility. */
   object-fit: contain;
 }
+
+@media (min-width: 1000px) {
+  /*
+   * Two columns of decisions.
+   *
+   * Nothing in a review row gets better for being 1100px wide — it is a 54px
+   * thumbnail, three candidate buttons and a chip row — and a batch of thirty
+   * is a long scroll to work down. Rows are top-aligned rather than stretched:
+   * a row carrying a number band is several times the height of a confident
+   * one, and stretching its neighbour to match would draw a tall empty card.
+   */
+  .review {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--cl-gap);
+  }
+
+  /*
+   * Cap the collector-number band.
+   *
+   * It is a photograph of the card's bottom sixth, roughly 4.5:1, and at
+   * width:100% of a full-width row it rendered 1055x230 — measured at
+   * 1440x900. That is a slab: it pushed the candidate buttons it exists to be
+   * read WITH off the bottom of the screen, so only one row was ever visible.
+   * 420px still puts the digits larger than they are on a phone, which is the
+   * size the crop was chosen for.
+   */
+  .numberBand {
+    max-width: 420px;
+  }
+
+  /*
+   * Commit and dismiss are one decision about the whole batch. Stretched edge
+   * to edge they read as a banner across the page rather than as a button.
+   */
+  .footer .shutter,
+  .dismiss {
+    width: auto;
+    min-width: 320px;
+    align-self: center;
+    padding: 0 var(--cl-gap-lg);
+  }
+}

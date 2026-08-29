@@ -128,13 +128,34 @@
 }
 
 @media (min-width: 1000px) {
-  /* Two columns of rows: the list is long and mostly short text, so a single
-     1180px-wide column would be a lot of whitespace per set. */
+  /*
+   * Columns sized to the row's CONTENT, not counted out.
+   *
+   * Two fixed columns left ~220px of dead space in the middle of every row at
+   * 1440x900 — measured: a 564px row holding a 72px logo, ~150px of name and
+   * meta, and an 84px progress cluster. The logo and the name ended up at
+   * opposite ends of a gap wide enough that they stopped reading as one label
+   * for one set.
+   *
+   * 320px is what the row actually needs, so auto-fill lands on three columns
+   * at the full 1180px shell and falls back to two between 1000px and there,
+   * where a fixed three would have crushed the longer set names into an
+   * ellipsis. This is the opposite call from WebSetCardsScreen, which fixes its
+   * column count on purpose — that grid IS a binder page and has to stay three
+   * (or nine) across to mean anything. A list of sets is just a list.
+   */
   .list {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: var(--cl-gap);
     padding: 0 var(--cl-gap-lg) var(--cl-gap);
+  }
+
+  /* The 72px floor is a thumb target, and a pointer needs none — the row's own
+     content (a 40px logo plus padding) is 56px. 174 sets is a long scroll to
+     spend 16px a row on nothing. */
+  .row {
+    min-height: 60px;
   }
 
   .group {

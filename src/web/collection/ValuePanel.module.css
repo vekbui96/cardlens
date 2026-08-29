@@ -138,3 +138,31 @@
   outline: var(--cl-focus-ring);
   outline-offset: -2px;
 }
+
+@media (min-width: 1000px) {
+  /*
+   * Line up with the screen this panel sits on.
+   *
+   * WebSetsScreen moves its group headings and its set list to --cl-gap-lg at
+   * this width; the panel stayed at --cl-gap and sat 8px proud of everything
+   * below it, which reads as a misplaced card rather than as a wider one.
+   */
+  .panel {
+    margin: var(--cl-gap-sm) var(--cl-gap-lg) var(--cl-gap);
+    padding: var(--cl-gap-lg);
+  }
+
+  /*
+   * Two columns of set rows.
+   *
+   * A row is a name and two numbers. Across the full 1180px shell the name and
+   * its value ended up ~900px apart with nothing in between, so the eye had to
+   * track a blank line to pair them — the classic wide-table problem, and the
+   * reason the sets list beside it is multi-column too.
+   */
+  .sets {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--cl-gap-lg);
+  }
+}

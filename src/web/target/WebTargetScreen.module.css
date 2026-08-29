@@ -307,3 +307,34 @@
   border: var(--cl-border);
   border-radius: var(--cl-radius-sm, var(--cl-radius));
 }
+
+@media (min-width: 1000px) {
+  /* The --cl-gap-lg inset every other web screen takes at this width. This one
+     never opted in, so it sat 8px proud of the header on the screens either
+     side of it in the menu. */
+  .head,
+  .notice,
+  .empty,
+  .runtime,
+  .add {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+
+  .list {
+    padding: 0 var(--cl-gap-lg) var(--cl-gap-lg);
+  }
+
+  /*
+   * A form does not get better for being wider.
+   *
+   * Both forms here are this element: an 8-digit TCIN, an optional name, a
+   * token. At the full shell width that is a 1130px single-line field with a
+   * 1130px button under it, which reads as a page-wide banner rather than as
+   * something to fill in — and the eye has to travel the whole width to get
+   * from the field it typed in to the button that submits it.
+   */
+  .add {
+    max-width: 640px;
+  }
+}

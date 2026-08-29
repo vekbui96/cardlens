@@ -367,3 +367,47 @@
 .spread[data-solo] > * {
   grid-column: auto;
 }
+
+/*
+ * Desktop — 1000px, where GlassesFrame widens the shell to 1180px.
+ *
+ * The same geometry the builder uses, for the same reason the spread itself is
+ * duplicated here: the owner and the visitor have to be looking at one object,
+ * and a page that is one size while you lay it out and another when you send it
+ * is not one object. See WebBinderScreen.module.css for the measurements.
+ */
+@media (min-width: 1000px) {
+  .spread {
+    grid-template-columns: repeat(2, minmax(0, 440px));
+    justify-content: center;
+  }
+
+  /* The inside front cover page 1 opens against, drawn rather than left blank. */
+  .spread[data-cover]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: var(--cl-gap-lg);
+    left: calc(50% - 440px - var(--cl-gap-lg) / 2);
+    width: 440px;
+    border-radius: var(--cl-radius);
+    background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
+  }
+
+  /*
+   * The list view keeps a reading width instead of running to the full shell.
+   *
+   * A row is a pocket address, a thumbnail, a name and a price, and stretched
+   * across 1140px the price ends up most of a screen away from the card it
+   * belongs to. 760px is the width the shell itself uses for text-shaped screens
+   * (GlassesFrame.module.css), so the list stays readable and the binder view
+   * keeps the width it actually has something to do with.
+   *
+   * Left-aligned, not centred: it is a list under the hero and the sort chips,
+   * and those are left-aligned. The spread is centred because a binder is one
+   * object with a spine down its middle; a list is not.
+   */
+  .rows {
+    max-width: 760px;
+  }
+}

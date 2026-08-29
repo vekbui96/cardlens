@@ -294,3 +294,51 @@
 .graphWrap {
   margin: 0 var(--cl-gap) var(--cl-gap);
 }
+
+@media (min-width: 1000px) {
+  /*
+   * The art, which was never getting bigger on its own.
+   *
+   * CardImage hard-codes a 54x76 thumb (components/CardImage.module.css), and
+   * `.tile img { width: 100% }` only ever meant 100% OF THAT. Measured at
+   * 1440x900: 54px of card in a 380px column, so ~86% of every pocket was
+   * empty and the page read as captions with a stamp beside them. The wrapper
+   * is sized from the outside rather than the component being changed —
+   * CardImage is shared with the glasses, where 54px is the whole point.
+   *
+   * 5/7 because that is a card, and the box has to hold the shape whether or
+   * not the image arrives — the same reason WebSetCardsScreen states it.
+   */
+  .zoom > div {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 7;
+  }
+
+  /*
+   * A page, kept page-shaped.
+   *
+   * Three across is deliberate and stays (see .grid), which means the width
+   * goes into the cards rather than into more of them — and three cards across
+   * 1140px is a 360px-wide card, half again the size of the real thing, with a
+   * nine-card page running to some 1600px of scroll. Capped, a pocket lands
+   * near 230px: bigger than the 120px the set grid trades away for its nine
+   * columns, and still a page you can see at once. Centred, because a binder
+   * page pinned to the left edge of a wide screen is not one.
+   */
+  .summary,
+  .page,
+  .filters,
+  .complete,
+  .graphWrap,
+  .footnote {
+    /* width:100% is load-bearing, not belt-and-braces: these are flex items,
+       and an auto cross-axis margin cancels the stretch that was giving them
+       their width — without it each block collapses to fit-content and the
+       page came out 376px wide instead of 720px. */
+    width: 100%;
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}

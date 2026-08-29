@@ -724,6 +724,92 @@ label.chip {
 }
 
 /*
+ * Desktop.
+ *
+ * 1000px is where GlassesFrame widens the web shell from 760px to 1180px, and
+ * where every other web stylesheet that has opted into desktop switches — see
+ * WebSetsScreen.module.css. Nothing new is invented here.
+ */
+@media (min-width: 1000px) {
+  /*
+   * Put the toolbar back on ONE line.
+   *
+   * The toolbar is three sibling groups — page actions, Settings, and the set
+   * picker with Fill — and Screen's body (components/Screen.module.css) is a
+   * COLUMN flex container, so each group is a flex item and therefore a line of
+   * its own. Measured at 1440px: three rows of chrome roughly 700px wide in
+   * total, stacked down the left edge, using a tenth of the width and pushing
+   * the binder below the fold.
+   *
+   * The body is named from here with `:has(> .controls)` rather than by editing
+   * Screen's own stylesheet, which is shared with the glasses; `.controls` is
+   * hashed by CSS modules, so the selector cannot match anything else, and the
+   * [data-shell="web"] prefix keeps it off the device the way web-theme.css does.
+   *
+   * Block flow rather than a row-wrap flex container, because every other child
+   * here carries its own `0 var(--cl-gap)` side margins: as flex items they
+   * would need `flex-basis: 100%`, and 100% plus 24px of margin overflows the
+   * line by exactly those 24px.
+   */
+  [data-shell="web"] div:has(> .controls) {
+    display: block;
+  }
+
+  .controls {
+    display: inline-flex;
+    /* Top, not the inline default of baseline: aligned on their baselines the
+       three groups sit on the line's text strut and step up and down by a few
+       pixels depending on which control comes first in each. */
+    vertical-align: top;
+  }
+
+  /*
+   * The extra width goes to the FACING PAGES, not to bigger pockets.
+   *
+   * Two 1fr columns took the whole 1180px shell and drew a 9-pocket page's
+   * pockets at 177x248 (measured at 1440px). A real card is 63x88mm, which is
+   * 238x333 CSS px at 96dpi — so that is three quarters of life size for
+   * something being browsed nine at a time, and one spread stood ~690px tall
+   * with every later page below the fold. Capping a page at 440px puts a pocket
+   * at 141x197, the same order as the 120px card tiles the set grid draws at
+   * this width, and fits a whole spread on a 900px-tall laptop.
+   *
+   * Centred rather than left-aligned so the binder opens in the middle of the
+   * window. Below the cap the columns simply fill, so the phone is untouched,
+   * and `.spread[data-solo]` outranks this on specificity and keeps its own cap.
+   */
+  .spread {
+    grid-template-columns: repeat(2, minmax(0, 440px));
+    justify-content: center;
+  }
+
+  /*
+   * The inside front cover, drawn rather than left blank.
+   *
+   * Page 1 sits in the right-hand column because that is where a binder falls
+   * open; the left column is the cover it opens against. On a phone that column
+   * does not exist at all, but at 1440px it was 440px of nothing, which reads as
+   * a page that failed to render rather than as the cover. A faint leaf says
+   * what the space is.
+   *
+   * Positioned from the same 440px cap: the two tracks and the gutter are
+   * centred, so the left one starts half a gutter plus one page left of centre.
+   * It stops at the page's own 20px bottom margin rather than at the spread's
+   * edge, so the leaf and the page end on the same line.
+   */
+  .spread[data-cover]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: var(--cl-gap-lg);
+    left: calc(50% - 440px - var(--cl-gap-lg) / 2);
+    width: 440px;
+    border-radius: var(--cl-radius);
+    background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
+  }
+}
+
+/*
  * A binder's total on the list row.
  *
  * Gold, the app's "worth something" accent, and in the data font so a column of
