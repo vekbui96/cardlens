@@ -91,6 +91,35 @@ describe("WebBindersScreen", () => {
     expect(new Repositories().getBinders()).toHaveLength(1);
   });
 
+  it("shows the cover the binder was given, ahead of a page from inside it", async () => {
+    // Setting a cover is a deliberate statement about what a binder IS, made
+    // one screen in. The shelf is where it pays off — seeing it before you open
+    // the binder is the entire point — so it wins over the page mosaic, which
+    // is only ever a fallback nobody chose.
+    render(<WebBindersScreen />, { wrapper: harness() });
+
+    new Repositories().mergeIncomingBinders([
+      {
+        id: "with-cover",
+        name: "Fronted",
+        format: "9",
+        cover: { kind: "card", cardId: "sv1-9", finish: "holo", imageSmall: "front.png" },
+        pages: [
+          { slots: { 0: { kind: "card", cardId: "sv1-1", finish: "normal", imageSmall: "inside.png" } } },
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    const { container } = render(<WebBindersScreen />, { wrapper: harness() });
+    await screen.findByText("Fronted");
+
+    const art = container.querySelectorAll("img");
+    expect(art).toHaveLength(1);
+    expect(art[0]).toHaveAttribute("src", "front.png");
+  });
+
   it("draws the binder's own card art on its cover, from the slot rather than the catalog", async () => {
     // The whole point of the shelf: a binder is recognised by what is in it.
     // The art is already denormalised onto the slot, so this must need no

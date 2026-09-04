@@ -409,7 +409,28 @@ test.describe("dragging cards around the binder", () => {
     // leaves the first end's coordinates pointing at whatever moved into place.
     await to.scrollIntoViewIfNeeded();
     await from.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(120);
+    /*
+     * Wait for the page to stop moving before measuring anything.
+     *
+     * Selecting a pocket scrolls it back into view with `behavior: "smooth"`,
+     * and opens the picker rail — which re-lays the pages out. A box read while
+     * either is still running points at wherever the pocket used to be, and the
+     * drop lands two rows away. A fixed sleep is a guess; this waits for the
+     * actual thing.
+     */
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector("[data-pocket]") as HTMLElement | null;
+        if (!el) return false;
+        const w = window as unknown as { __lastY?: number; __still?: number };
+        const y = Math.round(el.getBoundingClientRect().top);
+        w.__still = y === w.__lastY ? (w.__still ?? 0) + 1 : 0;
+        w.__lastY = y;
+        return (w.__still ?? 0) > 3;
+      },
+      undefined,
+      { polling: 50, timeout: 5000 },
+    );
     const a = (await from.boundingBox())!;
     const b = (await to.boundingBox())!;
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);

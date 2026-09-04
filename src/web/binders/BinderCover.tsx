@@ -3,15 +3,22 @@ import { specFor, type Binder, type BinderSlot } from "../../models/binderLayout
 import styles from "./WebBindersScreen.module.css";
 
 /**
- * A binder's cover: one of its own pages, drawn small.
+ * What a binder looks like on the shelf.
  *
  * The list used to describe binders in words — "12-pocket · 107/168 filled" —
  * which is the one thing a collector never uses to tell two binders apart. A
- * binder is recognised the way a book on a shelf is: by what it looks like. So
- * the cover is a REAL page from the binder at pocket scale, gaps and all,
- * rather than a stock icon or a single hero card.
+ * binder is recognised the way a book on a shelf is: by what it looks like.
  *
- * It costs nothing to fetch. `CardSlot` already carries `imageSmall`
+ * Two answers, in order of how much they were MEANT:
+ *
+ * 1. The binder's own cover, if one has been put in the window on its front.
+ *    That is a deliberate choice about what this binder is, made one screen in,
+ *    and the shelf is where it pays off — the whole point of setting a cover is
+ *    that you see it before you open the binder.
+ * 2. Otherwise a real page from it at pocket scale, gaps and all, which is the
+ *    next most identifying thing and needs no decision from anybody.
+ *
+ * Either way it costs nothing to fetch. `CardSlot` carries `imageSmall`
  * denormalised so a page can paint offline (see models/binderLayout.ts), so the
  * art here is exactly the art the binder is already holding — no catalog call,
  * no price call, nothing this screen was not already going to have.
@@ -46,6 +53,27 @@ export function BinderCover({
 }) {
   const spec = specFor(binder.format);
   const page = coverPage(binder);
+
+  /*
+   * A cover that was actually chosen wins over a page that merely happened to
+   * be first. Drawn as the one card it is, at the frame's full height, so the
+   * shelf shows the front of the binder rather than a thumbnail of its guts.
+   */
+  const chosen = binder.cover ?? null;
+  if (chosen) {
+    const src = chosen.kind === "card" ? chosen.imageSmall : imageSlotSrc(chosen);
+    if (src) {
+      return (
+        <img
+          className={`${styles.coverArt} ${owns(chosen) ? "" : styles.coverWanted}`}
+          src={src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
+      );
+    }
+  }
 
   return (
     /*

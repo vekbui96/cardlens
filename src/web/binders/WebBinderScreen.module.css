@@ -871,7 +871,13 @@ label.chip {
     /* minmax(0, 1fr), not 1fr: a binder spread has a min-content width of two
        full pages, and a plain 1fr track would let it push the rail off the
        right-hand edge rather than shrinking. */
-    grid-template-columns: minmax(0, 1fr) 340px;
+    /*
+     * Wider where there is room to be. A 340px rail showed three cards across
+     * at a size you could not read a collector number in, which is the one
+     * thing the picker is for. The shell is no longer capped, so this scales
+     * with the window and stops before it starts eating the binder.
+     */
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 26vw, 520px);
     gap: var(--cl-gap);
     align-items: start;
   }
@@ -975,7 +981,9 @@ label.chip {
    */
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    /* Bigger tiles than the phone strip: a card you are choosing between
+       printings of has to be readable, not merely present. */
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
     overflow-x: visible;
   }
 
@@ -987,6 +995,7 @@ label.chip {
      binder there is nothing to keep out of the way of. */
   .grid {
     max-height: none;
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   }
 
   .workspace[data-rail="shut"] .picker {
