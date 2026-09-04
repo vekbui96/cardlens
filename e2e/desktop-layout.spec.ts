@@ -239,40 +239,30 @@ test.describe("the binder at desktop size", () => {
     expect(left!.width, "a page is capped so its pockets stay card-sized").toBeLessThanOrEqual(460);
   });
 
-  test("the opening page opens against a drawn inside front cover", async ({ page }) => {
+  test("the opening page opens against the cover, which is a page you can fill", async ({ page }) => {
     // Page 1 sits in the right-hand column because that is where a binder falls
     // open. Left as a bare grid track that was 550px of nothing down the left of
-    // a 1440px window — indistinguishable from a page that failed to render. The
-    // column is now drawn as the cover leaf it represents.
+    // a 1440px window — indistinguishable from a page that failed to render.
+    //
+    // It was drawn as a faint `::after` leaf; it is a REAL page now, with the
+    // display window every binder has on its front. Hence a box to measure
+    // rather than a pseudo-element to read off the spread.
     await openBinder(page);
 
-    const spread = page.locator("[data-cover]");
-    await expect(spread).toBeVisible();
-    const page1 = await page.getByRole("region", { name: "Page 1" }).boundingBox();
-    const viewport = page.viewportSize()!;
+    await expect(page.locator("[data-cover]")).toBeVisible();
+    const page1 = (await page.getByRole("region", { name: "Page 1" }).boundingBox())!;
+    const leaf = (await page.locator("[class*='coverLeaf']").boundingBox())!;
 
-    // The spine of a centred spread falls on the middle of the window, so page
-    // 1's left edge is within half a gutter of it.
-    expect(
-      Math.abs(page1!.x - viewport.width / 2),
-      "page 1 should start at the middle of the window",
-    ).toBeLessThan(40);
-
-    // The leaf is a pseudo-element, so it has no box to locate — read it off the
-    // spread. `content: none` means the rule never applied and the half-screen
-    // is still empty.
-    const leaf = await spread.evaluate((el) => {
-      const s = getComputedStyle(el, "::after");
-      return { content: s.content, width: parseFloat(s.width), left: parseFloat(s.left) };
-    });
-    expect(leaf.content, "the inside front cover is not drawn at all").not.toBe("none");
-    expect(leaf.width, "the cover should be a page's width").toBeCloseTo(page1!.width, 0);
+    expect(leaf.width, "the cover should be a page's width").toBeCloseTo(page1.width, 0);
     // Immediately left of page 1, across the gutter — it is the facing page.
-    const spreadBox = (await spread.boundingBox())!;
-    expect(spreadBox.x + leaf.left + leaf.width, "the cover should meet the gutter").toBeLessThan(page1!.x);
-    expect(spreadBox.x + leaf.left + leaf.width, "the cover should touch the gutter").toBeGreaterThan(
-      page1!.x - 30,
-    );
+    expect(leaf.x + leaf.width, "the cover should meet the gutter").toBeLessThan(page1.x);
+    expect(leaf.x + leaf.width, "the cover should touch the gutter").toBeGreaterThan(page1.x - 30);
+    // Facing, not stacked: the two overlap vertically.
+    expect(leaf.y).toBeLessThan(page1.y + page1.height);
+    expect(page1.y).toBeLessThan(leaf.y + leaf.height);
+
+    // And it is a slot, not decoration.
+    await expect(page.getByRole("button", { name: "Cover, empty" })).toBeVisible();
   });
 
   test("no horizontal overflow on the binder at desktop width", async ({ page }) => {

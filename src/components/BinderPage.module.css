@@ -126,6 +126,30 @@ button.pocket {
   outline-offset: 2px;
 }
 
+/*
+ * The pocket a carried card would land in.
+ *
+ * Brighter than `.selected` and filled, because the two can be on screen at
+ * once — one pocket is being filled from the picker while another is under a
+ * dragged card — and "where this lands" has to win over "what I was editing".
+ */
+.dropOver {
+  outline: 2px solid var(--cl-accent-strong, var(--cl-accent));
+  outline-offset: 2px;
+  background: rgba(91, 140, 255, 0.14);
+}
+
+/*
+ * The pocket a card was picked up FROM, while it is in the air.
+ *
+ * Faded rather than emptied: the pocket keeps its size so the page does not
+ * re-flow under the drag, but the card must not appear to be in two places at
+ * once when a copy of it is following the pointer.
+ */
+.dragging {
+  opacity: 0.3;
+}
+
 button.pocket:focus-visible {
   outline: var(--cl-focus-ring);
   outline-offset: 2px;

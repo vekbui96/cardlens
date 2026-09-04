@@ -60,7 +60,7 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
-      testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan|showcase)\.spec\.ts/,
+      testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
     },
   ],
   webServer: [

@@ -174,6 +174,18 @@ export interface Binder {
    * represent money, not on the master-set binder they are still filling.
    */
   showValue?: boolean;
+  /**
+   * What shows through the window on the front of the binder.
+   *
+   * NOT a page and not a pocket. It holds no position, it is excluded from
+   * `countBinder` — a cover is not one of the 28 pockets you are filling — and
+   * `reformat` leaves it alone, because moving a binder from 9-pocket to
+   * 12-pocket re-flows the contents and a cover is not contents.
+   *
+   * Any slot, so it can be a card you own or an uploaded photo. See setCover
+   * for why it is absent rather than null when empty.
+   */
+  cover?: BinderSlot;
   createdAt: number; /** Last edit. The sync watermark and the last-write-wins key — see storage/binders.ts. */
   updatedAt: number;
   /**
@@ -292,14 +304,11 @@ export function placeSlot(
  * a run kept together), and jumping backwards would drop the next card
  * somewhere the user is not looking.
  */
-export function nextEmptyPocket(
-  binder: Binder,
-  from: { page: number; index: number },
-): { page: number; index: number } | null {
+export function nextEmptyPocket(binder: Binder, from: { page: number; index: number }): PocketAddress | null {
   const spec = specFor(binder.format);
   for (let page = from.page, index = from.index + 1; page < binder.pages.length; page++, index = 0) {
     for (; index < spec.pockets; index++) {
-      if (!binder.pages[page]?.slots[index]) return { page, index };
+      if (!binder.pages[page]?.slots[index]) return { kind: "pocket", page, index };
     }
   }
   return null;
@@ -342,22 +351,98 @@ export function pageGroups(pageCount: number, format: BinderFormat): number[][] 
   if (hasFacingPages(format)) return toSpreads(pageCount);
   return Array.from({ length: Math.max(0, pageCount) }, (_, i) => [i]);
 }
-/** Move a slot between pockets, including across pages. Swaps if the target is full. */
-export function moveSlot(
-  binder: Binder,
-  from: { page: number; index: number },
-  to: { page: number; index: number },
-  now: number,
-): Binder {
-  const source = binder.pages[from.page]?.slots[from.index];
+/**
+ * Every place a slot can live: a pocket on a page, or the binder's cover.
+ *
+ * A tagged address rather than a nullable page number, because the cover is
+ * genuinely not a pocket — it has no index, it is not counted in `filled`, and
+ * a sentinel like `page: -1` would flow into `placeSlot` and `nextEmptyPocket`
+ * as a number those functions would happily do arithmetic on.
+ */
+export type PocketAddress = { kind: "pocket"; page: number; index: number };
+export type BinderAddress = PocketAddress | { kind: "cover" };
+
+export function sameAddress(a: BinderAddress, b: BinderAddress): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "cover" || b.kind === "cover") return true;
+  return a.page === b.page && a.index === b.index;
+}
+
+/**
+ * An address as a DOM attribute value, and back.
+ *
+ * One string does two jobs that must not disagree: it is what `data-pocket`
+ * carries, which is how a drag finds what it is hovering over
+ * (`elementFromPoint(...).closest("[data-pocket]")`), and it is how the screen
+ * scrolls the selected pocket back into view. Two encodings would mean a drag
+ * that lands somewhere the scroller cannot find.
+ */
+export function addressKey(at: BinderAddress): string {
+  return at.kind === "cover" ? "cover" : `${at.page}:${at.index}`;
+}
+
+export function parseAddressKey(key: string | null | undefined): BinderAddress | null {
+  if (!key) return null;
+  if (key === "cover") return { kind: "cover" };
+  const [page, index] = key.split(":").map(Number);
+  if (!Number.isInteger(page) || !Number.isInteger(index) || page < 0 || index < 0) return null;
+  return { kind: "pocket", page, index };
+}
+
+/** What is at an address, or null. The one reader of both storage shapes. */
+export function slotAt(binder: Binder, at: BinderAddress): BinderSlot | null {
+  if (at.kind === "cover") return binder.cover ?? null;
+  return binder.pages[at.page]?.slots[at.index] ?? null;
+}
+
+/** Write to an address. Dispatches to the cover or to a pocket; nothing else should. */
+export function putAt(binder: Binder, at: BinderAddress, slot: BinderSlot | null, now: number): Binder {
+  if (at.kind === "cover") return setCover(binder, slot, now);
+  return placeSlot(binder, at.page, at.index, slot, now);
+}
+
+/**
+ * What goes in the display window on the front of the binder.
+ *
+ * A field on the binder rather than a page, because it is not one: it holds no
+ * position, it must not count towards "26/28 filled", and reformatting a binder
+ * between 9 and 12 pockets must not re-flow it into the pages. A real binder's
+ * cover sleeve works the same way — it is part of the binder, not part of the
+ * contents.
+ *
+ * Absent when empty rather than `null`, so a binder whose cover was cleared is
+ * byte-identical to one that never had a cover. Two ways to write the same
+ * thing is how last-write-wins starts producing spurious conflicts — the same
+ * reason `quantity: 1` and `forTrade: false` are never stored.
+ */
+export function setCover(binder: Binder, slot: BinderSlot | null, now: number): Binder {
+  // Returned UNCHANGED when there is nothing to change, like setForTrade:
+  // saving pushes the whole binder through sync, and clearing a cover that was
+  // already empty would manufacture an edit for every other device to pull.
+  if (!binder.cover && !slot) return binder;
+  const { cover: _dropped, ...rest } = binder;
+  return slot ? { ...rest, cover: slot, updatedAt: now } : { ...rest, updatedAt: now };
+}
+
+/**
+ * Move a slot between any two addresses — pocket to pocket, across pages, or
+ * on and off the cover. Swaps if the target is full.
+ */
+export function moveSlot(binder: Binder, from: BinderAddress, to: BinderAddress, now: number): Binder {
+  const source = slotAt(binder, from);
   if (!source) return binder;
-  const target = binder.pages[to.page]?.slots[to.index];
+  // Dropping a card back where it came from is the commonest way a drag ends —
+  // a press that moved a few pixels, or a change of mind. Without this the two
+  // writes below cancel out to "put it there, then clear where it came from",
+  // which is the same address: the card is destroyed by moving it nowhere.
+  if (sameAddress(from, to)) return binder;
+  const target = slotAt(binder, to);
 
   // Swap rather than overwrite: dragging onto a full pocket in a real binder
   // means the two change places, and silently destroying the target is the
   // kind of loss that has no undo.
-  let next = placeSlot(binder, to.page, to.index, source, now);
-  next = placeSlot(next, from.page, from.index, target ?? null, now);
+  let next = putAt(binder, to, source, now);
+  next = putAt(next, from, target, now);
   return next;
 }
 

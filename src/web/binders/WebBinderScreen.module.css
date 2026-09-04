@@ -96,16 +96,12 @@ label.chip {
 }
 
 /*
- * The picker is sticky at the bottom: choosing a card means looking at the
- * page you are filling, so scrolling the page must not scroll the picker away.
+ * The picker's contents. Sticking to the bottom of the screen is the RAIL's
+ * job now — see .rail — because on a wide screen the same contents are a
+ * column down the right-hand side and nothing about them is sticky at all.
  */
 .picker {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
   padding-top: var(--cl-gap-sm);
-  border-top: var(--cl-border);
-  background: var(--cl-bg);
 }
 
 /*
@@ -294,11 +290,24 @@ label.chip {
   display: none;
 }
 
-/* The opening page sits in the RIGHT column, leaving the inside front cover
-   blank beside it. Without this it lands in column 1 and the binder appears to
-   start on a left-hand page, which no binder does. */
+/* The opening page sits in the RIGHT column, because that is where a binder
+   falls open. Without this it lands in column 1 and the binder appears to start
+   on a left-hand page, which no binder does. */
 .spread[data-cover] > * {
   grid-column: 2;
+}
+
+/*
+ * ...and the cover takes the column beside it.
+ *
+ * Both rules are needed, and the row matters as much as the column: with the
+ * leaf left in column 2 alongside page 1, the grid stacks them into two ROWS
+ * and the cover sits above the page instead of facing it — which is a binder
+ * that opens downwards.
+ */
+.spread[data-cover] > .coverLeaf {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 /*
@@ -738,29 +747,15 @@ label.chip {
   }
 
   /*
-   * The inside front cover, drawn rather than left blank.
+   * The cover leaf takes the width of a page because the GRID TRACK gives it
+   * one, and nothing here should say so a second time.
    *
-   * Page 1 sits in the right-hand column because that is where a binder falls
-   * open; the left column is the cover it opens against. On a phone that column
-   * does not exist at all, but at 1440px it was 440px of nothing, which reads as
-   * a page that failed to render rather than as the cover. A faint leaf says
-   * what the space is.
-   *
-   * Positioned from the page's own width: the two tracks and the gutter are
-   * centred, so the left one starts half a gutter plus one page left of centre.
-   * It stops at the page's own 20px bottom margin rather than at the spread's
-   * edge, so the leaf and the page end on the same line.
+   * `width: var(--binder-page-drawn)` was tried and is wrong in a way worth
+   * recording: that variable is `min(--binder-page, (100% - gutter) / 2)`, and
+   * a percentage inside it resolves against whatever it is used ON. Read as a
+   * `width` on the leaf, 100% is the leaf's own grid area — already half the
+   * spread — so it halved again and drew a 166px cover beside a 350px page.
    */
-  .spread[data-cover]::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: var(--cl-gap-lg);
-    left: calc(50% - var(--binder-page-drawn) - var(--cl-gap-lg) / 2);
-    width: var(--binder-page-drawn);
-    border-radius: var(--cl-radius);
-    background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
-  }
 }
 
 /* --- Binder settings ----------------------------------------------------- */
@@ -834,4 +829,336 @@ label.chip {
   font-size: var(--cl-fs-small);
   line-height: 1.45;
   color: var(--cl-fg-dim);
+}
+
+/* --- Workspace: pages beside the picker ---------------------------------- */
+
+/*
+ * One column on a phone, two on a desktop.
+ *
+ * Below 1000px this is a plain block and nothing changes: the picker is a sheet
+ * that rises from the bottom when a pocket is selected, which is the right
+ * shape for a thumb and the layout that was confirmed on hardware. Above it,
+ * the sheet was spending the bottom third of a 1440x900 window on a card list
+ * while the binder it was filling scrolled out of sight above it — so the same
+ * contents become a column beside the pages, and both stay on screen.
+ */
+.workspace {
+  display: block;
+}
+
+.main {
+  min-width: 0;
+}
+
+@media (min-width: 1000px) {
+  .workspace {
+    display: grid;
+    /* minmax(0, 1fr), not 1fr: a binder spread has a min-content width of two
+       full pages, and a plain 1fr track would let it push the rail off the
+       right-hand edge rather than shrinking. */
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: var(--cl-gap);
+    align-items: start;
+  }
+
+  /*
+   * Shut, the rail takes NO width at all — it is lifted out of the grid.
+   *
+   * Not a narrow track, because the widest spread has no room to give: two
+   * 12-pocket pages are 2 x 544 plus a 20px gutter, and the 1180px shell leaves
+   * the spread 1116px after its own margins. Eight pixels of slack. A 40px
+   * handle drew a 124.5px pocket against the 9-pocket's 130, and shaving the
+   * handle to 28px only got it to 126.5 — measured both times. Any track at all
+   * costs more than there is, and an unequal pocket is the exact failure
+   * `--cl-binder-pocket` exists to prevent.
+   *
+   * So it floats over the top-right of the workspace instead, where the hint
+   * line's right half is empty. It scrolls with the page, which is acceptable
+   * because choosing a pocket opens the rail by itself — the handle is for
+   * opening it deliberately, not for reaching mid-scroll.
+   */
+  .workspace[data-rail="shut"] {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace[data-rail="shut"] .rail {
+    position: absolute;
+    top: 0;
+    right: 0;
+    max-height: none;
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+/*
+ * A sheet along the bottom, on a phone.
+ *
+ * This is what `.picker` used to be. It moved out here because the sticky
+ * behaviour belongs to the container that is sometimes a rail and sometimes a
+ * sheet, not to the contents, which are the same either way.
+ */
+@media (max-width: 999px) {
+  .rail {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    border-top: var(--cl-border);
+    background: var(--cl-bg);
+  }
+
+  /* Nothing selected means nothing to fill, and a phone has no room for a
+     picker standing by. The rail stays in the DOM either way so the desktop
+     layout does not have to mount and unmount it. */
+  .rail[data-idle] {
+    display: none;
+  }
+
+  .railHead {
+    display: none;
+  }
+}
+
+@media (min-width: 1000px) {
+  .rail {
+    position: sticky;
+    /* The screen is the scroll container and its header scrolls away with the
+       page, so 0 pins the rail to the top of the visible area. */
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 120px);
+    border: var(--cl-border);
+    border-radius: var(--cl-radius);
+    background: var(--cl-surface);
+    overflow: hidden;
+  }
+
+  .railHead {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--cl-gap-sm);
+    border-bottom: var(--cl-border);
+  }
+
+  /* The contents scroll inside the rail rather than moving it: the rail is
+     pinned beside the pages, and a picker that scrolled away with the binder
+     would be the bottom sheet again. */
+  .picker {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /*
+   * Both lists become grids in a 340px column.
+   *
+   * The set list is a sideways-scrolling strip on a phone because the picker is
+   * only about 92px tall there and the binder above it is the subject. In a
+   * full-height rail that strip would show four cards and hide the rest behind
+   * a horizontal scrollbar, in a column with room for forty.
+   */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    overflow-x: visible;
+  }
+
+  .cards > li {
+    flex: none;
+  }
+
+  /* The cap exists to keep the binder visible above a bottom sheet. Beside the
+     binder there is nothing to keep out of the way of. */
+  .grid {
+    max-height: none;
+  }
+
+  .workspace[data-rail="shut"] .picker {
+    display: none;
+  }
+
+  .workspace[data-rail="shut"] .railHead {
+    border-bottom: none;
+    padding: var(--cl-gap-sm) 0;
+  }
+
+  /* Sideways, so a 40px handle can still say what it opens. */
+  .workspace[data-rail="shut"] .railToggleLabel {
+    writing-mode: vertical-rl;
+  }
+
+  .workspace[data-rail="shut"] .railToggle {
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    padding: var(--cl-gap-sm) 0;
+  }
+}
+
+.railToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cl-radius-sm, 8px);
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.railToggle:hover {
+  color: var(--cl-fg);
+}
+
+.railToggle:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+/* What the rail says when no pocket is chosen. Only reachable on desktop — the
+   sheet is not rendered at all without a selection on a phone. */
+.railIdle {
+  margin: 0;
+  padding: var(--cl-gap);
+  border-top: var(--cl-border);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+/* --- The cover ------------------------------------------------------------ */
+
+/*
+ * The leaf page 1 opens against, with the binder's one display window in it.
+ *
+ * stretch, against the spread's own `align-items: start`: the cover is the
+ * other half of an open binder, and a leaf shorter than the page beside it
+ * reads as a panel that failed to load rather than as the inside of a cover.
+ */
+.coverLeaf {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cl-gap-sm);
+  min-height: 140px;
+  padding: var(--cl-gap);
+  border-radius: var(--cl-radius);
+  background: color-mix(in srgb, var(--cl-fg) 3%, transparent);
+}
+
+.coverWindow {
+  /* A shade larger than a pocket (130px at desktop), because the cover holds
+     one card and a binder's display window is the biggest sleeve on it. */
+  width: min(70%, 190px);
+  aspect-ratio: 5 / 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--cl-radius-art);
+  background: none;
+  font: inherit;
+  color: var(--cl-fg-dim);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* A window, not a call to action: an empty cover is the normal state for most
+   binders and should read as blank stationery, not as an unfinished task. */
+.coverEmpty {
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.coverFilled {
+  border: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.coverWindow img,
+.coverWindow > div {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.coverImage {
+  display: block;
+}
+
+.coverPlus {
+  font-size: 24px;
+  line-height: 1;
+  color: var(--cl-fg-dim);
+}
+
+.coverSelected,
+.coverWindow:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.coverName {
+  max-width: 100%;
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  color: var(--cl-fg-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* --- Dragging ------------------------------------------------------------- */
+
+/* Lit while a carried card is over it — the same accent the app uses
+   everywhere for "you can act on this". */
+.coverDropOver {
+  outline: 2px solid var(--cl-accent-strong);
+  outline-offset: 2px;
+  background: rgba(91, 140, 255, 0.12);
+}
+
+/* Faded while its own card is in the air, so the card is not in two places. */
+.coverDragging {
+  opacity: 0.35;
+}
+
+/*
+ * The card under the pointer.
+ *
+ * pointer-events: none is load-bearing rather than cosmetic: where a drag lands
+ * is decided by elementFromPoint at the pointer, and a ghost that took events
+ * would be the answer to every one of those hit tests.
+ */
+.ghost {
+  position: fixed;
+  z-index: 60;
+  width: 84px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-4deg);
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.65));
+  opacity: 0.95;
+}
+
+/* Straightens and grows a little over a pocket it can actually land in — the
+   only feedback that says "let go here" without a label. */
+.ghost[data-over] {
+  transform: translate(-50%, -50%) rotate(0deg) scale(1.06);
+}
+
+.ghost img,
+.ghost > div {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: var(--cl-radius-art);
 }

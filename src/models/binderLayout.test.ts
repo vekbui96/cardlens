@@ -15,6 +15,7 @@ import {
   hasFacingPages,
   isBinderFormat,
   pageGroups,
+  setCover,
   setForTrade,
   setShowValue,
   slotQuantity,
@@ -71,10 +72,13 @@ describe("placeSlot", () => {
   });
 });
 
+const pocket = (page: number, index: number) => ({ kind: "pocket" as const, page, index });
+const COVER = { kind: "cover" as const };
+
 describe("moveSlot", () => {
   it("moves a card into an empty pocket", () => {
     let b = placeSlot(base(), 0, 0, card("1"), NOW);
-    b = moveSlot(b, { page: 0, index: 0 }, { page: 1, index: 5 }, NOW);
+    b = moveSlot(b, pocket(0, 0), pocket(1, 5), NOW);
     expect(b.pages[0].slots[0]).toBeUndefined();
     expect(b.pages[1].slots[5]).toMatchObject({ cardId: "me5-1" });
   });
@@ -84,14 +88,74 @@ describe("moveSlot", () => {
     // is what the physical action means.
     let b = placeSlot(base(), 0, 0, card("1"), NOW);
     b = placeSlot(b, 0, 1, card("2"), NOW);
-    b = moveSlot(b, { page: 0, index: 0 }, { page: 0, index: 1 }, NOW);
+    b = moveSlot(b, pocket(0, 0), pocket(0, 1), NOW);
     expect(b.pages[0].slots[1]).toMatchObject({ cardId: "me5-1" });
     expect(b.pages[0].slots[0]).toMatchObject({ cardId: "me5-2" });
   });
 
   it("ignores a move from an empty pocket", () => {
     const b = base();
-    expect(moveSlot(b, { page: 0, index: 0 }, { page: 0, index: 1 }, NOW)).toBe(b);
+    expect(moveSlot(b, pocket(0, 0), pocket(0, 1), NOW)).toBe(b);
+  });
+
+  it("keeps the card when it is dropped back where it started", () => {
+    // The commonest way a drag ends. Without the guard the two writes cancel
+    // out — place it there, then clear there — and the card is destroyed by
+    // being moved nowhere.
+    let b = placeSlot(base(), 0, 0, card("1"), NOW);
+    b = moveSlot(b, pocket(0, 0), pocket(0, 0), NOW);
+    expect(b.pages[0].slots[0]).toMatchObject({ cardId: "me5-1" });
+  });
+
+  it("drags a card onto the cover, and off it again", () => {
+    let b = placeSlot(base(), 0, 0, card("1"), NOW);
+    b = moveSlot(b, pocket(0, 0), COVER, NOW);
+    expect(b.cover).toMatchObject({ cardId: "me5-1" });
+    expect(b.pages[0].slots[0]).toBeUndefined();
+
+    b = moveSlot(b, COVER, pocket(0, 3), NOW);
+    expect(b.cover).toBeUndefined();
+    expect(b.pages[0].slots[3]).toMatchObject({ cardId: "me5-1" });
+  });
+
+  it("swaps with whatever the cover already held", () => {
+    let b = setCover(placeSlot(base(), 0, 0, card("1"), NOW), card("2"), NOW);
+    b = moveSlot(b, pocket(0, 0), COVER, NOW);
+    expect(b.cover).toMatchObject({ cardId: "me5-1" });
+    expect(b.pages[0].slots[0]).toMatchObject({ cardId: "me5-2" });
+  });
+});
+
+describe("setCover", () => {
+  it("is absent when cleared, not null, so a cleared cover is byte-identical to none", () => {
+    const b = setCover(setCover(base(), card("1"), NOW), null, NOW);
+    expect("cover" in b).toBe(false);
+    expect(JSON.stringify(b)).toBe(JSON.stringify(base()));
+  });
+
+  it("returns the binder unchanged rather than manufacturing a sync edit", () => {
+    const b = base();
+    expect(setCover(b, null, NOW)).toBe(b);
+  });
+
+  it("is not a pocket: it does not count towards filled, and reformat leaves it", () => {
+    const b = setCover(base(), card("1"), NOW);
+    expect(countBinder(b).filled).toBe(0);
+    expect(reformat(b, "12", NOW).cover).toMatchObject({ cardId: "me5-1" });
+  });
+
+  it("survives the sync validator, which is a whitelist", () => {
+    // A field the client can write has to be NAMED in binderParse or it
+    // silently vanishes the first time the binder round-trips through sync.
+    const b = setCover(base(), card("1"), NOW);
+    expect(parseBinder(JSON.parse(JSON.stringify(b)))?.cover).toMatchObject({ cardId: "me5-1" });
+  });
+
+  it("drops a cover that does not parse, without losing the binder", () => {
+    const b = { ...setCover(base(), card("1"), NOW), cover: { kind: "card" } };
+    const parsed = parseBinder(JSON.parse(JSON.stringify(b)));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.cover).toBeUndefined();
   });
 });
 
@@ -214,7 +278,7 @@ describe("addPage / removeLastPage", () => {
 describe("nextEmptyPocket", () => {
   it("gives the pocket after the one just filled", () => {
     const b = placeSlot(base(), 0, 0, card("1"), NOW);
-    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ page: 0, index: 1 });
+    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ kind: "pocket", page: 0, index: 1 });
   });
 
   it("skips pockets that are already occupied", () => {
@@ -223,13 +287,13 @@ describe("nextEmptyPocket", () => {
     let b = placeSlot(base(), 0, 0, card("1"), NOW);
     b = placeSlot(b, 0, 1, card("2"), NOW);
     b = placeSlot(b, 0, 2, card("3"), NOW);
-    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ page: 0, index: 3 });
+    expect(nextEmptyPocket(b, { page: 0, index: 0 })).toEqual({ kind: "pocket", page: 0, index: 3 });
   });
 
   it("carries on to the next page when a page fills up", () => {
     let b = addPage(base(), NOW);
     for (let i = 0; i < 9; i++) b = placeSlot(b, 0, i, card(String(i)), NOW);
-    expect(nextEmptyPocket(b, { page: 0, index: 8 })).toEqual({ page: 1, index: 0 });
+    expect(nextEmptyPocket(b, { page: 0, index: 8 })).toEqual({ kind: "pocket", page: 1, index: 0 });
   });
 
   it("returns null when the binder is full from here on", () => {

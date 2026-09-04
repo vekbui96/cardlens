@@ -1,3 +1,4 @@
+import type React from "react";
 import { CardImage } from "./CardImage.tsx";
 import { imageSlotSrc } from "../services/sync/binderImages.ts";
 import {
@@ -30,6 +31,9 @@ export function BinderPageView({
   pageNumber,
   priceFor,
   trade,
+  onSlotPointerDown,
+  dropTarget,
+  draggingFrom,
 }: {
   page: PageData;
   format: BinderFormat;
@@ -60,6 +64,19 @@ export function BinderPageView({
    * same in both places and the grid geometry stays in one file.
    */
   trade?: boolean;
+  /**
+   * A pocket was pressed with something in it — a drag may be starting.
+   *
+   * Optional, and separate from `onSlotClick`, because a press is not yet a
+   * gesture: the screen decides whether it becomes a drag or stays a tap. See
+   * useBinderDrag. A read-only binder (the trade page) passes neither and its
+   * pockets stay plain.
+   */
+  onSlotPointerDown?: (index: number, slot: BinderSlot, event: React.PointerEvent) => void;
+  /** `data-pocket` of the pocket a dragged card is currently over. */
+  dropTarget?: string | null;
+  /** `data-pocket` of the pocket a card was picked up from, while it is in the air. */
+  draggingFrom?: string | null;
 }) {
   const spec = specFor(format);
   const interactive = typeof onSlotClick === "function";
@@ -115,11 +132,18 @@ export function BinderPageView({
             <span className={styles.emptyMark} aria-hidden="true" />
           );
 
+          const key = `${pageNumber - 1}:${index}`;
           const className = [
             styles.pocket,
             slot ? styles.filled : styles.empty,
             slot && !held ? styles.wanted : "",
             selectedIndex === index ? styles.selected : "",
+            // Lit while a dragged card is over it, so the drop lands somewhere
+            // the user chose rather than somewhere the pointer happened to be.
+            dropTarget === key ? styles.dropOver : "",
+            // The pocket a drag was picked UP from, faded while it is in the
+            // air — otherwise the card appears to be in two places at once.
+            draggingFrom === key ? styles.dragging : "",
           ]
             .filter(Boolean)
             .join(" ");
@@ -130,13 +154,14 @@ export function BinderPageView({
                 <button
                   type="button"
                   className={className}
-                  /* The web shell scrolls the selected pocket back into view
-                     after a place; it needs to find that one button among the
-                     several pressable things on the screen. */
-                  data-pocket={`${pageNumber - 1}:${index}`}
+                  /* Two jobs, one attribute: the web shell scrolls the selected
+                     pocket back into view after a place, and a drag hit-tests
+                     against it with elementFromPoint. See addressKey. */
+                  data-pocket={key}
                   aria-label={label}
                   aria-pressed={selectedIndex === index}
                   onClick={() => onSlotClick?.(index)}
+                  onPointerDown={slot ? (event) => onSlotPointerDown?.(index, slot, event) : undefined}
                 >
                   {inner}
                 </button>

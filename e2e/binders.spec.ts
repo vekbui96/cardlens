@@ -286,3 +286,258 @@ test.describe("binder value on the list", () => {
     await expect(page.getByRole("button", { name: "✓ Show value" })).toBeVisible();
   });
 });
+
+/**
+ * The cover, and dragging cards around.
+ *
+ * Both are gestures rather than state, so they are asserted here rather than in
+ * jsdom: a drag is pointerdown, a move past a threshold, a hit test against
+ * `elementFromPoint`, and a pointerup — and `elementFromPoint` is exactly the
+ * part a jsdom test cannot answer, because nothing in jsdom has a layout.
+ */
+/**
+ * The cover: a real slot before page 1, and not one of the pockets.
+ *
+ * Filled here by SELECTING it and picking a card, which is the gesture every
+ * device has. Dragging onto it is covered below, on desktop.
+ */
+test.describe("the binder cover", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "phone project only");
+  });
+
+  test("holds a card without counting it as one of the pockets", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Covered");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    await expect(page.getByRole("button", { name: "Cover, empty" })).toBeVisible();
+    await expect(page.getByText("0/9")).toBeVisible();
+
+    await page.getByRole("button", { name: "Cover, empty" }).click();
+    await expect(page.getByText(/Cover selected/)).toBeVisible();
+
+    await page.getByLabel("Cards from").selectOption({ label: "Obsidian Flames" });
+    await page
+      .getByRole("button", { name: /, (owned|not owned)$/ })
+      .first()
+      .click();
+
+    // On the cover — and the pocket count has NOT moved, because a cover is not
+    // one of the nine pockets being filled.
+    await expect(page.getByRole("button", { name: "Cover, empty" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Cover, ./ })).toBeVisible();
+    await expect(page.getByText("0/9")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Pocket 1, empty/ })).toBeVisible();
+  });
+
+  test("keeps its cover through a reload, because the cover rides on the binder", async ({ page }) => {
+    // A new field on the binder has to be named in the sync whitelist AND
+    // survive storage. This is the half storage can answer.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Covered");
+    await page.getByRole("button", { name: "Create binder" }).click();
+    await page.getByRole("button", { name: "Cover, empty" }).click();
+    await page.getByLabel("Cards from").selectOption({ label: "Obsidian Flames" });
+    await page
+      .getByRole("button", { name: /, (owned|not owned)$/ })
+      .first()
+      .click();
+    const label = await page.getByRole("button", { name: /^Cover, ./ }).getAttribute("aria-label");
+
+    await page.reload();
+    await expect(page.getByRole("button", { name: /^Cover, ./ })).toHaveAttribute("aria-label", label ?? "");
+  });
+
+  test("stacks above page 1 when the spread has collapsed to one column", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Narrow");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    const cover = (await page.getByRole("button", { name: "Cover, empty" }).boundingBox())!;
+    const page1 = (await page.getByRole("region", { name: "Page 1" }).boundingBox())!;
+    // Above, not beside: there is no second column to be beside.
+    expect(cover.y).toBeLessThan(page1.y);
+  });
+});
+
+/**
+ * Dragging, and the picker rail — both desktop.
+ *
+ * Drag is asserted on the DESKTOP project rather than the phone one because a
+ * phone project is touch-emulated, and Chrome's emulation answers a mouse drag
+ * by panning: it fires `pointercancel` on the first move and takes the pointer
+ * away, so the gesture under test never happens. That is emulation, not the
+ * app — a finger on real hardware presses, HOLDS, and then moves, and the hold
+ * is what keeps the browser from claiming the gesture (see useBinderDrag, and
+ * the unit tests that drive the touch path directly with fake timers).
+ */
+test.describe("dragging cards around the binder", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop project only");
+  });
+
+  /** A binder with its first two pockets filled from the mock catalog. */
+  async function binderWithTwoCards(page: import("@playwright/test").Page) {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Arrange me");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    await page.getByRole("button", { name: /Pocket 1, empty/ }).click();
+    await page.getByLabel("Cards from").selectOption({ label: "Obsidian Flames" });
+    const cards = page.getByRole("button", { name: /, (owned|not owned)$/ });
+    // Placing advances the selection to the next empty pocket, so two clicks
+    // fill pockets 1 and 2 without touching the page in between.
+    await cards.nth(0).click();
+    await expect(page.getByRole("button", { name: /Pocket 1, empty/ })).toHaveCount(0);
+    await cards.nth(1).click();
+    await expect(page.getByRole("button", { name: /Pocket 2, empty/ })).toHaveCount(0);
+  }
+
+  /** A press, a move past the drag threshold, and a release over the target. */
+  async function dragTo(
+    page: import("@playwright/test").Page,
+    from: import("@playwright/test").Locator,
+    to: import("@playwright/test").Locator,
+  ) {
+    // Both ends measured only once nothing is going to scroll: a box is in
+    // viewport coordinates, so measuring the second end after scrolling to it
+    // leaves the first end's coordinates pointing at whatever moved into place.
+    await to.scrollIntoViewIfNeeded();
+    await from.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(120);
+    const a = (await from.boundingBox())!;
+    const b = (await to.boundingBox())!;
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+    await page.mouse.down();
+    // Two moves: the first crosses the threshold that turns a press into a
+    // drag, the second is what the hit test actually reads.
+    await page.mouse.move(a.x + a.width / 2 + 24, a.y + a.height / 2, { steps: 4 });
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  test("swaps two pockets rather than overwriting one", async ({ page }) => {
+    // Overwriting would destroy a card with no undo. Two cards changing places
+    // is what dragging one onto another physically means.
+    await binderWithTwoCards(page);
+    const one = await page.getByRole("button", { name: /^Pocket 1, / }).getAttribute("aria-label");
+    const two = await page.getByRole("button", { name: /^Pocket 2, / }).getAttribute("aria-label");
+    expect(one).not.toBe(two);
+
+    await dragTo(
+      page,
+      page.getByRole("button", { name: /^Pocket 1, / }),
+      page.getByRole("button", { name: /^Pocket 2, / }),
+    );
+
+    // Both cards still in the binder, in each other's pockets.
+    await expect(page.getByRole("button", { name: /^Pocket 1, / })).toHaveAttribute(
+      "aria-label",
+      (two ?? "").replace("Pocket 2", "Pocket 1"),
+    );
+    await expect(page.getByRole("button", { name: /^Pocket 2, / })).toHaveAttribute(
+      "aria-label",
+      (one ?? "").replace("Pocket 1", "Pocket 2"),
+    );
+  });
+
+  test("moves a card onto the cover, and the pocket count goes down", async ({ page }) => {
+    await binderWithTwoCards(page);
+    await expect(page.getByText("2/9")).toBeVisible();
+
+    await dragTo(
+      page,
+      page.getByRole("button", { name: /^Pocket 1, / }),
+      page.getByRole("button", { name: "Cover, empty" }),
+    );
+
+    await expect(page.getByRole("button", { name: "Cover, empty" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Pocket 1, empty/ })).toBeVisible();
+    // A cover is not a pocket, so the card left the count when it left the page.
+    await expect(page.getByText("1/9")).toBeVisible();
+  });
+
+  test("does not open the picker on a pocket a card was merely dropped into", async ({ page }) => {
+    // The pointerup that ends a drag still fires the pocket's click. Left
+    // alone, rearranging a page would open the picker once per card moved.
+    await binderWithTwoCards(page);
+    // Filling pocket 2 already advanced the selection to pocket 3 — placing is
+    // a sequence, so the picker moves on by itself. Nothing to click.
+    await expect(page.getByText(/Pocket 3 on page 1 selected/)).toBeVisible();
+
+    await dragTo(
+      page,
+      page.getByRole("button", { name: /^Pocket 1, / }),
+      page.getByRole("button", { name: /Pocket 5, empty/ }),
+    );
+
+    // Still pocket 3 — the drop moved a card, it did not choose a pocket.
+    await expect(page.getByText(/Pocket 5 on page 1 selected/)).toHaveCount(0);
+    await expect(page.getByText(/Pocket 3 on page 1 selected/)).toBeVisible();
+  });
+});
+
+test.describe("the picker on a desktop", () => {
+  // Playwright requires an object-destructuring first argument here.
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop project only");
+  });
+
+  test("is a rail that opens on demand and gives the width back when shut", async ({ page }) => {
+    // Shut to begin with, because open it costs 340px and a 12-pocket spread
+    // needs 1108 of the 1180px shell to keep its pockets card-sized. The binder
+    // keeps the room until cards are actually asked for.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Wide");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    await expect(page.getByRole("complementary", { name: "Cards" })).toBeVisible();
+    await expect(page.getByLabel("Search every set")).toBeHidden();
+
+    const pages = page.getByRole("region", { name: "Page 1" });
+    const withoutRail = (await pages.boundingBox())!;
+
+    await page.getByRole("button", { name: /Cards/ }).click();
+    await expect(page.getByLabel("Search every set")).toBeVisible();
+
+    // Opening takes the width from the binder, which is the whole trade.
+    const withRail = (await pages.boundingBox())!;
+    expect(withRail.width).toBeLessThan(withoutRail.width);
+
+    await page.getByRole("button", { name: /Hide cards/ }).click();
+    await expect(page.getByLabel("Search every set")).toBeHidden();
+    expect((await pages.boundingBox())!.width).toBeCloseTo(withoutRail.width, 0);
+  });
+
+  test("comes out by itself when a pocket is chosen, because that is asking for cards", async ({ page }) => {
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Wide");
+    await page.getByRole("button", { name: "Create binder" }).click();
+    await expect(page.getByLabel("Search every set")).toBeHidden();
+
+    await page.getByRole("button", { name: /Pocket 1, empty/ }).click();
+    await expect(page.getByLabel("Search every set")).toBeVisible();
+  });
+
+  test("opens the binder against its cover, not above it", async ({ page }) => {
+    // Page 1 sits in the right-hand column because that is where a binder falls
+    // open. With both in one column the grid stacks them into two rows and the
+    // binder appears to open downwards.
+    await page.goto("/?ui=web#/binders");
+    await page.getByLabel("Binder name").fill("Facing");
+    await page.getByRole("button", { name: "Create binder" }).click();
+
+    const cover = (await page.getByRole("button", { name: "Cover, empty" }).boundingBox())!;
+    const page1 = (await page.getByRole("region", { name: "Page 1" }).boundingBox())!;
+    expect(cover.x).toBeLessThan(page1.x);
+    // Facing, so they overlap vertically rather than sitting one above the other.
+    expect(cover.y).toBeLessThan(page1.y + page1.height);
+    expect(page1.y).toBeLessThan(cover.y + cover.height);
+  });
+});

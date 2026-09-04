@@ -163,10 +163,22 @@ export function parseBinder(value: unknown): Binder | null {
   if (!Array.isArray(v.pages) || v.pages.length > MAX_PAGES) return null;
 
   const pockets = specFor(v.format).pockets;
+  /*
+   * The cover is one slot, validated by exactly the same rules as a pocket —
+   * it can hold a card or an uploaded image and there is no third thing it
+   * could be. Dropped rather than failing the binder when it does not parse: a
+   * bad cover should cost the cover, not the fourteen pages behind it.
+   *
+   * It has to be named HERE or it silently vanishes on sync. That is the whole
+   * point of this file being a whitelist, and it is the trap that cost this
+   * codebase `excluded` on the collection twice.
+   */
+  const cover = v.cover === undefined ? null : parseSlot(v.cover);
   return {
     id,
     name,
     format: v.format,
+    ...(cover ? { cover } : {}),
     // Only `true` is stored, so a binder taken off trade is byte-identical to
     // one never on it — same reason quantity 1 is not stored.
     ...(v.forTrade === true ? { forTrade: true } : {}),
