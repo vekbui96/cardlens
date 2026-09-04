@@ -6,7 +6,52 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
-## Most recent work — the trade binder and 4-pocket (2026-08-28)
+## Most recent work — the binders list is a shelf (2026-09-04)
+
+**Shipped as `b5fe606`, Pages only, verified live.** No server or model change —
+the diff is `src/web/binders/` plus one e2e expectation, so nothing in
+`tsconfig.node.json` moved and `D:\services\cardlens` did not need touching.
+
+The list drew each binder as a 56px row of words. Six binders read as six grey
+bars, so it now draws a **real page from the binder** at pocket scale — the
+first page holding anything, so a binder filled from page 3 does not show twelve
+empty pockets.
+
+- **The cover costs no fetch.** `CardSlot` already carries `imageSmall`
+  denormalised (it exists so a page can paint offline), so the art is what the
+  binder is already holding. Thumbnails are `loading="lazy"` — a 12-pocket cover
+  is twelve of them and the screen can hold several binders.
+- **The cover is decorative in full**: `alt=""` throughout and `aria-hidden` on
+  the page around it. The tile's button carries the name, format and fill in
+  words. A `getByRole("img")` passing on this screen means that regressed, and
+  there is a test that says so.
+- **One height, per-format width.** `.coverFrame` fixes the height and the page
+  carries `aspect-ratio: cols*5 / rows*7`, so a 12-pocket page is visibly wider
+  than a 9-pocket one. Sizing the pocket instead made a 4-pocket cover TALLER
+  than a 12-pocket one, which is backwards on a shelf. Note 9-pocket and
+  4-pocket share an outline — both are square grids of 5:7 cards — and that is
+  correct: what differs is the pocket size, which is the whole point of the
+  format.
+- **Delete asks now.** It was a bare red word beside the name with no undo, and
+  the tombstone is written precisely so the deletion survives a sync — a
+  misclick propagated to every device. Accessible names are `Delete <name>` and
+  `Confirm delete <name>`; `e2e/binders.spec.ts` and the unit tests use both.
+- **The create form is the last tile**, not a banner above everything. It spans
+  two columns at >= 1000px because three format chips measure 266px against a
+  248px tile and wrapped two-and-one.
+- **The list has its own stylesheet now.** It had been borrowing
+  `WebBinderScreen.module.css` for eight class names, which is why it looked
+  like a settings form; those eight were removed from the builder's sheet and
+  nothing else referenced them.
+
+**Trap worth keeping, for anyone verifying a screen visually:** Playwright's
+`webServer` has `reuseExistingServer: !CI` and sets `VITE_USE_MOCKS=true`. A dev
+server you started yourself with plain `npm run dev` gets reused WITHOUT that
+env, and the set pickers come back empty — which reads as a broken selector, not
+as a missing mock. Two binder specs failed this way before the stray server was
+killed. Kill port 5173 before running e2e.
+
+## Earlier — the trade binder and 4-pocket (2026-08-28)
 
 **Shipped as `8f82cbe`, both targets, verified live.** Pages serves a bundle
 containing `4-pocket` and the lazy `TradeShareScreen` chunk; the server answers
