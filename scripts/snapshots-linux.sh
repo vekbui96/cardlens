@@ -20,9 +20,18 @@
 # the generated PNGs come back.
 set -euo pipefail
 
-VERSION="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
-IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+# MUST match the `container.image` of the `visual` job in
+# .github/workflows/ci.yml. That job is what these baselines are compared
+# against; a different image has different fonts, and the diff then looks like
+# a regression that is really just a different machine.
+IMAGE="mcr.microsoft.com/playwright:v1.61.1-noble"
 OUT="e2e/v2/visual.spec.ts-snapshots"
+
+INSTALLED="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
+if [[ "$IMAGE" != *"v${INSTALLED}-"* ]]; then
+  echo "WARNING: image is $IMAGE but @playwright/test is $INSTALLED." >&2
+  echo "         Update the tag here AND in .github/workflows/ci.yml." >&2
+fi
 
 echo "==> image: $IMAGE"
 docker pull -q "$IMAGE"
@@ -43,11 +52,9 @@ docker run --rm \
     npm ci --no-audit --no-fund --silent
 
     echo "==> generating snapshots"
-    # Not CI=true: that turns a missing snapshot into a hard failure, and
-    # generating them is the entire point of this run.
-    npx playwright test \
-      --project=v2-phone --project=v2-desktop \
-      e2e/v2/visual.spec.ts --update-snapshots
+    # Same selection the CI job runs, so there is one definition of "the visual
+    # specs" rather than two that drift.
+    npm run snapshots --silent
 
     echo "==> exporting linux baselines"
     cp -v /build/e2e/v2/visual.spec.ts-snapshots/*-linux.png /out/

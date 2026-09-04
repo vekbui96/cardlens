@@ -13,22 +13,29 @@ import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
  * Each stream adds ONE `toHaveScreenshot` per screen to its own spec file under
  * `e2e/v2/`; this file owns the primitives themselves.
  *
- * ## Updating a baseline on purpose
+ * ## These run in a pinned container, and only there
  *
- * Playwright names a snapshot after the platform that took it, because a
- * screenshot from Windows and one from Linux genuinely differ — font
- * rasterisation and scrollbar width. Both sets are committed, and **both have
- * to be regenerated together**, or CI fails on Linux for a change that looked
- * fine on Windows:
+ * A screenshot is only reproducible in the environment that took it. Not just
+ * the OS — the installed FONTS. Baselines generated in the official Playwright
+ * image differ from ones taken on a bare `ubuntu-latest` runner by about 20px
+ * of page height, because the two have different font packages and text wraps
+ * differently. Both are "Linux"; neither matches the other.
  *
- *   npm run snapshots         # this platform (needs nothing)
- *   npm run snapshots:linux   # what CI actually gates (needs Docker)
+ * So these tests are tagged `@visual`, excluded from the ordinary e2e run, and
+ * executed by a CI job whose `container:` is the exact image
+ * `scripts/snapshots-linux.sh` uses. One environment, one set of baselines.
  *
- * Read the diff before committing either. A baseline updated without looking is
- * a regression test that has been switched off.
+ *   npm run snapshots:linux   # regenerate, in that same image (needs Docker)
+ *
+ * `npm run snapshots` regenerates for your own machine instead, which is useful
+ * while iterating but is NOT what CI compares against — those files exist only
+ * so the suite is runnable locally.
+ *
+ * Read the diff before committing a new baseline. One updated without looking
+ * is a regression test that has been switched off.
  */
 
-test.describe("primitives", () => {
+test.describe("primitives @visual", () => {
   test("the workshop looks like itself", async ({ page }) => {
     await openV2(page, "/dev/workshop", { seed: "binders" });
     await expect(page.getByRole("heading", { name: "Workshop", level: 1 })).toBeVisible();
@@ -37,7 +44,7 @@ test.describe("primitives", () => {
   });
 });
 
-test.describe("shell", () => {
+test.describe("shell @visual", () => {
   test("header and navigation", async ({ page }) => {
     await openV2(page, "/", { seed: "collection" });
     await stabiliseForSnapshot(page);

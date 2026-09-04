@@ -59,3 +59,37 @@ jobs:
           name: playwright-report
           path: playwright-report
           retention-days: 7
+
+  # v2 visual regression.
+  #
+  # Its own job, in a CONTAINER, because a screenshot only reproduces in the
+  # environment that took it — and not merely the OS. The bare `ubuntu-latest`
+  # runner and this image have different font packages, so the same page wraps
+  # differently and comes out ~20px taller in one than the other. Both are
+  # Linux; neither matches the other.
+  #
+  # This image is exactly what `scripts/snapshots-linux.sh` runs, so a baseline
+  # regenerated locally is byte-comparable with what CI sees here. Pin the tag
+  # and the two together, or this stops meaning anything.
+  visual:
+    name: v2 Visual Regression
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run visual specs
+        run: npm run e2e:visual
+      - name: Upload diffs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: test-results
+          retention-days: 7
