@@ -214,11 +214,25 @@ label.chip {
   gap: 2px;
 }
 
+/*
+ * The WHOLE card, not a crop of it.
+ *
+ * `object-fit: cover` filled the tile by cutting the bottom off every card —
+ * which is where the attacks, the set symbol and the collector number are, and
+ * the picker exists to answer "is this the printing I meant". `contain` letter-
+ * boxes instead, and at a card's own 5:7 there is nothing to letterbox.
+ *
+ * CardImage is asked for `fill` rather than `thumb` alongside this. `thumb` is
+ * a FIXED 54x76 wrapper — the glasses need it to be — so a tile styled through
+ * the img alone still drew 54px of art in a 92px tile, and asked the image CDN
+ * for a 120px file to do it. See CardImage, which has the same note against the
+ * showcase pocket that was measured at 54px inside 380.
+ */
 .card img,
 .card > div {
   width: 100%;
   aspect-ratio: 5 / 7;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--cl-radius-art);
 }
 

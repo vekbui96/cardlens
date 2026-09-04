@@ -606,7 +606,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                            chosen yet and would have to guess one. */
                           onPointerDown={(event) => onPointerDown(event, { kind: "new" }, slot)}
                         >
-                          <CardImage src={card.imageSmall} alt="" size="thumb" />
+                          <CardImage src={card.imageSmall} alt="" size="fill" />
                           <span className={styles.cardMeta}>
                             {card.collectorNumber} · {finishLabel(finish)}
                           </span>
@@ -684,7 +684,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
           data-over={drag.over ? "" : undefined}
         >
           {drag.slot.kind === "card" ? (
-            <CardImage src={drag.slot.imageSmall} alt="" size="thumb" />
+            <CardImage src={drag.slot.imageSmall} alt="" size="fill" />
           ) : (
             <img src={imageSlotSrc(drag.slot)} alt="" />
           )}

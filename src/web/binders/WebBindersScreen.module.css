@@ -11,34 +11,36 @@
 /* --- The shelf ----------------------------------------------------------- */
 
 /*
- * Fixed column counts per breakpoint rather than auto-fill.
+ * auto-fill, because the shell is no longer capped.
  *
- * auto-fill with a minmax() track is the usual answer and it is wrong here,
- * because the tile's tallest element is a binder PAGE and its height follows
- * the column width through a 5/7 aspect ratio. A track that can be any width
- * between 220px and 1fr therefore makes the tiles any height, and the shelf
- * jumps a row taller halfway through a window resize. Counted columns make the
- * geometry predictable enough to reason about: at the 1180px shell a tile is
- * 280px, so a 12-pocket cover draws a 61x85 pocket — a card, small.
+ * This was three fixed column counts, which was right while the surface stopped
+ * at 1180px and wrong the moment it took the window: four columns of a 1920px
+ * shelf is a 460px tile holding a 150px cover, adrift in its own box.
+ *
+ * auto-fill is only safe because a cover is a FIXED height with the page
+ * centred in it (see .coverFrame). While the cover took its height from the
+ * column width through a 5/7 ratio, a track that could be any width made the
+ * tiles any height and the shelf jumped a row taller mid-resize — which is what
+ * the counted columns were avoiding.
  */
 .shelf {
   list-style: none;
   margin: 0;
   padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap-lg);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--cl-gap);
 }
 
 @media (min-width: 560px) {
   .shelf {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   }
 }
 
 @media (min-width: 1000px) {
   .shelf {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 }
 

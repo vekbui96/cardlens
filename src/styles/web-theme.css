@@ -162,6 +162,23 @@ body:has([data-shell="web"]) {
 }
 
 /*
+ * Paragraphs keep a reading measure, now that the shell does not.
+ *
+ * The web surface used to cap itself at 1180px so text would not run the width
+ * of a monitor. That cap letterboxed every GRID in the app — the set list, the
+ * collection, a binder spread — to hold one line of prose to a sane length, and
+ * the grids are what people spend their time in. So the shell takes the window
+ * and the measure is enforced where it actually matters.
+ *
+ * `ch` rather than px, so it tracks the font: 78 characters is the long end of
+ * comfortable, and every paragraph in this app is a hint or a status line
+ * rather than an article.
+ */
+[data-shell="web"] p {
+  max-width: 78ch;
+}
+
+/*
  * The header rule is a 2px teal line on the glasses, where a bright edge is how
  * you separate regions on an additive display. On a screen with real contrast a
  * hairline does the same job without shouting.

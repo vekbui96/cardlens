@@ -376,31 +376,36 @@ test.describe("collection at desktop size", () => {
 
   test("the set list spends the width on columns, not on the gap inside a row", async ({ page }) => {
     // Two fixed columns put a 72px logo and a short name at opposite ends of a
-    // 564px row, with ~220px of nothing between them. Three columns is what the
-    // content of the row asks for at the full 1180px shell.
+    // 564px row, with ~220px of nothing between them. The width belongs in
+    // COLUMNS, and how many is auto-fill's business — the shell is no longer
+    // capped, so it is four at 1440 and more on a bigger monitor. Asserting an
+    // exact count would only be asserting the window size.
     await page.goto("/?ui=web#/collection");
 
     const rows = page.getByRole("button", { name: SET_ROW });
     await expect(rows.first()).toBeVisible();
     expect(await rows.count(), "not enough sets to tell a grid from a list").toBeGreaterThan(3);
 
-    const first = await rows.nth(0).boundingBox();
-    const second = await rows.nth(1).boundingBox();
-    const third = await rows.nth(2).boundingBox();
-    const fourth = await rows.nth(3).boundingBox();
+    const boxes = await rows.evaluateAll((els) =>
+      els.slice(0, 8).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }),
+    );
+    const first = boxes[0];
+    const across = boxes.filter((b) => Math.abs(b.y - first.y) < 4);
 
-    // Same y => same grid row.
-    expect(Math.abs(first!.y - second!.y), "rows 1 and 2 should sit side by side").toBeLessThan(4);
-    expect(Math.abs(first!.y - third!.y), "row 3 should be on that row too").toBeLessThan(4);
-    expect(second!.x).toBeGreaterThan(first!.x);
-    expect(third!.x).toBeGreaterThan(second!.x);
-    // ...and only three: a fourth on the same line would mean the name had been
-    // squeezed to an ellipsis to fit.
-    expect(fourth!.y, "the row should wrap after three").toBeGreaterThan(first!.y);
+    expect(across.length, "the set list is still one column per row").toBeGreaterThanOrEqual(3);
+    // Left to right, in order — a grid, not a pile.
+    for (let i = 1; i < across.length; i++) expect(across[i].x).toBeGreaterThan(across[i - 1].x);
+    // The row wrapped rather than stretching one row across the window.
+    expect(boxes.length, "sample was too small to see a wrap").toBeGreaterThan(across.length);
+    // And each row is sized by its content rather than by the leftover space.
+    expect(first.width, "a row is stretched, so the width went to gaps not columns").toBeLessThan(500);
 
     // The 72px floor is a thumb target the pointer does not need, and the
     // content of the row is 56px.
-    expect(first!.height, "row is taller than its content needs").toBeLessThan(72);
+    expect(first.height, "row is taller than its content needs").toBeLessThan(72);
   });
 
   test("the value panel lines up with the set list, and pairs a set with its value", async ({ page }) => {

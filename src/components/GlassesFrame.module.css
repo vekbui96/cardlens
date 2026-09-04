@@ -89,16 +89,25 @@
 }
 
 /*
- * Desktop is a real target, not a wide phone.
+ * Desktop is a real target, not a wide phone — and on a big monitor it should
+ * use the monitor.
  *
- * 760px is a sensible reading width and stays the cap for text-shaped screens,
- * but the set grid is the screen people spend time in and it was letterboxing a
- * 1440px display into a phone column. Widening the shell lets the grid's
- * auto-fill do the work without a per-screen breakpoint.
+ * 760px stays the cap up to 1000px. Past that the shell takes the window, less
+ * a gutter, because every screen people actually spend time in here is a GRID
+ * of cards: the set list, the collection, a binder spread, the picker. A cap
+ * letterboxes those into a column and leaves a 1920px display two-thirds empty.
+ *
+ * The old 1180px cap was there so text would not run to absurd line lengths.
+ * That concern is real but it belongs to the paragraphs, not to the shell:
+ * `.hint`, `.footnote` and `.notice` cap their own measure (see `.prose`
+ * below), which is the smaller and more precise fix. It also un-blocks the
+ * binder, where 1180 was 72px short of holding a 12-pocket spread beside the
+ * picker rail.
  */
 @media (min-width: 1000px) {
   .webSurface {
-    max-width: 1180px;
+    max-width: none;
+    padding: 0 var(--cl-gap-lg);
   }
 }
 

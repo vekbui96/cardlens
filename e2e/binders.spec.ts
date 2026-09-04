@@ -491,10 +491,16 @@ test.describe("the picker on a desktop", () => {
 
   test("is a rail that opens on demand and gives the width back when shut", async ({ page }) => {
     // Shut to begin with, because open it costs 340px and a 12-pocket spread
-    // needs 1108 of the 1180px shell to keep its pockets card-sized. The binder
-    // keeps the room until cards are actually asked for.
+    // needs 1108px to keep its pockets card-sized. The binder keeps the room
+    // until cards are actually asked for.
+    //
+    // A 12-POCKET binder, deliberately: it is the widest spread and the one the
+    // default protects. A 9-pocket spread has slack at this window size and
+    // would not shrink when the rail opens, so it could not tell the two states
+    // apart.
     await page.goto("/?ui=web#/binders");
     await page.getByLabel("Binder name").fill("Wide");
+    await page.getByRole("button", { name: "12-pocket", exact: true }).click();
     await page.getByRole("button", { name: "Create binder" }).click();
 
     await expect(page.getByRole("complementary", { name: "Cards" })).toBeVisible();

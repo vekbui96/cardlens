@@ -85,7 +85,7 @@ export function BinderSearchResults({
                 }`}
                 onClick={() => onChoose(card)}
               >
-                <CardImage src={card.imageSmall} alt="" size="thumb" />
+                <CardImage src={card.imageSmall} alt="" size="fill" />
                 {/* Two lines, not one: a result's set is the thing that tells
                     two otherwise identical Charizards apart, and squeezed onto
                     the number's line it is the half that gets ellipsised. */}
