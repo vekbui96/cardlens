@@ -6,6 +6,68 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## v2 Phase 0 is built — the rebuild can go parallel now (2026-09-04)
+
+The plan and specs from earlier in the day are now a working foundation.
+`docs/v2/PLAN.md` §4 lists what landed and where; `docs/v2/specs/00-foundation.md`
+is written to be picked up cold and now carries a status header.
+
+**Nothing user-visible changed.** v2 is opt-in and defaults off. A v1 user gets
+the same screens, the same input adapter, and one extra menu row ("Try the new
+interface"). The v2 code is a separate 9.3KB lazy chunk they never download —
+`scripts/check-v2-split.mjs` asserts that against `dist/` on every build,
+because the whole arrangement rests on one lazy import in `App.tsx` and a single
+eager import from a shared module would silently undo it.
+
+How to look at it: `?v=2` anywhere, or the menu row. `#/dev/workshop` shows every
+primitive in every state. `?seed=binders` loads real data through real storage.
+
+**Starting a screen stream:** read `00-foundation.md`, then your own spec.
+Replace your screen's entry in `V2Router.tsx`'s switch with a lazy import, build
+under `src/v2/screens/<yours>/`, put e2e under `e2e/v2/` — it runs at 390 and
+1440 automatically, so **do not edit `playwright.config.ts`**. Until a stream
+lands, its screen renders a placeholder naming the spec that owns it.
+
+### Traps this phase found
+
+- **A visual snapshot is only reproducible in the environment that took it, and
+  "Linux" is not an environment.** Baselines generated in the official Playwright
+  image differ from ones taken on a bare `ubuntu-latest` runner by ~20px of page
+  height — different font packages, so text wraps differently. Two Linux
+  baselines, neither matching the other. Fixed by giving the visual specs their
+  own CI job with `container:` pinned to the same image
+  `scripts/snapshots-linux.sh` uses. **If you bump `@playwright/test`, bump the
+  tag in both places** — the script warns when they disagree.
+- **`KeyboardBackedInputAdapter` reaches the web.** It attaches a document-level
+  `keydown` that `preventDefault()`s arrows, Enter and Escape — correct on the
+  glasses, where those keys ARE the four gestures. v1 only escapes it because
+  every web screen passes `enabled: false`, i.e. discipline at each call site
+  forever. `createInputAdapter` now takes `{ wearable }` and v2 passes false.
+  v1's behaviour is unchanged.
+- **PowerShell 5.1's `Get-Content -Raw` reads as ANSI.** Using it to bulk-edit a
+  UTF-8 markdown file mangled 18 characters and added a BOM. Use the editing
+  tools or Node for anything with an em-dash in it.
+- **Prettier can ping-pong on a markdown list with nested paragraphs**, growing
+  the indent every run so `format:check` never passes. Fold the detail into the
+  bullet, or make it a real section.
+- **`offsetParent` is always null in jsdom.** A focus trap that filters on it
+  finds no targets under test and silently does nothing — which is exactly the
+  state the test exists to catch.
+
+### Still open
+
+- `--cl-viewport`: the plan claimed 43 CSS modules read it. **Two do**, and v2
+  renders neither. The 43 was a count of modules using any `--cl-*` token.
+  Corrected in `PLAN.md` §7.3.
+- **Lifting presentation out of `models/` was dropped from Phase 0 on purpose.**
+  It blocks nothing, and doing it now would put a refactor of shared modules
+  covered by ~900 tests directly beneath nine branching streams. Reasoning is in
+  `00-foundation.md`. Worth doing after the streams land.
+- CI's `Playwright E2E` job is still red on three **pre-existing** tests
+  (`bulk-mark` ×2, one `binders`). The runner cannot reach TCGdex
+  (`ProviderError: tcgdex unreachable`), so there are no printings to mark. They
+  fail identically on commits predating all of this and pass locally.
+
 ## The binder got a cover, drag, and a picker rail (2026-09-04)
 
 **Shipped as `7746851`, `e21b6c9`, `a394ea9`. BOTH targets** — `binderParse.ts`
