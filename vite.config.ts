@@ -19,7 +19,17 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    /**
+     * Overridable so that two checkouts of this repo — parallel worktrees, or
+     * two agents building different screens — can each run their own dev
+     * server. Playwright's `reuseExistingServer` treats a busy port as "already
+     * running, reuse it", so without this the second checkout silently runs its
+     * entire e2e suite against the FIRST checkout's code and reports a pass.
+     */
+    port: Number(process.env.VITE_DEV_PORT ?? 5173),
+    // Fail loudly rather than sliding to 5174, which would reintroduce exactly
+    // the confusion this is here to prevent.
+    strictPort: true,
     proxy: {
       "/api": {
         target: API_TARGET,

@@ -3,14 +3,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Scratch data root for the e2e server.
+ * Ports, overridable per checkout.
+ *
+ * `reuseExistingServer` treats a busy port as "already running, reuse it". That
+ * is right for a single developer re-running the suite, and catastrophic for
+ * two checkouts at once — parallel worktrees, or two agents building different
+ * screens — because the second one runs its whole suite against the FIRST
+ * one's code and reports a pass. Give each checkout its own pair:
+ *
+ *   CL_E2E_PORT=5273 CL_E2E_API_PORT=8887 npm run e2e
+ */
+const WEB_PORT = Number(process.env.CL_E2E_PORT ?? 5173);
+const API_PORT = Number(process.env.CL_E2E_API_PORT ?? 8787);
+
+/**
+ * Scratch data root for the e2e server, keyed by API port for the same reason.
+ * Two servers sharing one collection.json is two suites writing over each
+ * other's rows.
  *
  * Without it the server falls back to its production paths under D:/services,
  * which do not exist on a dev machine (a stream of ENOENT warnings) and DO
  * exist on the home server — where a test run would write into the real
  * collection. Everything here is disposable.
  */
-const DATA = join(tmpdir(), "cardlens-e2e");
+const DATA = join(tmpdir(), `cardlens-e2e-${API_PORT}`);
 /** A token so the authenticated routes can actually be exercised, not just 401'd. */
 const E2E_TOKEN = "e2e-token";
 
@@ -19,8 +35,7 @@ const E2E_TOKEN = "e2e-token";
  * We start BOTH the API server (companion relay) and the Vite dev server, with mocks
  * enabled so tests are deterministic and never hit the live Pokémon API.
  */
-const PORT = 5173;
-const BASE_URL = `http://localhost:${PORT}`;
+const BASE_URL = `http://localhost:${WEB_PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -101,10 +116,11 @@ export default defineConfig({
   webServer: [
     {
       command: "npm run server:start",
-      port: 8787,
+      port: API_PORT,
       reuseExistingServer: !process.env.CI,
       stdout: "pipe",
       env: {
+        PORT: String(API_PORT),
         COLLECTION_TOKEN: E2E_TOKEN,
         COLLECTION_FILE: join(DATA, "collection.json"),
         BINDERS_FILE: join(DATA, "binders.json"),
@@ -121,6 +137,10 @@ export default defineConfig({
       stdout: "pipe",
       env: {
         VITE_USE_MOCKS: "true",
+        VITE_DEV_PORT: String(WEB_PORT),
+        // Point this checkout's dev server at this checkout's API server, or a
+        // second checkout's browser proxies /api to the first one's data.
+        VITE_SERVER_TARGET: `http://localhost:${API_PORT}`,
       },
     },
   ],
