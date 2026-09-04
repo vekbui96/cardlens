@@ -247,11 +247,37 @@ Conflict rules:
 
 - **Never edit another stream's directory.** Two streams needing the same
   component means it belongs in `primitives/`, which is a foundation change.
-- **`src/v2/routes.ts` is append-only** and one line per screen. It is the only
-  shared file streams touch, and one line each is a conflict you can resolve by
-  reading it.
+- **No stream edits `V2Router.tsx`.** This replaces the earlier
+  "`src/v2/routes.ts` is append-only" rule, which was written before the router
+  existed. A stream exports its screen from its own `index.ts` and the
+  integrator wires it in — one line per screen, all in one hand, so nine streams
+  never queue behind the same file. Streams also do not edit
+  `playwright.config.ts` (it already matches everything under `e2e/v2/`),
+  `tokens.css`, `primitives/`, `shell/` or `package.json`.
 - **Fixtures are additive.** Add a named fixture; never change one another
   stream uses.
+- **Each checkout runs e2e on its own port pair.** `CL_E2E_PORT` and
+  `CL_E2E_API_PORT`. Playwright's `reuseExistingServer` reads a busy port as
+  "already running, reuse it", so two checkouts on the defaults means the second
+  runs its whole suite against the first one's code and **passes**. Nothing in
+  the output says which app was tested.
+
+### The one dependency between streams
+
+The map above is otherwise a set of disjoint directories, which is what makes it
+parallel. There is exactly one edge, and it is worth naming because the map does
+not show it:
+
+**07 (shares) depends on 05 (binder builder).** Spec 07 requires the public
+share pages to draw a binder with "the same spread geometry as the builder, from
+the same primitives — the owner must see what the recipient will see, with no
+separate preview to drift". So 05 exports a read-only `BinderSpread` from its
+`index.ts`, taking an `owns` predicate (share pages judge ownership against the
+SHARER's collection, not the viewer's) and a mode where pockets are not buttons.
+07 imports it and adds nothing to 05's directory.
+
+That makes 07 the one stream that cannot start first. Everything else may run in
+any order.
 
 ---
 
