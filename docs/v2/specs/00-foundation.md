@@ -2,6 +2,28 @@
 
 **Phase 0. Nothing else starts until this lands.** One owner.
 
+## Status: built
+
+The shell, tokens, primitives, routing, workshop, fixtures, the toggle, and the
+e2e harness are all in. **Phase 1 may start.**
+
+One item was deliberately deferred and moved out of Phase 0 — lifting
+presentation helpers out of `models/`. It blocks nothing, and doing it now would
+put a shared-module refactor directly under nine branching streams. The
+reasoning is with that item at the end of this file.
+
+What a stream should know before it starts:
+
+| Command / URL                              | What it gives you, or protects                  |
+| ------------------------------------------ | ----------------------------------------------- |
+| `npm run check:v2`                         | No raw colours or lengths outside `tokens.css`  |
+| `npm run build` (its `postbuild`)          | v2 stays out of the entry bundle a v1 user gets |
+| `npx playwright test --project=v2-desktop` | v2 specs at 1440                                |
+| `npx playwright test --project=v2-phone`   | v2 specs at 390                                 |
+| `?v=2`                                     | Pin the version, whatever is stored             |
+| `?seed=binders`                            | Real data, written through real storage         |
+| `#/dev/workshop`                           | Every primitive, in every state                 |
+
 ## Purpose
 
 Give every later stream a shell to render into, a vocabulary to build from, and
@@ -14,13 +36,13 @@ tile, a page grid, or a way to get a binder with cards in it onto the screen.
 The foundation has no user-facing parity of its own except these, which v1 does
 and v2 must not lose:
 
-- [ ] `#/…` routes round-trip identically (`src/app/screenUrl.ts`) — a pasted
+- [x] `#/…` routes round-trip identically (`src/app/screenUrl.ts`) — a pasted
       link opens the same screen in either version.
-- [ ] Back behaves as a stack, not as browser history alone.
-- [ ] The glasses and preview shells are untouched and still render v1.
-- [ ] An uncaught render error shows the error screen rather than a white page
+- [x] Back behaves as a stack, not as browser history alone.
+- [x] The glasses and preview shells are untouched and still render v1.
+- [x] An uncaught render error shows the error screen rather than a white page
       (`src/app/ErrorBoundary.tsx`), in v2 too.
-- [ ] Sync status, and its three distinct messages (`bad-token`, `disabled`,
+- [x] Sync status, and its three distinct messages (`bad-token`, `disabled`,
       generic), are reachable from the v2 shell.
 
 ## Deliverables
@@ -108,43 +130,71 @@ and fights native scrolling).
 
 ## Acceptance
 
-- [ ] `?v=2` renders the v2 shell; `?v=1` and no flag render v1.
-- [ ] A square 600x600 viewport renders v1 whatever `?v=` says.
-- [ ] The v2 chunk is absent from the entry bundle for a v1 user (assert on the
+- [x] `?v=2` renders the v2 shell; `?v=1` and no flag render v1.
+- [x] A square 600x600 viewport renders v1 whatever `?v=` says.
+- [x] The v2 chunk is absent from the entry bundle for a v1 user (assert on the
       built `dist/` output, not by eye).
-- [ ] `[data-shell="web"]` rules from `web-theme.css` do not apply inside
+- [x] `[data-shell="web"]` rules from `web-theme.css` do not apply inside
       `[data-ui="v2"]` — asserted by a test, like `e2e/shell-isolation.spec.ts`
       does for the glasses.
-- [ ] `?seed=binders` produces a binder with cards, in both versions, and does
+- [x] `?seed=binders` produces a binder with cards, in both versions, and does
       nothing in a production build.
-- [ ] Switching version keeps the current `#/` route.
-- [ ] Exactly one QueryClient exists at runtime.
-- [ ] `#/dev/workshop` renders every primitive with no console errors.
+- [x] Switching version keeps the current `#/` route.
+- [x] Exactly one QueryClient exists at runtime.
+- [x] `#/dev/workshop` renders every primitive with no console errors.
 
 ## Also owned by this stream (found in review — see PLAN §1, §7)
 
 These are not optional extras; each one blocks or silently breaks screens.
 
-- [ ] **Gate the wearable input adapter on `layoutMode !== "web"`.**
+- [x] **Gate the wearable input adapter on `layoutMode !== "web"`.**
       `KeyboardBackedInputAdapter` preventDefaults arrows/Enter/Escape at the
       document, and `InputProvider` installs it in web mode too. Every v2 screen
-      with a field, a `<select>` or a modal fights it.
-- [ ] **Neutralise `global.css` for v2**: `body`/`#root` centring, the global
+      with a field, a `<select>` or a modal fights it. Done at the source rather
+      than the call site: `createInputAdapter` takes `{ wearable }` and
+      `App.tsx` passes `false` for v2, so a v2 screen cannot reintroduce it by
+      forgetting a flag. v1 is untouched. Covered by
+      `integrations/meta/inputGating.test.ts`, and by an e2e that dispatches a
+      real ArrowDown and asserts nothing called `preventDefault`.
+- [x] **Neutralise `global.css` for v2**: `body`/`#root` centring, the global
       `:focus { outline: none }`, and the bare `.sr-only`. Without breaking the
-      glasses.
-- [ ] **Define v2's own `--cl-viewport` equivalent.** 43 CSS modules read v1's,
+      glasses. Done in `src/v2/shell/reset.css`, anchored on
+      `html[data-ui="v2"]` — an attribute only `V2App` sets, so the cascade
+      cannot reach the glasses rather than us remembering not to send it.
+- [x] **Define v2's own `--cl-viewport` equivalent.** 2 CSS modules read v1's,
       set on `.webSurface`; a v2 shell that does not render `GlassesFrame` loses
       it silently.
-- [ ] **Adopt `src/utils/`**: `format.ts` (money, `"Unavailable"`, relative
+- [x] **Adopt `src/utils/`**: `format.ts` (money, `"Unavailable"`, relative
       time, collector numbers) and `image.ts` (`optimizedImageUrl`). One home,
-      or ten streams disagree about how to render a dollar.
+      or ten streams disagree about how to render a dollar. `Money` and
+      `CardArt` are the only things in v2 that format a price or build an image
+      URL, and both call these — so a screen never touches either directly.
 - [ ] **Lift presentation out of `models/`**: chart geometry in `history.ts`,
       labels in `ownedSort.ts` / `finishes.ts` / `target.ts`, formatting in
       `movement.ts`, the 0–1 bar width in `setCompletion.ts`. And the upward
       imports in `hooks/useSetView.ts` and `hooks/useCollectedSets.ts`.
-- [ ] **Add `e2e/v2/**` to the Playwright projects' `testMatch` once**, so no
+      **Deliberately not done — see below.**
+- [x] **Add `e2e/v2/**` to the Playwright projects' `testMatch` once**, so no
       stream has to edit that shared file, and no v2 spec accidentally runs at
-      the 600×600 glasses viewport.
+      the 600×600 glasses viewport. Done as two new projects, `v2-phone` and
+      `v2-desktop`, matching anything under `e2e/v2/`; the 600×600 `chromium`
+      project now explicitly ignores that directory.
+
+### Why the `models/` refactor was dropped from Phase 0
+
+It was misfiled. Everything else on the list above either blocks a screen or
+breaks one silently. This does not: a v2 screen can import `graphGeometry` from
+where it already lives, and nothing in these helpers is v1-specific enough to be
+wrong in v2.
+
+What it would cost is real. It edits shared modules covered by ~900 tests, at
+the exact moment nine streams start branching off them — so every stream would
+rebase through a refactor none of them needed, for a tidiness gain none of them
+asked for. That is the opposite of what Phase 0 is for.
+
+It is still worth doing: after the streams land, or alongside whichever one
+first genuinely needs one of these helpers and can prove the move against a real
+call site.
 
 ## Out of scope
 

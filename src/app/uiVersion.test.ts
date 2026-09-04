@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activeUiVersion,
   readStoredUiVersion,
   resolveUiVersion,
   storeUiVersion,
+  switchUiVersion,
   uiVersionFromLocation,
   UI_VERSION_KEY,
 } from "./uiVersion.ts";
@@ -61,5 +62,56 @@ describe("activeUiVersion", () => {
     expect(activeUiVersion("glasses")).toBe("v1");
     expect(activeUiVersion("preview")).toBe("v1");
     expect(activeUiVersion("web")).toBe("v2");
+  });
+});
+
+describe("switchUiVersion", () => {
+  /**
+   * `window.location.reload` and `history.replaceState` are the two side
+   * effects; jsdom implements neither usefully, so both are stubbed and the
+   * assertions are about what the function DECIDED, not about a reload
+   * actually happening.
+   */
+  function stubWindow(href: string) {
+    const reload = vi.fn();
+    const replaceState = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      href,
+      reload,
+    } as unknown as Location);
+    vi.spyOn(window.history, "replaceState").mockImplementation(replaceState);
+    return { reload, replaceState };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("remembers the choice and reloads", () => {
+    const { reload } = stubWindow("http://x.test/#/binders");
+    switchUiVersion("v2");
+    expect(readStoredUiVersion()).toBe("v2");
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("strips ?v= so the switch is not overruled by the URL it arrived on", () => {
+    // Without this, someone who opened `?v=2`, pressed V1 and reloaded would
+    // land on v2 again — the switch looking broken while behaving exactly as
+    // specified, because the URL outranks storage.
+    const { replaceState } = stubWindow("http://x.test/?v=2#/binders");
+    switchUiVersion("v1");
+    expect(replaceState).toHaveBeenCalledOnce();
+    const url = String(replaceState.mock.calls[0]![2]);
+    expect(url).not.toContain("v=2");
+  });
+
+  it("leaves the hash alone — changing version is not navigating", () => {
+    const { replaceState } = stubWindow("http://x.test/?v=2#/binder/abc");
+    switchUiVersion("v1");
+    expect(String(replaceState.mock.calls[0]![2])).toContain("#/binder/abc");
+  });
+
+  it("does not touch history when there was no ?v= to remove", () => {
+    const { replaceState } = stubWindow("http://x.test/#/binders");
+    switchUiVersion("v2");
+    expect(replaceState).not.toHaveBeenCalled();
   });
 });

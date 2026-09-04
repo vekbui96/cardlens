@@ -35,6 +35,10 @@ export function screenToPath(screen: Screen): string {
       return `/trade/${encodeURIComponent(screen.shareId)}`;
     case "binder":
       return `/binder/${encodeURIComponent(screen.binderId)}`;
+    // Under `/dev/` so it is obvious in the URL bar that this is not a screen
+    // of the app, and so the prefix is there if more dev screens follow.
+    case "workshop":
+      return "/dev/workshop";
     default:
       return `/${screen.name}`;
   }
@@ -94,6 +98,9 @@ export function pathToScreen(path: string): Screen | null {
   }
   if (head === "trade" && rest.length >= 1) {
     return { name: "trade", shareId: rest[0] };
+  }
+  if (head === "dev" && rest[0] === "workshop") {
+    return { name: "workshop" };
   }
   return null;
 }

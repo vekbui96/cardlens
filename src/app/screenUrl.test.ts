@@ -12,6 +12,9 @@ const SCREENS: Screen[] = [
   { name: "results", query: "charizard ex" },
   { name: "details", cardId: "me5-1" },
   { name: "set", setId: "me5", setName: "Pitch Black" },
+  // v2's component gallery. It round-trips like any other screen so that a
+  // link to it survives a reload and a version switch.
+  { name: "workshop" },
 ];
 
 describe("screen <-> path", () => {
@@ -97,5 +100,12 @@ describe("live share links", () => {
     // a screen that reports the link as dead.
     expect(pathToScreen("/trade/xyz")).toEqual({ name: "trade", shareId: "xyz" });
     expect(pathToScreen("/live/xyz")).toEqual({ name: "live", shareId: "xyz" });
+  });
+
+  it("puts the workshop under /dev/, not at the top level", () => {
+    // The prefix says in the URL bar that this is not a screen of the app, and
+    // leaves room for the next dev-only page without another special case.
+    expect(screenToPath({ name: "workshop" })).toBe("/dev/workshop");
+    expect(pathToScreen("/workshop")).toBeNull();
   });
 });

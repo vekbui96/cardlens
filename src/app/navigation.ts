@@ -42,7 +42,17 @@ export type Screen =
    * GIVE UP, priced per copy and addressed by pocket so the two of you can talk
    * about it. Same share id space; different page.
    */
-  | { name: "trade"; shareId: string };
+  | { name: "trade"; shareId: string }
+  /**
+   * v2 and development only: every primitive, in every state, against
+   * fixtures. It is a screen rather than a separate entry point so that it
+   * renders inside the real shell — a component gallery that mounts outside
+   * the app is a gallery that disagrees with the app.
+   *
+   * v1's router has no case for it and falls through to Home, which is the
+   * right answer there: the primitives it would show do not exist in v1.
+   */
+  | { name: "workshop" };
 export type ScreenName = Screen["name"];
 
 export interface NavState {

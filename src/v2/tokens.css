@@ -1,0 +1,155 @@
+/*
+ * v2 design tokens.
+ *
+ * Scoped to `[data-ui="v2"]` rather than `:root` so that v1 and v2 can be
+ * mounted in the same document without either bleeding into the other. That is
+ * not hypothetical: the version switch lives in both shells, and a v1 page that
+ * inherited v2's palette would be the first thing anyone saw after flipping.
+ *
+ * THIS IS THE ONLY FILE IN `src/v2/` ALLOWED TO CONTAIN A RAW VALUE.
+ * `scripts/check-v2-tokens.mjs` enforces it, and `npm run verify` runs it.
+ * A convention nobody can check is a convention that decays.
+ *
+ * v1's palette is built for an additive display where black is transparent.
+ * This one is built for a screen that emits light, so it is a real dark theme
+ * over a lifted surface rather than a true black — the same colours look murky
+ * here and the same contrast ratios come out wrong.
+ */
+[data-ui="v2"] {
+  /* --- Surface ---------------------------------------------------------- */
+  --v2-bg: #0b0e14;
+  --v2-surface: #141922;
+  --v2-surface-raised: #1c2330;
+  --v2-surface-sunken: #080a0f;
+  --v2-border: #2a3444;
+  --v2-border-strong: #3d4a5e;
+
+  /* --- Text ------------------------------------------------------------- */
+  --v2-fg: #eef2f7;
+  --v2-fg-muted: #9aa7b8;
+  --v2-fg-dim: #6b7787;
+  --v2-on-accent: #04121a;
+
+  /* --- Accent ----------------------------------------------------------- */
+  --v2-accent: #4cc2ff;
+  --v2-accent-strong: #7ad4ff;
+  --v2-accent-dim: #1d3a4d;
+
+  /* --- Semantic. Always paired with a word, never colour alone. ---------- */
+  --v2-price: #6ee7a8;
+  --v2-warn: #ffcf6b;
+  --v2-error: #ff7a7a;
+  --v2-gold: #f2c14e;
+
+  /* --- Focus ------------------------------------------------------------ */
+  --v2-focus-ring: 2px solid var(--v2-accent-strong);
+  --v2-focus-offset: 2px;
+
+  /* --- Type ------------------------------------------------------------- */
+  --v2-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --v2-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --v2-fs-display: 32px;
+  --v2-fs-title: 24px;
+  --v2-fs-heading: 19px;
+  --v2-fs-body: 15px;
+  --v2-fs-small: 13px;
+  --v2-fs-tiny: 11px;
+  --v2-lh-tight: 1.2;
+  --v2-lh-body: 1.5;
+  --v2-fw-regular: 400;
+  --v2-fw-medium: 550;
+  --v2-fw-bold: 700;
+
+  /* --- Space. A 4px grid; every gap in v2 is one of these. --------------- */
+  --v2-space-0: 0px;
+  --v2-space-1: 4px;
+  --v2-space-2: 8px;
+  --v2-space-3: 12px;
+  --v2-space-4: 16px;
+  --v2-space-5: 24px;
+  --v2-space-6: 32px;
+  --v2-space-7: 48px;
+
+  /* --- Line and target sizes -------------------------------------------- */
+  --v2-border-w: 1px;
+  /*
+   * The minimum interactive size. The reason is a thumb, so it does not shrink
+   * on a wide window — a pointer hitting a 44px target has never been a problem.
+   */
+  --v2-tap: 44px;
+
+  /* --- Radius ----------------------------------------------------------- */
+  --v2-radius-sm: 6px;
+  --v2-radius: 10px;
+  --v2-radius-lg: 16px;
+  --v2-radius-pill: 999px;
+
+  /* --- Elevation -------------------------------------------------------- */
+  --v2-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 30%);
+  --v2-shadow-lg: 0 8px 32px rgb(0 0 0 / 45%);
+
+  /* The modal backdrop. A colour, so it belongs here and not in a component. */
+  --v2-scrim: rgb(0 0 0 / 55%);
+
+  /* --- Motion ----------------------------------------------------------- */
+  --v2-ease: cubic-bezier(0.2, 0, 0, 1);
+  --v2-dur-fast: 120ms;
+  --v2-dur: 200ms;
+  /* A loading shimmer is a slow idle loop, not a transition. */
+  --v2-dur-shimmer: 1400ms;
+
+  /*
+   * --- Card geometry -----------------------------------------------------
+   *
+   * A Pokémon card is 63x88mm, which is 5:7 to within a hair, and 5:7 is what
+   * the hobby draws. Every piece of card art in v2 comes from this one ratio.
+   */
+  --v2-card-aspect: 5 / 7;
+
+  /*
+   * A POCKET IS A POCKET — the same physical size whether the page holds 4, 9
+   * or 12 of them. The PAGE gets wider; the pocket does not shrink. v1 learned
+   * this the hard way: a 12-pocket page drew its pockets at 92px beside a
+   * 9-pocket page's 125px, and the two binders read as different products.
+   */
+  --v2-pocket: 130px;
+  --v2-pocket-lg: 168px;
+
+  /*
+   * --- Viewport ----------------------------------------------------------
+   *
+   * v1 sets `--cl-viewport` on `.webSurface` inside `GlassesFrame`. v2 never
+   * renders that component, so without its own definition here it would fall
+   * through to the `:root` value — 600px, the fixed glasses square — and every
+   * width in v2 would quietly be wrong on a 1440px window.
+   */
+  --v2-viewport: 100%;
+
+  /* The shell's own chrome. Screens read these; they never set page margins. */
+  --v2-header-h: 56px;
+  --v2-gutter: var(--v2-space-4);
+
+  /* The side panel's width when it is open. Shut, it is `--v2-space-0`. */
+  --v2-rail-w: 320px;
+}
+
+/*
+ * Wider windows get more air and a bigger pocket, and that is the ONLY thing
+ * that changes with width at the token level. Every other responsive decision
+ * belongs to the shell or to a screen, where it can be seen next to the layout
+ * it affects.
+ */
+@media (min-width: 900px) {
+  [data-ui="v2"] {
+    --v2-gutter: var(--v2-space-5);
+    --v2-pocket: var(--v2-pocket-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui="v2"] {
+    --v2-dur-fast: 0.001ms;
+    --v2-dur: 0.001ms;
+    --v2-dur-shimmer: 0.001ms;
+  }
+}

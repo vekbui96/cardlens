@@ -1,0 +1,400 @@
+/*
+ * Every primitive's styling, in one file.
+ *
+ * No raw values: each length and colour is a token from `../tokens.css`, and
+ * `scripts/check-v2-tokens.mjs` fails the build if one appears here. Where a
+ * value has to vary per instance (a gap, a column width) the component sets a
+ * local custom property inline and this file consumes it — so the raw value
+ * still comes from a token, chosen in TypeScript where it can be type-checked.
+ */
+
+/* --- Stack / Row ---------------------------------------------------------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--gap);
+  align-items: var(--align);
+  justify-content: var(--justify);
+  min-width: 0;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.grow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* --- Grid ----------------------------------------------------------------- */
+
+/*
+ * `auto-fill`, not `auto-fit`. auto-fit collapses empty tracks and stretches
+ * the survivors, so a shelf holding one binder drew that binder full-bleed
+ * across 1440px. auto-fill keeps the track, and one tile stays tile-sized.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--min), 1fr));
+  gap: var(--gap);
+  min-width: 0;
+}
+
+/* --- Panel ---------------------------------------------------------------- */
+
+.panel {
+  background: var(--v2-surface);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  padding: var(--pad);
+  min-width: 0;
+}
+
+.panelRaised {
+  background: var(--v2-surface-raised);
+  box-shadow: var(--v2-shadow);
+}
+
+.panelQuiet {
+  background: transparent;
+  border-color: transparent;
+  padding: var(--v2-space-0);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-3);
+  margin-bottom: var(--v2-space-3);
+}
+
+.panelTitle {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+/* --- Card (a pressable surface) ------------------------------------------- */
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: var(--v2-fg);
+  background: var(--v2-surface);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  padding: var(--pad);
+  cursor: pointer;
+  min-height: var(--v2-tap);
+  transition:
+    border-color var(--v2-dur-fast) var(--v2-ease),
+    background-color var(--v2-dur-fast) var(--v2-ease),
+    transform var(--v2-dur-fast) var(--v2-ease);
+}
+
+.card:hover {
+  border-color: var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+}
+
+.card:active {
+  transform: scale(0.99);
+}
+
+.card:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.cardSelected {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+}
+
+/* --- CardArt -------------------------------------------------------------- */
+
+/*
+ * The ONE way v2 draws a card.
+ *
+ * It takes its size from its container and never from a hard-coded number.
+ * v1 has three of these and one hard-codes 54x76, which is how 54px of art
+ * ended up inside a 380px pocket on the binder page and again inside a 92px
+ * tile in the picker. There is no width prop here on purpose.
+ */
+.art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  overflow: hidden;
+  background: var(--v2-surface-sunken);
+}
+
+.artImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/*
+ * A card whose art has not arrived is drawn face-down, not as an empty pocket.
+ * A full binder that reads as empty is worse than a slow one.
+ */
+.artBack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(160deg, var(--v2-surface-raised), var(--v2-surface-sunken));
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  text-align: center;
+  padding: var(--v2-space-2);
+  line-height: var(--v2-lh-tight);
+}
+
+.artEmpty {
+  border-style: dashed;
+  background: transparent;
+}
+
+/*
+ * An empty pocket has to read as EMPTY.
+ *
+ * `.art` gives every card a sunken background so art with transparency has
+ * something to sit on. Left in place behind the empty variant it fills the
+ * pocket with a solid dark rectangle — which looks exactly like a card whose
+ * image has not loaded, and the two states mean opposite things.
+ */
+.artHostEmpty {
+  background: transparent;
+}
+
+/* --- Meter ---------------------------------------------------------------- */
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  min-width: 0;
+}
+
+.meterTrack {
+  position: relative;
+  height: var(--v2-space-2);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  width: var(--fill);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-accent);
+  transition: width var(--v2-dur) var(--v2-ease);
+}
+
+/*
+ * Complete is gold AND says so in the label beside it. Green-vs-gold is exactly
+ * the pair deuteranopia collapses, so the colour is the reward, never the
+ * information.
+ */
+.meterFillComplete {
+  background: var(--v2-gold);
+}
+
+.meterLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.meterValue {
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-fg);
+}
+
+/* --- Chip ----------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-1);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border-radius: var(--v2-radius-pill);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  white-space: nowrap;
+}
+
+.chipAccent {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent-strong);
+}
+
+.chipWarn {
+  border-color: var(--v2-warn);
+  color: var(--v2-warn);
+}
+
+.chipGold {
+  border-color: var(--v2-gold);
+  color: var(--v2-gold);
+}
+
+/* A chip that does something is a button and must be reachable like one. */
+.chipButton {
+  cursor: pointer;
+  min-height: var(--v2-tap);
+  font: inherit;
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-medium);
+}
+
+.chipButton:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* --- Money ---------------------------------------------------------------- */
+
+.money {
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-price);
+  font-weight: var(--v2-fw-medium);
+}
+
+/*
+ * "Unavailable" and "Pricing…" are not prices and must not look like one.
+ * A grey word cannot be mistaken for a number; `$0.00` can, and did.
+ */
+.moneyAbsent {
+  color: var(--v2-fg-dim);
+  font-weight: var(--v2-fw-regular);
+  font-variant-numeric: normal;
+}
+
+/* --- Rail ----------------------------------------------------------------- */
+
+/*
+ * The desktop side panel.
+ *
+ * Shut, it takes ZERO width — not a narrow column, not a collapsed strip.
+ * While a shut rail still occupied grid track, the binder page next to it lost
+ * 33px of pocket and a 12-pocket page fell to 92px against a 9-pocket page's
+ * 125px. A panel that is not open must cost nothing.
+ */
+.railHost {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  gap: var(--rail-gap);
+  align-items: start;
+  min-width: 0;
+}
+
+.railMain {
+  min-width: 0;
+}
+
+.rail {
+  position: sticky;
+  top: var(--v2-space-4);
+  align-self: start;
+  width: var(--rail-w);
+  max-height: calc(100vh - var(--v2-header-h) - var(--v2-space-6));
+  overflow: hidden auto;
+  background: var(--v2-surface);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  padding: var(--v2-space-4);
+}
+
+.railClosed {
+  display: none;
+}
+
+/* --- Sheet ---------------------------------------------------------------- */
+
+/*
+ * The phone counterpart of the Rail: the same content, from the bottom, where
+ * a thumb is. It is a dialog, so it traps focus and Escape closes it — the one
+ * place in v2 where a focus trap is correct.
+ */
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  background: var(--v2-scrim);
+  z-index: 20;
+}
+
+.sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 21;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--v2-surface);
+  border-top: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-lg) var(--v2-radius-lg) 0 0;
+  box-shadow: var(--v2-shadow-lg);
+  padding: var(--v2-space-4);
+  padding-bottom: max(var(--v2-space-4), env(safe-area-inset-bottom));
+}
+
+.sheetHandle {
+  width: var(--v2-space-7);
+  height: var(--v2-space-1);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-border-strong);
+  margin: var(--v2-space-0) auto var(--v2-space-3);
+  flex: none;
+}
+
+.sheetBody {
+  overflow: hidden auto;
+  min-height: 0;
+}
+
+/* --- Shared --------------------------------------------------------------- */
+
+/*
+ * v2's own screen-reader-only class. `global.css` has one, but it is unscoped
+ * and v2 does not inherit v1's conventions by accident — see `shell/reset.css`.
+ */
+.srOnly {
+  position: absolute;
+  width: var(--v2-border-w);
+  height: var(--v2-border-w);
+  padding: var(--v2-space-0);
+  margin: calc(var(--v2-border-w) * -1);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

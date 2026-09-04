@@ -89,6 +89,35 @@ export const FIXTURES: Record<string, () => void> = {
     for (const b of [full, sparse, bare]) repo.saveBinder(b);
   },
 
+  /**
+   * What a scanning session leaves behind.
+   *
+   * Scan itself stores nothing — it is a camera, a recogniser and a list that
+   * lives for as long as the screen does. What persists is the trail: the
+   * cards it recognised become recently-viewed, and the ones you kept become
+   * owned. So this fixture seeds that trail, which is what the screen needs to
+   * show a returning user something other than an empty page.
+   */
+  scan: () => {
+    ownFirst(3);
+    const repo = repos();
+    const now = Date.now();
+    CARDS.forEach(([cardId, , set, n], i) => {
+      repo.addRecentlyViewed(
+        {
+          id: cardId,
+          name: "Jolteon",
+          setName: set.toUpperCase(),
+          setCode: set,
+          collectorNumber: String(n),
+          imageSmall: IMG(set, n),
+        },
+        // Spread over the last hour so "recent" has an order worth sorting.
+        now - i * 60_000,
+      );
+    });
+  },
+
   /** A binder on offer: copies and conditions, which only trading uses. */
   trade: () => {
     ownFirst(3);

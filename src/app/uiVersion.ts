@@ -67,6 +67,33 @@ export function storeUiVersion(version: UiVersion): void {
 }
 
 /**
+ * Remember a choice and reload onto the same screen.
+ *
+ * It lives here, beside the storage it writes, rather than next to the switch
+ * that calls it — because BOTH shells need it, and v1 importing anything out of
+ * `src/v2/` would pull the rebuild into the entry chunk that every v1 user
+ * downloads. `e2e/v2/bundle.spec.ts` asserts that never happens.
+ *
+ * The `?v=` parameter has to go. It outranks storage, so leaving it would mean
+ * a user who arrived on `?v=2`, pressed V1, and landed on v2 again — the switch
+ * looking broken while behaving exactly as specified. The hash is left alone:
+ * it names the screen, and changing version is not navigating away from it.
+ *
+ * A full reload rather than a re-render: the two versions have different
+ * stylesheets and different assumptions about what is mounted, and swapping
+ * them in place would leave whichever one lost still holding its listeners.
+ */
+export function switchUiVersion(version: UiVersion): void {
+  storeUiVersion(version);
+  const url = new URL(window.location.href);
+  if (url.searchParams.has("v")) {
+    url.searchParams.delete("v");
+    window.history.replaceState(null, "", url.toString());
+  }
+  window.location.reload();
+}
+
+/**
  * The version this device should render, for a given layout mode.
  *
  * The GLASSES never get v2, whatever the flag says. v2 is a web rebuild; the

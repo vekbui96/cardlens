@@ -186,14 +186,39 @@ another stream's markup change.
 ## 4. Phases
 
 **Phase 0 — Foundation. One person. Nothing else starts until it lands.**
+✅ **Done.**
 
 The toggle, the v2 shell, routing, tokens, primitives, fixtures, the workshop
 route, the e2e page-object base, and the visual-regression harness. Everything
 in §3. It is the critical path and it is deliberately not parallel: eight people
 inventing primitives at once is how you get eight card tiles.
 
+What landed, and what a stream can rely on:
+
+| Thing                                      | Where                                             |
+| ------------------------------------------ | ------------------------------------------------- |
+| Toggle (`?v=2`, storage, the switch)       | `src/app/uiVersion.ts`, `src/v2/shell/`           |
+| Tokens, and the lint rule enforcing them   | `src/v2/tokens.css`, `npm run check:v2`           |
+| Primitives                                 | `src/v2/primitives/` — import from its `index.ts` |
+| Shell (header, nav, error boundary, width) | `src/v2/shell/`                                   |
+| Router with per-screen placeholders        | `src/v2/V2Router.tsx`                             |
+| Workshop                                   | `#/dev/workshop`                                  |
+| Fixtures                                   | `src/dev/fixtures.ts`, `?seed=<name>`             |
+| e2e page objects + visual harness          | `e2e/v2/pages/base.ts`, `e2e/v2/visual.spec.ts`   |
+| Bundle-split guard                         | `scripts/check-v2-split.mjs` (runs on `build`)    |
+
+One item on the foundation spec was deliberately deferred — lifting presentation
+helpers out of `models/`. It blocks nothing and would put a shared-module
+refactor directly beneath nine branching streams; the reasoning is in
+`specs/00-foundation.md`.
+
 **Phase 1 — Screens, in parallel.** One stream per spec in `specs/`. Each owns
 its own directory and its own spec, and touches nothing outside it (§5).
+
+To start a stream: read `specs/00-foundation.md` for the vocabulary, then your
+own spec. Replace your screen's entry in `V2Router.tsx`'s switch with a lazy
+import, build under `src/v2/screens/<yours>/`, and add specs under `e2e/v2/`
+(they run at 390 and 1440 automatically — do not edit `playwright.config.ts`).
 
 **Phase 2 — Parity and cutover.** §6.
 
@@ -278,11 +303,21 @@ outlines until it fights all three. This is a bigger leak than anything in
 
 ### 7.3 `--cl-viewport` is what makes screens fluid
 
-`GlassesFrame.module.css:81` sets `--cl-viewport: 100%` on `.webSurface`, and
-**43 CSS modules read it**. That single line is what converts the fixed 600px
-square into a fluid column. A v2 shell that does not render `GlassesFrame` loses
-it, and anything v2 reuses from v1 collapses to a 600px box. v2 must define its
-own equivalent explicitly rather than inheriting by luck.
+`GlassesFrame.module.css:81` sets `--cl-viewport: 100%` on `.webSurface`. That
+single line is what converts the fixed 600px square into a fluid column, and a
+v2 shell that does not render `GlassesFrame` never gets it — the token then
+falls through to the `:root` default in `tokens.css`, which is `600px`.
+
+**Correction (Phase 0).** An earlier draft of this section said 43 CSS modules
+read `--cl-viewport`. That was wrong, and the real number changes what the
+hazard is. Only two do — `GlassesFrame.module.css` and `Screen.module.css` —
+and v2 renders neither. The 43 was a count of modules referencing **any**
+`--cl-*` token, which is a different and much less alarming fact: v2 does not
+use v1's palette either, because it has its own scoped to `[data-ui="v2"]`.
+
+So the hazard is real but narrow: it bites only where v2 reuses a v1 component,
+and Phase 0 handles it by defining `--v2-viewport` outright rather than by
+inheriting anything. Asserted in `e2e/v2/shell.spec.ts`.
 
 ### 7.4 `playwright.config.ts` is a shared, unowned file
 

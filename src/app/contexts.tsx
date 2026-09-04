@@ -9,8 +9,31 @@ import { Repositories } from "../storage/repositories.ts";
 // --- Input ------------------------------------------------------------------
 const InputContext = createContext<AppInputAdapter | null>(null);
 
-export function InputProvider({ children, value }: { children: ReactNode; value?: AppInputAdapter }) {
-  const adapter = useMemo(() => value ?? createInputAdapter(), [value]);
+/**
+ * `wearable={false}` drops the keyboard half of the adapter, leaving only the
+ * DevPanel's mock channel.
+ *
+ * This matters more than it looks. `KeyboardBackedInputAdapter` listens on the
+ * document and `preventDefault()`s arrows, Enter and Escape — correct on the
+ * glasses, where those keys ARE the four gestures and nothing else wants them.
+ * On the web it means any screen that subscribes takes arrow keys away from
+ * every `<select>`, text field and native scroll on the page.
+ *
+ * v1 gets away with it because its web screens pass `enabled: false` to
+ * `useWearableInput`, so nothing subscribes and the listener is never attached
+ * — discipline, at every call site, forever. v2 turns it off at the source
+ * instead, so a v2 screen cannot reintroduce the problem by forgetting a flag.
+ */
+export function InputProvider({
+  children,
+  value,
+  wearable = true,
+}: {
+  children: ReactNode;
+  value?: AppInputAdapter;
+  wearable?: boolean;
+}) {
+  const adapter = useMemo(() => value ?? createInputAdapter(undefined, { wearable }), [value, wearable]);
   return <InputContext.Provider value={adapter}>{children}</InputContext.Provider>;
 }
 

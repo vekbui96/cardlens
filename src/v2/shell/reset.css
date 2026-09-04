@@ -1,0 +1,55 @@
+/*
+ * Undo the parts of `styles/global.css` that v2 must not inherit.
+ *
+ * global.css is written for the glasses, where the app IS a 600x600 square and
+ * centring it in the window is exactly right. v2 is a document that fills the
+ * window, and inheriting that centring gives it a body that vertically centres
+ * the whole page — so a short screen floats in the middle of a 1440x900 window
+ * and a tall one has its header scrolled off the top.
+ *
+ * These selectors are anchored on `html[data-ui="v2"]`, which `V2App` sets and
+ * removes on unmount. The glasses and preview shells never set it, so none of
+ * this can reach them — the cascade cannot get there, rather than us
+ * remembering not to send it.
+ */
+
+html[data-ui="v2"] body {
+  display: block;
+  align-items: initial;
+  justify-content: initial;
+  min-height: 100vh;
+  background: var(--v2-bg);
+  color: var(--v2-fg);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-body);
+  line-height: var(--v2-lh-body);
+}
+
+html[data-ui="v2"] #root {
+  display: block;
+  width: 100%;
+}
+
+/*
+ * global.css sets `:focus { outline: none }` and restores a ring only on
+ * `:focus-visible`. That is the right default, but the ring it restores is
+ * v1's cyan `--cl-focus-ring`, which does not exist in v2's palette and
+ * renders as the browser default. State v2's own, on v2's own token.
+ */
+[data-ui="v2"] :focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+[data-ui="v2"] a {
+  color: var(--v2-accent-strong);
+}
+
+/*
+ * Long-form text gets a measure. Anything past about 80 characters costs the
+ * reader the return sweep, and v1 shipped full-window paragraphs on a 1440px
+ * screen until this was added there too.
+ */
+[data-ui="v2"] p {
+  max-width: 72ch;
+}

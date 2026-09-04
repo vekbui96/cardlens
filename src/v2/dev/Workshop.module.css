@@ -1,0 +1,71 @@
+/*
+ * The workshop's own furniture — labels, swatches, and the boxes that
+ * demonstrate what a primitive does. Nothing here is part of the vocabulary;
+ * screens must never import it.
+ */
+
+.h1 {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+}
+
+.h3 {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  margin: var(--v2-space-0);
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  padding: var(--v2-space-2);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+}
+
+.swatchChip {
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  flex: none;
+}
+
+.swatchName {
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-muted);
+}
+
+.box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--v2-space-7);
+  padding: var(--v2-space-3);
+  background: var(--v2-surface-raised);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/*
+ * The three CardArt demonstrations. These are the CONTAINERS, and the only
+ * thing that differs between them is the width set here — which is the whole
+ * point being made: the art has no size of its own.
+ */
+/* Roughly what a card occupies in a dense set grid — not a token, a demo. */
+.tile {
+  width: calc(var(--v2-pocket) * 0.7);
+}
+
+.pocket {
+  width: var(--v2-pocket);
+}
+
+.hero {
+  width: calc(var(--v2-pocket) * 2);
+}

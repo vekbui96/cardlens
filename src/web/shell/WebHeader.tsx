@@ -3,6 +3,7 @@ import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
 import type { Screen } from "../../app/navigation.ts";
+import { switchUiVersion } from "../../app/uiVersion.ts";
 import styles from "./WebHeader.module.css";
 
 /**
@@ -158,6 +159,24 @@ export function WebHeader() {
                 );
               })}
             </div>
+
+            {/*
+              The way into the rebuild, and the only one a v1 user has.
+
+              It is deliberately a plain menu row rather than a banner: v2 is
+              unfinished, most of its screens still say so, and pushing people
+              into it would be advertising a half-built app. Anyone who wants to
+              compare the two can, and everyone else never notices.
+            */}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              onClick={() => switchUiVersion("v2")}
+            >
+              <span className={styles.itemLabel}>Try the new interface</span>
+              <span className={styles.itemHint}>Still being built · switch back any time</span>
+            </button>
           </div>
         </div>
       ) : null}

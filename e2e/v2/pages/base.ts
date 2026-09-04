@@ -1,0 +1,112 @@
+import { expect, type Locator, type Page } from "@playwright/test";
+
+/**
+ * Page objects for v2, expressed as intent.
+ *
+ * A spec here says `await shell.goTo("Binders")`, not
+ * `page.locator(".nav a:nth-child(5)")`. Nine screens are being built at once
+ * by people who will each rename a class at some point, and a suite written
+ * against class names would break nine times for reasons that are not bugs.
+ *
+ * Everything below selects by ROLE and accessible name. That has a second
+ * effect worth having on purpose: a control the tests can find is a control a
+ * screen reader can find, so an inaccessible screen fails the suite rather than
+ * quietly shipping.
+ */
+
+/** Fixtures, matching `src/dev/fixtures.ts`. */
+export type Fixture = "empty" | "collection" | "binders" | "trade" | "scan";
+
+export interface OpenOptions {
+  /** Named starting state. Applied before React mounts. */
+  seed?: Fixture;
+  /** Catalog simulation — see `initialSimulationFromUrl` in contexts.tsx. */
+  sim?: "fail" | "empty" | "slow";
+}
+
+/**
+ * Open a v2 screen by its hash route.
+ *
+ * `?v=2` pins the version rather than relying on stored state, so a spec cannot
+ * be affected by whatever a previous spec left in localStorage — and so a
+ * failing test's URL can be pasted straight into a browser and show the same
+ * thing.
+ */
+export async function openV2(page: Page, route = "/", options: OpenOptions = {}): Promise<V2Shell> {
+  const params = new URLSearchParams({ v: "2" });
+  if (options.seed) params.set("seed", options.seed);
+  if (options.sim) params.set("sim", options.sim);
+  await page.goto(`/?${params.toString()}#${route}`);
+  const shell = new V2Shell(page);
+  await shell.ready();
+  return shell;
+}
+
+export class V2Shell {
+  constructor(readonly page: Page) {}
+
+  /** The shell is up when its navigation is. */
+  async ready(): Promise<void> {
+    await expect(this.nav).toBeVisible();
+  }
+
+  get nav(): Locator {
+    return this.page.getByRole("navigation", { name: "Main" });
+  }
+
+  get main(): Locator {
+    return this.page.getByRole("main");
+  }
+
+  navLink(label: string): Locator {
+    return this.nav.getByRole("link", { name: label, exact: true });
+  }
+
+  async goTo(label: string): Promise<void> {
+    await this.navLink(label).click();
+  }
+
+  /** The nav entry currently marked `aria-current="page"`. */
+  get current(): Locator {
+    return this.nav.locator('[aria-current="page"]');
+  }
+
+  get versionSwitch(): Locator {
+    return this.page.getByRole("group", { name: "Interface version" });
+  }
+
+  async switchToV1(): Promise<void> {
+    await this.versionSwitch.getByRole("button", { name: "Use interface V1" }).click();
+  }
+
+  /**
+   * True when the v2 shell is the thing on screen. Used to assert the negative
+   * — that `?v=1`, or a glasses-shaped viewport, does NOT get v2.
+   */
+  async isShowing(): Promise<boolean> {
+    return (await this.page.locator('html[data-ui="v2"]').count()) > 0;
+  }
+}
+
+/**
+ * Hide everything that legitimately changes between runs, so a visual snapshot
+ * fails only for a layout change.
+ *
+ * Card art is the big one: it comes from a third-party CDN over the network,
+ * and a slow or missing image is a difference in pixels that says nothing about
+ * the code. The sync line is the other — it counts minutes since a real clock.
+ */
+export async function stabiliseForSnapshot(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: `
+      img { visibility: hidden !important; }
+      [data-snapshot="volatile"] { visibility: hidden !important; }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        caret-color: transparent !important;
+      }
+    `,
+  });
+  await page.waitForLoadState("networkidle");
+}

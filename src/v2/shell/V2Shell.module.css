@@ -1,0 +1,262 @@
+/*
+ * The shell owns width.
+ *
+ * Screens never set a page margin or a max-width of their own — they render
+ * into `.content` and get the gutter from here. That is what stops nine
+ * screens, built in parallel, from each choosing a slightly different left
+ * edge. A screen that genuinely needs a narrower column sets it on its own
+ * inner element, inside the gutter, where it is visibly a local decision.
+ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--v2-bg);
+  color: var(--v2-fg);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-body);
+  line-height: var(--v2-lh-body);
+}
+
+/* --- Skip link ------------------------------------------------------------ */
+
+/*
+ * Off-screen until focused. The navigation is a row of links before the
+ * content on every screen, so without this a keyboard user tabs the whole bar
+ * again on each navigation.
+ */
+.skip {
+  position: absolute;
+  left: var(--v2-space-2);
+  top: var(--v2-space-2);
+  z-index: 30;
+  transform: translateY(-200%);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  font-weight: var(--v2-fw-medium);
+  text-decoration: none;
+  transition: transform var(--v2-dur-fast) var(--v2-ease);
+}
+
+.skip:focus-visible {
+  transform: translateY(0);
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-4);
+  height: var(--v2-header-h);
+  padding-inline: var(--v2-gutter);
+  background: var(--v2-surface);
+  border-bottom: var(--v2-border-w) solid var(--v2-border);
+}
+
+.brand {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: -0.01em;
+  color: var(--v2-fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brandMark {
+  color: var(--v2-accent);
+}
+
+/*
+ * The nav scrolls sideways on a phone rather than wrapping to a second row.
+ * A wrapping bar changes the header's height, which moves the content under it
+ * on the one screen width where there is least of it to spare.
+ */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: var(--v2-tap);
+}
+
+.navLink:hover {
+  color: var(--v2-fg);
+  background: var(--v2-surface-raised);
+}
+
+/* Current is marked by weight and colour AND `aria-current`, not colour alone. */
+.navLinkCurrent {
+  color: var(--v2-accent-strong);
+  background: var(--v2-accent-dim);
+}
+
+.headerEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  flex: none;
+}
+
+/* --- Content -------------------------------------------------------------- */
+
+.content {
+  flex: 1 1 auto;
+  width: 100%;
+  padding: var(--v2-space-5) var(--v2-gutter) var(--v2-space-7);
+  min-width: 0;
+}
+
+/* --- Version switch ------------------------------------------------------- */
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-1);
+  padding: var(--v2-space-1);
+  border-radius: var(--v2-radius-pill);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+}
+
+.switchOption {
+  border: none;
+  background: none;
+  color: var(--v2-fg-dim);
+  font-family: inherit;
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-bold);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border-radius: var(--v2-radius-pill);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+
+.switchOption:hover {
+  color: var(--v2-fg);
+}
+
+.switchOption:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.switchOptionActive {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+/* --- Loading / error ------------------------------------------------------ */
+
+/*
+ * A skeleton in the content area, inside the shell — never a bare spinner on an
+ * empty page. The header and navigation are already correct at this point, and
+ * throwing them away for the duration of a chunk download makes every screen
+ * change look like a full page load.
+ */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-4);
+}
+
+.skeletonBar {
+  height: var(--v2-space-6);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.skeletonBarWide {
+  height: var(--v2-space-7);
+  max-width: 40ch;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.error {
+  border: var(--v2-border-w) solid var(--v2-error);
+  border-radius: var(--v2-radius);
+  padding: var(--v2-space-5);
+  background: var(--v2-surface);
+  max-width: 60ch;
+}
+
+.errorTitle {
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+  font-size: var(--v2-fs-title);
+  color: var(--v2-error);
+}
+
+.errorDetail {
+  color: var(--v2-fg-muted);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-fs-small);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: var(--v2-space-4);
+}
+
+.button {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--v2-accent);
+}
+
+.button:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}

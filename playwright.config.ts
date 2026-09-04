@@ -36,7 +36,20 @@ export default defineConfig({
     viewport: { width: 600, height: 600 },
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 600, height: 600 } } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 600, height: 600 } },
+      /**
+       * The v2 specs are excluded here, not merely included elsewhere.
+       *
+       * This project has no `testMatch`, so it runs everything — and at
+       * 600x600 `resolveLayoutMode` returns `glasses`, where `activeUiVersion`
+       * refuses to serve v2 at all. Every v2 spec would resolve to the v1
+       * glasses shell and fail for a reason that has nothing to do with what it
+       * was testing.
+       */
+      testIgnore: /[\\/]v2[\\/]/,
+    },
     /**
      * A real phone shape. The glasses are small AND square; a phone is small and
      * tall, and layoutMode branches on exactly that difference — so this project
@@ -61,6 +74,28 @@ export default defineConfig({
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
       testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
+    },
+    /**
+     * v2, at the two widths its specs are written against.
+     *
+     * These exist so that no screen stream ever has to edit this file: a spec
+     * dropped anywhere under `e2e/v2/` runs at both widths automatically, and
+     * nine streams adding themselves to a shared regex — in parallel, in
+     * separate worktrees — would conflict on every single merge.
+     *
+     * The widths are exact rather than a device preset because the visual
+     * snapshots are keyed to them. 390 is an iPhone's CSS width, the narrowest
+     * thing that matters; 1440 is a laptop.
+     */
+    {
+      name: "v2-phone",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: false },
+      testMatch: /[\\/]v2[\\/].*\.spec\.ts/,
+    },
+    {
+      name: "v2-desktop",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      testMatch: /[\\/]v2[\\/].*\.spec\.ts/,
     },
   ],
   webServer: [

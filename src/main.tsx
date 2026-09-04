@@ -6,6 +6,21 @@ import { ErrorBoundary } from "./app/ErrorBoundary.tsx";
 import { CompanionPage } from "./pages/CompanionPage.tsx";
 import { PrivacyPage } from "./pages/PrivacyPage.tsx";
 import { isWebMode, layoutOverrideFromLocation, resolveLayoutMode } from "./app/layoutMode.ts";
+import { activeUiVersion } from "./app/uiVersion.ts";
+import { applyFixture, fixtureFromLocation } from "./dev/fixtures.ts";
+
+/**
+ * Seed named data BEFORE React mounts.
+ *
+ * `LibraryProvider` reads storage once, on mount. Applying a fixture from
+ * inside an effect would write underneath a provider that had already read the
+ * old state, so the page would show yesterday's collection until a reload —
+ * which is exactly the unreproducible setup fixtures exist to replace.
+ *
+ * `applyFixture` refuses to run outside dev and e2e, so this is dead code in a
+ * production build.
+ */
+applyFixture(fixtureFromLocation());
 
 /**
  * Tiny path router. The glasses app is a single-screen state machine; only the
@@ -44,6 +59,12 @@ function warmFirstScreen(): void {
   const mode = resolveLayoutMode(window.innerWidth, window.innerHeight, layoutOverrideFromLocation());
   // The glasses Home is eager and already in this bundle; only web pays.
   if (!isWebMode(mode)) return;
+  // v2 has its own entry chunk and a different Home. Warming v1's here would
+  // fetch a screen this session is never going to render.
+  if (activeUiVersion(mode) === "v2") {
+    void import("./v2/V2App.tsx").catch(() => {});
+    return;
+  }
   void import("./web/home/WebHomeScreen.tsx").catch(() => {});
 }
 
