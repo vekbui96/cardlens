@@ -102,6 +102,16 @@ describe("live share links", () => {
     expect(pathToScreen("/live/xyz")).toEqual({ name: "live", shareId: "xyz" });
   });
 
+  it("round-trips a search with no query", () => {
+    // The shell's "Search" link points here. It used to serialise as
+    // `/search/`, which parsed back to nothing and resolved to Home — so the
+    // link worked in-session and broke on reload or when pasted to someone.
+    const screen = { name: "results", query: "" } as const;
+    expect(screenToPath(screen)).toBe("/search");
+    expect(pathToScreen("/search")).toEqual(screen);
+    expect(pathToScreen("/search/")).toEqual(screen);
+  });
+
   it("puts the workshop under /dev/, not at the top level", () => {
     // The prefix says in the URL bar that this is not a screen of the app, and
     // leaves room for the next dev-only page without another special case.

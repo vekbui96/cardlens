@@ -19,8 +19,12 @@ export function screenToPath(screen: Screen): string {
   switch (screen.name) {
     case "home":
       return "/";
+    // An empty query is a real state — the search screen with nothing typed
+    // yet, which is where the shell's "Search" link points. Encoding it as
+    // `/search/` produced a path that parsed back to nothing and silently
+    // resolved to Home on reload or on a pasted link.
     case "results":
-      return `/search/${encodeURIComponent(screen.query)}`;
+      return screen.query ? `/search/${encodeURIComponent(screen.query)}` : "/search";
     case "details":
       return `/card/${encodeURIComponent(screen.cardId)}`;
     case "set":
@@ -73,7 +77,7 @@ export function pathToScreen(path: string): Screen | null {
   if (!head) return { name: "home" };
 
   if (SIMPLE.has(head) && rest.length === 0) return { name: head } as Screen;
-  if (head === "search" && rest[0]) return { name: "results", query: rest.join("/") };
+  if (head === "search") return { name: "results", query: rest.length ? rest.join("/") : "" };
   if (head === "card" && rest[0]) return { name: "details", cardId: rest[0] };
   // The set name rides along because printings are matched to TCGdex by
   // normalised name, not by id — me5 there is me05.
