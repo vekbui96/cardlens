@@ -13,10 +13,19 @@ import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
  * Each stream adds ONE `toHaveScreenshot` per screen to its own spec file under
  * `e2e/v2/`; this file owns the primitives themselves.
  *
- * Updating a snapshot on purpose:
- *   npx playwright test e2e/v2/visual.spec.ts --update-snapshots
- * Read the diff before you do. A snapshot updated without looking is a
- * regression test that has been switched off.
+ * ## Updating a baseline on purpose
+ *
+ * Playwright names a snapshot after the platform that took it, because a
+ * screenshot from Windows and one from Linux genuinely differ — font
+ * rasterisation and scrollbar width. Both sets are committed, and **both have
+ * to be regenerated together**, or CI fails on Linux for a change that looked
+ * fine on Windows:
+ *
+ *   npm run snapshots         # this platform (needs nothing)
+ *   npm run snapshots:linux   # what CI actually gates (needs Docker)
+ *
+ * Read the diff before committing either. A baseline updated without looking is
+ * a regression test that has been switched off.
  */
 
 test.describe("primitives", () => {

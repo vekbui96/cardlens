@@ -20,6 +20,8 @@ What a stream should know before it starts:
 | `npm run build` (its `postbuild`)          | v2 stays out of the entry bundle a v1 user gets |
 | `npx playwright test --project=v2-desktop` | v2 specs at 1440                                |
 | `npx playwright test --project=v2-phone`   | v2 specs at 390                                 |
+| `npm run snapshots`                        | Re-baseline visuals for this platform           |
+| `npm run snapshots:linux`                  | Re-baseline the ones CI gates (needs Docker)    |
 | `?v=2`                                     | Pin the version, whatever is stored             |
 | `?seed=binders`                            | Real data, written through real storage         |
 | `#/dev/workshop`                           | Every primitive, in every state                 |
@@ -98,6 +100,14 @@ new dependency.
 
 Page objects exposing intent. Plus the visual-regression harness: one
 `toHaveScreenshot()` per primitive group and per screen, at 390 and 1440.
+
+Baselines are committed for **both Linux and Windows**, because Playwright keys
+a snapshot to the platform that took it and the two genuinely differ (font
+rasterisation, scrollbar width). CI runs Linux, so Linux is the set that gates
+anything — but a Windows-only baseline would mean every visual change passes
+locally and fails in CI. Regenerate both together: `npm run snapshots` and
+`npm run snapshots:linux` (the latter uses the official Playwright Docker image
+pinned to this repo's version, so it produces exactly what CI compares against).
 
 ## Data
 
