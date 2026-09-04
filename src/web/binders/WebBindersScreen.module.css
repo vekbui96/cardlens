@@ -1,0 +1,503 @@
+/*
+ * The binders list — a shelf, not a table.
+ *
+ * Its own stylesheet rather than borrowing the builder's. The two screens were
+ * sharing WebBinderScreen.module.css for eight class names, which is how the
+ * list ended up styled like a settings form: it inherited whatever the builder
+ * happened to have lying about instead of being designed for the one question
+ * it answers, which is "which binder is that one".
+ */
+
+/* --- The shelf ----------------------------------------------------------- */
+
+/*
+ * Fixed column counts per breakpoint rather than auto-fill.
+ *
+ * auto-fill with a minmax() track is the usual answer and it is wrong here,
+ * because the tile's tallest element is a binder PAGE and its height follows
+ * the column width through a 5/7 aspect ratio. A track that can be any width
+ * between 220px and 1fr therefore makes the tiles any height, and the shelf
+ * jumps a row taller halfway through a window resize. Counted columns make the
+ * geometry predictable enough to reason about: at the 1180px shell a tile is
+ * 280px, so a 12-pocket cover draws a 61x85 pocket — a card, small.
+ */
+.shelf {
+  list-style: none;
+  margin: 0;
+  padding: var(--cl-gap-sm) var(--cl-gap) var(--cl-gap-lg);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cl-gap);
+}
+
+@media (min-width: 560px) {
+  .shelf {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .shelf {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* --- A binder ------------------------------------------------------------ */
+
+.tile {
+  position: relative;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  overflow: hidden;
+}
+
+/*
+ * The whole tile is the target. A binder is opened far more often than anything
+ * else on this screen is done, so it gets the entire area rather than a link on
+ * one line of it.
+ */
+/*
+ * Full height, so every tile in a row is the same box.
+ *
+ * The grid stretches its items by default and the button has to take that
+ * height, or the tile paints a surface the pressable area stops short of — a
+ * click near the bottom edge of a short tile would land on nothing.
+ */
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+  width: 100%;
+  height: 100%;
+  padding: var(--cl-gap-sm);
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.open:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: var(--cl-surface-raised);
+  }
+}
+
+/*
+ * The page the cover sits in.
+ *
+ * Recessed and darker than the tile, so the pockets read as being INSIDE
+ * something. Without it the thumbnails float on the tile's own surface and the
+ * cover looks like a contact sheet rather than a page of a binder.
+ */
+/*
+ * One height for every cover, whatever format is in it.
+ *
+ * The page inside is centred and takes its width from its own shape, so a
+ * 12-pocket page is visibly wider than a 9-pocket one and a 4-pocket page
+ * visibly narrower — which is the difference between the formats. Fixing the
+ * HEIGHT rather than the pocket is what keeps the shelf a shelf.
+ */
+.coverFrame {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 152px;
+  padding: 5px;
+  border-radius: var(--cl-radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+@media (min-width: 560px) {
+  .coverFrame {
+    height: 192px;
+  }
+}
+
+@media (min-width: 1000px) {
+  .coverFrame {
+    height: 212px;
+  }
+}
+
+.cover {
+  display: grid;
+  /* Tighter than the app's smallest gap on purpose: at this scale the pockets
+     of a real sheet nearly touch, and 8px between 34px cards reads as a grid of
+     unrelated pictures instead of a page. */
+  gap: 3px;
+  height: 100%;
+  max-width: 100%;
+}
+
+.coverCard,
+.coverEmpty,
+.coverBlank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+}
+
+.coverCard {
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Not held yet — the same language the pocket uses in the builder, so a binder
+   still being filled reads as half-lit at shelf scale and not merely as one
+   with fewer cards in it. */
+.coverWanted {
+  filter: grayscale(0.8) brightness(0.5);
+}
+
+/* An empty pocket, kept on purpose. Barely there: a page of gaps must not out-
+   shout a page of cards. */
+.coverEmpty {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Full, but no art — a binder filled before the slot carried a thumbnail. Drawn
+   as a face-down card so the pocket still counts as occupied. */
+.coverBlank {
+  background: var(--cl-surface-raised);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* --- What it says -------------------------------------------------------- */
+
+.name {
+  margin-top: var(--cl-gap-xs);
+  font-weight: 650;
+  line-height: 1.25;
+  /* Two lines, then ellipsis. A long name must not push the shelf out of
+     alignment, and one line is not enough for "Riolu & Lucario master". */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tradeTag {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--cl-gold-dim, rgba(242, 181, 68, 0.16));
+  color: var(--cl-gold, var(--cl-price));
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.meter {
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cl-accent);
+  transition: width var(--cl-transition);
+}
+
+/* Gold is "finished, or worth something" in this app, and a filled binder is
+   the first. Paired with the count beside it rather than left to colour alone. */
+.meterFull {
+  background: var(--cl-gold, var(--cl-price));
+}
+
+.meta {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  line-height: 1.35;
+}
+
+/* The figure the bar is drawn from, and brighter than the line under it: it is
+   the number people actually scan for. */
+.count {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+  line-height: 1.3;
+}
+
+.value {
+  display: block;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-gold, var(--cl-price));
+}
+
+/* What the total leaves out, attached to it rather than left to be inferred. */
+.valueNote {
+  font-weight: 400;
+  color: var(--cl-fg-dim);
+}
+
+/* Said out loud rather than left blank: a figure that appears out of nothing
+   reads as a number that changed. */
+.valuePending {
+  display: block;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+/* --- Deleting ------------------------------------------------------------ */
+
+/*
+ * Quiet until wanted.
+ *
+ * It sits over the cover's top-right corner, at 30% opacity, and comes up to
+ * full on hover or focus. On a touch screen there is no hover, so it stays at a
+ * legible 60% — invisible-until-hover is a desktop idiom that strands a phone.
+ */
+.remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(8, 11, 19, 0.72);
+  color: var(--cl-fg-muted);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .remove {
+    opacity: 0;
+  }
+
+  .tile:hover .remove,
+  .remove:focus-visible {
+    opacity: 1;
+  }
+}
+
+.remove:hover {
+  color: var(--cl-error);
+}
+
+.remove:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/*
+ * The confirm covers the binder it is about.
+ *
+ * Over the tile rather than in a modal: what is being deleted is the thing
+ * underneath, and a dialog in the middle of the screen makes you remember which
+ * one you pressed. Nothing else on the shelf is disturbed.
+ */
+.confirm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cl-gap-sm);
+  padding: var(--cl-gap);
+  /* Nearly opaque. At 0.92 the card art read through the question, which is
+     the one moment on this screen where the words matter more than the art. */
+  background: rgba(8, 11, 19, 0.96);
+  text-align: center;
+}
+
+.confirmText {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg);
+  overflow-wrap: anywhere;
+}
+
+.confirmActions {
+  display: flex;
+  gap: var(--cl-gap-sm);
+}
+
+.confirmNo,
+.confirmYes {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--cl-radius-sm);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.confirmNo {
+  border: var(--cl-border-strong);
+  background: transparent;
+  color: var(--cl-fg);
+}
+
+.confirmYes {
+  border: none;
+  background: var(--cl-error);
+  color: #2a0808;
+}
+
+.confirmNo:focus-visible,
+.confirmYes:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- Making one ---------------------------------------------------------- */
+
+/*
+ * Dashed, and full width until there is room for it to be a tile.
+ *
+ * On a phone the shelf is two columns and a 165px tile cannot hold a text
+ * field, three format chips and a button without turning into six stacked
+ * rows. Spanning the row there costs nothing — it is the last item — and the
+ * form gets the width it needs.
+ */
+.createTile {
+  grid-column: 1 / -1;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: transparent;
+}
+
+/*
+ * Two columns wide on desktop, not one.
+ *
+ * A single 280px tile is 248px of usable width and the three format chips
+ * measure 266px, so they wrapped two-and-one — an unbalanced row directly under
+ * a shelf whose whole point is that it lines up. Two columns also gives the
+ * name field and the button a width that looks deliberate rather than stretched,
+ * and with six binders it lands the form exactly at the end of the second row.
+ */
+@media (min-width: 1000px) {
+  .createTile {
+    grid-column: span 2;
+  }
+}
+
+.create {
+  display: flex;
+  flex-direction: column;
+  /* Centred, because the tile is as tall as a binder and the form is not. */
+  justify-content: center;
+  height: 100%;
+  gap: var(--cl-gap-sm);
+  padding: var(--cl-gap);
+}
+
+.createTitle {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-fg-muted);
+}
+
+.input {
+  min-height: 44px;
+  width: 100%;
+  font: inherit;
+  /* 16px minimum or iOS Safari zooms the page on focus. */
+  font-size: max(16px, var(--cl-fs-body));
+  padding: 0 12px;
+  border: var(--cl-border);
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+}
+
+.input:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 1px;
+}
+
+.formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border: var(--cl-border);
+  border-radius: 999px;
+  background: var(--cl-surface);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+.chipOn {
+  background: var(--cl-accent);
+  border-color: transparent;
+  color: var(--cl-on-accent);
+}
+
+.chip:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.primary {
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.primary:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}

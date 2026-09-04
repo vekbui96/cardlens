@@ -125,7 +125,10 @@ test.describe("binders", () => {
 
     await page.goto("/?ui=web#/binders");
     await expect(page.getByText("Doomed")).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).click();
+    // Two presses, on two different buttons. The tombstone is written so the
+    // deletion survives a sync, which is exactly why one press must not do it.
+    await page.getByRole("button", { name: "Delete Doomed" }).click();
+    await page.getByRole("button", { name: "Confirm delete Doomed" }).click();
     await expect(page.getByText("Doomed")).toHaveCount(0);
 
     // Through a reload, because the tombstone lives in storage and a merge on
