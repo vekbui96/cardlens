@@ -58,7 +58,7 @@ container.
 Header, navigation, the screen frame, the error boundary, and the responsive
 rules. **The shell owns width**; screens never set their own page margins.
 
-### 6. `src/dev/fixtures/`
+### 6. `src/dev/fixtures.ts`
 
 Named fixtures loaded with `?seed=<name>`, dev/e2e only, refusing to run in a
 production build. At minimum: `empty`, `collection`, `binders`, `trade`, `scan`.

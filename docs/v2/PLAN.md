@@ -205,18 +205,18 @@ The ownership map is the thing that makes this parallel. A stream owns its
 directory and **nothing else**; a change needed outside it is a request to the
 foundation owner, not an edit.
 
-| Stream            | Spec                        | Owns                                                                                        |
-| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
-| Foundation        | `specs/00-foundation.md`    | `src/v2/{shell,primitives,tokens.css,routing}`, `src/dev/fixtures/`, `e2e/v2/pages/base.ts` |
-| Home              | `specs/01-home.md`          | `src/v2/screens/home/`                                                                      |
-| Collection & sets | `specs/02-collection.md`    | `src/v2/screens/collection/`                                                                |
-| Set cards         | `specs/03-set-cards.md`     | `src/v2/screens/set/`                                                                       |
-| Binders           | `specs/04-binders.md`       | `src/v2/screens/binders/`                                                                   |
-| Binder builder    | `specs/05-binder.md`        | `src/v2/screens/binder/`                                                                    |
-| Scan              | `specs/06-scan.md`          | `src/v2/screens/scan/`                                                                      |
-| Shares & trade    | `specs/07-shares.md`        | `src/v2/screens/share/`                                                                     |
-| Target & sealed   | `specs/08-target-sealed.md` | `src/v2/screens/target/`, `.../sealed/`                                                     |
-| Card details      | `specs/09-details.md`       | `src/v2/screens/details/`                                                                   |
+| Stream            | Spec                         | Owns                                                                                          |
+| ----------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
+| Foundation        | `specs/00-foundation.md`     | `src/v2/{shell,primitives,tokens.css,routing}`, `src/dev/fixtures.ts`, `e2e/v2/pages/base.ts` |
+| Home              | `specs/01-home.md`           | `src/v2/screens/home/`                                                                        |
+| Collection & sets | `specs/02-collection.md`     | `src/v2/screens/collection/`                                                                  |
+| Set cards         | `specs/03-set-cards.md`      | `src/v2/screens/set/`                                                                         |
+| Binders           | `specs/04-binders.md`        | `src/v2/screens/binders/`                                                                     |
+| Binder builder    | `specs/05-binder.md`         | `src/v2/screens/binder/`                                                                      |
+| Scan              | `specs/06-scan.md`           | `src/v2/screens/scan/`                                                                        |
+| Shares & trade    | `specs/07-shares.md`         | `src/v2/screens/share/`                                                                       |
+| Target & sealed   | `specs/08-target-sealed.md`  | `src/v2/screens/target/`, `.../sealed/`                                                       |
+| Search & details  | `specs/09-search-details.md` | `src/v2/screens/search/`, `.../details/`                                                      |
 
 Conflict rules:
 
