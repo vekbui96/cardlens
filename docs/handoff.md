@@ -6,7 +6,61 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
-## Most recent work — the binders list is a shelf (2026-09-04)
+## The binder got a cover, drag, and a picker rail (2026-09-04)
+
+**Shipped as `7746851`, `e21b6c9`, `a394ea9`. BOTH targets** — `binderParse.ts`
+changed, so `D:\services\cardlens` was reset to `e21b6c9` and `cardlens`
+restarted; the cover branch was confirmed present in the deployed file.
+
+- **`cover` is a field on the Binder**, not a page and not a pocket: no
+  position, excluded from `countBinder`, untouched by `reformat`. It had to be
+  named in `models/binderParse.ts` — the shared whitelist — or it would vanish
+  the first time a binder round-tripped through sync.
+- **The binders list shows that cover** when one is set, and falls back to the
+  page mosaic otherwise. Setting a cover is the point; seeing it before you open
+  the binder is where it pays off.
+- **Dragging is pointer-events** (`useBinderDrag.ts`), not HTML5 DnD, because
+  `dragstart` never fires on touch. Mouse drags after 5px; a finger must HOLD
+  first, since on a finger a press that moves is how you scroll.
+
+**Three bugs that each broke the drag outright and showed no error.** Worth
+knowing before touching that file:
+
+1. The document handlers closed over React state. A quick flick is pointerdown,
+   two moves and a pointerup inside one frame, so they ran the whole gesture
+   against `drag === null`. They read a ref now, and the listeners attach once.
+2. Every pocket is an `<img>`, and an image is `draggable` by default — the
+   browser started its own native drag and stopped sending pointermove. A
+   document `dragstart` handler cancels it while a drag is pending.
+3. `touch-action: none` set when the drag starts is TOO LATE: the browser has
+   already decided the gesture is a pan and sent pointercancel. A non-passive
+   `touchmove` that preventDefaults is what actually holds it.
+
+**The picker is a rail on desktop, shut until asked for.** That default is
+arithmetic, not taste — see the comment on `railOpen`. Shut it takes NO grid
+width (absolutely positioned), because even a 28px handle cost the 12-pocket
+spread 3.5px a pocket, and unequal pockets across formats is the failure
+`--cl-binder-pocket` exists to prevent.
+
+**The web shell is no longer capped at 1180px.** It takes the window past
+1000px; the reading measure moved to `[data-shell="web"] p { max-width: 78ch }`,
+which is the smaller and more precise fix. Card previews in the picker also went
+from `thumb` (a fixed 54x76 wrapper) to `fill`, and from `cover` to `contain` —
+they were being cropped through the bottom of every card.
+
+**Drag e2e runs on the DESKTOP project, not phone.** A phone project is
+touch-emulated and Chrome answers a mouse drag by panning — pointercancel on the
+first move, so the gesture never happens. The touch path is covered instead by
+`useBinderDrag.test.ts` with fake timers.
+
+**Three CI e2e failures are PRE-EXISTING and not from this work.** The same
+three fail at `f69632d` (2026-08-29, before any of it): both
+`bulk-mark.spec.ts` triple-pinch tests — the 1200ms race CLAUDE.md already
+documents — and `binders.spec.ts` "carries the total back to the page before".
+That last one passes locally 5/5. They pass on some CI runs and not others; do
+not read them as a regression, and do not assume they are fine either.
+
+## Earlier — the binders list is a shelf (2026-09-04)
 
 **Shipped as `b5fe606`, Pages only, verified live.** No server or model change —
 the diff is `src/web/binders/` plus one e2e expectation, so nothing in
