@@ -1,0 +1,538 @@
+/*
+ * Collection & sets.
+ *
+ * Every length and colour here is a token from `../../tokens.css`; the only
+ * bare numbers are relative units (`em`, `ch`, `%`), which `check-v2-tokens`
+ * allows because they are relative to something the code can already see.
+ *
+ * The screen sets NO page margin and NO max-width. The shell owns both.
+ */
+
+/* --- Heading -------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.summary {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  margin: 0;
+}
+
+/* --- View tabs ------------------------------------------------------------ */
+
+.tabs {
+  display: flex;
+  gap: var(--v2-space-1);
+  padding: var(--v2-space-1);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-surface-sunken);
+  border: var(--v2-border-w) solid var(--v2-border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-pill);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--v2-fg);
+  background: var(--v2-surface-raised);
+}
+
+/*
+ * Current is weight, background AND `aria-current` — never colour on its own.
+ */
+.tabCurrent,
+.tabCurrent:hover {
+  background: var(--v2-accent-dim);
+  color: var(--v2-accent-strong);
+  font-weight: var(--v2-fw-bold);
+}
+
+/* --- Buttons and inputs --------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  text-decoration: none;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.button:hover {
+  border-color: var(--v2-accent);
+}
+
+.sync {
+  white-space: nowrap;
+}
+
+/* On is a filled dot's worth of colour AND the word "on" in the label itself. */
+.syncOn {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent-strong);
+}
+
+.filter {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  min-height: var(--v2-tap);
+  flex: 1 1 14em;
+  max-width: 24em;
+  min-width: 0;
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.filter::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+/* --- Shared text ---------------------------------------------------------- */
+
+.muted {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  margin: 0;
+}
+
+.caption {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  white-space: nowrap;
+}
+
+.note {
+  color: var(--v2-warn);
+  font-size: var(--v2-fs-small);
+  margin: 0;
+}
+
+/* --- Value panel ---------------------------------------------------------- */
+
+.total {
+  font-size: var(--v2-fs-display);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+.movement {
+  display: inline-flex;
+  gap: var(--v2-space-2);
+  align-items: baseline;
+  font-size: var(--v2-fs-small);
+}
+
+.up {
+  color: var(--v2-price);
+  font-variant-numeric: tabular-nums;
+}
+
+.down {
+  color: var(--v2-error);
+  font-variant-numeric: tabular-nums;
+}
+
+.valueList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+.valueRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--v2-space-3);
+  align-items: baseline;
+  font-size: var(--v2-fs-small);
+}
+
+.valueName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valueCount {
+  color: var(--v2-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The expander is a BUTTON, and it says what it is holding back.
+ *
+ * Two lines: the count and the money on the first, the names of every folded
+ * set on the second. A "show more" that does not name what is behind it makes
+ * the reader open it to find out whether they needed to.
+ */
+.expander {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--v2-space-1);
+  width: 100%;
+  text-align: start;
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) dashed var(--v2-border-strong);
+  background: transparent;
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.expander:hover {
+  border-color: var(--v2-accent);
+  border-style: solid;
+}
+
+.expanderLead {
+  font-weight: var(--v2-fw-medium);
+}
+
+.expanderNames {
+  font-size: var(--v2-fs-tiny);
+  line-height: var(--v2-lh-body);
+}
+
+/* --- The set grid --------------------------------------------------------- */
+
+/*
+ * The width goes into COLUMNS, not into a gap inside a row.
+ *
+ * `22em` is the floor a set row needs before its name starts eliding — with
+ * `auto-fill` that is four columns on a 1440px window (≈339px each) and one on
+ * a 390px phone. Stretching a single column across 1440 is what v1 did, and it
+ * put the set name at the far left and the progress figures at the far right
+ * with eleven hundred pixels of nothing between them.
+ *
+ * `min(100%, …)` so a container narrower than the floor gets one column that
+ * fits rather than one column that overflows.
+ */
+.setGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22em), 1fr));
+  gap: var(--v2-space-3);
+}
+
+/*
+ * A row is a Card that happens to be a link, and must not read as body text
+ * with a hyperlink in it.
+ *
+ * The class is doubled on purpose. `shell/reset.css` states
+ * `[data-ui="v2"] a { color: var(--v2-accent-strong) }`, which is (0,1,1) and
+ * therefore outranks the `.card` primitive's own (0,1,0) `color` — so every
+ * `Card href=` in v2 currently draws cyan and underlined. Doubling the class
+ * gets to (0,2,0) without touching either shared file. Reported upstream.
+ */
+.setCard.setCard {
+  height: 100%;
+  color: var(--v2-fg);
+  text-decoration: none;
+}
+
+.setRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--v2-space-3);
+  row-gap: var(--v2-space-1);
+  align-items: center;
+}
+
+.logo {
+  grid-row: 1 / -1;
+  width: 5ch;
+  height: 2.4em;
+  object-fit: contain;
+  flex: none;
+}
+
+.logoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-bold);
+  text-transform: uppercase;
+  overflow: hidden;
+}
+
+.setHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+  min-width: 0;
+}
+
+.setName {
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.setMeta {
+  display: flex;
+  gap: var(--v2-space-2);
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  white-space: nowrap;
+  flex: none;
+}
+
+.code {
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-fs-tiny);
+  text-transform: uppercase;
+  color: var(--v2-fg-dim);
+}
+
+/* --- Completion tiers ----------------------------------------------------- */
+
+/*
+ * Two figures side by side, each with its own WORD.
+ *
+ * Green-for-in-progress against gold-for-complete is exactly the pair a deutan
+ * sees as two yellows, so BASE, MASTER and "complete" carry the meaning; the
+ * colour is only a reward for noticing. The bar is the least important thing on
+ * the line and is the only part allowed to shrink.
+ */
+.tiers {
+  grid-column: 2;
+  display: flex;
+  gap: var(--v2-space-4);
+  min-width: 0;
+}
+
+.tierLine {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--v2-fs-tiny);
+  line-height: var(--v2-lh-tight);
+}
+
+.tierWord {
+  flex: none;
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: 0.06em;
+  color: var(--v2-fg-dim);
+}
+
+.tierWordDone {
+  color: var(--v2-gold);
+}
+
+.tierBar {
+  flex: 1 1 2ch;
+  min-width: 2ch;
+}
+
+.tierCount {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-fg-muted);
+}
+
+.tierDone {
+  color: var(--v2-gold);
+  font-weight: var(--v2-fw-medium);
+}
+
+/* --- Loading -------------------------------------------------------------- */
+
+/*
+ * A skeleton in the SHAPE of a set row, so the list that arrives lands where
+ * the placeholder was. A bare spinner makes the page jump under a reader who
+ * has already started at the top of it.
+ */
+.skeletonRow {
+  height: 3.8em;
+  border-radius: var(--v2-radius);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* --- Everything owned: the list ------------------------------------------- */
+
+.ownedGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20em), 1fr));
+  gap: var(--v2-space-2);
+}
+
+.ownedRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--v2-space-3);
+  align-items: center;
+}
+
+/*
+ * A fixed box whether or not the art loads. Sizing a tile from the image alone
+ * collapsed it to 19px when upstream 404'd.
+ */
+.ownedArt {
+  display: block;
+  width: 2.6em;
+  flex: none;
+}
+
+/* --- Everything owned: the showcase --------------------------------------- */
+
+/*
+ * The stage and the strip are siblings, and the strip is the only thing that
+ * scrolls. Nothing in `Showcase.tsx` may call `scrollIntoView`: it scrolls
+ * ancestors, which is how walking the filmstrip used to drag the large card off
+ * the screen.
+ */
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-5);
+  align-items: flex-start;
+}
+
+.stageArt {
+  flex: 0 1 auto;
+  width: min(100%, 18em);
+}
+
+.stageFacts {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+
+.position {
+  font-size: var(--v2-fs-tiny);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--v2-fg-dim);
+  margin: 0;
+}
+
+.stageName {
+  font-size: var(--v2-fs-title);
+  line-height: var(--v2-lh-tight);
+  font-weight: var(--v2-fw-medium);
+  margin: 0;
+}
+
+.stagePrice {
+  font-size: var(--v2-fs-heading);
+  margin: 0;
+}
+
+.strip {
+  position: relative;
+  display: flex;
+  gap: var(--v2-space-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--v2-space-2);
+  scrollbar-width: thin;
+}
+
+.thumb {
+  flex: 0 0 auto;
+  width: 7em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  font: inherit;
+  text-align: start;
+  padding: var(--v2-space-1);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid transparent;
+  background: transparent;
+  color: var(--v2-fg-muted);
+  cursor: pointer;
+}
+
+.thumb:hover {
+  border-color: var(--v2-border-strong);
+}
+
+.thumbOn {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+  color: var(--v2-fg);
+}
+
+.thumbArt {
+  display: block;
+  width: 100%;
+}
+
+.thumbName {
+  font-size: var(--v2-fs-tiny);
+  line-height: var(--v2-lh-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumbPrice {
+  font-size: var(--v2-fs-tiny);
+}
