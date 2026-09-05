@@ -28,7 +28,7 @@ import {
   type BinderAddress,
   type BinderSlot,
 } from "../../models/binderLayout.ts";
-import { useBinderDrag, type DragSource } from "./useBinderDrag.ts";
+import { useBinderDrag, type DragSource } from "../../features/binders/useBinderDrag.ts";
 import { BinderCoverLeaf } from "./BinderCoverLeaf.tsx";
 import { finishLabel } from "../../models/finishes.ts";
 import { formatUsd } from "../../utils/format.ts";

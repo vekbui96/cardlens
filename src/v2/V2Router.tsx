@@ -30,6 +30,11 @@ const Collection = lazy(() =>
 );
 const SetCards = lazy(() => import("./screens/set/index.ts").then((m) => ({ default: m.SetScreen })));
 const Binders = lazy(() => import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })));
+const Binder = lazy(() => import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })));
+const Search = lazy(() => import("./screens/results/index.ts").then((m) => ({ default: m.ResultsScreen })));
+const Details = lazy(() => import("./screens/details/index.ts").then((m) => ({ default: m.DetailsScreen })));
+const Sealed = lazy(() => import("./screens/sealed/index.ts").then((m) => ({ default: m.SealedScreen })));
+const Target = lazy(() => import("./screens/target/index.ts").then((m) => ({ default: m.TargetScreen })));
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -76,6 +81,18 @@ function render(screen: Screen) {
       return <SetCards setId={screen.setId} setName={screen.setName} />;
     case "binders":
       return <Binders />;
+    case "binder":
+      return <Binder binderId={screen.binderId} />;
+    case "results":
+      return <Search query={screen.query} />;
+    case "details":
+      // Spread, not `summary={screen.summary}` — `exactOptionalPropertyTypes`
+      // distinguishes an absent optional prop from one explicitly `undefined`.
+      return <Details cardId={screen.cardId} {...(screen.summary ? { summary: screen.summary } : {})} />;
+    case "sealed":
+      return <Sealed />;
+    case "target":
+      return <Target />;
     case "workshop":
       return <Workshop />;
     default:

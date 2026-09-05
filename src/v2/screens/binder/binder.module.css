@@ -1,0 +1,680 @@
+/*
+ * The binder builder. Every value is a token from `../../tokens.css`, or a
+ * `calc()` over one.
+ *
+ * No page margin and no max-width — the shell's `.content` owns both.
+ *
+ * ## The one number this file is really about
+ *
+ * A POCKET IS A POCKET. The same physical size whether the page holds 4, 9 or
+ * 12 of them; it is the PAGE that gets wider with more columns. v1 learned this
+ * the hard way — a 12-pocket page drew its pockets at 92px beside a 9-pocket
+ * page's 125px, and the two binders read as different products rather than as
+ * the same cards filed differently.
+ *
+ * So the pocket has a fixed CAP and the page is capped to match: `--pocket-cap`
+ * below, `--page-cap` from it and the column count, and the frame is
+ * `min(100%, cap)`. Above the width where the cap fits, every format draws an
+ * identical pocket. Below it — a phone, or a spread squeezed by the open picker
+ * — the page shrinks rather than overflowing, which is the only other honest
+ * answer: a binder you have to scroll sideways is not a binder you can read.
+ *
+ * The cap is expressed against `--v2-pocket-lg` rather than `--v2-pocket`
+ * because `--v2-pocket` GROWS to 168px at 900px wide (see tokens.css), and eight
+ * of those plus the gutter is a 12-pocket spread 1464px wide against the 1392px
+ * a 1440 window actually has. The shelf can afford the big pocket because it
+ * shows one tile; a binder shows twenty-four at once.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/*
+ * What the screen is waiting for. `aria-live`, because after a place the
+ * selection MOVES — to a pocket that may be off screen — and a sighted user
+ * sees the ring travel while nobody else is told anything at all.
+ */
+.prompt {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+/*
+ * A plain control. Not the `Chip` primitive, because these carry `disabled`,
+ * `aria-expanded` and a `title` and `Chip` takes none of the three — and a
+ * "Remove page" that cannot say why it is off is a button that looks broken.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--v2-space-2);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-pill);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+}
+
+.button:disabled {
+  color: var(--v2-fg-dim);
+  cursor: default;
+}
+
+.buttonOn {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-2);
+}
+
+/* --- Settings ------------------------------------------------------------- */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-4);
+  padding: var(--v2-space-4);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+}
+
+.settingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.settingLabel {
+  min-width: 10ch;
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.settingControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
+/* --- Pages ---------------------------------------------------------------- */
+
+.pages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-5);
+}
+
+/*
+ * One spread. Below the desktop breakpoint it is a single column and the binder
+ * reads one page at a time — three columns either side of a 390px screen is a
+ * 55px pocket, and a phone is held one page at a time anyway.
+ */
+.spread {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--v2-space-4);
+  justify-items: center;
+}
+
+/*
+ * The page's ideal size, from the format alone.
+ *
+ * `--cols` and `--rows` are set inline by the component (see `pageVars`), so a
+ * fourth format would need no new rule here.
+ */
+.frame {
+  --pocket-cap: calc(var(--v2-pocket-lg) * 3 / 4);
+  --page-cap: calc(var(--cols) * var(--pocket-cap) + (var(--cols) - 1) * var(--v2-space-2));
+  width: min(100%, calc(var(--page-cap) + 2 * var(--v2-space-3)));
+  padding: var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+}
+
+/*
+ * 4-pocket holds BIGGER cards, so its pockets are bigger.
+ *
+ * One size for every format is right for 9 and 12, which both sleeve ordinary
+ * 63x88mm cards. It is wrong for 4-pocket, which exists precisely because jumbo
+ * promos and top-loaders do not fit an ordinary sleeve — the same reason
+ * `hasFacingPages` turns facing pages off for it. Drawing a jumbo at the
+ * standard size says the format is merely emptier, when what it actually is, is
+ * larger. Half again is a jumbo's proportion of a standard card, near enough.
+ */
+.frame[data-format="4"] {
+  --pocket-cap: calc(var(--v2-pocket-lg) * 3 / 4 * 3 / 2);
+}
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+  padding-bottom: var(--v2-space-1);
+  border-bottom: var(--v2-border-w) solid var(--v2-border);
+}
+
+.pageNumber {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.pageFormat {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+}
+
+.page {
+  display: grid;
+  /* minmax(0) so a badge can never widen one column and squeeze the others —
+     the pockets in a real page are identical by construction. */
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  /* Declared rather than left implicit: a page is a fixed sheet of rows, and
+     saying so means a format that changed its rows needs no rule here. */
+  grid-template-rows: repeat(var(--rows), auto);
+  gap: var(--v2-space-2);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+/* --- One pocket ----------------------------------------------------------- */
+
+.pocket {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  padding: var(--v2-space-0);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-sm);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pocket:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.art {
+  height: 100%;
+}
+
+/* A card the collection does not hold is a plan, not a possession. It stays
+   placeable and stays visible — that is the point of laying out a binder. */
+.wanted {
+  opacity: 0.45;
+}
+
+.pocketSelected {
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 var(--v2-space-0) var(--v2-space-1) var(--v2-accent-dim);
+}
+
+/* Lit while a dragged card is over it, so the drop lands somewhere the user
+   chose rather than somewhere the pointer happened to be. */
+.pocketOver {
+  border-color: var(--v2-accent-strong);
+  background: var(--v2-accent-dim);
+}
+
+/* The pocket a card was picked UP from, faded while it is in the air —
+   otherwise the card appears to be in two places at once. */
+.pocketDragging {
+  opacity: 0.3;
+}
+
+/* --- Pocket marks --------------------------------------------------------- */
+
+.mark {
+  position: absolute;
+  border-radius: var(--v2-radius-sm);
+  padding: var(--v2-space-0) var(--v2-space-1);
+  background: var(--v2-surface-sunken);
+  font-size: var(--v2-fs-tiny);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--v2-lh-body);
+  pointer-events: none;
+}
+
+.price {
+  right: var(--v2-space-1);
+  bottom: var(--v2-space-1);
+  color: var(--v2-price);
+}
+
+/* Shadowed art alone is a colour, and colour is never the only carrier. */
+.tag {
+  left: var(--v2-space-1);
+  bottom: var(--v2-space-1);
+  color: var(--v2-warn);
+}
+
+.stock {
+  right: var(--v2-space-1);
+  top: var(--v2-space-1);
+  color: var(--v2-fg);
+}
+
+/* "2·5" — how a trade is negotiated out loud. Only on a trade binder. */
+.address {
+  left: var(--v2-space-1);
+  top: var(--v2-space-1);
+  color: var(--v2-fg-muted);
+}
+
+/* --- The cover ------------------------------------------------------------ */
+
+/*
+ * The leaf page 1 opens against, and the one slot every binder has.
+ *
+ * It is NOT a pocket: no index, excluded from the filled count, untouched by
+ * `reformat`. It is drawn as the inside of a front cover rather than as another
+ * page, so that distinction is visible and not just true in the data.
+ */
+.leaf {
+  --pocket-cap: calc(var(--v2-pocket-lg) * 3 / 4);
+  --page-cap: calc(var(--cols) * var(--pocket-cap) + (var(--cols) - 1) * var(--v2-space-2));
+  width: min(100%, calc(var(--page-cap) + 2 * var(--v2-space-3)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-3);
+  border: var(--v2-border-w) dashed var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface-sunken);
+}
+
+/*
+ * Bigger than a pocket, deliberately.
+ *
+ * At a pocket's size the leaf beside a 9-pocket page was a 126px card adrift in
+ * 600px of dashed box — the first snapshot of this screen. The window on the
+ * front of a real binder is the largest single thing on it, and drawing it that
+ * way is also what stops the leaf reading as a page that failed to render.
+ */
+.coverWindow {
+  position: relative;
+  width: min(100%, calc(var(--pocket-cap) * 3 / 2));
+  aspect-ratio: var(--v2-card-aspect);
+  padding: var(--v2-space-0);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface);
+  font: inherit;
+  color: var(--v2-fg-dim);
+  cursor: pointer;
+}
+
+.coverWindow:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* A window, not a call to action. An empty cover is the normal state for most
+   binders and should read as blank stationery, not as a task being nagged. */
+.coverPlus {
+  font-size: var(--v2-fs-title);
+}
+
+.coverName {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.coverKind {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --- The picker ----------------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-3);
+}
+
+.pickerTitle {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.searchForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
+.input {
+  flex: 1 1 12ch;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.input::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.select {
+  flex: 1 1 12ch;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  flex: 1 1 20ch;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  white-space: nowrap;
+}
+
+/*
+ * The card list. A dense grid of art, because that is how a card is recognised
+ * — and every tile is draggable straight into a pocket.
+ */
+.cards {
+  display: grid;
+  /* A fixed column count, not `auto-fill`: this list lives in a 320px rail or a
+     390px sheet, and a track minimum wide enough for a legible tile would drop
+     it to one column in the rail — a single file of cards to scroll past. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--v2-space-2);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  width: 100%;
+  padding: var(--v2-space-1);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  font: inherit;
+  color: var(--v2-fg);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pick:hover {
+  border-color: var(--v2-border-strong);
+}
+
+.pick:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.pickMeta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-tiny);
+  overflow-wrap: anywhere;
+}
+
+/* --- The chosen pocket ---------------------------------------------------- */
+
+/*
+ * Last in the picker, under the list rather than in place of it: choosing a
+ * printing used to replace the results, so the card being compared against
+ * vanished at the moment the comparison mattered.
+ */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-3);
+  padding-top: var(--v2-space-3);
+  border-top: var(--v2-border-w) solid var(--v2-border);
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.detailArt {
+  flex: none;
+  width: var(--v2-space-7);
+}
+
+.detailText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.detailName {
+  font-weight: var(--v2-fw-medium);
+  overflow-wrap: anywhere;
+}
+
+.detailMeta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  overflow-wrap: anywhere;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+}
+
+.rowMain {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+}
+
+.count {
+  min-width: 3ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  margin: var(--v2-space-0);
+  color: var(--v2-error);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- The carried card ----------------------------------------------------- */
+
+/*
+ * The card under the pointer while it is being dragged.
+ *
+ * Fixed to the viewport and `pointer-events: none`, which is not cosmetic: the
+ * hit test that decides where the card lands is `elementFromPoint` at the
+ * pointer, and a ghost that took events would be the answer to every one of
+ * those tests.
+ */
+.ghost {
+  position: fixed;
+  z-index: 40;
+  width: var(--v2-pocket);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: var(--v2-radius-sm);
+  box-shadow: var(--v2-shadow-lg);
+  opacity: 0.9;
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+.skeleton {
+  border-radius: var(--v2-radius-sm);
+  aspect-ratio: var(--v2-card-aspect);
+  background: linear-gradient(90deg, var(--v2-surface), var(--v2-surface-raised), var(--v2-surface));
+  background-size: 300% 100%;
+  animation: shimmer var(--v2-dur-shimmer) linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* --- Desktop -------------------------------------------------------------- */
+
+/*
+ * Facing pages, and the picker beside them rather than over them.
+ *
+ * One breakpoint for both, because they are one decision: a spread only fits
+ * where there is room for a rail beside it, and below that width the binder is
+ * read one page at a time with the picker as a sheet from the bottom — which is
+ * the layout confirmed on hardware.
+ *
+ * 62.5em is 1000px, and it is written in `em` for two reasons. A media query's
+ * `em` is the browser's INITIAL font size rather than the root element's, so
+ * `useWideLayout` can pass the identical string to `matchMedia` and the two
+ * cannot disagree — a px query in the script beside an em query here is exactly
+ * how a rail comes out beside pages that are still stacked. And a media query
+ * cannot read a custom property, so the number has to be written twice
+ * somewhere; `em` is at least a unit `check-v2-tokens` accepts on its own terms
+ * rather than through an escape hatch.
+ *
+ * 1000px is what a 12-pocket spread plus a rail actually costs: two pages of
+ * four pockets and the gutter come to 1108px on their own, and the rail is
+ * another 320.
+ */
+@media (min-width: 62.5em) {
+  .spread[data-abreast] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--v2-space-5);
+  }
+
+  /*
+   * The two leaves meet at the gutter rather than floating in the middle of
+   * their halves, so the spread reads as one binder open on a table.
+   */
+  .spread[data-abreast] > .sideLeft {
+    justify-self: end;
+  }
+
+  .spread[data-abreast] > .sideRight {
+    justify-self: start;
+  }
+
+  /* The spine, drawn on the gap rather than as a border on either page. */
+  .spread[data-abreast]::before {
+    content: "";
+    position: absolute;
+    top: var(--v2-space-0);
+    bottom: var(--v2-space-0);
+    left: 50%;
+    width: var(--v2-border-w);
+    background: var(--v2-border-strong);
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

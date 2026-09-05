@@ -18,6 +18,17 @@ import {
  * with a handler per pocket. A 12-pocket spread is 24 targets that would each
  * need to track enter/leave and reconcile against a drag that can be cancelled
  * mid-flight; hit-testing once per move is both less code and less state.
+ *
+ * It lives under `src/features/` rather than in either shell because BOTH build
+ * a binder now: v1's `web/binders/WebBinderScreen.tsx` and v2's
+ * `v2/screens/binder/`. v2 may not depend on `src/web/`, so the alternative was
+ * a second copy — and the three traps below (a handler reading state instead of
+ * a ref, the browser's own image drag, and `touch-action` applied after the
+ * gesture has been claimed as a pan) each cost a day to find once. Two copies
+ * would drift, and the copy that drifted would fail silently.
+ *
+ * The only contract with a screen is the `[data-pocket]` attribute, whose value
+ * is `addressKey(address)`. Anything carrying one is a drop target.
  */
 
 /** Where the thing being dragged came from. */
