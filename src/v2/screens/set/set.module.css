@@ -1,0 +1,287 @@
+/*
+ * Set cards.
+ *
+ * No raw values: every length and colour here is a token from `../../tokens.css`
+ * and `scripts/check-v2-tokens.mjs` fails the build if one appears. The screen
+ * owns no page margin either — the shell's `.content` supplies the gutter.
+ */
+
+/* --- Title and switcher --------------------------------------------------- */
+
+.title {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+.titleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  margin-inline-start: calc(var(--v2-space-2) * -1);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+
+.titleButton:hover {
+  border-color: var(--v2-border-strong);
+  background: var(--v2-surface);
+}
+
+.titleButton:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.caret {
+  color: var(--v2-accent);
+  font-size: var(--v2-fs-small);
+}
+
+.sheetTitle {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+}
+
+.switchList {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.switchName {
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg);
+}
+
+/* Gold is the reward for noticing; the ★ and the word carry the meaning. */
+.switchTier {
+  color: var(--v2-gold);
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: 0.04em;
+}
+
+.switchCount {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+/* --- Notices and prose ---------------------------------------------------- */
+
+.prose,
+.summary,
+.notice {
+  margin: var(--v2-space-0);
+  max-width: 70ch;
+}
+
+.notice {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.noticeWarn {
+  color: var(--v2-warn);
+}
+
+.summary {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+/* --- Pages ---------------------------------------------------------------- */
+
+/*
+ * Pages sit side by side WHERE THEY FIT, and nowhere else.
+ *
+ * A page is three pockets plus its two gaps plus the panel's own padding, so
+ * that width is what decides how many columns there are — not a breakpoint.
+ * `min(100%, …)` is what keeps a 390px window to one column instead of
+ * overflowing it.
+ *
+ * A FIXED track, not `1fr`. Stretching is the same mistake `auto-fit` makes in
+ * the Grid primitive: at 900px exactly one page fits, and a `1fr` track would
+ * draw that page 852px wide around 504px of pockets — a page that changes width
+ * with the window is not a page. It stays page-sized and the slack stays on the
+ * right, where it is obviously slack.
+ */
+.pages {
+  --page-w: calc(3 * var(--v2-pocket) + 2 * var(--v2-space-2) + 2 * var(--v2-space-4));
+
+  display: grid;
+  grid-template-columns: repeat(auto-fill, min(100%, var(--page-w)));
+  gap: var(--v2-space-4);
+  align-items: start;
+}
+
+/*
+ * Nine pockets, three across, in every format.
+ *
+ * `minmax(0, var(--v2-pocket))` rather than a bare token: the pocket is the size
+ * it wants to be wherever there is room, and shrinks only where the window
+ * genuinely cannot hold three of them — which at 390px, with the shell's
+ * gutter, it cannot. A fixed track there would overflow the page sideways, and
+ * a binder you have to scroll horizontally is not a binder.
+ */
+.pocketGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, var(--v2-pocket)));
+  gap: var(--v2-space-2);
+  justify-content: start;
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.pageCount {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pageCountFull {
+  color: var(--v2-gold);
+  font-weight: var(--v2-fw-medium);
+}
+
+.pageRange {
+  color: var(--v2-fg-dim);
+}
+
+/* --- Flat grid (the filtered view) ---------------------------------------- */
+
+.flatGrid {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+/* --- Pocket --------------------------------------------------------------- */
+
+.pocket {
+  min-width: 0;
+}
+
+.pocketCard {
+  height: 100%;
+}
+
+/* Not in the set at all — a dashed edge, and the words say so too. */
+.pocketExcluded {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.art {
+  position: relative;
+}
+
+/*
+ * Dimmed, not hidden. A grid of greyed art is readable at a glance; a grid with
+ * holes punched in it is not, and the missing card is exactly what is being
+ * looked for.
+ */
+.artMissing {
+  opacity: 0.45;
+  filter: saturate(0.4);
+}
+
+.tick {
+  position: absolute;
+  inset-block-start: var(--v2-space-1);
+  inset-inline-end: var(--v2-space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+.pocketName {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pocketMeta {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pocketFoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-1);
+  font-size: var(--v2-fs-tiny);
+  min-width: 0;
+}
+
+.pocketState {
+  color: var(--v2-fg-dim);
+}
+
+/* The word beside the accent border, because colour is never the only carrier. */
+.pocketHeld {
+  color: var(--v2-accent-strong);
+  font-weight: var(--v2-fw-medium);
+  white-space: nowrap;
+}
+
+/* --- Loading -------------------------------------------------------------- */
+
+.skeletonBar {
+  height: var(--v2-space-5);
+  max-width: 20ch;
+  margin-bottom: var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+  animation: setShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.skeletonPocket {
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    160deg,
+    var(--v2-surface-raised) 25%,
+    var(--v2-surface) 63%,
+    var(--v2-surface-raised)
+  );
+  animation: setShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes setShimmer {
+  from {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
