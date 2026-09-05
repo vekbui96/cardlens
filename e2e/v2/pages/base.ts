@@ -33,6 +33,7 @@ export interface OpenOptions {
  * thing.
  */
 export async function openV2(page: Page, route = "/", options: OpenOptions = {}): Promise<V2Shell> {
+  await stubRemoteImages(page);
   const params = new URLSearchParams({ v: "2" });
   if (options.seed) params.set("seed", options.seed);
   if (options.sim) params.set("sim", options.sim);
@@ -86,6 +87,47 @@ export class V2Shell {
   async isShowing(): Promise<boolean> {
     return (await this.page.locator('html[data-ui="v2"]').count()) > 0;
   }
+}
+
+/**
+ * A 1x1 fully transparent PNG, inline so no test ever reads a file for it.
+ *
+ * Transparent and one pixel because nothing on screen is allowed to depend on
+ * it: every image in v2 is sized by CSS — `CardArt` fills a container holding
+ * `--v2-card-aspect`, a set logo is `5ch` by `2.4em` — so the intrinsic size of
+ * what arrives never reaches layout, and `stabiliseForSnapshot` hides images
+ * before any snapshot anyway.
+ */
+const BLANK_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+  "base64",
+);
+
+/**
+ * Answer every off-site IMAGE request locally, so no v2 spec touches the real
+ * network.
+ *
+ * Card art goes to `images.pokemontcg.io` through the `wsrv.nl` resizing proxy
+ * — two third parties, on the public internet, for nine to twenty-five requests
+ * a page. `stabiliseForSnapshot` then waits for `networkidle`, which cannot
+ * settle until the slowest of them does; under a loaded machine that is a test
+ * failing for the weather. Fulfilling them here makes the wait a local one.
+ *
+ * Fulfilled rather than aborted on purpose: an aborted `<img>` fires `error`,
+ * and a screen is entitled to draw something different when art fails to load.
+ * A 1x1 transparent PNG loads successfully and draws nothing.
+ *
+ * Non-image off-site requests are left alone (`fallback`), so a spec that wants
+ * to stub or observe one still can — and installing this twice is harmless.
+ */
+export async function stubRemoteImages(page: Page): Promise<void> {
+  await page.route(
+    (url) => url.hostname !== "localhost" && url.hostname !== "127.0.0.1",
+    (route) => {
+      if (route.request().resourceType() !== "image") return route.fallback();
+      return route.fulfill({ status: 200, contentType: "image/png", body: BLANK_PNG });
+    },
+  );
 }
 
 /**

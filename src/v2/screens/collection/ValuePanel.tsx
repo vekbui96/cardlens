@@ -103,7 +103,16 @@ export function ValuePanel() {
               <span className={styles.valueCount}>
                 {s.priced}/{s.printings}
               </span>
-              <Money value={s.value} absentLabel="Unpriced" />
+              {/*
+                `Money`'s own absent word, not a local one. The spec's states
+                table says an unpriced SET reads "Unavailable", and that is the
+                word every other money slot in v2 uses for the same condition —
+                a set row saying "Unpriced" beside a card row saying
+                "Unavailable" is two names for one state. The card rows in
+                `OwnedView` override it on purpose and say why; this had no
+                such reason.
+              */}
+              <Money value={s.value} />
             </li>
           ))}
         </ul>

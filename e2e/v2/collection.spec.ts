@@ -386,6 +386,18 @@ test.describe("layout", () => {
 
 /* --- Visual --------------------------------------------------------------- */
 
+/**
+ * These three used to carry a 20s screenshot timeout and a comment blaming set
+ * logos on a third-party CDN. Measured, that was wrong twice over. The mock
+ * catalog's sets carry no `images.logo`, so `SetRow` draws its text fallback and
+ * the two set-list snapshots make ZERO off-site requests. The showcase makes
+ * nine — card art, not logos, through `wsrv.nl`. And because every image here is
+ * sized by CSS and `stabiliseForSnapshot` hides images anyway, the network was
+ * never in the pixels: it was in the `networkidle` wait inside that helper.
+ *
+ * `openV2` now fulfils off-site images locally, so there is nothing to wait for
+ * and the default timeout is the honest one.
+ */
 test.describe("collection @visual", () => {
   test("the set list, with progress", async ({ page }) => {
     await stubPrintings(page);
@@ -393,10 +405,7 @@ test.describe("collection @visual", () => {
     await openV2(page, "/collection");
     await expect(page.getByTestId("pricing-progress")).toHaveText("9 of 24 printings priced");
     await stabiliseForSnapshot(page);
-    // A generous stability window: the set logos come from a third-party CDN
-    // over the real network here, and a phone-width page is tall enough that
-    // the last of them is still settling when the default 5s runs out.
-    await expect(page.getByRole("main")).toHaveScreenshot("collection-sets.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-sets.png");
   });
 
   test("everything owned, on the showcase", async ({ page }) => {
@@ -405,19 +414,13 @@ test.describe("collection @visual", () => {
     await openV2(page, "/owned");
     await expect(page.getByTestId("showcase-stage").getByText("1 of 24", { exact: true })).toBeVisible();
     await stabiliseForSnapshot(page);
-    // A generous stability window: the set logos come from a third-party CDN
-    // over the real network here, and a phone-width page is tall enough that
-    // the last of them is still settling when the default 5s runs out.
-    await expect(page.getByRole("main")).toHaveScreenshot("collection-owned.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-owned.png");
   });
 
   test("an empty collection", async ({ page }) => {
     await openV2(page, "/collection", { seed: "empty" });
     await expect(page.getByTestId("collection-summary")).toHaveText("Nothing tracked yet");
     await stabiliseForSnapshot(page);
-    // A generous stability window: the set logos come from a third-party CDN
-    // over the real network here, and a phone-width page is tall enough that
-    // the last of them is still settling when the default 5s runs out.
-    await expect(page.getByRole("main")).toHaveScreenshot("collection-empty.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-empty.png");
   });
 });
