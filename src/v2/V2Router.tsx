@@ -24,6 +24,10 @@ const Workshop = lazy(() => import("./dev/Workshop.tsx").then((m) => ({ default:
  * file is nine merge conflicts on the file that decides whether the app runs.
  */
 const Home = lazy(() => import("./screens/home/index.ts").then((m) => ({ default: m.HomeScreen })));
+/** One screen behind three route names — see specs/02-collection.md. */
+const Collection = lazy(() =>
+  import("./screens/collection/index.ts").then((m) => ({ default: m.CollectionScreen })),
+);
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -62,6 +66,10 @@ function render(screen: Screen) {
   switch (screen.name) {
     case "home":
       return <Home />;
+    case "collection":
+    case "sets":
+    case "owned":
+      return <Collection />;
     case "workshop":
       return <Workshop />;
     default:
