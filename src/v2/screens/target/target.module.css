@@ -1,0 +1,358 @@
+/*
+ * Target restock. Every value is a token from `../../tokens.css`.
+ *
+ * No page margin and no max-width — the shell's `.content` owns both. Reading
+ * widths are set in `ch`, which is relative to the text it measures and so is
+ * allowed to be written here.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.summary {
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.prose {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  line-height: var(--v2-lh-body);
+  max-width: 72ch;
+}
+
+.proseStrong {
+  color: var(--v2-fg);
+}
+
+/* --- Notices -------------------------------------------------------------- */
+
+/*
+ * A failure panel, bordered so it reads as set apart. The border is the second
+ * channel only: the panel's own heading names what could not be reached, so the
+ * colour is never carrying the fact that something is wrong.
+ */
+.failure {
+  border-color: var(--v2-warn);
+}
+
+.failureTitle {
+  color: var(--v2-warn);
+  font-weight: var(--v2-fw-medium);
+}
+
+/* The same shape for a fact that is good news, so the two cannot be confused. */
+.calm {
+  border-color: var(--v2-border-strong);
+}
+
+/* --- Bot health ----------------------------------------------------------- */
+
+/*
+ * Stats wrap rather than sitting on a fixed grid. Four short pairs fit one line
+ * at 1440 and two at 390 with no breakpoint, and a fifth pair would simply take
+ * its place instead of overflowing a column count that had been guessed.
+ */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-4);
+  margin: var(--v2-space-0);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  min-width: calc(var(--v2-pocket) / 2);
+}
+
+.statLabel {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statValue {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The watchlist -------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-3);
+}
+
+/*
+ * A row the reader has switched off is dimmed AND says "Not being watched" in
+ * words. The opacity is the redundant channel; the sentence is the fact.
+ */
+.rowOff {
+  opacity: 0.65;
+}
+
+.rowHeading {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+/*
+ * The screenshot the bot took of where the cart attempt stopped. Bounded so a
+ * full browser window does not become the tallest thing on the page.
+ */
+.shot {
+  display: block;
+  max-width: 100%;
+  max-height: calc(var(--v2-pocket-lg) * 2);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+}
+
+.productName {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  color: var(--v2-accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--v2-tap);
+}
+
+.productName:hover {
+  color: var(--v2-accent-strong);
+  text-decoration: underline;
+}
+
+.productName:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.meta {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Paired with the word "was" in the sentence itself — never colour alone. */
+.metaStale {
+  color: var(--v2-warn);
+}
+
+/* --- Forms ---------------------------------------------------------------- */
+
+/*
+ * A form field stops at a readable width instead of taking the panel.
+ *
+ * The first baseline had a single-line text box 1390px wide at 1440, which is
+ * not a field, it is a rule with a caret in it. Four pockets is about the width
+ * of the longest thing anyone types here — a Target product URL.
+ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  max-width: calc(var(--v2-pocket-lg) * 4);
+}
+
+.label {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.input {
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  min-height: var(--v2-tap);
+  width: 100%;
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.input::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.submit {
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  /*
+   * As wide as its own words, not as wide as the panel. It sits in a `Stack`,
+   * which stretches its children, and a 1390px "Add to watchlist" reads as a
+   * banner rather than as something you press.
+   */
+  align-self: start;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-5);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid transparent;
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  cursor: pointer;
+}
+
+.submit:disabled {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-dim);
+  border-color: var(--v2-border);
+  cursor: default;
+}
+
+.submit:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.secondary {
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.secondary:hover {
+  border-color: var(--v2-border-strong);
+}
+
+.secondary:disabled {
+  color: var(--v2-fg-dim);
+  cursor: default;
+}
+
+.secondary:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/*
+ * Destructive, and it looks it. Removing a watch is not undoable from here —
+ * the row would have to be added back through a ninety-second browser round
+ * trip — so it is the one control on the screen that is coloured against.
+ */
+.danger {
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-error);
+  background: var(--v2-surface-raised);
+  color: var(--v2-error);
+  cursor: pointer;
+}
+
+.danger:disabled {
+  color: var(--v2-fg-dim);
+  border-color: var(--v2-border);
+  cursor: default;
+}
+
+.danger:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/*
+ * A checkbox and its word, as one target. `min-height` rather than a fixed size
+ * so the label text can wrap without the box shrinking below a thumb.
+ */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  min-height: var(--v2-tap);
+  font-size: var(--v2-fs-small);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: var(--v2-space-4);
+  height: var(--v2-space-4);
+  accent-color: var(--v2-accent);
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+  align-items: center;
+}
+
+.error {
+  margin: var(--v2-space-0);
+  color: var(--v2-error);
+  font-size: var(--v2-fs-small);
+  max-width: 72ch;
+}
+
+.ok {
+  margin: var(--v2-space-0);
+  color: var(--v2-price);
+  font-size: var(--v2-fs-small);
+  max-width: 72ch;
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+/*
+ * The shape of the content, not a spinner: a health panel and three rows, which
+ * is what a small watchlist looks like, so nothing jumps when it arrives.
+ */
+.skeletonRow {
+  height: var(--v2-space-7);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: targetShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes targetShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
