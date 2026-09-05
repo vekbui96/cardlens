@@ -140,7 +140,7 @@ function Shelf({ count, placed }: { count: number; placed: number }) {
     <Card
       href={`#${screenToPath({ name: "binders" })}`}
       label={`Binders: ${label}`}
-      className={styles.tile}
+
       pad={4}
     >
       <Stack gap={1}>

@@ -176,25 +176,6 @@
   text-align: end;
 }
 
-/* --- Tiles ---------------------------------------------------------------- */
-
-/*
- * A `Card` given an `href` renders an `<a>`, and `shell/reset.css` colours every
- * anchor in v2 `--v2-accent-strong` at `[data-ui="v2"] a` — specificity (0,1,1),
- * which beats the primitive's own `.card { color: var(--v2-fg) }` at (0,1,0). So
- * a pressable Card and a linking Card, which are meant to be the same surface,
- * come out as a panel and a paragraph of underlined blue link text.
- *
- * `:link`/`:visited` gets this to (0,2,0) and wins without touching the shared
- * primitive. The real fix belongs in `primitives.module.css` — reported, not
- * forked.
- */
-.tile:link,
-.tile:visited {
-  color: var(--v2-fg);
-  text-decoration: none;
-}
-
 /* --- Progress ------------------------------------------------------------- */
 
 .resumeLabel {

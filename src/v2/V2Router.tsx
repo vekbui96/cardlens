@@ -28,6 +28,9 @@ const Home = lazy(() => import("./screens/home/index.ts").then((m) => ({ default
 const Collection = lazy(() =>
   import("./screens/collection/index.ts").then((m) => ({ default: m.CollectionScreen })),
 );
+const Binders = lazy(() =>
+  import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })),
+);
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -70,6 +73,8 @@ function render(screen: Screen) {
     case "sets":
     case "owned":
       return <Collection />;
+    case "binders":
+      return <Binders />;
     case "workshop":
       return <Workshop />;
     default:

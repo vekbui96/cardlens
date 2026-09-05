@@ -77,7 +77,7 @@ function ResumeCard({ resume }: { resume: ContinueTarget }) {
     <Card
       href={setHref(resume.setId, resume.setName)}
       label={`Pick up where you left off: ${resume.setName}, ${figure.text}`}
-      className={styles.tile}
+
       pad={4}
     >
       <Stack gap={1}>
@@ -117,7 +117,6 @@ function SetRow({ row }: { row: ProgressRow }) {
     <Card
       href={setHref(row.setId, row.setName)}
       label={`${row.setName}, ${figure.text}${word ? `, ${word} complete` : ""}`}
-      className={styles.tile}
     >
       <Meter
         value={figure.ratio}

@@ -24,13 +24,13 @@ export function EmptyHome() {
           this device straight away — sync is optional and comes later.
         </p>
         <div className={styles.actions}>
-          <Card href={`#${screenToPath({ name: "sets" })}`} className={styles.tile} pad={4}>
+          <Card href={`#${screenToPath({ name: "sets" })}`} pad={4}>
             <Stack gap={1}>
               <span className={styles.actionName}>Browse sets</span>
               <span className={styles.actionHint}>Pick a set and tick off what you have</span>
             </Stack>
           </Card>
-          <Card href={`#${screenToPath({ name: "results", query: "" })}`} className={styles.tile} pad={4}>
+          <Card href={`#${screenToPath({ name: "results", query: "" })}`} pad={4}>
             <Stack gap={1}>
               <span className={styles.actionName}>Search for a card</span>
               <span className={styles.actionHint}>By name or collector number</span>

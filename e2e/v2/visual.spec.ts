@@ -54,7 +54,14 @@ test.describe("shell @visual", () => {
   });
 
   test("an unbuilt screen states which spec owns it", async ({ page }) => {
-    await openV2(page, "/binders");
+    /*
+     * Any route no stream has landed yet. It was `/binders` until the shelf was
+     * built, and it has to move again each time a screen lands — which is the
+     * point: this test is a placeholder for the placeholder, and the day there
+     * is no unbuilt route left, it is the test that should be deleted rather
+     * than kept alive by pointing it at something that is finished.
+     */
+    await openV2(page, "/scan");
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("not-built.png");
   });

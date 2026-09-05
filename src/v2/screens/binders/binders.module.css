@@ -1,0 +1,270 @@
+/*
+ * The shelf. Every value is a token from `../../tokens.css`.
+ *
+ * No page margin and no max-width — the shell's `.content` owns both.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.summary {
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Shelf ---------------------------------------------------------------- */
+
+.shelf {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+/*
+ * Every tile in a row is the same height, because the grid stretches them and
+ * the cover inside is a fixed height rather than a share of the column. That is
+ * the whole reason `auto-fill` is safe here: while the cover took its height
+ * from the column width, the shelf jumped a row taller mid-resize.
+ */
+.tile {
+  position: relative;
+  display: flex;
+}
+
+.tile > * {
+  flex: 1 1 auto;
+}
+
+/* --- Cover ---------------------------------------------------------------- */
+
+/*
+ * A cover stands ONE POCKET-LG TALL, whatever is filed in it — the same way a
+ * shelf of real binders stands level. What differs between formats is the
+ * WIDTH, because that is what actually differs: a 12-pocket page is four cards
+ * across and a 9-pocket page is three. Sizing the pocket instead and letting the
+ * page fall out of it made a 4-pocket cover TALLER than a 12-pocket one, which
+ * is backwards on a shelf.
+ */
+.coverFrame {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  height: var(--v2-pocket-lg);
+}
+
+/*
+ * The page. `--cols`, `--rows` and `--page-w` come from the binder's format.
+ *
+ * Fixed height, ideal width, and `max-width: 100%` so a wide format in a narrow
+ * column is squeezed rather than allowed to overflow the tile. The tracks are
+ * `1fr` for the same reason — the pockets absorb the squeeze, and `object-fit`
+ * inside each one keeps the card itself undistorted.
+ */
+.page {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  gap: var(--v2-space-1);
+  height: 100%;
+  width: var(--page-w);
+  max-width: 100%;
+}
+
+/* A chosen cover is drawn as the one card it is, at the frame's full height. */
+.chosen {
+  height: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  max-width: 100%;
+}
+
+/*
+ * The pocket forces both dimensions onto the art, overriding `CardArt`'s own
+ * 5:7. That is deliberate here and nowhere else: the PAGE carries the ratio at
+ * this size, and the image letterboxes inside its pocket exactly as a card does
+ * in a real sleeve.
+ */
+.pocket > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* A card the collection does not hold is a plan, not a possession. */
+.wanted {
+  opacity: 0.4;
+}
+
+/* --- Tile text ------------------------------------------------------------ */
+
+.name {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  overflow-wrap: anywhere;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-fg);
+  font-size: var(--v2-fs-small);
+}
+
+/*
+ * Two lines by design rather than one that wraps. "167/168 · 12-pocket · 14
+ * pages" does not fit a tile at any of the column counts, and where it broke
+ * depended on the name above it — which made a row of tiles ragged for no
+ * reason. It is also the better reading: the first line is how full the binder
+ * is, which is what you scan the shelf for, and the second is what shape it is,
+ * which you look at once.
+ */
+.meta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.note {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- Delete --------------------------------------------------------------- */
+
+/*
+ * A sibling of the open link, not a child of it: an anchor cannot contain a
+ * button, and putting the destructive action inside the thing you press to open
+ * the binder is how it got pressed by accident.
+ */
+.remove {
+  position: absolute;
+  top: var(--v2-space-2);
+  right: var(--v2-space-2);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--v2-tap);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-0);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg-dim);
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: var(--v2-error);
+  border-color: var(--v2-error);
+}
+
+.remove:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/*
+ * The confirmation sits OVER the binder it is about, so there is never a
+ * question of which one is being deleted. A binder is an evening's arrangement
+ * and the delete writes a tombstone that survives a sync — a misclick reaches
+ * every device — so it takes two presses, and the second is a different button.
+ */
+.confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-3);
+  border-radius: var(--v2-radius);
+  border: var(--v2-border-w) solid var(--v2-error);
+  background: var(--v2-surface-raised);
+  text-align: center;
+}
+
+.confirmText {
+  margin: var(--v2-space-0);
+  font-weight: var(--v2-fw-medium);
+}
+
+/* --- Create --------------------------------------------------------------- */
+
+/*
+ * The empty slot on the shelf. Last, and shaped like a binder, so it reads as
+ * "one more goes here" rather than as a settings panel. With no binders at all
+ * it is the only tile on the screen and IS the empty state — the old design put
+ * a "No binders yet" notice underneath the form that answered it.
+ */
+.create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-3);
+  border: var(--v2-border-w) dashed var(--v2-border-strong);
+  border-radius: var(--v2-radius);
+  padding: var(--v2-space-4);
+  background: transparent;
+}
+
+.createTitle {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.input {
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  min-height: var(--v2-tap);
+  width: 100%;
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.input::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.submit {
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid transparent;
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  cursor: pointer;
+}
+
+.submit:disabled {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-dim);
+  border-color: var(--v2-border);
+  cursor: default;
+}
+
+.submit:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
