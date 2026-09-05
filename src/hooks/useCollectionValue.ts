@@ -37,6 +37,20 @@ export interface CollectionValueResult extends CollectionValue {
   /** Sets whose prices could not be loaded at all. */
   failed: number;
   /**
+   * Sets nothing was even asked about, because their name is not known yet.
+   *
+   * `printingsQuery` is `enabled: Boolean(setName)`, and the endpoint needs the
+   * name — TCGdex matches on a normalised name, not on our set id. Until the
+   * set list loads, or for a set the list does not contain at all, there is no
+   * request to wait for.
+   *
+   * These used to be counted as `pending`, because React Query reports a
+   * DISABLED query as `isPending` forever. So a slow or failed set list left
+   * every set reading "pricing…" indefinitely, waiting on a request nobody was
+   * making, and the total never became honest about what it could not include.
+   */
+  unaskable: number;
+  /**
    * Portfolio movement from Cardmarket's EUR averages, as a percentage.
    *
    * A percentage rather than an amount because the series is EUR while the total
@@ -91,11 +105,16 @@ export function useCollectionValue(
     const prices = new Map<string, SetPrintingIndex | null>();
     let pending = 0;
     let failed = 0;
+    let unaskable = 0;
 
     setIds.forEach((setId, i) => {
       const q = queries[i];
       if (!q) return;
-      if (q.isPending) pending += 1;
+      // `fetchStatus === "idle"` alongside `isPending` is React Query's way of
+      // saying "disabled": pending, but with nothing in flight and nothing
+      // scheduled. Counting it as pending is what made "pricing…" permanent.
+      if (q.isPending && q.fetchStatus === "idle") unaskable += 1;
+      else if (q.isPending) pending += 1;
       if (q.isError) failed += 1;
       prices.set(setId, buildPrintingIndex(q.data?.byNumber));
     });
@@ -119,7 +138,7 @@ export function useCollectionValue(
         printingEur(prices.get(row.setId), collectorNumberFromCardId(row.cardId), row.finish),
       ),
     );
-    return { ...value, pending, failed, movement };
+    return { ...value, pending, failed, unaskable, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
   }, [rows, setIds, catalogPrices, queries.map((q) => q.dataUpdatedAt).join(",")]);
 }
