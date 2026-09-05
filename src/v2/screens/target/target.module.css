@@ -1,0 +1,222 @@
+/*
+ * Target's own furniture: a heading, a form, and the controls a form needs.
+ *
+ * Everything structural here is `Stack`, `Row`, `Panel`, `Card` and `Chip` from
+ * the vocabulary. What is left is the one thing the vocabulary does not have —
+ * FORM CONTROLS. There is no Button, no TextField and no Field primitive, so a
+ * screen with a text entry and a submit has to draw them itself. The shell has
+ * already had to do the same thing (`.button` in `V2Shell.module.css`, for the
+ * error boundary's retry), which makes this the second copy rather than the
+ * first. See the stream report.
+ *
+ * No raw values: every length and colour below is a token, exactly as in
+ * `primitives.module.css`, so `npm run check:v2` passes for the same reason it
+ * does there.
+ */
+
+.h1 {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+}
+
+.lead {
+  color: var(--v2-fg-muted);
+  margin: var(--v2-space-0);
+}
+
+/*
+ * A local measure, set on an inner element rather than on the page.
+ *
+ * The shell owns the gutter and the width; a form stretched to 1440px is a
+ * text field a metre long, which is a decision about THIS content and belongs
+ * here where it can be seen next to it.
+ */
+.column {
+  max-width: 62ch;
+}
+
+.label {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg-muted);
+}
+
+.input {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  color: var(--v2-fg);
+  background: var(--v2-surface-sunken);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  min-height: var(--v2-tap);
+  width: 100%;
+}
+
+.input::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+  border-color: var(--v2-accent);
+}
+
+.button {
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  /* A thumb, so it does not shrink on a wide window. */
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.button:hover:enabled {
+  border-color: var(--v2-accent);
+}
+
+.button:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.button:disabled {
+  cursor: default;
+  color: var(--v2-fg-dim);
+  border-color: var(--v2-border);
+}
+
+.buttonPrimary {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-size: var(--v2-fs-body);
+}
+
+.buttonPrimary:disabled {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-dim);
+}
+
+/*
+ * Removing is the one destructive control on the screen, so it is coloured AND
+ * says "Remove" — the word is what carries it, the colour only confirms.
+ */
+.buttonDanger {
+  color: var(--v2-error);
+  border-color: var(--v2-border-strong);
+}
+
+.buttonDanger:hover:enabled {
+  border-color: var(--v2-error);
+}
+
+/* A checkbox and its word, kept on one line and at a real target size. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  min-height: var(--v2-tap);
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  cursor: pointer;
+}
+
+.check input {
+  width: var(--v2-space-4);
+  height: var(--v2-space-4);
+  accent-color: var(--v2-accent);
+  cursor: pointer;
+}
+
+.list {
+  list-style: none;
+  padding-inline-start: var(--v2-space-0);
+  margin: var(--v2-space-0);
+}
+
+.name {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg);
+  text-decoration: none;
+}
+
+.name:hover {
+  color: var(--v2-accent-strong);
+  text-decoration: underline;
+}
+
+.meta {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  margin: var(--v2-space-0);
+}
+
+.note {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  margin: var(--v2-space-0);
+}
+
+.problem {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-error);
+  margin: var(--v2-space-0);
+}
+
+.confirmed {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-price);
+  margin: var(--v2-space-0);
+}
+
+.troubleTitle {
+  font-size: var(--v2-fs-title);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.dim {
+  color: var(--v2-fg-dim);
+}
+
+/* --- Loading -------------------------------------------------------------- */
+
+/*
+ * A skeleton in the shape of the content — a health chip, a form, two rows —
+ * rather than a spinner. The shell has the same shimmer for the same reason;
+ * there is no Skeleton primitive to share, so this is the second copy.
+ */
+.bar {
+  height: var(--v2-space-6);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.barTall {
+  height: var(--v2-space-7);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
