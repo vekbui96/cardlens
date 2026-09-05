@@ -73,15 +73,18 @@ it went last.
   `/search/`, which parsed back to null and resolved to Home — so it worked
   while you clicked it and broke on reload or when the link was shared.
 
-### Open, and worth doing before more streams land
-
-- **`useCollectionValue` counts a disabled query as pending.** A set's pricing
-  query is disabled while its name is unknown, so a slow or failed set list
-  leaves every set reading "pricing…" forever, waiting on a request nobody is
-  making, and the total never becomes honest. Home works around it in
-  `pricingSummary`; the hook itself is unfixed and every screen showing value
-  inherits the bug.
-- Seven streams still need finishing, and 07 still needs starting.
+- **The v2 shell's navigation could vanish at 390px.** The brand and the
+  header's right-hand group were both `flex: none`, so the nav was the only
+  child able to shrink — and shrank to nothing when the sync line got long.
+  Every destination, gone, at the width with least other way to get anywhere.
+  It stayed in the DOM, so only an e2e in an unrelated spec caught it. The nav
+  now has a min-width floor and the sync line truncates instead.
+- ~~`useCollectionValue` counts a disabled query as pending~~ — **fixed.** A
+  set's pricing query is disabled while its name is unknown, and React Query
+  reports a disabled query as `isPending` forever, so a slow or failed set list
+  left every set reading "pricing…" indefinitely, waiting on a request nobody
+  was making. Those are counted as `unaskable` now — not pending, because
+  nothing is happening, and not failed, because nothing was attempted.
 
 ## v2 Phase 0 is built — the rebuild can go parallel now (2026-09-04)
 
