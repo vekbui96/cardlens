@@ -53,8 +53,19 @@ test.describe("shell @visual", () => {
     await expect(page.getByRole("banner")).toHaveScreenshot("header.png");
   });
 
+  /**
+   * Must point at a route no stream has landed yet, or it stops testing the
+   * placeholder and starts testing whatever screen moved in. It was `/binders`
+   * until that stream landed and this failed with an 11k-pixel diff — which is
+   * the test doing its job, but for the wrong reason.
+   *
+   * `/live/:id` belongs to spec 07, the last stream and the only one with a
+   * dependency, so it is the safest bet. When 07 lands, move this to whatever
+   * is still outstanding — or, if nothing is, delete it along with `NotBuilt`.
+   */
   test("an unbuilt screen states which spec owns it", async ({ page }) => {
-    await openV2(page, "/binders");
+    await openV2(page, "/live/not-a-real-share");
+    await expect(page.getByText(/Not built yet/)).toBeVisible();
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("not-built.png");
   });
