@@ -37,6 +37,24 @@ const E2E_TOKEN = "e2e-token";
  */
 const BASE_URL = `http://localhost:${WEB_PORT}`;
 
+/**
+ * A v1 project's file filter, anchored to `e2e/` and NOT `e2e/v2/`.
+ *
+ * The bare form — `/(…|scan|showcase|binders)\.spec\.ts/` — matches anywhere in
+ * the path, so `e2e/v2/binders.spec.ts` matched it too and v2's binder specs
+ * ran under the v1 phone and desktop projects at the wrong viewports, with
+ * touch emulation, and **passed**. A spec passing in a shell it was never
+ * written for is worse than one that fails, because nothing about the output
+ * says it happened.
+ *
+ * `scan`, `showcase`, `trade` and `binders` are all names that exist on both
+ * sides, so this is not a one-off collision — it is every stream whose screen
+ * v1 also has.
+ */
+function v1Only(names: string): RegExp {
+  return new RegExp(`[\\\\/]e2e[\\\\/](?:${names})\\.spec\\.ts$`);
+}
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -78,7 +96,7 @@ export default defineConfig({
     {
       name: "phone",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders|trade)\.spec\.ts/,
+      testMatch: v1Only("phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders|trade"),
     },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec
@@ -88,7 +106,7 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
-      testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
+      testMatch: v1Only("desktop-layout|web-header|owned-cards|set-switcher|scan|showcase|binders"),
     },
     /**
      * v2, at the two widths its specs are written against.
