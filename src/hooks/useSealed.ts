@@ -5,6 +5,7 @@ import { useSets } from "./useSets.ts";
 import type { SetSealed } from "../models/sealed.ts";
 import { companionBase } from "../services/companionApi.ts";
 import { fetchJson } from "../services/http.ts";
+import { settledKey } from "./settledKey.ts";
 
 export interface SealedRow extends SetSealed {
   setName: string;
@@ -95,5 +96,5 @@ export function useSealed(): SealedResult {
     rows.sort((a, b) => b.holdings - a.holdings || a.setName.localeCompare(b.setName));
     return { rows, pending, missing };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; its settled data is what matters
-  }, [setIds, setNames, ownedFinishCountsBySet, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [setIds, setNames, ownedFinishCountsBySet, settledKey(queries)]);
 }

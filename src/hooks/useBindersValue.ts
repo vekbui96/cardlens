@@ -7,6 +7,7 @@ import { cardSlotsOf, summariseBinderValue, type BinderValueSummary } from "../m
 import { setIdFromCardId } from "../utils/cardId.ts";
 import { setPrintingsQuery } from "./useBinderValue.ts";
 import { useSets } from "./useSets.ts";
+import { settledKey } from "./settledKey.ts";
 
 /**
  * What several binders are worth, for the list screen.
@@ -64,7 +65,7 @@ export function useBindersValue(binders: Binder[]): BindersValue {
     return map;
     // Results are a new array each render; the settled data inside is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setIds, results.map((r) => r.dataUpdatedAt).join(",")]);
+  }, [setIds, settledKey(results)]);
 
   const isLoading = results.some((r) => r.isLoading);
 

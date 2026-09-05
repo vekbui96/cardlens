@@ -8,6 +8,7 @@ import { printingsCache } from "../storage/caches.ts";
 import { companionBase } from "../services/companionApi.ts";
 import { fetchJson } from "../services/http.ts";
 import { toSetPrintings } from "./useSetInformation.ts";
+import { settledKey } from "./settledKey.ts";
 
 /**
  * Query options for one set's printings.
@@ -121,5 +122,5 @@ export function useCollectionValue(
     );
     return { ...value, pending, failed, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
-  }, [rows, setIds, catalogPrices, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [rows, setIds, catalogPrices, settledKey(queries)]);
 }

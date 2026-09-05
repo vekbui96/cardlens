@@ -6,6 +6,7 @@ import { setCardsCache } from "../storage/caches.ts";
 import { companionBase } from "../services/companionApi.ts";
 import { shouldUseMocks } from "../integrations/pokemon/index.ts";
 import { fetchJson } from "../services/http.ts";
+import { settledKey } from "./settledKey.ts";
 
 /**
  * pokemontcg.io market prices for every card in the given sets, as one index.
@@ -73,7 +74,7 @@ export function useCatalogPrices(setIds: string[]): Map<string, number> {
     }),
   });
 
-  const fallbackStamp = queries.map((q) => q.dataUpdatedAt).join(",");
+  const fallbackStamp = settledKey(queries);
 
   return useMemo(
     () => {

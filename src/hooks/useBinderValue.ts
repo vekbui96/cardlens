@@ -8,6 +8,7 @@ import { setIdFromCardId } from "../utils/cardId.ts";
 import { printingsCache } from "../storage/caches.ts";
 import { loadPrintings } from "./useSetPrintings.ts";
 import { useSets } from "./useSets.ts";
+import { settledKey } from "./settledKey.ts";
 
 /**
  * Query options for one set's printings.
@@ -111,7 +112,7 @@ export function useBinderValue(binder: Binder | null): BinderValue {
     return map;
     // Results are a new array each render; the data inside is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setIds, results.map((r) => r.dataUpdatedAt).join(",")]);
+  }, [setIds, settledKey(results)]);
 
   const priceFor = useCallback(
     (slot: BinderSlot) => {

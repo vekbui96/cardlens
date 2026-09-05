@@ -9,6 +9,7 @@ import { collectorNumberFromCardId, marketPrice } from "../models/marketPrice.ts
 import { useCatalogPrices } from "./useCatalogPrices.ts";
 import type { OwnedPrintingRow } from "../models/ownedSort.ts";
 import { setCardsCache } from "../storage/caches.ts";
+import { settledKey } from "./settledKey.ts";
 
 /**
  * Every printing you hold, as a flat list with names, art and prices.
@@ -68,8 +69,8 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
    * ESLint cannot read statically is one it cannot check, and an unchecked
    * dependency list is exactly where a stale memo hides.
    */
-  const cardsSettledAt = cardQueries.map((q) => q.dataUpdatedAt).join(",");
-  const pricesSettledAt = priceQueries.map((q) => q.dataUpdatedAt).join(",");
+  const cardsSettledAt = settledKey(cardQueries);
+  const pricesSettledAt = settledKey(priceQueries);
 
   /**
    * Teach the stored rows their collector numbers, from the card lists this
