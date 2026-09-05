@@ -25,7 +25,12 @@ set -euo pipefail
 # against; a different image has different fonts, and the diff then looks like
 # a regression that is really just a different machine.
 IMAGE="mcr.microsoft.com/playwright:v1.61.1-noble"
-OUT="e2e/v2/visual.spec.ts-snapshots"
+# Every `*-snapshots` directory under e2e/v2, not just the foundation's own.
+# Each screen stream keeps its baselines beside its spec — `home.spec.ts` has
+# `home.spec.ts-snapshots` — and an earlier version of this script copied out of
+# one hardcoded directory, so it generated every stream's Linux baselines inside
+# the container and then threw all but one set away.
+OUT="e2e/v2"
 
 INSTALLED="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
 if [[ "$IMAGE" != *"v${INSTALLED}-"* ]]; then
@@ -57,8 +62,17 @@ docker run --rm \
     npm run snapshots --silent
 
     echo "==> exporting linux baselines"
-    cp -v /build/e2e/v2/visual.spec.ts-snapshots/*-linux.png /out/
+    found=0
+    for dir in /build/e2e/v2/*-snapshots; do
+      [ -d "$dir" ] || continue
+      name=$(basename "$dir")
+      ls "$dir"/*-linux.png >/dev/null 2>&1 || continue
+      mkdir -p "/out/$name"
+      cp -v "$dir"/*-linux.png "/out/$name/"
+      found=1
+    done
+    [ "$found" = 1 ] || { echo "no -linux.png produced — did the specs run?" >&2; exit 1; }
   '
 
-echo "==> done. Linux baselines in $OUT:"
-ls -1 "$OUT" | sed 's/^/    /'
+echo "==> done. Linux baselines:"
+ls -1 "$OUT"/*-snapshots/*-linux.png | sed 's/^/    /'

@@ -105,6 +105,23 @@
     transform var(--v2-dur-fast) var(--v2-ease);
 }
 
+/*
+ * A Card rendered as an anchor must look identical to one rendered as a button.
+ *
+ * `shell/reset.css` sets `[data-ui="v2"] a { color: var(--v2-accent-strong) }`,
+ * which is specificity (0,1,1) against `.card`'s (0,1,0) — so it wins, and the
+ * anchor keeps its underline as well. Every linking Card therefore rendered as
+ * a block of underlined blue link text while the button version rendered
+ * correctly, which is exactly the kind of difference nobody attributes to the
+ * primitive. `:link`/`:visited` takes this to (0,2,0) and settles it here,
+ * rather than in each screen that happens to notice.
+ */
+.card:link,
+.card:visited {
+  color: var(--v2-fg);
+  text-decoration: none;
+}
+
 .card:hover {
   border-color: var(--v2-border-strong);
   background: var(--v2-surface-raised);

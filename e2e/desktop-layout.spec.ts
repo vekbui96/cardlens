@@ -290,7 +290,8 @@ test.describe("the trade page at desktop size", () => {
 
   /** Matches the token the e2e API server is started with — see playwright.config.ts. */
   const E2E_TOKEN = "e2e-token";
-  const API = "http://localhost:8787/api";
+  // Follows CL_E2E_API_PORT — see the note in e2e/trade.spec.ts.
+  const API = `http://localhost:${process.env.CL_E2E_API_PORT ?? 8787}/api`;
 
   async function shareTradeBinder(request: APIRequestContext, id: string) {
     const now = Date.now();

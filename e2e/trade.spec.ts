@@ -2,7 +2,12 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 
 /** Matches the token the e2e API server is started with — see playwright.config.ts. */
 const E2E_TOKEN = "e2e-token";
-const API = "http://localhost:8787/api";
+/**
+ * Must follow `CL_E2E_API_PORT`, or this spec talks to whatever happens to be
+ * on 8787 — another checkout's server, or nothing at all. Six tests here failed
+ * with ECONNREFUSED the moment parallel worktrees started using their own ports.
+ */
+const API = `http://localhost:${process.env.CL_E2E_API_PORT ?? 8787}/api`;
 
 /**
  * A binder offered for trade, end to end against the real server.
