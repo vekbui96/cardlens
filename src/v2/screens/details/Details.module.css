@@ -1,0 +1,247 @@
+/*
+ * The card-details screen's own styling. Every value is a token from
+ * `../../tokens.css`.
+ *
+ * No page margin and no max-width on the screen itself — the shell's `.content`
+ * owns both. What IS capped here caps itself on its own element, and measures
+ * in pockets so it stays in step with every other card in the app.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The two columns ------------------------------------------------------ */
+
+/*
+ * Art beside the facts wherever both fit, stacked where they do not.
+ *
+ * No media query and no breakpoint of its own: the art asks for two pockets'
+ * worth of width, the facts ask for three, and the window answers. At 390 the
+ * two bases exceed the content box so the art takes its own line at its own
+ * size, and the facts take the full width below it. At 1440 `--v2-pocket` is
+ * already the larger token and both fit side by side. A hardcoded breakpoint
+ * could not do this — a media query cannot read `--v2-pocket`, so the two
+ * numbers would drift apart the first time the pocket changed.
+ */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-5);
+  align-items: start;
+  min-width: 0;
+  /* Six pockets is about as wide as this page ever wants to be; past that the
+     facts column becomes a line of text with a metre of nothing after it. */
+  max-width: calc(var(--v2-pocket) * 6);
+}
+
+.artColumn {
+  flex: 0 1 calc(var(--v2-pocket) * 2);
+  min-width: 0;
+}
+
+.factsColumn {
+  flex: 1 1 calc(var(--v2-pocket) * 3);
+  min-width: 0;
+}
+
+/* --- Facts ---------------------------------------------------------------- */
+
+/*
+ * A description list, two columns. `<dl>` rather than rows of spans because
+ * that is what this is: terms and their values, which a screen reader can then
+ * navigate as pairs instead of as one run-on sentence.
+ */
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--v2-space-2) var(--v2-space-4);
+  margin: var(--v2-space-0);
+}
+
+/*
+ * The `<dt>`/`<dd>` wrapper keeps a term and its value associated in the markup
+ * while `display: contents` lets the grid above lay the two out as its own
+ * columns. Without the wrapper the pairing is only positional.
+ */
+.factPair {
+  display: contents;
+}
+
+.factTerm {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-small);
+}
+
+.factValue {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* --- Printings ------------------------------------------------------------ */
+
+.printings {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+/*
+ * The mark and the exclusion are two buttons side by side, never one inside the
+ * other. They answer different questions — "do I have this" and "does this
+ * belong in the set at all" — and a button nested in a button is not a thing the
+ * DOM has.
+ */
+.printingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  min-width: 0;
+}
+
+.mark {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * A printing that is not part of this master set. Dashed, dimmed, AND labelled
+ * in words — this is a state that looks exactly like "not owned" until
+ * something says otherwise.
+ */
+.markExcluded {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.printingLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v2-space-3);
+  min-width: 0;
+}
+
+.printingLabel {
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  min-width: 0;
+}
+
+/*
+ * The tick is a glyph, not a colour. A held row is also `selected`, which takes
+ * the accent border, but green-on-dark is exactly what a deutan loses — so the
+ * mark has to be a shape, and the screen-reader word beside it says it outright.
+ */
+.tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+/* The same footprint as the tick, so nothing shifts sideways when one appears. */
+.tickEmpty {
+  display: inline-block;
+  flex: none;
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-pill);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+}
+
+/* --- Lines ---------------------------------------------------------------- */
+
+.note {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  max-width: 70ch;
+}
+
+.coverage {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Paired with the words in the line itself; the colour is only the shortcut. */
+.coverageWarn {
+  color: var(--v2-warn);
+}
+
+.warnPanel {
+  border-color: var(--v2-warn);
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+/*
+ * The shape of the content: one large card and a column of lines beside it.
+ * A spinner would say "something is happening"; this says what is about to be
+ * there, and nothing jumps when it lands.
+ */
+.skeletonArt {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: detailsShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.skeletonLine {
+  display: block;
+  width: 100%;
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+}
+
+.skeletonLineShort {
+  width: 50%;
+}
+
+@keyframes detailsShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
