@@ -1,0 +1,64 @@
+/*
+ * Sealed's own furniture, and there is deliberately almost none of it.
+ *
+ * The screen is `Stack` + `Panel` + `Row` + `Money` + `Chip` and nothing else —
+ * one panel per set, four figures across. What is left here is a heading (the
+ * vocabulary has no type primitive, so every screen writes its own h1), two
+ * muted labels, and the loading shimmer.
+ *
+ * No raw values: every length and colour is a token, so `npm run check:v2`
+ * passes for the same reason `primitives.module.css` does.
+ */
+
+.h1 {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+}
+
+.lead {
+  color: var(--v2-fg-muted);
+  margin: var(--v2-space-0);
+}
+
+.kind {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.meta {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+  margin: var(--v2-space-0);
+}
+
+/* A price cell is fixed-width so four sets' figures line up as a column. */
+.cell {
+  min-width: 18ch;
+}
+
+.bar {
+  height: var(--v2-space-6);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.barTall {
+  height: var(--v2-space-7);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
