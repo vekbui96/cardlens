@@ -79,6 +79,15 @@ export default defineConfig({
       name: "phone",
       use: { ...devices["Pixel 7"] },
       testMatch: /(phone-layout|web-header|owned-cards|set-switcher|scan|showcase|binders|trade)\.spec\.ts/,
+      /*
+       * These names match on BASENAME, so `e2e/v2/binders.spec.ts` matched the
+       * `binders` alternative and the v2 shelf quietly ran here as well as in
+       * its own two projects — four viewports instead of two, at a size no v2
+       * spec is written against. `scan`, `showcase` and `trade` are v2 spec
+       * names too, so the next three streams would each have hit it. Excluded
+       * for the same reason `chromium` excludes them, one line up.
+       */
+      testIgnore: /[\\/]v2[\\/]/,
     },
     /**
      * A laptop. Same reason the phone project is scoped: every other spec
@@ -89,6 +98,8 @@ export default defineConfig({
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
       testMatch: /(desktop-layout|web-header|owned-cards|set-switcher|scan|showcase|binders)\.spec\.ts/,
+      /* Same basename collision as `phone` above. */
+      testIgnore: /[\\/]v2[\\/]/,
     },
     /**
      * v2, at the two widths its specs are written against.
