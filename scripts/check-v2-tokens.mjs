@@ -38,6 +38,12 @@ const RULES = [
  * Lines exempted with an explicit note. There is always a case the rule did
  * not anticipate, and a comment saying which is better than a rule people
  * route around by moving the value somewhere it is not checked.
+ *
+ * Accepted on the offending line OR the line above it. Both, because Prettier
+ * decides which: a comment written after `@media (min-width: 1000px) {` is
+ * moved onto the next line by `format`, which used to put it off the only line
+ * this checked — so the sanctioned escape hatch did not survive the sanctioned
+ * formatter, and the one stream that tried it had to find another way out.
  */
 const ALLOW = /v2-tokens-allow/;
 
@@ -81,7 +87,7 @@ for (const path of walk(V2)) {
       return;
     }
     const code = line.replace(/\/\*.*?\*\//g, "").replace(/\/\/.*$/, "");
-    if (!code.trim() || ALLOW.test(line)) return;
+    if (!code.trim() || ALLOW.test(line) || ALLOW.test(lines[i - 1] ?? "")) return;
     if (!isCss && !STYLE_CONTEXT.test(code)) return;
 
     for (const rule of RULES) {
@@ -111,7 +117,7 @@ for (const f of failures) {
   console.error(`    ${f.source}`);
 }
 console.error(
-  "\nAdd a token and use it. If a value genuinely cannot be one, append a\n" +
-    "`v2-tokens-allow` comment on that line saying why.\n",
+  "\nAdd a token and use it. If a value genuinely cannot be one, put a\n" +
+    "`v2-tokens-allow` comment on that line or the line above it, saying why.\n",
 );
 process.exit(1);
