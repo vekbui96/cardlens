@@ -138,6 +138,29 @@ test.describe("the shell holds", () => {
     await expect(skip).toHaveAttribute("href", "#v2-main");
   });
 
+  /**
+   * The navigation must survive the LONGEST thing the header can say, at the
+   * NARROWEST width. It did not: the brand and the header's right-hand side
+   * were both `flex: none`, so the nav was the only child able to shrink and a
+   * long sync label squeezed it to zero width. The element stayed in the DOM
+   * and simply stopped being visible, which is why nothing caught it until an
+   * unrelated spec happened to seed a sync token at 390px.
+   */
+  test("the navigation survives the longest sync message at 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const shell = await openV2(page);
+    // "Sync: token rejected" is the longest of the six lines syncLine produces.
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-snapshot="volatile"]');
+      if (el) el.textContent = "Sync: token rejected";
+    });
+    await expect(shell.nav).toBeVisible();
+    const width = await shell.nav.evaluate((el) => el.getBoundingClientRect().width);
+    expect(width).toBeGreaterThan(0);
+    // And every destination is still reachable by scrolling that strip.
+    await expect(shell.navLink("Binders")).toHaveCount(1);
+  });
+
   test("sync status is reachable from the shell", async ({ page }) => {
     const shell = await openV2(page);
     await expect(shell.page.locator('[data-snapshot="volatile"]')).toContainText("Sync:");

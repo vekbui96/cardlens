@@ -83,7 +83,17 @@
   align-items: center;
   gap: var(--v2-space-1);
   flex: 1 1 auto;
-  min-width: 0;
+  /*
+   * A FLOOR, not `0`.
+   *
+   * With `min-width: 0` the nav was the only flex child allowed to shrink —
+   * the brand and the header's right-hand side were both `flex: none` — so at
+   * 390px a longer sync label ("Sync: token rejected") squeezed it to zero
+   * width and the entire navigation vanished. It was still in the DOM, which
+   * is why it took an e2e failure rather than a glance to find: the element
+   * resolved, and was simply not visible.
+   */
+  min-width: var(--v2-space-7);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -120,11 +130,24 @@
   background: var(--v2-accent-dim);
 }
 
+/*
+ * Allowed to shrink, and to truncate the sync line while doing it. The version
+ * switch inside it does not shrink — it is the control that gets someone out of
+ * a broken v2, so it is the last thing that may be squeezed away.
+ */
 .headerEnd {
   display: flex;
   align-items: center;
   gap: var(--v2-space-2);
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.syncLine {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- Content -------------------------------------------------------------- */

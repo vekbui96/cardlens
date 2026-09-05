@@ -94,7 +94,7 @@ export function V2Shell({ children, version }: V2ShellProps) {
             `syncLine`, shared with v1 so the two cannot drift apart.
           */}
           <span
-            className={styles.navLink}
+            className={cx(styles.navLink, styles.syncLine)}
             title={sync.hint}
             aria-label={`${sync.label}. ${sync.hint}`}
             // Its text counts minutes against a real clock, so it differs
