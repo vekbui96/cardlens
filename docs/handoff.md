@@ -6,41 +6,50 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
-## v2 Phase 1: Home landed, seven streams are unfinished WIP branches (2026-09-04)
+## v2 Phase 1 is complete — all nine specs are built (2026-09-05)
 
-Eight screen streams were run in parallel, one per worktree. **The session hit
-its rate limit and terminated seven of them mid-run.** Nothing was lost — every
-one had produced real work, and all of it is committed and pushed. But only
-Home is finished, verified and on `main`.
+Every screen in `docs/v2/specs/` is built, verified and wired. `V2Router.tsx`
+has no unbuilt routes left, and the "not built yet" placeholder now has no
+subject (its visual test was deleted; `NotBuilt` stays as the `default:` case
+in case the `Screen` union grows).
 
-### On `main` and working
+**Still opt-in and still off by default.** `?v=2`, or "Try the new interface"
+in v1's menu. A v1 user downloads none of it.
 
-**Home** (`src/v2/screens/home/`), wired in `V2Router.tsx`. Open `?v=2`. It is
-the first screen that is not a placeholder.
+| Screen                           | Directory                     | Spec |
+| -------------------------------- | ----------------------------- | ---- |
+| Home                             | `src/v2/screens/home/`        | 01   |
+| Collection / Sets / Owned        | `.../collection/`             | 02   |
+| Set cards                        | `.../set/`                    | 03   |
+| Binders shelf                    | `.../binders/`                | 04   |
+| Binder builder (+`BinderSpread`) | `.../binder/`                 | 05   |
+| Scan                             | `.../scan/`                   | 06   |
+| Showcase / Live / Trade          | `.../share/`                  | 07   |
+| Target, Sealed                   | `.../target/`, `.../sealed/`  | 08   |
+| Search, Card details             | `.../search/`, `.../details/` | 09   |
 
-### Unfinished, on branches, NOT verified
+Eight streams ran in parallel, one worktree each. **The session hit its rate
+limit twice and killed most of them mid-run.** Nothing was lost: each branch was
+committed and pushed as WIP, then merged, finished and verified one at a time.
+The `worktree-agent-*` branches are all merged and can be deleted.
 
-Each branch has one WIP commit whose message says where that stream stopped and
-what to check first. **None of them has passed verify/e2e/visual, and none is
-wired into the router.** Do not merge one without running the gates and reading
-it against its spec.
+Spec 07 was written by hand — its stream died before reading a file — and it is
+the one screen with a dependency, on the builder's `BinderSpread`, which is why
+it went last.
 
-| Branch (`worktree-agent-…`) | Screen                | Spec |
-| --------------------------- | --------------------- | ---- |
-| `a56f06761c5839740`         | Collection & sets     | 02   |
-| `ad9bf3051d33f8d41`         | Set cards             | 03   |
-| `aa40e13ab132188b0`         | Binders shelf         | 04   |
-| `ab31e2d554a818275`         | Binder builder        | 05   |
-| `ae869b53c2461ab3e`         | Scan                  | 06   |
-| `af96471645c3d7533`         | Target & Sealed       | 08   |
-| `a2d64576667105c7a`         | Search & card details | 09   |
+### What is NOT done
 
-**Spec 07 (shares & trade) was never started.** It is the one stream with a
-dependency: it needs a read-only `BinderSpread` exported by the builder (05).
-Check whether that export exists on `ab31e2d554a818275` before starting it.
-
-To resume one: merge the branch, wire its screen into `V2Router.tsx` (the
-integrator's file — no stream edits it), then run the gates.
+- **Parity and cutover (Phase 2, `PLAN.md` §6).** v2 defaults to off and should
+  stay that way until someone has actually used each screen against a real
+  collection. The specs' acceptance lists pass; that is not the same as the app
+  being better, which is what the toggle exists to let you judge.
+- Two primitives are provably missing, each reinvented by more than one stream:
+  `Card` cannot take `onPress` alongside `href`, cannot emit
+  `aria-pressed="false"`, and cannot carry a `data-` attribute; and there is no
+  text-input primitive, so search and the binder picker each styled their own.
+- `?sim=empty` is ignored by the mock provider's `getCardsBySet`, so any spec
+  relying on it to see an empty set view silently tests the non-empty path.
+- Offline is not exercised end to end; there is no network-drop harness.
 
 ### Traps this phase found
 
