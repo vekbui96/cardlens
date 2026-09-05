@@ -1,0 +1,298 @@
+/*
+ * The set screen's own styling. Every value is a token from `../../tokens.css`.
+ *
+ * There is no page margin and no max-width here on purpose — the shell's
+ * `.content` owns both, and a screen that sets its own left edge stops lining up
+ * with the other eight.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+  min-width: 0;
+}
+
+.line {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Paired with the words "No prices for any of…" in the line itself. The colour
+ * is the shortcut; the sentence is the information.
+ */
+.lineWarn {
+  color: var(--v2-warn);
+}
+
+/*
+ * The progress bar is a figure, not a rule across the page. Left to fill 1440px
+ * its two labels end up at opposite ends of the window with a metre of nothing
+ * between them, and the pair stops reading as one sentence. Four pockets wide is
+ * about a line of text, and it scales with the pocket rather than with a number
+ * this file would have to keep in step with `tokens.css` by hand.
+ */
+.progress {
+  max-width: calc(var(--v2-pocket) * 4);
+}
+
+.note {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  max-width: 70ch;
+}
+
+/* The milestone word, which carries what a gold bar cannot. */
+.tierWord {
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: 0.04em;
+}
+
+.tierBase {
+  color: var(--v2-price);
+}
+
+.tierMaster {
+  color: var(--v2-gold);
+}
+
+/* --- Filters -------------------------------------------------------------- */
+
+/*
+ * A `<div role="group">` rather than a `Row`, because the group and its label
+ * are what make five loose chips read as one control to a screen reader. The
+ * flex lives here so the role does not have to be smuggled through a primitive.
+ */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+  min-width: 0;
+}
+
+/* --- Pages ---------------------------------------------------------------- */
+
+/*
+ * Binder pages, side by side wherever two of them fit.
+ *
+ * No media query, and no breakpoint of its own: a page asks for exactly three
+ * pockets' worth of width and the window answers. At 390 that basis exceeds the
+ * content box, so flex shrinks the single page to fit and the pockets come out
+ * three across at whatever width is left — which is the right answer, because a
+ * nine-pocket page is 3x3 or it is not a page. At 1440 `--v2-pocket` is already
+ * the larger size, two pages fit, and `max-width` stops them stretching past the
+ * pocket size the token asked for. A hardcoded `900px` here could not do this:
+ * a media query cannot read `--v2-pocket`, so the two numbers would drift.
+ */
+.pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-5);
+  align-items: start;
+  min-width: 0;
+}
+
+.page {
+  flex: 1 1 calc(var(--v2-pocket) * 3);
+  max-width: calc(var(--v2-pocket) * 3 + var(--v2-space-2) * 2);
+  min-width: 0;
+}
+
+/*
+ * Three columns, always. `minmax(0, 1fr)` rather than `auto-fill` because this
+ * grid is a physical object: a page that dropped to two columns on a narrow
+ * window would still be labelled "Page 4, 28–36" while showing a shape no
+ * binder sheet has.
+ */
+.pockets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--v2-space-2);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+/*
+ * A grid item stretches to its row, so making the `<li>` a grid makes the
+ * pocket inside it fill the cell. Without this a short caption leaves the tile
+ * floating in the middle of a row sized by its tallest neighbour.
+ */
+.pockets > li,
+.flat > li {
+  display: grid;
+  min-width: 0;
+}
+
+/*
+ * The filtered view. `Grid` supplies the columns, which reflow to the window
+ * rather than holding a 3x3 shape — deliberately unlike a page, because it is
+ * not one.
+ */
+.flat {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.flatHeading {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Something the reader has to know about. The border carries it, and the panel
+ * title says it in words — colour is never the only carrier.
+ */
+.warnPanel {
+  border-color: var(--v2-warn);
+}
+
+.pageRange {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.pageCount {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Pockets -------------------------------------------------------------- */
+
+.pocket {
+  height: 100%;
+}
+
+/*
+ * An excluded printing is not a missing one. Dashed, dimmed, AND labelled
+ * "Excluded" in words — this is a state that looks exactly like "not owned"
+ * until something says otherwise.
+ */
+.pocketExcluded {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.art {
+  position: relative;
+  display: block;
+}
+
+/*
+ * The tick is a glyph, not a colour. A held pocket is also `selected`, which
+ * takes the accent border, but green-on-dark is exactly what a deutan loses —
+ * so the mark has to be a shape, and the screen-reader text below says the word.
+ */
+.tick {
+  position: absolute;
+  inset: auto var(--v2-space-1) var(--v2-space-1) auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+/*
+ * Dim the art of a printing that is not held, rather than hiding it: a grid of
+ * greyed cards is readable at a glance, a grid with holes in it is not.
+ */
+.artMissing {
+  opacity: 0.45;
+}
+
+.pocketName {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  /* Two lines, then ellipsis. A card name is the thing you scan for. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pocketMeta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-tiny);
+  line-height: var(--v2-lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.pocketPrice {
+  font-size: var(--v2-fs-tiny);
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+/*
+ * The shape of the content, in collector order — two pages of nine, because
+ * that is what arrives. A spinner would say "something is happening"; this says
+ * what is about to be there, and nothing jumps when it lands.
+ */
+.skeletonPocket {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: setShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.skeletonMarker {
+  display: block;
+  width: 50%;
+  height: var(--v2-space-5);
+  margin-bottom: var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+}
+
+@keyframes setShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* --- Switcher ------------------------------------------------------------- */
+
+.switchList {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+.switchName {
+  font-weight: var(--v2-fw-medium);
+}
