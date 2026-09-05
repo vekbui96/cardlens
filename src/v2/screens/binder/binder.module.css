@@ -1,0 +1,569 @@
+/*
+ * The binder builder.
+ *
+ * No raw values: every length and colour is a token from `../../tokens.css`,
+ * and `scripts/check-v2-tokens.mjs` fails the build on one that is not. The
+ * bare numbers below are COUNTS — how many gaps sit between four pockets — not
+ * sizes, which is why they are written as arithmetic over tokens rather than as
+ * a figure somebody would later have to recognise.
+ */
+
+/* --- Geometry: a pocket is a pocket --------------------------------------- */
+
+/*
+ * THE ONE RULE THIS FILE EXISTS FOR.
+ *
+ * A pocket is the same size in a 9-pocket binder and a 12-pocket binder, and
+ * BIGGER in a 4-pocket one, which exists for jumbo promos and top-loaders. The
+ * PAGE gets wider with more columns; the pocket never shrinks. v1 divided one
+ * fixed page width by the column count instead, and drew the same card at
+ * 141px in a 9, 104px in a 12 and 256px in a 4 — so a card's size told you
+ * which binder it had been filed in, and nothing else.
+ *
+ * So the pocket is derived from the WIDEST format the layout has to hold, and
+ * every format then uses that number:
+ *
+ *   pocket = min(the token, what four columns can afford here)
+ *   page   = cols x pocket + (cols - 1) gaps + the page's own chrome
+ *
+ * The `4` and the `8` are the widest format's column count — four across, one
+ * page at a time on a phone; twice that for two facing pages on a desktop.
+ * They are constants of the FORMAT, not of the window, which is why 9 and 12
+ * come out identical at every width including a half-open rail.
+ *
+ * `--binder-pocket` is used in exactly one place: inside `--binder-page`,
+ * inside `grid-template-columns` on this element. It contains a percentage, and
+ * a percentage resolves against whatever property finally consumes it — so
+ * reading it on a child would silently measure the child instead, and the two
+ * page widths would stop agreeing. Do not use it anywhere else.
+ */
+.spread {
+  --binder-gap: var(--v2-space-1);
+  --binder-pad: var(--v2-space-2);
+  /* What a page costs beyond its pockets: its own padding and border. */
+  --binder-chrome: calc(2 * var(--binder-pad) + 2 * var(--v2-border-w));
+  --binder-pocket: min(var(--v2-pocket), (100% - 3 * var(--binder-gap) - var(--binder-chrome)) / 4);
+  --binder-page: calc(
+    var(--binder-cols, 3) * var(--binder-pocket) + (var(--binder-cols, 3) - 1) * var(--binder-gap) +
+      var(--binder-chrome)
+  );
+
+  display: grid;
+  /*
+   * One page per row below 1000px — pages stack, one at a time, which is the
+   * layout confirmed on hardware. A spread of two pages simply flows into two
+   * rows, so the pairing stays in the data and the phone does not need a second
+   * one of its own.
+   */
+  grid-template-columns: minmax(0, var(--binder-page));
+  justify-content: center;
+  gap: var(--v2-space-4);
+}
+
+/*
+ * 4-pocket holds BIGGER cards, so its pockets are bigger.
+ *
+ * One size is right for 9 and 12, which both sleeve ordinary 63x88mm cards. It
+ * is wrong for 4-pocket, which exists precisely because jumbo promos do not fit
+ * an ordinary pocket — see hasFacingPages in models/binderLayout.ts, which
+ * turns facing pages off for the same reason. 1.5x is a jumbo's proportion of a
+ * standard card, near enough.
+ *
+ * Two attributes of specificity, so it wins over the desktop rule below without
+ * having to be repeated inside it.
+ */
+.spread[data-binder-format="4"] {
+  --binder-pocket: min(calc(var(--v2-pocket) * 1.5), (100% - var(--binder-gap) - var(--binder-chrome)) / 2);
+}
+
+/*
+ * The one breakpoint in this file.
+ *
+ * A media query cannot read a custom property — `@media (min-width: var(--x))`
+ * is not valid CSS — so a token would not help, which is what the allow marker
+ * on the line below says. It has to agree with WIDE in `useWideLayout.ts`,
+ * which picks between the rail and the sheet in JavaScript: they are the same
+ * decision made in two places because only one of them can be made in CSS.
+ */
+@media (min-width: 1000px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  /*
+   * Facing pages. Two page tracks plus the gutter between them, so the pocket
+   * is what EIGHT columns can afford rather than four.
+   *
+   * minmax(0, ...) rather than a fixed track: between 1000px and the width a
+   * 12-pocket spread actually wants, the spread shrinks to fit instead of
+   * pushing out of the window. Both pages shrink by the same amount, so the
+   * formats stay equal to each other the whole way down.
+   */
+  .spread {
+    --binder-pocket: min(
+      var(--v2-pocket),
+      (100% - var(--v2-space-4) - 6 * var(--binder-gap) - 2 * var(--binder-chrome)) / 8
+    );
+    grid-template-columns: repeat(2, minmax(0, var(--binder-page)));
+  }
+
+  /*
+   * A format with no facing pages is one page per row, full size — not half a
+   * spread with an empty side waiting for a neighbour that is never coming.
+   */
+  .spread[data-solo] {
+    grid-template-columns: minmax(0, var(--binder-page));
+  }
+}
+
+/* --- A page --------------------------------------------------------------- */
+
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--binder-pad);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+  min-width: 0;
+}
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--binder-pad);
+}
+
+.pageNumber {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  color: var(--v2-fg-muted);
+}
+
+.pageFormat {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-dim);
+}
+
+.pockets {
+  display: grid;
+  grid-template-columns: repeat(var(--binder-cols, 3), minmax(0, 1fr));
+  gap: var(--binder-gap);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.cell {
+  min-width: 0;
+}
+
+/* --- A pocket ------------------------------------------------------------- */
+
+/*
+ * A real `<button>`, not a Card.
+ *
+ * `Card` cannot be used here and that is worth stating: a pocket needs
+ * `data-pocket` on the element itself, because a drag hit-tests with
+ * `elementFromPoint(...).closest("[data-pocket]")` rather than with a handler
+ * per pocket — 24 targets on a spread, each tracking enter and leave against a
+ * gesture that can be cancelled mid-flight. It also needs `onPointerDown`,
+ * because a press is not yet a gesture and the screen decides whether it
+ * becomes a drag. `Card` passes through neither.
+ */
+.pocket {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: var(--v2-space-0);
+  border: var(--v2-border-w) dashed var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  font: inherit;
+  color: var(--v2-fg);
+  min-height: var(--v2-tap);
+  transition:
+    border-color var(--v2-dur-fast) var(--v2-ease),
+    box-shadow var(--v2-dur-fast) var(--v2-ease),
+    opacity var(--v2-dur-fast) var(--v2-ease);
+}
+
+/* A button is pressable; a read-only pocket is not, and must not look it. */
+button.pocket {
+  cursor: pointer;
+}
+
+button.pocket:hover {
+  border-color: var(--v2-border-strong);
+}
+
+.pocket:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* A pocket with a card in it is a sleeve, not an outline. */
+.pocketFilled {
+  border-style: solid;
+}
+
+.pocketSelected {
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 var(--v2-border-w) var(--v2-accent);
+}
+
+/*
+ * Lit while a dragged card is over it, so the drop lands where the user aimed
+ * rather than wherever the pointer happened to be when they let go.
+ */
+.pocketDropOver {
+  border-color: var(--v2-accent-strong);
+  border-style: solid;
+  box-shadow: 0 0 0 var(--v2-space-1) var(--v2-accent-dim);
+}
+
+/* Faded while its card is in the air — otherwise it is in two places at once. */
+.pocketDragging {
+  opacity: 30%;
+}
+
+/*
+ * A card you have not got yet, shadowed rather than hidden.
+ *
+ * Planning around gaps is the entire point of laying a binder out, so an
+ * unowned card must be placeable and must stay visibly different from one you
+ * hold. Never colour alone: the tag beside it says "Don't own" in words.
+ */
+.pocketWanted .art {
+  opacity: 45%;
+  filter: grayscale(70%);
+}
+
+.art {
+  display: block;
+  width: 100%;
+}
+
+/* Custom art bypasses CardArt: see the comment in BinderSpread.tsx. */
+.customArt {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  object-fit: contain;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+}
+
+/* --- Pocket marks --------------------------------------------------------- */
+
+.mark {
+  position: absolute;
+  left: var(--v2-space-1);
+  right: var(--v2-space-1);
+  padding: 0 var(--v2-space-1);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-scrim);
+  color: var(--v2-fg);
+  font-size: var(--v2-fs-tiny);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.wantedTag {
+  bottom: var(--v2-space-1);
+  color: var(--v2-warn);
+}
+
+.price {
+  bottom: var(--v2-space-1);
+  color: var(--v2-price);
+}
+
+/* Stacked above the tag when a pocket carries both. */
+.aboveTag {
+  bottom: calc(var(--v2-space-5) - var(--v2-space-1));
+}
+
+.address {
+  top: var(--v2-space-1);
+  left: var(--v2-space-1);
+  right: auto;
+  color: var(--v2-fg-muted);
+  font-family: var(--v2-font-mono);
+}
+
+.stock {
+  top: var(--v2-space-1);
+  left: auto;
+  right: var(--v2-space-1);
+  color: var(--v2-gold);
+  font-family: var(--v2-font-mono);
+}
+
+/* --- The cover ------------------------------------------------------------ */
+
+/*
+ * The leaf page 1 opens against, and the one slot every binder has.
+ *
+ * NOT a pocket: it carries no index, it is excluded from "26/28 filled", and
+ * reformatting between 9 and 12 leaves it alone. It carries `data-pocket`
+ * anyway, with "cover" as its address, so one hit test finds every drop target
+ * — see addressKey in models/binderLayout.ts.
+ */
+.coverLeaf {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--binder-pad);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(160deg, var(--v2-surface-raised), var(--v2-surface));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--v2-space-2);
+  min-width: 0;
+}
+
+/*
+ * The display window in the front cover, not a pocket-sized thumbnail.
+ *
+ * Narrower than the leaf, because a Vault X's sleeve is: the card is meant to
+ * be read through a window with a margin around it, which is also what stops
+ * the leaf reading as a page that failed to draw its grid.
+ */
+.coverWindow {
+  width: 72%;
+  min-width: 0;
+}
+
+.coverEmptyMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border: var(--v2-border-w) dashed var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-title);
+}
+
+.coverName {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg-muted);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- The screen ----------------------------------------------------------- */
+
+.title {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+}
+
+.hint {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.footnote {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.button {
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--v2-accent);
+}
+
+.button:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.button:disabled {
+  opacity: 45%;
+  cursor: default;
+}
+
+.buttonOn {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+  color: var(--v2-accent-strong);
+}
+
+/* A labelled group of controls in the settings panel. `Row` carries no role. */
+.settingControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-2);
+  min-width: 0;
+}
+
+.select {
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  max-width: 100%;
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+}
+
+.error {
+  margin: var(--v2-space-0);
+  color: var(--v2-error);
+  font-size: var(--v2-fs-small);
+}
+
+.fileInput {
+  position: absolute;
+  width: var(--v2-border-w);
+  height: var(--v2-border-w);
+  opacity: 0;
+}
+
+.fileLabel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* --- The picker ----------------------------------------------------------- */
+
+.pickerCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--v2-pocket), 1fr));
+  gap: var(--v2-space-2);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+/*
+ * The rail is 320px, so a pocket-wide track leaves room for one column and a
+ * lot of air. Inside it the tiles are deliberately smaller than a pocket: the
+ * picker is a list to choose from, not a second binder.
+ */
+.pickerTile {
+  display: block;
+  width: 100%;
+  padding: var(--v2-space-0);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.pickerTile:hover {
+  border-color: var(--v2-accent);
+}
+
+.pickerTile:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.pickerTileWanted .art {
+  opacity: 45%;
+  filter: grayscale(70%);
+}
+
+.pickerMeta {
+  display: block;
+  padding: var(--v2-space-1);
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skeletonTile {
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: binderShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes binderShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* --- The drag ghost ------------------------------------------------------- */
+
+/*
+ * The card under the pointer while it is being carried.
+ *
+ * `pointer-events: none` is not cosmetic. The hit test that decides where the
+ * card lands is `elementFromPoint` AT THE POINTER, and a ghost that took events
+ * would be the answer to every one of those tests — the card would always land
+ * on itself.
+ */
+.ghost {
+  position: fixed;
+  z-index: 40;
+  width: var(--v2-pocket);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 85%;
+  filter: drop-shadow(0 var(--v2-space-1) var(--v2-space-2) var(--v2-scrim));
+}
