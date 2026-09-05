@@ -38,6 +38,8 @@ const Collection = lazy(() =>
 );
 const SetCards = lazy(() => import("./screens/set/index.ts").then((m) => ({ default: m.SetCardsScreen })));
 const Binders = lazy(() => import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })));
+const Target = lazy(() => import("./screens/target/index.ts").then((m) => ({ default: m.TargetScreen })));
+const Sealed = lazy(() => import("./screens/sealed/index.ts").then((m) => ({ default: m.SealedScreen })));
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -84,6 +86,10 @@ function render(screen: Screen) {
       return <SetCards setId={screen.setId} setName={screen.setName} />;
     case "binders":
       return <Binders />;
+    case "target":
+      return <Target />;
+    case "sealed":
+      return <Sealed />;
     case "workshop":
       return <Workshop />;
     default:
