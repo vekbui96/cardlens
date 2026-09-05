@@ -16,6 +16,15 @@ import styles from "./shell/V2Shell.module.css";
 
 const Workshop = lazy(() => import("./dev/Workshop.tsx").then((m) => ({ default: m.Workshop })));
 
+/*
+ * Screens, one lazy import each.
+ *
+ * This file is the ONLY place a stream's work is wired in, and no stream edits
+ * it — the integrator does. Nine streams each appending a line to one shared
+ * file is nine merge conflicts on the file that decides whether the app runs.
+ */
+const Home = lazy(() => import("./screens/home/index.ts").then((m) => ({ default: m.HomeScreen })));
+
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
  * the placeholder, so an unbuilt screen answers "when?" instead of just
@@ -51,6 +60,8 @@ export function V2Router() {
 
 function render(screen: Screen) {
   switch (screen.name) {
+    case "home":
+      return <Home />;
     case "workshop":
       return <Workshop />;
     default:
