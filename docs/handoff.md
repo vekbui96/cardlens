@@ -6,6 +6,74 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## v2 Phase 1: Home landed, seven streams are unfinished WIP branches (2026-09-04)
+
+Eight screen streams were run in parallel, one per worktree. **The session hit
+its rate limit and terminated seven of them mid-run.** Nothing was lost — every
+one had produced real work, and all of it is committed and pushed. But only
+Home is finished, verified and on `main`.
+
+### On `main` and working
+
+**Home** (`src/v2/screens/home/`), wired in `V2Router.tsx`. Open `?v=2`. It is
+the first screen that is not a placeholder.
+
+### Unfinished, on branches, NOT verified
+
+Each branch has one WIP commit whose message says where that stream stopped and
+what to check first. **None of them has passed verify/e2e/visual, and none is
+wired into the router.** Do not merge one without running the gates and reading
+it against its spec.
+
+| Branch (`worktree-agent-…`) | Screen                | Spec |
+| --------------------------- | --------------------- | ---- |
+| `a56f06761c5839740`         | Collection & sets     | 02   |
+| `ad9bf3051d33f8d41`         | Set cards             | 03   |
+| `aa40e13ab132188b0`         | Binders shelf         | 04   |
+| `ab31e2d554a818275`         | Binder builder        | 05   |
+| `ae869b53c2461ab3e`         | Scan                  | 06   |
+| `af96471645c3d7533`         | Target & Sealed       | 08   |
+| `a2d64576667105c7a`         | Search & card details | 09   |
+
+**Spec 07 (shares & trade) was never started.** It is the one stream with a
+dependency: it needs a read-only `BinderSpread` exported by the builder (05).
+Check whether that export exists on `ab31e2d554a818275` before starting it.
+
+To resume one: merge the branch, wire its screen into `V2Router.tsx` (the
+integrator's file — no stream edits it), then run the gates.
+
+### Traps this phase found
+
+- **Parallel checkouts silently test each other's code.** Playwright's
+  `reuseExistingServer` reads a busy port as "already running, reuse it", so
+  seven of eight worktrees would have run their whole suite against whichever
+  dev server started first — and **passed**, with nothing in the output naming
+  the app under test. Ports and the scratch data dir are now per-checkout via
+  `CL_E2E_PORT` / `CL_E2E_API_PORT`. False failures announce themselves; false
+  passes do not.
+- **A `Card` with `href` did not look like one with `onPress`.**
+  `shell/reset.css`'s `[data-ui="v2"] a` is specificity (0,1,1) and beat
+  `.card`'s (0,1,0), so every linking Card rendered as underlined blue link
+  text. Fixed at the primitive with `.card:link, .card:visited`. The kind of
+  difference each stream works around locally instead of reporting.
+- **`snapshots-linux.sh` silently discarded every per-screen baseline.** It
+  copied out of one hardcoded directory, so it generated each stream's Linux
+  baselines inside the container and threw all but the foundation's away. Now
+  walks every `*-snapshots` dir under `e2e/v2` and fails if a run produced none.
+- **`#/search` did not round-trip.** The shell's own Search link serialised to
+  `/search/`, which parsed back to null and resolved to Home — so it worked
+  while you clicked it and broke on reload or when the link was shared.
+
+### Open, and worth doing before more streams land
+
+- **`useCollectionValue` counts a disabled query as pending.** A set's pricing
+  query is disabled while its name is unknown, so a slow or failed set list
+  leaves every set reading "pricing…" forever, waiting on a request nobody is
+  making, and the total never becomes honest. Home works around it in
+  `pricingSummary`; the hook itself is unfixed and every screen showing value
+  inherits the bug.
+- Seven streams still need finishing, and 07 still needs starting.
+
 ## v2 Phase 0 is built — the rebuild can go parallel now (2026-09-04)
 
 The plan and specs from earlier in the day are now a working foundation.
