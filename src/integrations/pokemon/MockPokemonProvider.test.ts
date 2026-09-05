@@ -27,6 +27,23 @@ describe("MockPokemonProvider", () => {
     expect(await provider.searchCards("Charizard")).toEqual([]);
   });
 
+  /**
+   * `?sim=empty` used to be a no-op on every screen that reads a SET, because
+   * only `searchCards` consulted the flag. A set screen rendered its ordinary
+   * populated state, so any spec asserting an empty one passed for the wrong
+   * reason — and the empty state itself was unreachable and therefore unchecked.
+   */
+  it("honors forceEmpty for set contents and the set list too, not just search", async () => {
+    const provider = new MockPokemonProvider({ forceEmpty: true });
+    expect(await provider.getCardsBySet("sv3")).toEqual([]);
+    expect(await provider.listSets()).toEqual([]);
+
+    // And still answers normally without it, so the flag is what does this.
+    const normal = new MockPokemonProvider();
+    expect((await normal.getCardsBySet("sv3")).length).toBeGreaterThan(0);
+    expect((await normal.listSets()).length).toBeGreaterThan(0);
+  });
+
   it("throws a network ProviderError when failNetwork is set", async () => {
     const provider = new MockPokemonProvider({ failNetwork: true });
     await expect(provider.searchCards("Charizard")).rejects.toBeInstanceOf(ProviderError);

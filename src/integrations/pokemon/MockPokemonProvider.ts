@@ -21,7 +21,15 @@ import { toDetails, toRankable, toSet, toSummary } from "./map.ts";
 export interface MockBehavior {
   /** Force every call to reject with a network error (DevPanel "Simulate API failure"). */
   failNetwork?: boolean;
-  /** Force searches to return nothing (DevPanel "Simulate empty search"). */
+  /**
+   * Force the catalog to know nothing (DevPanel "Simulate empty search").
+   *
+   * Searches, set listings and set contents alike. It used to mean searches
+   * ONLY, which made `?sim=empty` a no-op on every screen that reads a set —
+   * the screen rendered its ordinary populated state and the spec asserting an
+   * empty one passed for the wrong reason. An empty state nobody can reach is
+   * an empty state nobody has checked.
+   */
   forceEmpty?: boolean;
   /** Artificial latency in ms (DevPanel "Simulate slow network"). */
   latencyMs?: number;
@@ -76,6 +84,7 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
 
   async listSets(opts?: FetchOpts): Promise<PokemonSet[]> {
     await this.gate(opts?.signal);
+    if (this.behavior.forceEmpty) return [];
     const byId = new Map<string, PokemonSet>();
     for (const card of MOCK_CARDS) {
       if (!byId.has(card.set.id)) byId.set(card.set.id, toSet(card.set));
@@ -85,6 +94,7 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
 
   async getCardsBySet(setId: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
     await this.gate(opts?.signal);
+    if (this.behavior.forceEmpty) return [];
     let cards = MOCK_CARDS.filter((c) => c.set.id === setId);
     if (opts?.rarities && opts.rarities.length > 0) {
       const set = new Set(opts.rarities);
