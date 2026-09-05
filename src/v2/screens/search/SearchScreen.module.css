@@ -1,0 +1,202 @@
+/*
+ * Search. The shell owns the page margin and the width; nothing here sets one.
+ */
+
+.title {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  letter-spacing: -0.01em;
+}
+
+.heading {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+/* --- The form ------------------------------------------------------------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+  /* Wide enough to read a card name in, narrow enough not to span a laptop. */
+  max-width: 52ch;
+}
+
+.label {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  color: var(--v2-fg-muted);
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-body);
+}
+
+.input::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/*
+ * Submit is a real, visible button, not an icon in the corner of the field.
+ * The whole screen turns on the difference between typing and submitting, so
+ * the thing that submits has to be the most obvious control on it.
+ */
+.primary {
+  flex: none;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--v2-accent-strong);
+}
+
+.primary:disabled {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-dim);
+  cursor: default;
+}
+
+.primary:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.quiet {
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  border: none;
+  border-radius: var(--v2-radius-sm);
+  background: none;
+  color: var(--v2-accent);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.quiet:hover {
+  color: var(--v2-accent-strong);
+}
+
+.quiet:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.hint {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-small);
+}
+
+.prose {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 62ch;
+}
+
+/* --- A result tile -------------------------------------------------------- */
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+.name {
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.set {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  line-height: var(--v2-lh-tight);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+  font-size: var(--v2-fs-small);
+}
+
+.number {
+  color: var(--v2-fg-dim);
+  font-family: var(--v2-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+  padding: var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+}
+
+.skeletonArt {
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+}
+
+.skeletonLine {
+  height: var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.skeletonLineShort {
+  width: 50%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}

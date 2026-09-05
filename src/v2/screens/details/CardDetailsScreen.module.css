@@ -1,0 +1,193 @@
+/*
+ * Card details. The shell owns the page margin and the width.
+ */
+
+/*
+ * The art is the point of this screen, so it gets a column of its own — but a
+ * bounded one. `CardArt` fills whatever it is given, and given the whole of a
+ * 1440px window it would draw a Charizard a metre tall.
+ */
+.hero {
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: calc(var(--v2-pocket-lg) * 2);
+}
+
+.facts {
+  flex: 1 1 0;
+  min-width: 0;
+  /* Never wider than a comfortable measure, however wide the window gets. */
+  max-width: 62ch;
+}
+
+.title {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+}
+
+.number {
+  font-family: var(--v2-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-fg);
+}
+
+.count {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Facts ---------------------------------------------------------------- */
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-4);
+  margin: var(--v2-space-0);
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+}
+
+.factTerm {
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.factValue {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- A printing ----------------------------------------------------------- */
+
+.printing {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.printingName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: var(--v2-fw-medium);
+}
+
+/*
+ * "Owned" is a word before it is a colour. The selected row is already tinted
+ * by `Card`'s own selected state; this makes the meaning survive both
+ * deuteranopia and a screenshot in greyscale.
+ */
+.owned {
+  flex: none;
+  color: var(--v2-accent-strong);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+}
+
+.notOwned {
+  flex: none;
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- Prose, notes, failure ------------------------------------------------ */
+
+.prose {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 62ch;
+}
+
+.note {
+  margin: var(--v2-space-0);
+  color: var(--v2-warn);
+  font-size: var(--v2-fs-small);
+  max-width: 62ch;
+}
+
+.failure {
+  border: var(--v2-border-w) solid var(--v2-error);
+  border-radius: var(--v2-radius);
+  padding: var(--v2-space-4);
+  background: var(--v2-surface-raised);
+}
+
+.primary {
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-family: var(--v2-font);
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--v2-accent-strong);
+}
+
+.primary:disabled {
+  background: var(--v2-surface);
+  color: var(--v2-fg-dim);
+  cursor: default;
+}
+
+.primary:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* --- Waiting -------------------------------------------------------------- */
+
+.skeletonArt {
+  width: 100%;
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+}
+
+.skeletonTitle {
+  height: var(--v2-space-6);
+  max-width: 24ch;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface);
+}
+
+.skeletonRow {
+  height: var(--v2-tap);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
