@@ -64,3 +64,53 @@ Every tile is a link with a real target. No tile that only looks tappable.
 ## Out of scope
 
 The collection list itself (`02-collection`). Home links to it.
+
+---
+
+## What was actually built, and where it departed from the above
+
+### The entry-point tiles were not built, on purpose
+
+The parity checklist says the six destinations come "from
+`src/web/home/WebHomeScreen.tsx`". They do not — that file has none of them, and
+carries a comment explaining why: on web those destinations live in the app bar,
+one tap from everywhere, and repeating them down the middle of Home would make it
+a worse copy of a menu the user already has.
+
+v2's shell nav **is** that app bar, on this very screen, with `aria-current`
+marking where you are. So parity is already met by the shell, and a second copy
+would be two competing answers to "where do I go", one of which goes stale the
+moment the nav gains an entry.
+
+What Home draws instead are the links that carry something the nav cannot: the
+total with its denominator (→ Collection), the set you were last in with your
+progress on it, each set closest to complete with its bar, and — only when there
+are any — a binders line with a count of what is in them. `e2e/v2/home.spec.ts`
+asserts the absence, because an absence nobody checks comes back.
+
+### Sync only appears when sync needs a person
+
+The shell already prints `syncLine`'s label on every screen. Home adds a panel
+only for `bad-token` and `disabled` — the two states that stay broken until
+somebody acts. Everything else recovers by itself or was chosen deliberately, and
+a status line that is almost always fine trains the reader to skip it.
+
+`syncLine`'s _hints_ are not used here: they are written for the glasses
+("Select to re-enter", "← to disconnect") and describe gestures a browser does
+not have. The label is shared so the two versions cannot disagree about what a
+state is called.
+
+### "Value over time" is printings over time
+
+`models/history.ts` is explicit that the app only ever knows today's prices, so a
+value line would be a curve that never happened. The chart counts printings and
+says so; the panel beside it is the money.
+
+### An honest "pricing…" that ends
+
+`useCollectionValue` counts a **disabled** query as pending, and a set's pricing
+query is disabled while its name is unknown. A slow or failed set list therefore
+leaves every set held permanently "pricing…", waiting on a request nobody is
+making. `pricingSummary` subtracts sets the loaded set list does not contain and
+reports them as unpriceable instead. The underlying behaviour is a shared-layer
+bug, reported rather than patched from here.

@@ -1,0 +1,328 @@
+/*
+ * Home's own styling. Every value is a token from `../../tokens.css`.
+ *
+ * There is no page margin and no max-width here on purpose — the shell's
+ * `.content` owns both, and a screen that sets its own left edge is a screen
+ * that no longer lines up with the other eight.
+ */
+
+/* --- Header --------------------------------------------------------------- */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.stats {
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.statNumber {
+  color: var(--v2-fg);
+  font-weight: var(--v2-fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The top region ------------------------------------------------------- */
+
+/*
+ * One column on a phone; value beside the graph on a laptop.
+ *
+ * No media query. The widths are stated as multiples of `--v2-pocket` — the one
+ * width v2 already calls "a card" — and flex wraps them the moment they will not
+ * both fit. A breakpoint would be a second number, in this file only, that has
+ * to be kept in step with the one in tokens.css by hand; this asks the two
+ * panels how much room they actually want and lets the window answer.
+ *
+ * The graph gets the larger share because a line needs width to be a shape at
+ * all, while the total needs only enough for a number and a sentence under it.
+ */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-4);
+  align-items: start;
+}
+
+.top > :first-child {
+  flex: 1 1 calc(var(--v2-pocket) * 2);
+}
+
+.top > :last-child {
+  flex: 2 1 calc(var(--v2-pocket) * 3);
+}
+
+/* --- Value ---------------------------------------------------------------- */
+
+.total {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+}
+
+.line {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/* Paired with the word "No prices" in the line itself — never colour alone. */
+.lineWarn {
+  color: var(--v2-warn);
+}
+
+.aside {
+  color: var(--v2-accent);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--v2-tap);
+}
+
+.aside:hover {
+  color: var(--v2-accent-strong);
+  text-decoration: underline;
+}
+
+.aside:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.note {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.noteSets {
+  color: var(--v2-fg);
+}
+
+/* --- Chart ---------------------------------------------------------------- */
+
+.hero {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-regular);
+}
+
+.plot {
+  width: 100%;
+  /*
+   * A ratio, not a height: the SVG is stretched with
+   * `preserveAspectRatio="none"`, so the box on the page decides the shape and
+   * the viewBox decides nothing but the coordinate space.
+   */
+  aspect-ratio: 10 / 3;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chartLine {
+  stroke: var(--v2-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fillTop {
+  stop-color: var(--v2-accent);
+  stop-opacity: 0.28;
+}
+
+.fillBottom {
+  stop-color: var(--v2-accent);
+  stop-opacity: 0;
+}
+
+/*
+ * Three equal columns rather than `space-between`, so a label going from
+ * "Sep 4" to "Dec 30" cannot move the other two. The dates are hidden in
+ * snapshots; their boxes are not, and a shifting box is a false diff.
+ */
+.axis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  color: var(--v2-fg-dim);
+  font-size: var(--v2-fs-tiny);
+  font-variant-numeric: tabular-nums;
+}
+
+.axis > :nth-child(2) {
+  text-align: center;
+}
+
+.axis > :nth-child(3) {
+  text-align: end;
+}
+
+/* --- Tiles ---------------------------------------------------------------- */
+
+/*
+ * A `Card` given an `href` renders an `<a>`, and `shell/reset.css` colours every
+ * anchor in v2 `--v2-accent-strong` at `[data-ui="v2"] a` — specificity (0,1,1),
+ * which beats the primitive's own `.card { color: var(--v2-fg) }` at (0,1,0). So
+ * a pressable Card and a linking Card, which are meant to be the same surface,
+ * come out as a panel and a paragraph of underlined blue link text.
+ *
+ * `:link`/`:visited` gets this to (0,2,0) and wins without touching the shared
+ * primitive. The real fix belongs in `primitives.module.css` — reported, not
+ * forked.
+ */
+.tile:link,
+.tile:visited {
+  color: var(--v2-fg);
+  text-decoration: none;
+}
+
+/* --- Progress ------------------------------------------------------------- */
+
+.resumeLabel {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.resumeName {
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.resumeMeta {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The milestone word, which carries what the gold bar cannot. */
+.tierWord {
+  font-weight: var(--v2-fw-bold);
+  letter-spacing: 0.04em;
+}
+
+.tierBase {
+  color: var(--v2-price);
+}
+
+.tierMaster {
+  color: var(--v2-gold);
+}
+
+.list {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+/* --- Empty ---------------------------------------------------------------- */
+
+.emptyTitle {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.emptyHint {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 52ch;
+}
+
+/*
+ * The two ways in. `--v2-pocket` as the basis rather than a bare number: it is
+ * already the width v2 calls "one card", and these sit two-up at 390 and
+ * two-up at 1440 without a second breakpoint.
+ */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-3);
+}
+
+.actions > * {
+  flex: 1 1 var(--v2-pocket);
+}
+
+.actionName {
+  font-weight: var(--v2-fw-medium);
+}
+
+.actionHint {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/* --- Sync notice ---------------------------------------------------------- */
+
+/*
+ * Only ever rendered for the two states that stay broken until someone acts.
+ * The border carries the warning and the label says "token rejected" or "off on
+ * server" in words — colour is never the only carrier.
+ */
+.sync {
+  border-color: var(--v2-warn);
+}
+
+.syncLabel {
+  color: var(--v2-warn);
+  font-weight: var(--v2-fw-medium);
+}
+
+.syncDetail {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  max-width: 70ch;
+}
+
+/* --- Skeleton ------------------------------------------------------------- */
+
+/*
+ * The shape of the content, not a spinner. Three rows because three sets is
+ * what "Closest to complete" shows, so nothing jumps when they arrive.
+ */
+.skeletonRow {
+  height: var(--v2-space-7);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: homeShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes homeShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
