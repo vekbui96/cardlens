@@ -89,10 +89,7 @@ test.describe("everything about this printing", () => {
     const normal = page.getByRole("button", { name: /^Normal/ });
     await expect(normal).toHaveAccessibleName(/Not owned/);
     await normal.click();
-    await expect(page.getByRole("button", { name: /^Normal Owned/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(page.getByRole("button", { name: /^Normal Owned/ })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: /^Holofoil/ })).toHaveAccessibleName(/Not owned/);
 
     /*

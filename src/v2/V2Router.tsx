@@ -40,6 +40,10 @@ const SetCards = lazy(() => import("./screens/set/index.ts").then((m) => ({ defa
 const Binders = lazy(() => import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })));
 const Target = lazy(() => import("./screens/target/index.ts").then((m) => ({ default: m.TargetScreen })));
 const Sealed = lazy(() => import("./screens/sealed/index.ts").then((m) => ({ default: m.SealedScreen })));
+const Search = lazy(() => import("./screens/search/index.ts").then((m) => ({ default: m.SearchScreen })));
+const CardDetails = lazy(() =>
+  import("./screens/details/index.ts").then((m) => ({ default: m.CardDetailsScreen })),
+);
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -90,6 +94,10 @@ function render(screen: Screen) {
       return <Target />;
     case "sealed":
       return <Sealed />;
+    case "results":
+      return <Search query={screen.query} />;
+    case "details":
+      return <CardDetails cardId={screen.cardId} {...(screen.summary ? { summary: screen.summary } : {})} />;
     case "workshop":
       return <Workshop />;
     default:
