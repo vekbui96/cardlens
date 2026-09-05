@@ -62,20 +62,14 @@ test.describe("shell @visual", () => {
     await expect(page.getByRole("banner")).toHaveScreenshot("header.png");
   });
 
-  /**
-   * Must point at a route no stream has landed yet, or it stops testing the
-   * placeholder and starts testing whatever screen moved in. It was `/binders`
-   * until that stream landed and this failed with an 11k-pixel diff — which is
-   * the test doing its job, but for the wrong reason.
+  /*
+   * There WAS a snapshot here of the "not built yet" placeholder. It is gone,
+   * because every screen in `Screen` is now built and the test had no subject
+   * left — it followed the last unbuilt route from `/binders` to `/live/:id`
+   * and then ran out of places to point.
    *
-   * `/live/:id` belongs to spec 07, the last stream and the only one with a
-   * dependency, so it is the safest bet. When 07 lands, move this to whatever
-   * is still outstanding — or, if nothing is, delete it along with `NotBuilt`.
+   * `NotBuilt` itself stays as the router's `default:` case. The union can
+   * still grow, and a new screen name arriving before its screen does should
+   * say so rather than render nothing.
    */
-  test("an unbuilt screen states which spec owns it", async ({ page }) => {
-    await openV2(page, "/live/not-a-real-share");
-    await expect(page.getByText(/Not built yet/)).toBeVisible();
-    await stabiliseForSnapshot(page);
-    await expect(page.getByRole("main")).toHaveScreenshot("not-built.png");
-  });
 });

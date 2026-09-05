@@ -46,6 +46,18 @@ const CardDetails = lazy(() =>
 );
 const Binder = lazy(() => import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })));
 const Scan = lazy(() => import("./screens/scan/index.ts").then((m) => ({ default: m.ScanScreen })));
+/*
+ * The three public pages. A visitor who opens one of these will usually never
+ * open another screen in this app, so they are their own chunk — nobody
+ * downloads the whole rebuild to look at somebody's binder once.
+ */
+const Showcase = lazy(() => import("./screens/share/index.ts").then((m) => ({ default: m.ShowcaseScreen })));
+const LiveShowcase = lazy(() =>
+  import("./screens/share/index.ts").then((m) => ({ default: m.LiveShowcaseScreen })),
+);
+const TradeShare = lazy(() =>
+  import("./screens/share/index.ts").then((m) => ({ default: m.TradeShareScreen })),
+);
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -96,6 +108,12 @@ function render(screen: Screen) {
       return <Binder binderId={screen.binderId} />;
     case "scan":
       return <Scan />;
+    case "showcase":
+      return <Showcase setId={screen.setId} setName={screen.setName} payload={screen.payload} />;
+    case "live":
+      return <LiveShowcase shareId={screen.shareId} />;
+    case "trade":
+      return <TradeShare shareId={screen.shareId} />;
     case "target":
       return <Target />;
     case "sealed":

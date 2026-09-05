@@ -1,0 +1,220 @@
+/* The three public share pages. No raw values — see ../../tokens.css. */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--v2-space-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-1);
+}
+
+.subtitle {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  margin: var(--v2-space-0);
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--v2-space-1);
+  font-size: var(--v2-fs-title);
+}
+
+.unpriced {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-warn);
+}
+
+/* --- The set showcase ------------------------------------------------------ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+  padding: var(--v2-space-2);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+  min-width: 0;
+}
+
+/*
+ * A card the sharer does not hold is dimmed AND says "Not held" underneath.
+ * Opacity alone would be the only carrier of the meaning, and on a page whose
+ * entire subject is which cards are missing that is the one thing that must
+ * not depend on seeing a difference in brightness.
+ */
+.cardMissing {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  min-width: 0;
+}
+
+.cardName {
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  margin: var(--v2-space-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-dim);
+  font-variant-numeric: tabular-nums;
+  margin: var(--v2-space-0);
+}
+
+.cardMissingLabel {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-dim);
+  margin: var(--v2-space-0);
+}
+
+/* --- The trade list -------------------------------------------------------- */
+
+.tradeList {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+}
+
+.tradeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "art name price"
+    "art meta price";
+  align-items: center;
+  gap: var(--v2-space-1) var(--v2-space-3);
+  width: 100%;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2);
+  border: var(--v2-border-w) solid transparent;
+  border-radius: var(--v2-radius-sm);
+  background: none;
+  color: var(--v2-fg);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.tradeRow:hover {
+  background: var(--v2-surface-raised);
+}
+
+.tradeRow:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* The row whose pocket was just jumped to, so the two views stay tied. */
+.tradeRowLit {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+}
+
+.tradeArt {
+  grid-area: art;
+  width: var(--v2-space-7);
+  flex: none;
+}
+
+.tradeName {
+  grid-area: name;
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tradeMeta {
+  grid-area: meta;
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tradePrice {
+  grid-area: price;
+  font-size: var(--v2-fs-body);
+}
+
+/* --- Shared ---------------------------------------------------------------- */
+
+.button {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--v2-accent);
+}
+
+.button:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-4);
+}
+
+.skeletonBar {
+  height: var(--v2-space-6);
+  max-width: 30ch;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+}
+
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--v2-pocket), 1fr));
+  gap: var(--v2-space-3);
+}
+
+.skeletonCard {
+  aspect-ratio: var(--v2-card-aspect);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+}
+
+.srOnly {
+  position: absolute;
+  width: var(--v2-border-w);
+  height: var(--v2-border-w);
+  padding: var(--v2-space-0);
+  margin: calc(var(--v2-border-w) * -1);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
