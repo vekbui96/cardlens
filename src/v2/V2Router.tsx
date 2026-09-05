@@ -8,10 +8,18 @@ import styles from "./shell/V2Shell.module.css";
 /**
  * Which v2 screen to render.
  *
- * Phase 0 ships this router with every screen unbuilt on purpose. Each stream
- * from `docs/v2/PLAN.md` §5 replaces exactly one entry in `SCREENS` with its
- * own lazy import, and touches nothing else in this file — which is what lets
- * nine of them land in any order without conflicting.
+ * Phase 0 shipped this with every screen unbuilt on purpose, and Phase 1
+ * replaces them one at a time.
+ *
+ * **No stream edits this file.** A stream exports its screen from its own
+ * `src/v2/screens/<name>/index.ts` and the integrator adds the lazy import and
+ * the case. Nine streams each appending to one shared file is nine merge
+ * conflicts on the file that decides whether the app runs at all — and they
+ * would all be resolved by whoever merged last, who has the least context.
+ *
+ * A screen with no case falls through to `NotBuilt`, which names the spec that
+ * owns it. That is the honest state during a rebuild: "this is next", not
+ * "this is broken".
  */
 
 const Workshop = lazy(() => import("./dev/Workshop.tsx").then((m) => ({ default: m.Workshop })));
@@ -28,6 +36,7 @@ const Home = lazy(() => import("./screens/home/index.ts").then((m) => ({ default
 const Collection = lazy(() =>
   import("./screens/collection/index.ts").then((m) => ({ default: m.CollectionScreen })),
 );
+const SetCards = lazy(() => import("./screens/set/index.ts").then((m) => ({ default: m.SetCardsScreen })));
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -70,6 +79,8 @@ function render(screen: Screen) {
     case "sets":
     case "owned":
       return <Collection />;
+    case "set":
+      return <SetCards setId={screen.setId} setName={screen.setName} />;
     case "workshop":
       return <Workshop />;
     default:
