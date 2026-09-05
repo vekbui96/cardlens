@@ -1,0 +1,458 @@
+/*
+ * Scan.
+ *
+ * No raw values: every length and colour is a token from `../../tokens.css`,
+ * and `npm run check:v2` fails the build if one appears here. The exceptions
+ * the checker allows on purpose — `%`, `em`, `ch`, `fr` — are used where the
+ * value is relative to something already on the page, which is exactly the case
+ * for the two sizes that matter here: the flex bases that decide when the
+ * layout goes two-column, and the cap on the collector-number band.
+ */
+
+.h1 {
+  font-size: var(--v2-fs-display);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0) var(--v2-space-0) var(--v2-space-2);
+}
+
+.lede {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 62ch;
+}
+
+/* --- The two columns ------------------------------------------------------ */
+
+/*
+ * Intrinsic, not a breakpoint.
+ *
+ * The layout turns on how much room there IS, so it is expressed as flex bases
+ * rather than a media query on the window: this screen is also the one most
+ * likely to end up beside something else later, and a rule keyed to the window
+ * would be wrong there while looking right here.
+ *
+ * At 390 the batch cannot make its 26em basis and wraps under the viewfinder —
+ * "viewfinder over review strip". At 1440 both fit, the batch takes three
+ * shares to the viewfinder's one, and the rows inside it come out two across.
+ */
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--v2-space-5);
+}
+
+.cameraColumn {
+  flex: 1 1 20em;
+  /*
+   * A viewfinder does not get better for being 700px wide, and every pixel
+   * past this is a pixel the decisions beside it could have used.
+   */
+  max-width: 28em;
+  min-width: 0;
+}
+
+.batchColumn {
+  flex: 3 1 26em;
+  min-width: 0;
+}
+
+/* --- The stage ------------------------------------------------------------ */
+
+/*
+ * A fixed shape, held from the very first render.
+ *
+ * The first version of this screen put results in the same column as the
+ * preview, so the stage shrank on the first capture and the guide moved under
+ * the card the user was still holding. Nothing a capture produces lands in this
+ * column, and the stage's own ratio never changes — the camera's aspect is
+ * carried by `.frame` inside it instead.
+ */
+.stage {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface-sunken);
+  border: var(--v2-border-w) solid var(--v2-border);
+}
+
+/*
+ * The camera's own rectangle, letterboxed inside the stage.
+ *
+ * This is what makes the guide honest. `guideStyle` returns fractions of the
+ * FRAME, so they are only true on screen if the element they are positioned
+ * against is exactly the frame's shape. Drawn over a letterboxed video element
+ * instead, the bracket a user aligns their card to sits a few percent away from
+ * the crop that is actually hashed — the classic way a scanner ends up reading
+ * the region next to the one on screen.
+ */
+.frame {
+  position: relative;
+  aspect-ratio: var(--frame-aspect, 3 / 4);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.videoHidden {
+  display: none;
+}
+
+/*
+ * Corner brackets rather than a solid outline: the card has to stay readable
+ * through the guide, and a full border competes with the card's own.
+ */
+.guide {
+  position: absolute;
+  pointer-events: none;
+}
+
+.corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--v2-space-5);
+  height: var(--v2-space-5);
+  border: calc(var(--v2-border-w) * 3) solid var(--v2-accent);
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: var(--v2-radius-sm);
+}
+
+.cornerTr {
+  left: auto;
+  right: 0;
+  transform: rotate(90deg);
+}
+
+.cornerBr {
+  top: auto;
+  bottom: 0;
+  left: auto;
+  right: 0;
+  transform: rotate(180deg);
+}
+
+.cornerBl {
+  top: auto;
+  bottom: 0;
+  transform: rotate(270deg);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--v2-space-5);
+  text-align: center;
+}
+
+/* --- Words ---------------------------------------------------------------- */
+
+.status {
+  margin: var(--v2-space-0);
+  min-height: var(--v2-space-5);
+  font-weight: var(--v2-fw-medium);
+}
+
+.muted {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.errorText {
+  margin: var(--v2-space-0);
+  color: var(--v2-error);
+  font-size: var(--v2-fs-small);
+  max-width: 34ch;
+}
+
+.warnText {
+  color: var(--v2-warn);
+  font-weight: var(--v2-fw-medium);
+}
+
+.banner {
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+  padding: var(--v2-space-4);
+  max-width: 70ch;
+}
+
+/* Colour is never the only carrier: both banners lead with a sentence saying
+   what happened, and both offer the action that fixes it. */
+.bannerError {
+  border-color: var(--v2-error);
+}
+
+.bannerWarn {
+  border-color: var(--v2-warn);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.primary {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-5);
+  border: none;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  cursor: pointer;
+}
+
+.secondary {
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  cursor: pointer;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary:focus-visible,
+.secondary:focus-visible,
+.candidate:focus-visible,
+.pickOption:focus-visible,
+.select:focus-visible,
+.input:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+/* --- The batch ------------------------------------------------------------ */
+
+/*
+ * Two columns of decisions where there is room.
+ *
+ * Nothing in a row gets better for being 900px wide — it is a thumbnail, three
+ * candidate buttons and a chip row — and a batch of thirty is a long scroll to
+ * work down. `min(100%, 22em)` is what keeps it ONE column on a phone: a bare
+ * 22em minimum would overflow a 390px window rather than dropping a track.
+ *
+ * Rows are top-aligned rather than stretched: a row carrying a number band is
+ * several times the height of a settled one, and stretching its neighbour to
+ * match would draw a tall empty card.
+ */
+.rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22em), 1fr));
+  align-items: start;
+  gap: var(--v2-space-3);
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
+}
+
+/* Dimmed, not removed: a rejected row has to stay reachable to be un-rejected,
+   and a list that reorders itself under a thumb is hard to work down. */
+.rowRejected {
+  opacity: 0.5;
+}
+
+.thumb {
+  width: 4em;
+  align-self: start;
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+}
+
+.name {
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+/* Provenance, deliberately quieter than the card it describes: it matters when
+   something looks wrong and must never compete with the name when it does not. */
+.via {
+  font-size: var(--v2-fs-tiny);
+  color: var(--v2-fg-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * The collector-number strip, on a row the scanner could not decide.
+ *
+ * Sized by its HEIGHT, not by the width of whatever holds it. The crop is
+ * always the bottom sixth of a 63x88 card, so it is always about 4.5:1 — and at
+ * `width: 100%` of a full-width desktop row that ratio rendered 1055x230,
+ * measured at 1440x900. That is a slab: it pushed the candidate buttons it
+ * exists to be read WITH off the bottom of the window, so only one row was ever
+ * visible at a time. Fixing the height instead caps it at roughly 400x90 on a
+ * laptop and lets it shrink on a phone, which is the size the crop was chosen
+ * for in the first place.
+ *
+ * A light background: it is a photograph of white cardstock, and on this
+ * near-black surface a dark frame around it makes the print harder to pick out.
+ */
+.numberBand {
+  display: block;
+  height: 6em;
+  width: auto;
+  max-width: 100%;
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-2);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+  object-fit: contain;
+}
+
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+}
+
+.candidate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--v2-space-1);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: none;
+  color: var(--v2-fg);
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  text-align: start;
+  cursor: pointer;
+}
+
+.candidateOn {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+}
+
+.candidateName {
+  font-weight: var(--v2-fw-medium);
+}
+
+.candidateSub {
+  color: var(--v2-fg-muted);
+}
+
+/* --- Pick by set ---------------------------------------------------------- */
+
+.sheetTitle {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-medium);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+}
+
+.fieldLabel {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.select,
+.input {
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-sunken);
+  color: var(--v2-fg);
+  width: 100%;
+}
+
+.pickList {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  max-height: 40vh;
+  overflow: hidden auto;
+}
+
+.pickOption {
+  display: flex;
+  align-items: baseline;
+  gap: var(--v2-space-3);
+  width: 100%;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface);
+  color: var(--v2-fg);
+  font-family: inherit;
+  font-size: var(--v2-fs-small);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pickOption:hover {
+  border-color: var(--v2-accent);
+}
+
+.pickNumber {
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-fg-dim);
+  min-width: 5ch;
+}
+
+.pickName {
+  font-weight: var(--v2-fw-medium);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
