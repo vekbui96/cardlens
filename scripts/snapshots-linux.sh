@@ -43,9 +43,18 @@ docker pull -q "$IMAGE"
 
 mkdir -p "$OUT"
 
-docker run --rm \
-  -v "$(pwd)":/host:ro \
-  -v "$(pwd)/$OUT":/out \
+# Git Bash on Windows rewrites anything that looks like a Unix path in an
+# argument, so `-w /build` reached Docker as `C:/Program Files/Git/build` and
+# the run died on "the working directory is invalid". MSYS_NO_PATHCONV turns
+# that off for this one command. The bind mounts need the opposite treatment:
+# `pwd` there is `/c/Users/...`, which Docker cannot resolve, and `pwd -W` gives
+# the `C:/Users/...` form it wants. On Linux and macOS `pwd -W` does not exist,
+# so fall back to plain `pwd` — the whole point is that one script serves both.
+HOSTPATH="$(pwd -W 2>/dev/null || pwd)"
+
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "${HOSTPATH}":/host:ro \
+  -v "${HOSTPATH}/$OUT":/out \
   -w /build \
   "$IMAGE" \
   bash -eu -c '
