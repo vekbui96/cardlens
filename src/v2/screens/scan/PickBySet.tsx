@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Row, Sheet, Stack } from "../../primitives/index.ts";
 import { byCollectorNumber } from "../../../integrations/pokemon/sort.ts";
 import type { CardIndex, IndexedCard } from "../../../scan/cardIndex.ts";
@@ -47,6 +47,12 @@ export function PickBySet({
   const [setId, setSetId] = useState(() => initialSetId ?? sets[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
+  /**
+   * Generated rather than hardcoded: this sheet can be open for more than one
+   * unsettled row, and two elements sharing an id would send the label to
+   * whichever the browser found first.
+   */
+  const setFieldId = useId();
 
   // The set is usually already right, so the useful thing to type is the number.
   useEffect(() => search.current?.focus(), []);
@@ -106,7 +112,7 @@ export function PickBySet({
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
         <input
           ref={search}

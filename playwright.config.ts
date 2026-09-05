@@ -59,7 +59,18 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  /**
+   * One local retry, where there used to be none.
+   *
+   * The v2 visual suite fails intermittently on a busy machine with "Failed to
+   * take two consecutive stable screenshots" — a TIMEOUT, not a diff. The
+   * distinction is what makes a retry the right tool rather than a cover-up: a
+   * real regression produces the same diff on every attempt and still fails,
+   * while a shot that could not settle in time usually settles on the next one.
+   * Playwright still reports these as "flaky", so they stay visible rather than
+   * disappearing into a green run.
+   */
+  retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   use: {

@@ -143,12 +143,39 @@ export async function stabiliseForSnapshot(page: Page): Promise<void> {
     content: `
       img { visibility: hidden !important; }
       [data-snapshot="volatile"] { visibility: hidden !important; }
+      /*
+        The shell's nav scrolls sideways at 390px rather than wrapping, and the
+        browser keeps scrolling the current entry into view — including BETWEEN
+        the two screenshots Playwright takes to decide the page has settled, so
+        it never settles and the whole shot times out. Pinning it shut costs the
+        snapshot nothing: what is off the left edge is off the left edge either
+        way, and no screen under test lives in the header.
+      */
+      nav[aria-label="Main"] { overflow: hidden !important; }
       *, *::before, *::after {
         animation: none !important;
         transition: none !important;
         caret-color: transparent !important;
+        scroll-behavior: auto !important;
       }
     `,
   });
+
+  /*
+   * Park every horizontal scroller at its start.
+   *
+   * The shell's navigation scrolls sideways at 390px rather than wrapping to a
+   * second row, and the browser scrolls it on its own to bring the current
+   * entry into view — at a moment that depends on when layout and focus settle.
+   * So two identical runs produced two different header offsets, and the
+   * collection snapshot failed on ~2000 pixels that were all in the header and
+   * none in the screen it was testing.
+   */
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("*")) {
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    }
+  });
+
   await page.waitForLoadState("networkidle");
 }

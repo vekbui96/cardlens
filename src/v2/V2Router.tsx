@@ -45,6 +45,7 @@ const CardDetails = lazy(() =>
   import("./screens/details/index.ts").then((m) => ({ default: m.CardDetailsScreen })),
 );
 const Binder = lazy(() => import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })));
+const Scan = lazy(() => import("./screens/scan/index.ts").then((m) => ({ default: m.ScanScreen })));
 
 /**
  * The spec that owns each screen, and therefore who to go and ask. Shown on
@@ -93,6 +94,8 @@ function render(screen: Screen) {
       return <Binders />;
     case "binder":
       return <Binder binderId={screen.binderId} />;
+    case "scan":
+      return <Scan />;
     case "target":
       return <Target />;
     case "sealed":

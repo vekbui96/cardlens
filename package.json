@@ -24,10 +24,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test --grep-invert @visual",
-    "e2e:visual": "playwright test --grep @visual --project=v2-phone --project=v2-desktop",
+    "e2e:visual": "playwright test --grep @visual --project=v2-phone --project=v2-desktop --workers=1",
     "e2e:install": "playwright install --with-deps chromium",
     "check:v2": "node scripts/check-v2-tokens.mjs",
-    "snapshots": "playwright test --grep @visual --project=v2-phone --project=v2-desktop --update-snapshots",
+    "snapshots": "playwright test --grep @visual --project=v2-phone --project=v2-desktop --workers=1 --update-snapshots",
     "snapshots:linux": "bash scripts/snapshots-linux.sh",
     "verify": "npm run format:check && npm run typecheck && npm run lint && npm run check:v2 && npm run test"
   },

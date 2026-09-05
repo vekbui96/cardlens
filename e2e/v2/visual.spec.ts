@@ -40,7 +40,16 @@ test.describe("primitives @visual", () => {
     await openV2(page, "/dev/workshop", { seed: "binders" });
     await expect(page.getByRole("heading", { name: "Workshop", level: 1 })).toBeVisible();
     await stabiliseForSnapshot(page);
-    await expect(page).toHaveScreenshot("workshop.png", { fullPage: true });
+    /*
+     * `main`, not `fullPage`. A full-page capture of a 4000px document is
+     * stitched by scrolling, and this shell has a STICKY header — so the header
+     * moves relative to the content between the two shots Playwright compares
+     * to decide the page has settled. It never settles, and the failure reads
+     * "Failed to take two consecutive stable screenshots" rather than as a
+     * diff, which points at load rather than at the real cause. The header has
+     * its own snapshot below; this one is about the primitives.
+     */
+    await expect(page.getByRole("main")).toHaveScreenshot("workshop.png", { timeout: 20000 });
   });
 });
 
