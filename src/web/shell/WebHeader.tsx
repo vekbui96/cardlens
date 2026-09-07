@@ -80,9 +80,21 @@ export function WebHeader() {
       toggle.current?.focus();
     };
     window.addEventListener("keydown", onKey);
-    panel.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
   }, [open, comboboxOpen]);
+
+  /*
+   * Move focus into the panel ONCE, when it opens.
+   *
+   * Separate from the Escape listener above, which now also depends on whether
+   * the suggestion list is open. Left in that effect, this line re-ran every
+   * time the list appeared and pulled focus off the search field — which blurred
+   * it, which closed the list, which re-ran the effect. The field could never
+   * hold a suggestion open for long enough to click one.
+   */
+  useEffect(() => {
+    if (open) panel.current?.focus();
+  }, [open]);
 
   /** Counts, but only where there is something to count. A "0" is not news. */
   const countFor = (d: Destination): string | null => {

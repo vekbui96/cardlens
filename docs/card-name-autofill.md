@@ -80,9 +80,9 @@ loaded on Home, never on a screen with no search box, never eagerly.
 
 ## Ranking
 
-The hard part. "char" must put `Charizard` first, not `Charcadet` or
-`Charizard & Braixen-GX`, and a naive alphabetical sort gets this wrong every
-time.
+The hard part, and the reason a naive alphabetical sort is not merely worse but
+actively wrong: it would answer "pik" with `Pichu` before `Pikachu`, and "char"
+with `Charcadet` before anything anyone means.
 
 Order by, in sequence:
 
@@ -187,7 +187,7 @@ eaten. This is the single most likely way the v1 half breaks.
       the one-time names fetch. Asserted by counting requests, not by reading.
 - [ ] The names file is not requested on a screen with no search box.
 - [ ] "char" ranks `Charizard` above `Charcadet` and above
-      `Charizard & Braixen-GX`.
+      `Charizard & Braixen-GX` — but see the note below on where it actually lands.
 - [ ] "pik" ranks `Pikachu` first — the 99-printing name, not the alphabetical
       one.
 - [ ] "charizard ex" matches `Charizard-EX`.
@@ -200,6 +200,20 @@ eaten. This is the single most likely way the v1 half breaks.
 - [ ] At 390px the list does not cover the input it belongs to.
 - [ ] `getByRole("combobox")` and `getByRole("option")` find the control and its
       suggestions.
+
+---
+
+### Where "char" actually lands, and why that is right
+
+An earlier draft of the criterion above demanded `Charizard` **first** for
+"char". Checked against the shipped index, it is third — behind `Charmander`
+(42 printings) and `Charmeleon`, because `Charizard` has 21.
+
+That is the printings rule working, not failing. All three are legitimate
+completions, they are ordered by how common the card actually is, and
+`Charizard` is visible without scrolling. Pinning one Pokémon to the top would
+mean special-casing a name, which is a worse rule than a measurable one — so
+the criterion was corrected rather than the ranking bent to satisfy it.
 
 ---
 
