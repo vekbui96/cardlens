@@ -1,4 +1,7 @@
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
+import { useCombobox } from "../../../hooks/useCombobox.ts";
+import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
 import { CardArt, Chip, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../../app/contexts.tsx";
@@ -78,6 +81,13 @@ export function BinderPicker({
 
   const [setId, setSetId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
+  // Local card-name suggestions — see docs/card-name-autofill.md. Choosing one
+  // fills the field; the picker still only searches on submit.
+  const { suggestions, prime } = useCardNameSuggestions(searchInput);
+  const combobox = useCombobox({
+    items: suggestions,
+    onChoose: (s) => setSearchInput(s.name),
+  });
   /**
    * The SUBMITTED query. Typing does not search: pokemontcg.io fails in bursts
    * and rate-limits, and a request per keystroke would spend that budget on
@@ -121,14 +131,32 @@ export function BinderPicker({
         }}
       >
         <Row gap={2}>
-          <input
-            className={styles.input}
-            type="search"
-            aria-label="Search every set"
-            placeholder="Search every set"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
+          <div className={styles.field}>
+            <input
+              className={styles.input}
+              type="search"
+              aria-label="Search every set"
+              placeholder="Search every set"
+              autoComplete="off"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              {...combobox.inputProps}
+              onFocus={() => {
+                prime();
+                combobox.inputProps.onFocus();
+              }}
+            />
+            <NameSuggestList
+              combobox={combobox}
+              suggestions={suggestions}
+              classes={{
+                list: styles.suggestions,
+                option: styles.suggestion,
+                optionActive: styles.suggestionActive,
+                count: styles.srOnly,
+              }}
+            />
+          </div>
           <button type="submit" className={styles.button} disabled={!searchInput.trim()}>
             Search
           </button>

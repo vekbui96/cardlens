@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
+import { useCardNameSuggestions } from "../../hooks/useCardNameSuggestions.ts";
+import { useCombobox } from "../../hooks/useCombobox.ts";
+import { NameSuggestList } from "../../components/NameSuggestList.tsx";
 import type { Screen } from "../../app/navigation.ts";
 import { switchUiVersion } from "../../app/uiVersion.ts";
 import styles from "./WebHeader.module.css";
@@ -46,22 +49,40 @@ export function WebHeader() {
   const { run } = useSearchAction();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /*
+   * Local suggestions, shared with v2 — see docs/card-name-autofill.md.
+   * Nothing here reaches the catalog; the field still only searches on submit.
+   */
+  const { suggestions, prime } = useCardNameSuggestions(query);
+  const combobox = useCombobox({
+    items: suggestions,
+    onChoose: (s) => setQuery(s.name),
+  });
+  const comboboxOpen = combobox.open;
   const panel = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        // Return focus to what opened it, or a keyboard user is stranded.
-        toggle.current?.focus();
-      }
+      if (e.key !== "Escape") return;
+      /*
+       * Escape belongs to the innermost thing that is open.
+       *
+       * This listener is on `window`, above React's root, so the combobox's
+       * `stopPropagation` on the synthetic event cannot reach it — one Escape
+       * would close the suggestion list AND the whole menu, losing the search
+       * the person was in the middle of typing.
+       */
+      if (comboboxOpen) return;
+      setOpen(false);
+      // Return focus to what opened it, or a keyboard user is stranded.
+      toggle.current?.focus();
     };
     window.addEventListener("keydown", onKey);
     panel.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, comboboxOpen]);
 
   /** Counts, but only where there is something to count. A "0" is not news. */
   const countFor = (d: Destination): string | null => {
@@ -117,18 +138,39 @@ export function WebHeader() {
               should not raise the keyboard over the destinations you came for.
             */}
             <form className={styles.search} onSubmit={search} role="search">
-              <input
-                className={styles.searchInput}
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search cards"
-                aria-label="Search cards"
-                enterKeyHint="search"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-              />
+              <div className={styles.searchField}>
+                <input
+                  className={styles.searchInput}
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search cards"
+                  aria-label="Search cards"
+                  enterKeyHint="search"
+                  // Ours covers the browser's, and the browser's suggests what
+                  // you typed before rather than what actually exists.
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  {...combobox.inputProps}
+                  // After the spread so both run — see the v2 screen for why.
+                  onFocus={() => {
+                    prime();
+                    combobox.inputProps.onFocus();
+                  }}
+                />
+                <NameSuggestList
+                  combobox={combobox}
+                  suggestions={suggestions}
+                  classes={{
+                    list: styles.suggestions,
+                    option: styles.suggestion,
+                    optionActive: styles.suggestionActive,
+                    count: styles.srOnly,
+                  }}
+                />
+              </div>
               <button type="submit" className={styles.searchGo} disabled={!query.trim()}>
                 Search
               </button>

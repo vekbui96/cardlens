@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useCardNameSuggestions } from "../../hooks/useCardNameSuggestions.ts";
+import { useCombobox } from "../../hooks/useCombobox.ts";
+import { NameSuggestList } from "../../components/NameSuggestList.tsx";
 import type { CSSProperties } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
@@ -106,6 +109,12 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const [setId, setSetId] = useState("me5");
   const [setName, setSetName] = useState("Pitch Black");
   const [searchInput, setSearchInput] = useState("");
+  // Local card-name suggestions, shared with v2 — docs/card-name-autofill.md.
+  const { suggestions, prime } = useCardNameSuggestions(searchInput);
+  const combobox = useCombobox({
+    items: suggestions,
+    onChoose: (s) => setSearchInput(s.name),
+  });
   /** The SUBMITTED query. Typing does not search: pokemontcg.io fails in bursts
       and rate-limits, and a request per keystroke would spend that budget on
       prefixes nobody asked about. */
@@ -480,14 +489,32 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                 setSearch(searchInput.trim());
               }}
             >
-              <input
-                className={styles.input}
-                type="search"
-                aria-label="Search every set"
-                placeholder="Search every set — e.g. Umbreon VMAX"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-              />
+              <div className={styles.searchField}>
+                <input
+                  className={styles.input}
+                  type="search"
+                  aria-label="Search every set"
+                  placeholder="Search every set — e.g. Umbreon VMAX"
+                  autoComplete="off"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  {...combobox.inputProps}
+                  onFocus={() => {
+                    prime();
+                    combobox.inputProps.onFocus();
+                  }}
+                />
+                <NameSuggestList
+                  combobox={combobox}
+                  suggestions={suggestions}
+                  classes={{
+                    list: styles.suggestions,
+                    option: styles.suggestion,
+                    optionActive: styles.suggestionActive,
+                    count: styles.srOnly,
+                  }}
+                />
+              </div>
               <button type="submit" className={styles.chip} disabled={!searchInput.trim()}>
                 Search
               </button>

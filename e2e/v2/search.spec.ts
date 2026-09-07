@@ -30,7 +30,7 @@ async function countApiCalls(page: Page): Promise<() => number> {
   return () => calls;
 }
 
-const searchBox = (page: Page) => page.getByRole("searchbox", { name: /card name or number/i });
+const searchBox = (page: Page) => page.getByRole("combobox", { name: /card name or number/i });
 const searchButton = (page: Page) => page.getByRole("button", { name: "Search", exact: true });
 
 test.describe("typing does not search", () => {

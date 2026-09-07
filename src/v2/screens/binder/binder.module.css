@@ -567,3 +567,60 @@ button.pocket:hover {
   opacity: 85%;
   filter: drop-shadow(0 var(--v2-space-1) var(--v2-space-2) var(--v2-scrim));
 }
+
+/* --- Card-name suggestions ------------------------------------------------- */
+
+.field {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  /*
+   * Above the pockets it overlaps. The picker is a rail on a desktop and a
+   * sheet on a phone, and in both a suggestion list that renders behind a card
+   * is a list you cannot click.
+   */
+  z-index: 25;
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  padding: var(--v2-space-1);
+  list-style: none;
+  background: var(--v2-surface-raised);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius);
+  box-shadow: var(--v2-shadow-lg);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  cursor: pointer;
+  font-size: var(--v2-fs-small);
+}
+
+.suggestionActive {
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+}
+
+.srOnly {
+  position: absolute;
+  width: var(--v2-border-w);
+  height: var(--v2-border-w);
+  padding: var(--v2-space-0);
+  margin: calc(var(--v2-border-w) * -1);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

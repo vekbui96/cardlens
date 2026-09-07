@@ -241,3 +241,62 @@
     gap: var(--cl-gap-sm);
   }
 }
+
+/* --- Card-name suggestions ------------------------------------------------- */
+
+/* Anchors the dropdown to the input alone, not to the Search button beside it. */
+.searchField {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--cl-surface-raised);
+  border: 1px solid var(--cl-accent);
+  border-radius: var(--cl-radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  /* A thumb. The panel this sits in is a phone-first overlay. */
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--cl-fg);
+  font-size: var(--cl-fs-small);
+}
+
+/*
+ * Background AND text colour — someone arrowing through this has no pointer to
+ * tell them where they are.
+ */
+.suggestionActive {
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

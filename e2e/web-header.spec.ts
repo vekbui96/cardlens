@@ -27,7 +27,7 @@ test.describe("web app bar", () => {
       await expect(menu.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toBeVisible();
     }
     // Search is a field in the panel, not a destination that opens a modal.
-    await expect(page.getByRole("searchbox", { name: "Search cards" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Search cards" })).toBeVisible();
   });
 
   test("searches from the panel without opening another overlay", async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe("web app bar", () => {
 
     // Scoped to the form: Home's empty state also offers a "Search" button.
     const form = page.getByRole("search");
-    await form.getByRole("searchbox", { name: "Search cards" }).fill("charizard");
+    await form.getByRole("combobox", { name: "Search cards" }).fill("charizard");
     await form.getByRole("button", { name: "Search" }).click();
 
     await expect(page).toHaveURL(/#\/search\/charizard$/);
@@ -51,7 +51,7 @@ test.describe("web app bar", () => {
 
     const form = page.getByRole("search");
     await expect(form.getByRole("button", { name: "Search" })).toBeDisabled();
-    await form.getByRole("searchbox", { name: "Search cards" }).fill("   ");
+    await form.getByRole("combobox", { name: "Search cards" }).fill("   ");
     await expect(form.getByRole("button", { name: "Search" })).toBeDisabled();
   });
 

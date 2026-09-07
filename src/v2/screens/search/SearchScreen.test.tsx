@@ -75,7 +75,7 @@ function Routed() {
   return <SearchScreen query={current.name === "results" ? current.query : ""} />;
 }
 
-const input = () => screen.getByRole("searchbox", { name: /card name or number/i });
+const input = () => screen.getByRole("combobox", { name: /card name or number/i });
 const submit = () => screen.getByRole("button", { name: "Search" });
 
 describe("typing versus submitting", () => {

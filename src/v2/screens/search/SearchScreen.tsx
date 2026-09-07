@@ -2,6 +2,9 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { FormEvent } from "react";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
 import { FULL_SEARCH_LIMIT } from "../../../integrations/providers.ts";
+import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
+import { useCombobox } from "../../../hooks/useCombobox.ts";
+import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
 import { formatCollector } from "../../../utils/format.ts";
 import { useCatalogSearch } from "../../../hooks/useCatalogSearch.ts";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
@@ -55,6 +58,17 @@ export function SearchScreen({ query }: SearchScreenProps) {
   const { recentSearches, addRecentSearch, clearRecentSearches } = useLibrary();
   const inputId = useId();
   const [text, setText] = useState(query);
+  /*
+   * Suggestions are local. Nothing here reaches the catalog — see
+   * docs/card-name-autofill.md and the rule it exists to protect: typing does
+   * not search, submit does.
+   */
+  const { suggestions, prime } = useCardNameSuggestions(text);
+  const combobox = useCombobox({
+    items: suggestions,
+    // Fills the field only. The person still decides whether to search it.
+    onChoose: (s) => setText(s.name),
+  });
 
   // Adopt the query the URL names — a pasted link, a recent search, the back
   // button. Never the other way round: local text never drives a fetch.
@@ -108,17 +122,39 @@ export function SearchScreen({ query }: SearchScreenProps) {
           Card name or number
         </label>
         <Row gap={2} align="stretch">
-          <input
-            id={inputId}
-            className={styles.input}
-            type="search"
-            name="q"
-            autoComplete="off"
-            enterKeyHint="search"
-            placeholder="Charizard 4/102"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
+          <div className={styles.field}>
+            <input
+              id={inputId}
+              className={styles.input}
+              type="search"
+              name="q"
+              // The browser's own history dropdown would cover ours, and it
+              // suggests what you typed before rather than what exists.
+              autoComplete="off"
+              enterKeyHint="search"
+              placeholder="Charizard 4/102"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              {...combobox.inputProps}
+              // After the spread, so both run: the combobox needs to know the
+              // field is focused, and this is the moment the names file is
+              // fetched — once, and never on a screen without a search box.
+              onFocus={() => {
+                prime();
+                combobox.inputProps.onFocus();
+              }}
+            />
+            <NameSuggestList
+              combobox={combobox}
+              suggestions={suggestions}
+              classes={{
+                list: styles.suggestions,
+                option: styles.suggestion,
+                optionActive: styles.suggestionActive,
+                count: styles.srOnly,
+              }}
+            />
+          </div>
           <button type="submit" className={styles.primary}>
             Search
           </button>

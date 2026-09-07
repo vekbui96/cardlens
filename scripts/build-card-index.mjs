@@ -269,7 +269,7 @@ function writeArtifacts(hashes, cards) {
   mkdirSync(OUT_DIR, { recursive: true });
   // Old versions would otherwise pile up in the repo and ship to every device.
   for (const name of readdirSync(OUT_DIR)) {
-    if (/^(index|cards)-/.test(name) && !name.includes(version)) rmSync(join(OUT_DIR, name));
+    if (/^(index|cards|names)-/.test(name) && !name.includes(version)) rmSync(join(OUT_DIR, name));
   }
 
   writeFileSync(`${OUT_DIR}/index-${version}.bin`, Buffer.from(index.buffer));
@@ -286,11 +286,40 @@ function writeArtifacts(hashes, cards) {
       })),
     ),
   );
+  /*
+   * Distinct names, with how many printings carry each.
+   *
+   * This is what the search boxes autocomplete against, and it is a separate
+   * file for one reason: `cards-<version>.json` is 2.29MB, and pulling that
+   * onto a phone to help somebody spell "Gyarados" would be absurd. The same
+   * 20,205 cards collapse to about 4,451 names — roughly 67KB, 21KB gzipped.
+   *
+   * The count is not decoration. It is the ranking signal: "pik" has to return
+   * Pikachu, which has 99 printings, rather than whatever sorts first
+   * alphabetically. See docs/card-name-autofill.md.
+   */
+  const printings = new Map();
+  for (const c of cards) printings.set(c.name, (printings.get(c.name) ?? 0) + 1);
+  writeFileSync(
+    `${OUT_DIR}/names-${version}.json`,
+    // Sorted by name so the file is stable between rebuilds and diffs small.
+    JSON.stringify([...printings.entries()].sort((a, b) => a[0].localeCompare(b[0]))),
+  );
+
   writeFileSync(
     `${OUT_DIR}/latest.json`,
-    JSON.stringify({ version, cards: cards.length, sets: [...new Set(cards.map((c) => c.setId))] }, null, 2),
+    JSON.stringify(
+      {
+        version,
+        cards: cards.length,
+        names: printings.size,
+        sets: [...new Set(cards.map((c) => c.setId))],
+      },
+      null,
+      2,
+    ),
   );
-  return { version, bytes: index.byteLength };
+  return { version, bytes: index.byteLength, names: printings.size };
 }
 
 const { version, bytes } = writeArtifacts(hashes, downloaded);
