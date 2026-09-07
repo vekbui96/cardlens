@@ -51,6 +51,22 @@ it went last.
   relying on it to see an empty set view silently tests the non-empty path.
 - Offline is not exercised end to end; there is no network-drop harness.
 
+### Specced, not built: card-name autofill
+
+`docs/card-name-autofill.md` — suggest card names as you type, in all four
+search boxes, in **both versions**. Nothing is implemented yet; the spec carries
+the plan and the measurements.
+
+The one number that decides the design: the shipped card index is **2.29 MB**,
+but its 20,205 cards collapse to **4,451 distinct names — 21 KB gzipped**. So
+autofill is answered entirely on the device and never breaks the rule that
+typing does not search. Reading the 2.29 MB file for this is the obvious
+implementation and the wrong one.
+
+Its riskiest step is the v1 half: `KeyboardBackedInputAdapter` is live there and
+`preventDefault`s Down/Up/Escape as soon as anything subscribes, which are
+exactly the keys a combobox needs. v2 is safe — its adapter is off.
+
 ### Traps this phase found
 
 - **Parallel checkouts silently test each other's code.** Playwright's
