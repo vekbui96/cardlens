@@ -624,3 +624,11 @@ button.pocket:hover {
   white-space: nowrap;
   border: 0;
 }
+
+/*
+ * The always-mounted anchor the printing chooser scrolls to. It must not
+ * introduce a box of its own when there is nothing inside it.
+ */
+.detailAnchor:focus {
+  outline: none;
+}

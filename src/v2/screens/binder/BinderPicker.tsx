@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
 import { useCombobox } from "../../../hooks/useCombobox.ts";
 import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
@@ -102,6 +102,32 @@ export function BinderPicker({
    */
   const [chosen, setChosen] = useState<PokemonCardSummary | null>(null);
 
+  /**
+   * Bring "which printing?" to the reader when they pick a card.
+   *
+   * The chooser is rendered BELOW the results on purpose — it used to replace
+   * them, and the card you were comparing against vanished exactly when the
+   * comparison mattered. But a name search asks for every printing rather than
+   * the top forty, so tapping a Charizard halfway down a hundred results left
+   * the question far below the fold with nothing taking you there. The tap that
+   * should have finished the job started a hunt.
+   *
+   * Keyed on the card's ID, not the object: `chosen` is a new reference on
+   * unrelated re-renders and would re-scroll while someone is reading.
+   * `block: "nearest"` so a chooser already on screen does not jump.
+   */
+  const detailRef = useRef<HTMLDivElement>(null);
+  const chosenId = chosen?.id ?? null;
+  useEffect(() => {
+    if (!chosenId) return;
+    const el = detailRef.current;
+    if (!el) return;
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    el.scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    // preventScroll, or focus fights the smooth scroll it was just given.
+    el.focus({ preventScroll: true });
+  }, [chosenId]);
+
   // ALL sets, not just collected ones: a binder is a plan, and planning a set
   // you have not started is the common case.
   const browsing = (allSets ?? []).find((s) => s.id === setId) ?? (allSets ?? [])[0];
@@ -204,17 +230,25 @@ export function BinderPicker({
 
       {/* Last, so "which printing" is asked where the thumb already is, under
           the list it was asked about — and so a filled pocket can be marked
-          owned without finding the card in the catalog a second time. */}
-      <PocketDetail
-        chosen={chosen}
-        slot={selectedSlot}
-        where={where}
-        forTrade={forTrade}
-        priceFor={priceFor}
-        onPlace={onPlace}
-        onUpdate={onUpdate}
-        onCancel={() => setChosen(null)}
-      />
+          owned without finding the card in the catalog a second time.
+
+          The wrapper is ALWAYS mounted, even when there is nothing to show, and
+          that is deliberate: the scroll effect below targets it, and a ref on a
+          conditionally-rendered node makes mount → effect → focus → render into
+          a cycle. A first attempt at this fix did exactly that and made this
+          screen's spec thirty times slower. */}
+      <div ref={detailRef} tabIndex={-1} className={styles.detailAnchor}>
+        <PocketDetail
+          chosen={chosen}
+          slot={selectedSlot}
+          where={where}
+          forTrade={forTrade}
+          priceFor={priceFor}
+          onPlace={onPlace}
+          onUpdate={onUpdate}
+          onCancel={() => setChosen(null)}
+        />
+      </div>
     </Stack>
   );
 }
