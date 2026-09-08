@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { buildPrintingIndex, printingEur, type SetPrintingIndex } from "../models/printingIndex.ts";
@@ -140,5 +141,5 @@ export function useCollectionValue(
     );
     return { ...value, pending, failed, unaskable, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
-  }, [rows, setIds, catalogPrices, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [rows, setIds, catalogPrices, settledKey(queries)]);
 }

@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { SetPrintings } from "../integrations/tcgdex/client.ts";
@@ -64,7 +65,7 @@ export function useBindersValue(binders: Binder[]): BindersValue {
     return map;
     // Results are a new array each render; the settled data inside is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setIds, results.map((r) => r.dataUpdatedAt).join(",")]);
+  }, [setIds, settledKey(results)]);
 
   const isLoading = results.some((r) => r.isLoading);
 

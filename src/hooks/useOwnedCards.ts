@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { useCatalog } from "../app/contexts.tsx";
@@ -68,8 +69,8 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
    * ESLint cannot read statically is one it cannot check, and an unchecked
    * dependency list is exactly where a stale memo hides.
    */
-  const cardsSettledAt = cardQueries.map((q) => q.dataUpdatedAt).join(",");
-  const pricesSettledAt = priceQueries.map((q) => q.dataUpdatedAt).join(",");
+  const cardsSettledAt = settledKey(cardQueries);
+  const pricesSettledAt = settledKey(priceQueries);
 
   /**
    * Teach the stored rows their collector numbers, from the card lists this

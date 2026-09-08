@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLibrary } from "../app/LibraryProvider.tsx";
@@ -95,5 +96,5 @@ export function useSealed(): SealedResult {
     rows.sort((a, b) => b.holdings - a.holdings || a.setName.localeCompare(b.setName));
     return { rows, pending, missing };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; its settled data is what matters
-  }, [setIds, setNames, ownedFinishCountsBySet, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [setIds, setNames, ownedFinishCountsBySet, settledKey(queries)]);
 }

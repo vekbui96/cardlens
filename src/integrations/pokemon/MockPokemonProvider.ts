@@ -76,6 +76,11 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
 
   async listSets(opts?: FetchOpts): Promise<PokemonSet[]> {
     await this.gate(opts?.signal);
+    // `?sim=empty` used to be honoured by `searchCards` alone, so the flag every
+    // screen is told to use for seeing its empty state did nothing on any
+    // set-reading screen — they rendered their normal populated selves, and a
+    // spec asserting an empty one passed for the wrong reason.
+    if (this.behavior.forceEmpty) return [];
     const byId = new Map<string, PokemonSet>();
     for (const card of MOCK_CARDS) {
       if (!byId.has(card.set.id)) byId.set(card.set.id, toSet(card.set));
@@ -85,6 +90,8 @@ export class MockPokemonProvider implements CardCatalogProvider, CardPricingProv
 
   async getCardsBySet(setId: string, opts?: SearchOpts): Promise<PokemonCardSummary[]> {
     await this.gate(opts?.signal);
+    // See listSets: an empty SET is the state the set screens need to show.
+    if (this.behavior.forceEmpty) return [];
     let cards = MOCK_CARDS.filter((c) => c.set.id === setId);
     if (opts?.rarities && opts.rarities.length > 0) {
       const set = new Set(opts.rarities);

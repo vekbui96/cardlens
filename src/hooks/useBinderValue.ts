@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import type { SetPrintings } from "../integrations/tcgdex/client.ts";
@@ -111,7 +112,7 @@ export function useBinderValue(binder: Binder | null): BinderValue {
     return map;
     // Results are a new array each render; the data inside is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setIds, results.map((r) => r.dataUpdatedAt).join(",")]);
+  }, [setIds, settledKey(results)]);
 
   const priceFor = useCallback(
     (slot: BinderSlot) => {

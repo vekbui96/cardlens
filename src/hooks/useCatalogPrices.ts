@@ -1,3 +1,4 @@
+import { settledKey } from "./settledKey.ts";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useCatalog } from "../app/contexts.tsx";
@@ -73,7 +74,7 @@ export function useCatalogPrices(setIds: string[]): Map<string, number> {
     }),
   });
 
-  const fallbackStamp = queries.map((q) => q.dataUpdatedAt).join(",");
+  const fallbackStamp = settledKey(queries);
 
   return useMemo(
     () => {
