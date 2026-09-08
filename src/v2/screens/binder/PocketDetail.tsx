@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { CardArt, Chip, Money, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useSetPrintings } from "../../../hooks/useSetPrintings.ts";
@@ -103,6 +104,38 @@ export function PocketDetail({
     Boolean(chosen),
   );
 
+  /**
+   * Bring the chooser to the reader when a card is picked.
+   *
+   * This panel sits BELOW the results rather than replacing them, so the card
+   * you were comparing against does not vanish at the moment you have to decide
+   * between its printings. That is the right call and it is kept — but nothing
+   * moved the reader to it, and a name search here deliberately asks for every
+   * printing of a Pokémon rather than the top forty. So tapping a Charizard
+   * halfway down a hundred results left the printing rows a long scroll further
+   * down, and the tap that was meant to finish the job started a hunt instead.
+   *
+   * `block: "nearest"` scrolls the least that will do, so a chooser already on
+   * screen does not jump. Sticky would have been the tidier answer and does not
+   * work here: this is the last child of its container, so a bottom-stuck
+   * element has no travel to stick through.
+   *
+   * Focus follows for the same reason the scroll does — a keyboard or screen
+   * reader user is otherwise left at the result they just activated, with the
+   * printings announced nowhere. `preventScroll` because the line above has
+   * already put it exactly where it should be.
+   */
+  const detailRef = useRef<HTMLDivElement>(null);
+  const chosenId = chosen?.id ?? null;
+  useEffect(() => {
+    if (!chosenId) return;
+    const el = detailRef.current;
+    if (!el) return;
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    el.scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    el.focus({ preventScroll: true });
+  }, [chosenId]);
+
   if (chosen) {
     const known = index?.byNumber[chosen.collectorNumber];
     /*
@@ -115,7 +148,9 @@ export function PocketDetail({
     const finishes = known?.length ? known : availableFinishes(chosen.variants);
 
     return (
-      <div className={styles.detail}>
+      {/* `tabIndex={-1}` so the effect above can move focus here. It is a
+          landing place, not a stop on the tab order. */}
+      <div className={styles.detail} ref={detailRef} tabIndex={-1}>
         <div className={styles.detailHead}>
           <CardArt
             src={chosen.imageSmall}

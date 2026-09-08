@@ -362,6 +362,41 @@ test.describe("the picker", () => {
     await expect(page.getByRole("button", { name: /Page 1, pocket 1, Umbreon VMAX/ })).toBeVisible();
   });
 
+  test("brings the printing chooser on screen instead of leaving it below the results", async ({ page }) => {
+    /*
+     * The chooser sits BELOW the results rather than replacing them, so the card
+     * you were comparing against does not vanish when you have to decide between
+     * its printings. Right call — but a name search here asks for every printing
+     * of a Pokémon rather than the top forty, so nothing brought the reader to
+     * it and the second tap started a scroll instead of finishing the job.
+     *
+     * `toBeVisible()` does not catch this: it means "is in the layout with a
+     * box", which is true of something a hundred results below the fold. That is
+     * exactly how it shipped, so this asserts the viewport instead.
+     */
+    await openV2(page, "/binder/fx-empty", { seed: "binders" });
+    await page.getByRole("button", { name: "Page 1, pocket 1, empty" }).click();
+    await page.getByRole("searchbox", { name: "Search every set" }).fill("Umbreon");
+    await page.getByRole("button", { name: "Search" }).click();
+    await page
+      .getByRole("button", { name: /Umbreon VMAX/ })
+      .first()
+      .click();
+
+    const prompt = page.getByText(/Which printing goes in/);
+    await expect(prompt).toBeVisible();
+
+    // Polled, because the scroll is smooth unless the reader asked otherwise.
+    await expect
+      .poll(async () => {
+        const box = await prompt.boundingBox();
+        const viewport = page.viewportSize();
+        if (!box || !viewport) return false;
+        return box.y >= 0 && box.y + box.height <= viewport.height;
+      })
+      .toBe(true);
+  });
+
   test("fills the binder with one of each card in a set", async ({ page }) => {
     await openV2(page, "/binder/fx-empty", { seed: "binders" });
     await page.getByRole("button", { name: "Cards", exact: true }).click();
