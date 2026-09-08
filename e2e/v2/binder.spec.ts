@@ -169,6 +169,44 @@ test.describe("filling a pocket", () => {
     // Still zero. The cover is not one of the nine.
     await expect(page.getByText("0 of 9 pockets filled")).toBeVisible();
   });
+
+  test("brings the printing chooser on screen instead of leaving it below the results", async ({ page }) => {
+    /*
+     * The chooser sits BELOW the results rather than replacing them, so the card
+     * you were comparing against does not vanish at the moment the comparison
+     * matters. Right call — but a name search here asks for EVERY printing of a
+     * Pokémon rather than the top forty, so tapping one halfway down left the
+     * question a long scroll further on with nothing taking you to it: the tap
+     * that should have finished the job started a hunt.
+     *
+     * `toBeVisible()` cannot catch that. In Playwright it means "is in the
+     * layout with a box", which is true of an element a hundred results below
+     * the fold — and that is exactly how this reached a user. So assert the
+     * VIEWPORT, polled, because the scroll is smooth unless the reader has asked
+     * for less motion.
+     */
+    await openBinder(page, "fx-empty");
+    await page.getByRole("button", { name: "Pocket 1, empty" }).click();
+    // A combobox, not a searchbox: every search box carries name autofill.
+    await page.getByRole("combobox", { name: "Search every set" }).fill("Charizard");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page
+      .getByRole("button", { name: /Charizard VMAX/ })
+      .first()
+      .click();
+
+    const prompt = page.getByText(/Which printing goes in/);
+    await expect(prompt).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const box = await prompt.boundingBox();
+        const viewport = page.viewportSize();
+        if (!box || !viewport) return false;
+        return box.y >= 0 && box.y + box.height <= viewport.height;
+      })
+      .toBe(true);
+  });
 });
 
 /**
