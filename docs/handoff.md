@@ -6,6 +6,29 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## 16-pocket (4x4) binders (2026-09-27)
+
+`BINDER_SPECS` gains `"16"`, `BINDER_FORMATS` gains it, and that is the whole
+change — no CSS, no screen, no gate. It is worth saying why, because it is the
+design working rather than luck: every gate goes through `isBinderFormat`, both
+pickers map `BINDER_FORMATS`, and `binder.module.css` derives one pocket size
+from **what four columns can afford** (eight for two facing pages) rather than
+from a per-format rule. 16-pocket is four across like the 12, so the pocket does
+not move and the page simply grows a fourth row.
+
+**A FIVE-column format would not be free**, and the failure would be quiet: it
+would shrink the pockets in every other binder in the app, which is the exact
+bug "a pocket is a pocket" exists to prevent. There is now a unit test asserting
+no format exceeds four columns, and an e2e asserting a 16-pocket page is the
+same WIDTH as a 12-pocket one and taller.
+
+Both facing, since 12 and 16 are told apart by page depth — three rows against
+four — and depth does not change when a page is put beside its neighbour.
+
+**The server needs deploying with this.** `models/binderLayout.ts` is one of the
+shared files in `tsconfig.node.json`: until the server has it, `parseBinder`
+rejects `format: "16"` and a 16-pocket binder is dropped on sync without a word.
+
 ## Filling a binder on a phone (2026-09-27)
 
 ### The phone fill flow was broken in three ways at once

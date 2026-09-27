@@ -12,6 +12,7 @@ import {
   preferredFinish,
   reformat,
   removeLastPage,
+  BINDER_FORMATS,
   hasFacingPages,
   isBinderFormat,
   pageGroups,
@@ -31,9 +32,31 @@ const card = (n: string): CardSlot => ({ kind: "card", cardId: `me5-${n}`, finis
 const base = () => emptyBinder("b1", "Vault X", "9", NOW);
 
 describe("binder specs", () => {
-  it("lays 9-pocket out as 3x3 and 12-pocket as 4x3", () => {
+  it("lays 9-pocket out as 3x3, 12-pocket as 4x3 and 16-pocket as 4x4", () => {
     expect(specFor("9")).toMatchObject({ cols: 3, rows: 3, pockets: 9 });
     expect(specFor("12")).toMatchObject({ cols: 4, rows: 3, pockets: 12 });
+    expect(specFor("16")).toMatchObject({ cols: 4, rows: 4, pockets: 16, label: "16-pocket" });
+  });
+
+  it("never gets wider than four columns, which is what the layout assumes", () => {
+    /*
+     * `binder.module.css` derives ONE pocket size from what four columns can
+     * afford — eight for two facing pages — so that a card is drawn the same
+     * size in every binder it could be filed in. A five-column format would
+     * silently shrink every other format's pockets to fit, which is the exact
+     * bug "a pocket is a pocket" exists to prevent, and it would show up as the
+     * 9-pocket binder changing size the day the new format was added.
+     */
+    for (const format of BINDER_FORMATS) {
+      expect(specFor(format).cols).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("agrees with itself about how many pockets a page holds", () => {
+    for (const format of BINDER_FORMATS) {
+      const spec = specFor(format);
+      expect(spec.pockets).toBe(spec.cols * spec.rows);
+    }
   });
 });
 
@@ -407,6 +430,10 @@ describe("4-pocket", () => {
     expect(hasFacingPages("4")).toBe(false);
     expect(hasFacingPages("9")).toBe(true);
     expect(hasFacingPages("12")).toBe(true);
+    // 12 and 16 are both four across, so a spread of either is eight — they are
+    // told apart by page DEPTH, three rows against four, which does not change
+    // when a page is put beside its neighbour.
+    expect(hasFacingPages("16")).toBe(true);
 
     expect(pageGroups(5, "4")).toEqual([[0], [1], [2], [3], [4]]);
   });

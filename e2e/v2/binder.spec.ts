@@ -80,8 +80,37 @@ test.describe("a pocket is a pocket", () => {
     await expect(page.getByRole("button", { name: "Pocket 5, empty" })).toHaveCount(0);
     const four = await pocketWidth(page);
 
+    await page.getByRole("button", { name: "16-pocket" }).click();
+    await expect(page.getByRole("button", { name: "Pocket 16, empty" })).toBeVisible();
+    const sixteen = await pocketWidth(page);
+
     expect(Math.abs(nine - twelve)).toBeLessThanOrEqual(1);
+    // 16-pocket is four across like the 12 and four DOWN instead of three, so
+    // it is a deeper page of identically sized pockets — not smaller ones. This
+    // is the assertion that would catch a new format quietly shrinking every
+    // other binder in the app.
+    expect(Math.abs(nine - sixteen)).toBeLessThanOrEqual(1);
     expect(four).toBeGreaterThanOrEqual(nine * 1.3);
+  });
+
+  test("a 16-pocket page is as wide as a 12-pocket one, and taller", async ({ page }) => {
+    // Four columns either way, so the page width cannot move; the fourth row is
+    // the entire difference. A format that changed the width would mean the
+    // pocket had changed size, which is the one thing that must not happen.
+    await openBinder(page, "fx-empty");
+    const grid = page.locator('[data-pocket="0:0"]').locator("..").locator("..");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "12-pocket" }).click();
+    await expect(page.getByRole("button", { name: "Pocket 12, empty" })).toBeVisible();
+    const twelve = (await grid.boundingBox())!;
+
+    await page.getByRole("button", { name: "16-pocket" }).click();
+    await expect(page.getByRole("button", { name: "Pocket 16, empty" })).toBeVisible();
+    const sixteen = (await grid.boundingBox())!;
+
+    expect(Math.abs(sixteen.width - twelve.width)).toBeLessThanOrEqual(1);
+    expect(sixteen.height).toBeGreaterThan(twelve.height);
   });
 
   test("a 12-pocket page is wider than a 9-pocket one, because the PAGE grows", async ({ page }) => {

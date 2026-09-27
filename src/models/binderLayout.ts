@@ -14,8 +14,8 @@ import type { CollectFinish } from "./cards.ts";
  * array-of-cards model fall apart the moment you insert in the middle.
  */
 
-/** The Vault X formats, as pockets per page side. */
-export type BinderFormat = "4" | "9" | "12";
+/** The formats, as pockets per page side. */
+export type BinderFormat = "4" | "9" | "12" | "16";
 export interface BinderSpec {
   format: BinderFormat;
   label: string;
@@ -30,15 +30,24 @@ export interface BinderSpec {
  * 4-pocket is 2×2. 9-pocket is 3×3. 12-pocket is 4×3 — four across, three down —
  * which is worth stating because a 12-pocket could equally be 3×4 and the
  * difference decides whether a page reads in rows of four or rows of three.
+ * 16-pocket is 4×4, and is the densest page in common use.
+ *
+ * **Four columns is the widest any of these gets, and the layout depends on
+ * that.** `binder.module.css` derives one pocket size from what four columns
+ * can afford (eight, for two facing pages) so that a card is the same size in
+ * every binder it could be filed in. 16-pocket is four across like the 12, so
+ * it needed no geometry of its own — a FIVE-column format would, and adding
+ * one means revisiting that file rather than only this list.
  */
 export const BINDER_SPECS: Record<BinderFormat, BinderSpec> = {
   "4": { format: "4", label: "4-pocket", cols: 2, rows: 2, pockets: 4 },
   "9": { format: "9", label: "9-pocket", cols: 3, rows: 3, pockets: 9 },
   "12": { format: "12", label: "12-pocket", cols: 4, rows: 3, pockets: 12 },
+  "16": { format: "16", label: "16-pocket", cols: 4, rows: 4, pockets: 16 },
 };
 
 /** Every format, in the order the pickers offer them. */
-export const BINDER_FORMATS: readonly BinderFormat[] = ["4", "9", "12"];
+export const BINDER_FORMATS: readonly BinderFormat[] = ["4", "9", "12", "16"];
 
 /** Narrows an untrusted value to a known format. The one gate on ingest. */
 export function isBinderFormat(value: unknown): value is BinderFormat {
@@ -53,6 +62,10 @@ export function isBinderFormat(value: unknown): value is BinderFormat {
  * be indistinguishable at a glance. A 4-pocket binder also holds the big cards
  * (jumbo promos, top-loaders), so halving the width to fit a facing page throws
  * away the one thing the format is for.
+ *
+ * 12 and 16 are both four across, and a spread of either is eight — but they
+ * are told apart by how DEEP the page is (three rows against four), which does
+ * not change when the page is put beside its neighbour. So both face.
  */
 export function hasFacingPages(format: BinderFormat): boolean {
   return format !== "4";
