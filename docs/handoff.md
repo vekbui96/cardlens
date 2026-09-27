@@ -6,6 +6,68 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## 16-pocket (4x4) binders (2026-09-27)
+
+`BINDER_SPECS` gains `"16"`, `BINDER_FORMATS` gains it, and that is the whole
+change — no CSS, no screen, no gate. It is worth saying why, because it is the
+design working rather than luck: every gate goes through `isBinderFormat`, both
+pickers map `BINDER_FORMATS`, and `binder.module.css` derives one pocket size
+from **what four columns can afford** (eight for two facing pages) rather than
+from a per-format rule. 16-pocket is four across like the 12, so the pocket does
+not move and the page simply grows a fourth row.
+
+**A FIVE-column format would not be free**, and the failure would be quiet: it
+would shrink the pockets in every other binder in the app, which is the exact
+bug "a pocket is a pocket" exists to prevent. There is now a unit test asserting
+no format exceeds four columns, and an e2e asserting a 16-pocket page is the
+same WIDTH as a 12-pocket one and taller.
+
+Both facing, since 12 and 16 are told apart by page depth — three rows against
+four — and depth does not change when a page is put beside its neighbour.
+
+**The server needs deploying with this.** `models/binderLayout.ts` is one of the
+shared files in `tsconfig.node.json`: until the server has it, `parseBinder`
+rejects `format: "16"` and a 16-pocket binder is dropped on sync without a word.
+
+## Filling a binder on a phone (2026-09-27)
+
+### The phone fill flow was broken in three ways at once
+
+Reported as "I don't like how it works"; measured at 390x844 before touching
+anything, because three separate faults were producing one bad feeling.
+
+| What happened                              | Measured                                                        |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| The keyboard came up on every pocket tap   | focus after the tap was `input[type=search] "Search every set"` |
+| The sheet covered most of the screen       | 525px of 844 — **62%**                                          |
+| The pocket you tapped was hidden behind it | pocket at y 520-634, sheet top edge at y 319                    |
+| The page drifted behind the modal          | `body { overflow: visible }`, scrim did not block touch         |
+
+**`Sheet` focused the first focusable inside itself**, and in the binder picker
+that is the search box. Nobody taps a pocket in order to type; they tap it to
+pick out of the set already in front of them. It focuses the DIALOG now —
+`tabIndex={-1}`, so the trap still has a start and a screen reader still hears
+the label, with no keyboard. A sheet that genuinely wants one asks for it
+itself, which `PickBySet` already did in one line.
+
+**`scrollIntoView({ block: "center" })` centres in the LAYOUT viewport**, whose
+bottom two-thirds is the sheet — so the effect written to keep the pocket
+visible was reliably hiding it. It now centres the pocket in the band the sheet
+leaves, read off the live dialog, which on a desktop (rail, no dialog) is the
+whole window and behaves exactly as before.
+
+**And it could not have scrolled anyway.** A one-page binder is 1113px tall in
+an 844px window, so 269px is the entire available scroll and `scrollTo` clamps
+in silence. The pages stack now reserves the sheet's max-height underneath
+itself while the phone sheet is open. **Either half alone looks identical to no
+fix at all**, which is why both are in one commit with one test across them.
+
+Also: the sheet rides above the software keyboard now (`visualViewport` — iOS
+shrinks the visual viewport and leaves the layout one alone, so a `bottom: 0`
+element sits underneath the keyboard), `dvh` instead of `vh` for the same class
+of reason, and the scrim takes `touch-action: none` so a drag on it cannot
+scroll the binder out from under the sheet.
+
 ## The two missing v2 primitives are built (2026-09-27)
 
 Phase 1 closed with a short list of what it had left behind, and the top of it

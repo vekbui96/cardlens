@@ -426,13 +426,35 @@
   inset: 0;
   background: var(--v2-scrim);
   z-index: 20;
+  /*
+   * A drag on the scrim must not scroll the page behind the modal. It already
+   * swallows taps; on a touch screen a scroll is the other half of that, and
+   * without this the binder slides away under a sheet that is filling it.
+   */
+  touch-action: none;
 }
 
+/*
+ * `--sheet-lift` is how much software keyboard is currently covering the
+ * viewport, written by the component from `visualViewport`. Zero the rest of
+ * the time, so this is an ordinary bottom sheet until a field takes focus.
+ */
 .sheet {
   position: fixed;
-  inset: auto 0 0 0;
+  inset: auto 0 var(--sheet-lift, 0) 0;
   z-index: 21;
+  /*
+   * `dvh`, not `vh`. On iOS `vh` is the LARGE viewport — the one you get with
+   * the browser chrome hidden — so `80vh` is taller than the screen actually
+   * shows and the bottom of the sheet is simply off it.
+   *
+   * 72 rather than 80 because this sheet is how a binder gets filled, and the
+   * pocket being filled is above it: at 390x844 an 80% sheet left 169px, which
+   * is one 114px pocket and nothing else. 72% leaves room for the pocket and
+   * its neighbours, which is what tells you where the card is going.
+   */
   max-height: 80vh;
+  max-height: 72dvh;
   display: flex;
   flex-direction: column;
   background: var(--v2-surface);
@@ -441,6 +463,11 @@
   box-shadow: var(--v2-shadow-lg);
   padding: var(--v2-space-4);
   padding-bottom: max(var(--v2-space-4), env(safe-area-inset-bottom));
+}
+
+/* The dialog takes focus on open; it is a target, not a control. */
+.sheet:focus {
+  outline: none;
 }
 
 .sheetHandle {
@@ -455,6 +482,12 @@
 .sheetBody {
   overflow: hidden auto;
   min-height: 0;
+  /*
+   * Stop the page behind taking over when the card list hits its end. Without
+   * it, flicking through cards scrolls the binder out from under the sheet as
+   * soon as the list bottoms out.
+   */
+  overscroll-behavior: contain;
 }
 
 /* --- Shared --------------------------------------------------------------- */
