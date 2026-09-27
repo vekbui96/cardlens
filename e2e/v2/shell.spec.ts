@@ -237,3 +237,55 @@ test.describe("input", () => {
     expect(defaultPrevented).toBe(false);
   });
 });
+
+test.describe("the Field primitive", () => {
+  /**
+   * The measurement this exists for: iOS Safari zooms the whole page when a
+   * focused input's computed font-size is under 16px, and v2's body text is
+   * 15px. Phase 1 shipped six hand-written `.input` rules and exactly one of
+   * them had thought about this — with `max(1em, var(--v2-fs-body))`, which
+   * cannot work, because `1em` is the inherited size and `shell/reset.css`
+   * sets that to `--v2-fs-body`. It computed to `max(15px, 15px)`.
+   *
+   * So this asserts the NUMBER rather than the rule. A guard that reads as a
+   * fix and is not one is worse than no guard: nobody looks at it twice.
+   */
+  const withFields: Array<[route: string, seed: "collection" | "binders" | undefined]> = [
+    ["/sets", "collection"],
+    ["/binders", "binders"],
+    ["/search", undefined],
+    ["/target", undefined],
+  ];
+
+  for (const [route, seed] of withFields) {
+    test(`every text field on ${route} is at least 16px, or iOS zooms the page`, async ({ page }) => {
+      await openV2(page, route, seed ? { seed } : {});
+      const fields = page.locator(
+        'main input[type="text"], main input[type="search"], main input[type="password"], main input:not([type])',
+      );
+      const count = await fields.count();
+      // An assertion that cannot be stressed cannot catch anything: a screen
+      // whose field stopped rendering would otherwise pass this silently.
+      expect(count).toBeGreaterThan(0);
+      for (let i = 0; i < count; i++) {
+        const size = await fields.nth(i).evaluate((el) => getComputedStyle(el).fontSize);
+        expect(parseFloat(size), `${route} field ${i}`).toBeGreaterThanOrEqual(16);
+      }
+    });
+  }
+});
+
+test.describe("a tile that navigates is a link", () => {
+  /**
+   * Three Phase 1 tiles were `<button>`s because `Card` could not take `href`
+   * and `onPress` together — so opening a binder or a search result in a new
+   * tab, which is the obvious move when comparing two of them, did nothing.
+   */
+  test("the binder shelf opens in-page on a plain click, and carries a real URL", async ({ page }) => {
+    const shell = await openV2(page, "/binders", { seed: "binders" });
+    const tile = shell.main.getByRole("link", { name: /pockets filled/ }).first();
+    await expect(tile).toHaveAttribute("href", /#\/binder\//);
+    await tile.click();
+    await expect(page).toHaveURL(/#\/binder\//);
+  });
+});

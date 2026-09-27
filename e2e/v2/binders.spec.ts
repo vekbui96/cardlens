@@ -44,19 +44,23 @@ function tile(page: Page, id: string) {
 
 test.describe("finding a binder", () => {
   test("every binder is a tile that says what it is in words", async ({ page }) => {
-    // The art is decorative in full, so the button's name is the whole of what
-    // a screen reader gets. It has to answer the same question the picture
-    // does: which binder, what shape, how far along.
+    // The art is decorative in full, so the link's name is the whole of what a
+    // screen reader gets. It has to answer the same question the picture does:
+    // which binder, what shape, how far along.
     await openShelf(page);
 
-    await expect(page.getByRole("button", { name: "Jolteon, 9-pocket, 27 of 27" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Showcase, 12-pocket, 1 of 36" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Destined rivals, 9-pocket, 0 of 9" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Jolteon, 9-pocket, 27 of 27" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Showcase, 12-pocket, 1 of 36" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Destined rivals, 9-pocket, 0 of 9" })).toBeVisible();
   });
 
   test("the whole tile opens the binder", async ({ page }) => {
+    // A link, not a button: it has a real URL, so it can also be opened in a
+    // new tab. The plain click below still routes in-page.
     await openShelf(page);
-    await page.getByRole("button", { name: "Jolteon, 9-pocket" }).click();
+    const tile = page.getByRole("link", { name: "Jolteon, 9-pocket" });
+    await expect(tile).toHaveAttribute("href", "#/binder/fx-full");
+    await tile.click();
     expect(page.url()).toContain("#/binder/fx-full");
   });
 

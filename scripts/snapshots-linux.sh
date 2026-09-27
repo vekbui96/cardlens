@@ -49,9 +49,12 @@ docker run --rm \
   -w /build \
   "$IMAGE" \
   bash -eu -c '
+    # Without .claude/worktrees too: those are whole checkouts of this repo,
+    # node_modules and all, and tarring them into the container turns a 30MB
+    # copy into gigabytes of somebody else'"'"'s branch.
     echo "==> copying repo (without node_modules)"
     mkdir -p /build
-    tar -C /host --exclude=./node_modules --exclude=./dist --exclude=./.git -cf - . | tar -C /build -xf -
+    tar -C /host --exclude=./node_modules --exclude=./dist --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C /build -xf -
 
     echo "==> installing"
     npm ci --no-audit --no-fund --silent

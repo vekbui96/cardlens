@@ -6,6 +6,86 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## The two missing v2 primitives are built (2026-09-27)
+
+Phase 1 closed with a short list of what it had left behind, and the top of it
+was two primitives that more than one stream had reinvented. Both exist now,
+and the reinventions are gone rather than merely deprecated.
+
+### `Field` — the text input
+
+Six screens each wrote their own `.input` rule. They disagreed on the border
+(three `--v2-border`, three `--v2-border-strong`), the size (one
+`--v2-fs-small`, five `--v2-fs-body`), the padding (`1/2`, `0/3`, `2/3`) and on
+whether to set `box-sizing` at all. None of that was a decision.
+
+All seven text inputs in v2 now render `Field`, and all six rules are deleted —
+`collection.module.css` keeps two lines of pure layout (`flex-basis`,
+`max-width`) and nothing else. The three `<input>`s still written by hand are a
+file picker and two checkboxes, which are different controls that happen to
+share a tag name; `Field`'s `type` is narrowed to `text | search | password` so
+they cannot drift into it.
+
+It demands an accessible name in the TYPE: either `label` (becomes
+`aria-label`) or `id` (means a visible `<label htmlFor>` sits beside it). There
+is no third option, because passing neither is what happens when a field is
+copied out of a screen that had a label.
+
+**The measurement that matters: 16px, not 15.** iOS Safari zooms the whole page
+when a focused input computes under 16px, and v2's body text is 15px — so every
+tap on a field shoved the layout sideways. Exactly one of the six rules had
+thought about this, and its guard did not work: `max(1em, var(--v2-fs-body))`,
+where `1em` is the INHERITED size and `shell/reset.css` sets that to
+`--v2-fs-body`. It computed to `max(15px, 15px)`. `--v2-fs-field: 16px` is now
+a token, and `shell.spec.ts` asserts the COMPUTED size on four routes rather
+than asserting the rule — a guard that reads as a fix and is not one is worse
+than no guard, because nobody looks at it twice.
+
+### `Card` — a link that is also a handler, and a toggle that says so
+
+Two capability gaps, both with real call sites:
+
+- **`href` and `onPress` together.** Three Phase 1 tiles were `<button>`s for
+  want of it — the binder shelf, a search result, an owned row — and each one
+  had a real URL. So none could be middle-clicked, opened in a new tab, copied
+  as a link or previewed in the status bar, which is the obvious thing to want
+  in a grid of results or a shelf of binders you are comparing. They are
+  anchors now, and a plain click still routes in-page; a click with a modifier
+  or a non-primary button is handed back to the browser, since intercepting
+  everything would give the anchor its advantage and take it straight back.
+- **`aria-pressed="false"`.** `selected` now emits `aria-pressed` whenever it is
+  passed, matching `Chip`. A toggle that reports itself only while it is ON is
+  announced as a plain button the rest of the time, and nothing tells the reader
+  the second state was ever there. `CardDetailsScreen` had worked around this in
+  its own text; that text is right anyway and stays.
+
+The third gap the Phase 1 note listed — a `data-` attribute passthrough — was
+**not** added. Its only evidence is `BinderSpread`'s pockets and
+`BinderTile`'s `<li>`, and neither is a `Card`: the pocket is its own geometry
+and the `<li>` is the grid item. Adding an API with no caller is how a
+primitive set stops fitting in your head.
+
+### Traps this found
+
+- **The agent worktrees break `npm run verify` locally.** `.claude/worktrees/`
+  holds twelve full checkouts of this repo, each with its own `node_modules`,
+  and every tool that walks the tree found all of them: `npm run lint` reported
+  **7,142 errors**, none from code anyone had written. Excluded now in
+  `eslint.config.js`, `.prettierignore`, and the tar inside
+  `snapshots-linux.sh` — which was otherwise copying gigabytes of other
+  branches into the container. CI never saw any of it, because none of it is
+  committed. **The branches are all merged and the worktrees can be pruned.**
+- **`snapshots-linux.sh` needs `MSYS_NO_PATHCONV=1` on Git Bash.** Without it
+  the shell rewrites `-w /build` to `C:/Program Files/Git/build` and Docker
+  refuses it. Same trap as `gh api` paths, same fix.
+
+### What is still open, in the order I would do them
+
+1. **Parity and cutover (Phase 2, `PLAN.md` §6).** Unchanged and still the
+   thing: v2 is off by default until someone has used each screen against a
+   real collection.
+2. **Offline end to end.** Still no network-drop harness.
+
 ## v2 Phase 1 is complete — all nine specs are built (2026-09-05)
 
 Every screen in `docs/v2/specs/` is built, verified and wired. `V2Router.tsx`
@@ -43,29 +123,23 @@ it went last.
   stay that way until someone has actually used each screen against a real
   collection. The specs' acceptance lists pass; that is not the same as the app
   being better, which is what the toggle exists to let you judge.
-- Two primitives are provably missing, each reinvented by more than one stream:
-  `Card` cannot take `onPress` alongside `href`, cannot emit
-  `aria-pressed="false"`, and cannot carry a `data-` attribute; and there is no
-  text-input primitive, so search and the binder picker each styled their own.
-- `?sim=empty` is ignored by the mock provider's `getCardsBySet`, so any spec
-  relying on it to see an empty set view silently tests the non-empty path.
 - Offline is not exercised end to end; there is no network-drop harness.
+- ~~`?sim=empty` is ignored by the mock provider's `getCardsBySet`~~ — fixed;
+  the mock empties a SET as well as a search, so a spec relying on it to see an
+  empty set view now actually sees one.
+- ~~Two primitives are provably missing~~ — **built; see the next section.**
 
-### Specced, not built: card-name autofill
+### Specced and built: card-name autofill
 
-`docs/card-name-autofill.md` — suggest card names as you type, in all four
-search boxes, in **both versions**. Nothing is implemented yet; the spec carries
-the plan and the measurements.
+`docs/card-name-autofill.md`, shipped in all four search boxes in **both**
+versions. `models/cardNames.ts` holds the folding and the ranking,
+`hooks/useCombobox.ts` the keyboard contract, and `names-<version>.json` is
+emitted beside the card index in the same run so the two cannot drift.
 
-The one number that decides the design: the shipped card index is **2.29 MB**,
-but its 20,205 cards collapse to **4,451 distinct names — 21 KB gzipped**. So
-autofill is answered entirely on the device and never breaks the rule that
-typing does not search. Reading the 2.29 MB file for this is the obvious
-implementation and the wrong one.
-
-Its riskiest step is the v1 half: `KeyboardBackedInputAdapter` is live there and
-`preventDefault`s Down/Up/Escape as soon as anything subscribes, which are
-exactly the keys a combobox needs. v2 is safe — its adapter is off.
+The number that decided the design: the shipped index is **2.29 MB**, and its
+20,205 cards collapse to **4,451 distinct names — about 25 KB gzipped with a
+printings count each**. So suggestions are answered on the device and the rule
+that typing issues no request is untouched.
 
 ### Traps this phase found
 

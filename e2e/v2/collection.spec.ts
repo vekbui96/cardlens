@@ -317,7 +317,7 @@ test.describe("everything owned", () => {
     await openV2(page, "/owned");
 
     await page.getByRole("group", { name: "View" }).getByRole("button", { name: "List" }).click();
-    const rows = page.getByRole("list").getByRole("button");
+    const rows = page.getByRole("list").getByRole("link");
     await expect(rows).toHaveCount(24);
 
     const sorts = page.getByRole("group", { name: "Sort by" });

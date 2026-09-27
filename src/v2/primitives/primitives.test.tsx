@@ -1,7 +1,8 @@
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Card, CardArt, Chip, Meter, Money, Panel } from "./index.ts";
+import { Card, CardArt, Chip, Field, Meter, Money, Panel } from "./index.ts";
 
 /**
  * These cover the decisions, not the markup.
@@ -122,6 +123,116 @@ describe("Card", () => {
     render(<Card>Just content</Card>);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByText("Just content")).toBeInTheDocument();
+  });
+
+  it("announces both states of a toggle, not only the pressed one", async () => {
+    // A toggle that reports itself only while it is ON is announced as a plain
+    // button the rest of the time, so nothing tells the reader there was a
+    // second state at all. The details screen worked around this by spelling
+    // "Owned" / "Not owned" in the text, which is right anyway — but it is not
+    // a substitute for the control saying what kind of control it is.
+    const { rerender } = render(
+      <Card onPress={() => undefined} selected={false}>
+        Owned
+      </Card>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "false");
+    rerender(
+      <Card onPress={() => undefined} selected>
+        Owned
+      </Card>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("emits no aria-pressed when it is not a toggle", () => {
+    render(<Card onPress={() => undefined}>Open</Card>);
+    expect(screen.getByRole("button")).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("runs the handler on a plain click of a link, instead of navigating", async () => {
+    // Three Phase 1 tiles were buttons for want of this: a binder on the shelf,
+    // a search result and an owned row. Each has a real URL and each needed a
+    // handler too — to carry a summary, or to go through the app's own router —
+    // so each gave up being a link, and gave up being openable in a new tab.
+    const onPress = vi.fn();
+    render(
+      <Card href="#/binder/abc" onPress={onPress}>
+        A binder
+      </Card>,
+    );
+    const link = screen.getByRole("link", { name: "A binder" });
+    await userEvent.click(link);
+    expect(onPress).toHaveBeenCalledOnce();
+    expect(link).toHaveAttribute("href", "#/binder/abc");
+  });
+
+  it("leaves a modified click to the browser, so it can still open a new tab", () => {
+    // The whole reason to prefer a link here. Intercepting every click would
+    // hand the anchor its advantage and then take it straight back.
+    const onPress = vi.fn();
+    render(
+      <Card href="#/binder/abc" onPress={onPress}>
+        A binder
+      </Card>,
+    );
+    // fireEvent rather than userEvent: what is under test is the guard reading
+    // the modifier off the event, and userEvent's own modifier state does not
+    // reach the click it synthesises here.
+    fireEvent.click(screen.getByRole("link", { name: "A binder" }), { metaKey: true });
+    expect(onPress).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("link", { name: "A binder" }), { button: 1 });
+    expect(onPress).not.toHaveBeenCalled();
+  });
+});
+
+describe("Field", () => {
+  it("takes its name from the label prop", () => {
+    render(<Field label="Filter sets" />);
+    expect(screen.getByRole("textbox", { name: "Filter sets" })).toBeInTheDocument();
+  });
+
+  it("takes its name from a visible label when given an id instead", () => {
+    render(
+      <>
+        <label htmlFor="q">Card name or number</label>
+        <Field id="q" />
+      </>,
+    );
+    expect(screen.getByRole("textbox", { name: "Card name or number" })).toBeInTheDocument();
+  });
+
+  it("passes the rest through, so a combobox can spread onto it", () => {
+    // `useCombobox` hands back a bag of role and aria props plus three
+    // handlers. A primitive that accepted only the props it had thought of
+    // would send both search boxes straight back to a bare <input>.
+    render(
+      <Field
+        label="Search"
+        role="combobox"
+        aria-expanded={false}
+        aria-autocomplete="list"
+        enterKeyHint="search"
+      />,
+    );
+    const input = screen.getByRole("combobox", { name: "Search" });
+    expect(input).toHaveAttribute("aria-autocomplete", "list");
+    expect(input).toHaveAttribute("enterkeyhint", "search");
+  });
+
+  it("forwards a ref, because the scan picker focuses itself", () => {
+    const ref = createRef<HTMLInputElement>();
+    render(<Field label="Number or name" ref={ref} />);
+    expect(ref.current).toBeInstanceOf(HTMLInputElement);
+  });
+
+  it("reports what was typed", async () => {
+    const onChange = vi.fn();
+    render(<Field label="Binder name" onChange={onChange} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Binder name" }), "Jolteon");
+    expect(onChange).toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Binder name" })).toHaveValue("Jolteon");
   });
 });
 

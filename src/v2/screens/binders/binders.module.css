@@ -325,20 +325,6 @@
   color: var(--v2-fg-muted);
 }
 
-.input {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-0) var(--v2-space-3);
-  font: inherit;
-  /* Never below 16px or iOS Safari zooms the whole page on focus. */
-  font-size: max(1em, var(--v2-fs-body));
-  border: var(--v2-border-w) solid var(--v2-border);
-  border-radius: var(--v2-radius-sm);
-  background: var(--v2-surface-sunken);
-  color: var(--v2-fg);
-}
-
 .primary {
   min-height: var(--v2-tap);
   padding: var(--v2-space-0) var(--v2-space-5);

@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useTargetBot } from "../../../hooks/useTargetBot.ts";
 import { extractTcin, statusLabel, type WatchedProduct } from "../../../models/target.ts";
 import { formatUpdated } from "../../../utils/format.ts";
-import { Card, Chip, cx, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
+import { Card, Chip, cx, Field, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
 import { addProblem, botHealth, botTrouble, checkProblem, statusTone } from "./botState.ts";
 import styles from "./target.module.css";
 
@@ -71,9 +71,8 @@ function Connect({ onConnect }: { onConnect: (token: string) => void }) {
             <label className={styles.label} htmlFor="v2-target-token">
               Watchlist token
             </label>
-            <input
+            <Field
               id="v2-target-token"
-              className={styles.input}
               type="password"
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -295,9 +294,8 @@ function AddForm({ bot }: { bot: Bot }) {
           <label className={styles.label} htmlFor="v2-target-entry">
             Target link or TCIN
           </label>
-          <input
+          <Field
             id="v2-target-entry"
-            className={styles.input}
             value={entry}
             onChange={(e) => setEntry(e.target.value)}
             placeholder="https://www.target.com/p/…/-/A-94336414"
@@ -307,9 +305,8 @@ function AddForm({ bot }: { bot: Bot }) {
           <label className={styles.label} htmlFor="v2-target-name">
             Name (optional — the bot looks it up if blank)
           </label>
-          <input
+          <Field
             id="v2-target-name"
-            className={styles.input}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoComplete="off"

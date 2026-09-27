@@ -11,3 +11,9 @@ package-lock.json
 # Build artifacts: minified on purpose, and reformatting them costs 70KB on
 # every device that downloads the index.
 public/card-index/
+
+# Agent worktrees. Full checkouts of this repo, each with its own node_modules,
+# living inside it. Every tool that walks the tree finds twelve more copies of
+# the codebase and lints, formats and tars all of them — `npm run verify` came
+# back with 7,142 errors, none of them from code anyone had written.
+.claude/worktrees

@@ -13,6 +13,7 @@ import {
   Card,
   CardArt,
   Chip,
+  Field,
   Grid,
   Money,
   Panel,
@@ -21,6 +22,7 @@ import {
   Stack,
   cx,
 } from "../../primitives/index.ts";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import { recallScroll, rememberScroll } from "./scrollMemory.ts";
 import styles from "./SearchScreen.module.css";
 
@@ -123,9 +125,8 @@ export function SearchScreen({ query }: SearchScreenProps) {
         </label>
         <Row gap={2} align="stretch">
           <div className={styles.field}>
-            <input
+            <Field
               id={inputId}
-              className={styles.input}
               type="search"
               name="q"
               // The browser's own history dropdown would cover ours, and it
@@ -338,12 +339,20 @@ function ResultTile({
 }) {
   return (
     /*
-     * A button rather than a link, so the summary can travel with the
-     * navigation. Details refetches by id anyway, but the catalog fails often
-     * enough that a details screen which cannot even name its card is a real
-     * state — and the summary is what lets it paint the header regardless.
+     * A link that also runs a handler, because both halves are needed.
+     *
+     * The handler is what lets the SUMMARY travel with the navigation: details
+     * refetches by id anyway, but the catalog fails often enough that a details
+     * screen which cannot even name its card is a real state, and the summary
+     * is what paints the header regardless. The `href` is what makes it a card
+     * you can open in a new tab — which is the whole point of a grid of
+     * results. It was a bare button until `Card` could do both.
      */
-    <Card onPress={() => onOpen(card.id, card)} className={styles.tile}>
+    <Card
+      href={`#${screenToPath({ name: "details", cardId: card.id })}`}
+      onPress={() => onOpen(card.id, card)}
+      className={styles.tile}
+    >
       <CardArt src={card.imageSmall} name={card.name} detail="tile" decorative />
       <span className={styles.name}>{card.name}</span>
       {/*

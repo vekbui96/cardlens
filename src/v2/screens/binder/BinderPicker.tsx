@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
 import { useCombobox } from "../../../hooks/useCombobox.ts";
 import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
-import { CardArt, Chip, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import { CardArt, Chip, Field, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../../app/contexts.tsx";
 import { useSets } from "../../../hooks/useSets.ts";
@@ -158,10 +158,9 @@ export function BinderPicker({
       >
         <Row gap={2}>
           <div className={styles.field}>
-            <input
-              className={styles.input}
+            <Field
               type="search"
-              aria-label="Search every set"
+              label="Search every set"
               placeholder="Search every set"
               autoComplete="off"
               value={searchInput}

@@ -398,18 +398,6 @@
 }
 
 .select,
-.input {
-  font-family: inherit;
-  font-size: var(--v2-fs-body);
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-2) var(--v2-space-3);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  border-radius: var(--v2-radius-sm);
-  background: var(--v2-surface-sunken);
-  color: var(--v2-fg);
-  width: 100%;
-}
-
 .pickList {
   list-style: none;
   margin: var(--v2-space-0);

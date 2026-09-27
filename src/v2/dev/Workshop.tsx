@@ -3,6 +3,7 @@ import {
   Card,
   CardArt,
   Chip,
+  Field,
   Grid,
   Meter,
   Money,
@@ -43,6 +44,7 @@ export function Workshop() {
       <TypeScale />
       <Layout />
       <Surfaces />
+      <Fields />
       <Art />
       <Data />
       <Disclosure />
@@ -206,13 +208,84 @@ function Surfaces() {
             A Card with no <code>onPress</code> and no <code>href</code> renders inert — no pointer, no hover,
             nothing that suggests a press it does not perform.
           </p>
+          <p>
+            <code>selected</code> makes it a TOGGLE, so both of its states are announced:{" "}
+            <code>aria-pressed</code> is emitted whether it is on or off. Leave the prop off and no
+            <code>aria-pressed</code> is emitted at all, which is what a one-shot action wants.
+          </p>
+          <p>
+            <code>href</code> and <code>onPress</code> together is a real link that routes in-page: a plain
+            click runs the handler, and ctrl/cmd/middle-click is left to the browser so it still opens in a
+            new tab.
+          </p>
           <Row gap={3} wrap>
             <Card onPress={() => setSelected((s) => !s)} selected={selected}>
-              Pressable {selected ? "(selected)" : ""}
+              Toggle {selected ? "(selected)" : "(not selected)"}
             </Card>
+            <Card onPress={() => undefined}>Pressable, not a toggle</Card>
             <Card href="#/dev/workshop">A link</Card>
+            <Card href="#/dev/workshop" onPress={() => undefined}>
+              A link that routes in-page
+            </Card>
             <Card>Inert</Card>
           </Row>
+        </Stack>
+      </Stack>
+    </Panel>
+  );
+}
+
+/* --- Field ---------------------------------------------------------------- */
+
+function Fields() {
+  const [text, setText] = useState("");
+  const [search, setSearch] = useState("Charizard");
+  return (
+    <Panel title="Field">
+      <Stack gap={4}>
+        <p>
+          The one text field. Six screens each wrote their own before this existed, and the six disagreed
+          about the border, the size, the padding and <code>box-sizing</code>.
+        </p>
+        <p>
+          It is 16px and not <code>--v2-fs-body</code>, which is 15px: under 16px, iOS Safari zooms the whole
+          page the moment the field takes focus.
+        </p>
+
+        <Stack gap={2}>
+          <h3 className={styles.h3}>Named by a visible label</h3>
+          <label htmlFor="workshop-labelled">Card name</label>
+          <Field id="workshop-labelled" value={text} onChange={(e) => setText(e.target.value)} />
+        </Stack>
+
+        <Stack gap={2}>
+          <h3 className={styles.h3}>Named by the prop, for a search box</h3>
+          <Field
+            type="search"
+            label="Search every set"
+            placeholder="Search every set"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Stack>
+
+        <Stack gap={2}>
+          <h3 className={styles.h3}>Beside a button</h3>
+          <p>
+            <code>grow</code> gives the field the free space and leaves the button its own size. Row’s{" "}
+            <code>grow</code> cannot do this — it gives every child an equal share.
+          </p>
+          <Row gap={2}>
+            <Field grow label="With a button beside it" placeholder="Type here" />
+            <Chip onPress={() => undefined}>Go</Chip>
+          </Row>
+        </Stack>
+
+        <Stack gap={2}>
+          <h3 className={styles.h3}>The rest of its states</h3>
+          <Field label="Masked" type="password" defaultValue="hunter2" />
+          <Field label="Disabled" disabled defaultValue="Cannot be edited" />
+          <Field label="Empty with a placeholder" placeholder="A placeholder is not a label" />
         </Stack>
       </Stack>
     </Panel>

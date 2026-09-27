@@ -97,18 +97,18 @@
   color: var(--v2-accent-strong);
 }
 
+/*
+ * Layout only — `Field` draws the box. A filter over a list of sets wants a
+ * comfortable minimum but not the whole of a 1440px window: past about 24em
+ * the caret ends up a long way from the list it is filtering.
+ *
+ * The whole `flex` shorthand here rather than `Field`'s `grow` prop plus a
+ * basis: the two rules live in different stylesheets, so which of them set the
+ * basis would be decided by bundle order.
+ */
 .filter {
-  font-family: inherit;
-  font-size: var(--v2-fs-body);
-  min-height: var(--v2-tap);
   flex: 1 1 14em;
   max-width: 24em;
-  min-width: 0;
-  padding: var(--v2-space-2) var(--v2-space-3);
-  border-radius: var(--v2-radius-sm);
-  border: var(--v2-border-w) solid var(--v2-border);
-  background: var(--v2-surface-sunken);
-  color: var(--v2-fg);
 }
 
 .filter::placeholder {

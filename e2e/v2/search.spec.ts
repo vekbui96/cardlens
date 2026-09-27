@@ -75,13 +75,15 @@ test.describe("results", () => {
   test("are a grid, and every card states its set and number", async ({ page }) => {
     await openV2(page, "/search/charizard");
 
-    const tiles = page.getByRole("button", { name: /charizard/i });
+    // Links, not buttons: a result has a URL, and a grid of results is exactly
+    // where opening two of them in tabs is the natural thing to do.
+    const tiles = page.getByRole("link", { name: /charizard/i });
     await expect(tiles).toHaveCount(5);
 
     // Two of the five are from the same set. The name cannot tell them apart —
     // and with 108 real Charizards, neither could a list that omitted either.
-    await expect(page.getByRole("button", { name: /obsidian flames.*#223/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /obsidian flames.*#125/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /obsidian flames.*#223/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /obsidian flames.*#125/i })).toBeVisible();
   });
 
   test("say when nothing matched, rather than showing an empty strip", async ({ page }) => {
@@ -140,7 +142,7 @@ test.describe("back from a card", () => {
     );
     await openV2(page, "/search/charizard");
 
-    const tiles = page.getByRole("button", { name: /#\d/ });
+    const tiles = page.getByRole("link", { name: /#\d/ });
     await expect(tiles).toHaveCount(5);
 
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));

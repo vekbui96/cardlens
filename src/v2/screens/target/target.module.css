@@ -42,18 +42,6 @@
   color: var(--v2-fg-muted);
 }
 
-.input {
-  font-family: inherit;
-  font-size: var(--v2-fs-body);
-  color: var(--v2-fg);
-  background: var(--v2-surface-sunken);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  border-radius: var(--v2-radius-sm);
-  padding: var(--v2-space-2) var(--v2-space-3);
-  min-height: var(--v2-tap);
-  width: 100%;
-}
-
 .input::placeholder {
   color: var(--v2-fg-dim);
 }

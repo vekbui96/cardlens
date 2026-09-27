@@ -120,16 +120,16 @@ describe("results", () => {
     // "charizard" returns 108 cards and most of them are called Charizard.
     render(<SearchScreen query="charizard" />, { wrapper: harness(new MockPokemonProvider()) });
 
-    const tiles = await screen.findAllByRole("button", { name: /charizard/i });
+    const tiles = await screen.findAllByRole("link", { name: /charizard/i });
     expect(tiles.length).toBeGreaterThan(1);
     for (const tile of tiles) {
       // Every tile carries a set name and a #number in its accessible name.
       expect(tile).toHaveAccessibleName(/#\d/);
     }
     // Two of these results are from the same set; only the number tells them apart.
-    expect(screen.getAllByRole("button", { name: /obsidian flames/i })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /obsidian flames.*#223/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /obsidian flames.*#125/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /obsidian flames/i })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: /obsidian flames.*#223/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /obsidian flames.*#125/i })).toBeInTheDocument();
   });
 
   it("says nothing matched rather than showing an empty strip", async () => {

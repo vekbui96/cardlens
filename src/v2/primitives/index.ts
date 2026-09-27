@@ -10,6 +10,7 @@
 
 export { Stack, Row, Grid, ScreenReaderOnly, cx } from "./layout.tsx";
 export { Panel, Card } from "./surfaces.tsx";
+export { Field, type FieldProps } from "./field.tsx";
 export { CardArt, type ArtDetail } from "./CardArt.tsx";
 export { Meter, Chip, Money } from "./data.tsx";
 export { RailHost, Sheet } from "./disclosure.tsx";
