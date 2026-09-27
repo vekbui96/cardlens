@@ -105,21 +105,38 @@ export function BinderScreen({ binderId }: { binderId: string }) {
   const draggingFrom = drag && drag.source.kind === "address" ? addressKey(drag.source.at) : null;
 
   /**
-   * Keep the pocket being filled on screen.
+   * Keep the pocket being filled on screen — in the part of the screen the
+   * picker is not covering.
    *
-   * The picker is a sticky half of a phone display, so the page it is filling
-   * scrolls out from under it — and after a place the selection moves to a
-   * pocket that may be further down still. Without this a binder is filled
-   * blind: cards land somewhere and the only evidence is the counter.
+   * After a place the selection moves to the next empty pocket, which may be
+   * further down, so without this a binder is filled blind: cards land
+   * somewhere and the only evidence is the counter.
+   *
+   * `scrollIntoView({ block: "center" })` was the obvious way to do that and
+   * is wrong on a phone. It centres the pocket in the LAYOUT viewport, and on
+   * a phone the bottom of that viewport is the picker sheet — measured at
+   * 390x844, the pocket landed at y 520-634 behind a sheet whose top edge was
+   * at 319. The effect written to keep the pocket visible was reliably hiding
+   * it. So centre it in the band the sheet actually leaves, which on a desktop
+   * (no sheet, the picker is a rail) is the whole window and behaves as before.
    */
   const selectedKey = selected ? addressKey(selected) : null;
   const lastScrolled = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedKey || selectedKey === lastScrolled.current) return;
     lastScrolled.current = selectedKey;
-    document
-      .querySelector(`[data-pocket="${selectedKey}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const pocket = document.querySelector(`[data-pocket="${selectedKey}"]`);
+    if (!pocket) return;
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    // A frame, because on a phone the sheet mounts with this same selection
+    // and its height is the whole of what "on screen" means here.
+    requestAnimationFrame(() => {
+      const sheet = document.querySelector('[role="dialog"]');
+      const floor = sheet ? sheet.getBoundingClientRect().top : window.innerHeight;
+      const box = pocket.getBoundingClientRect();
+      const top = window.scrollY + box.top - Math.max(0, (floor - box.height) / 2);
+      window.scrollTo({ top: Math.max(0, top), behavior: still ? "auto" : "smooth" });
+    });
   }, [selectedKey]);
 
   if (!binder) {
@@ -200,8 +217,24 @@ export function BinderScreen({ binderId }: { binderId: string }) {
     />
   );
 
+  /**
+   * Room under the last page for it to scroll clear of the picker.
+   *
+   * Without it the fix above cannot work and the symptom is identical to
+   * having no fix at all. Measured at 390x844 on a one-page binder: the
+   * document is 1113px, the window 844, so the furthest the page can scroll is
+   * 269px — and the sheet covers the bottom 525. The pocket physically cannot
+   * reach the visible band, and `scrollTo` silently clamps.
+   *
+   * Reserved as the sheet's MAXIMUM rather than its measured height, so it is
+   * one CSS class and not a resize observer feeding a layout it is also
+   * reading. The surplus is at most a few dozen px of empty space behind a
+   * sheet that is covering it.
+   */
+  const phoneSheetOpen = !wide && selected !== null;
+
   const pages = (
-    <Stack gap={5}>
+    <Stack gap={5} className={phoneSheetOpen ? styles.fillRoom : undefined}>
       <p className={styles.hint} aria-live="polite">
         {selected
           ? `Filling ${addressPhrase(selected)} — pick a card, or clear it.`

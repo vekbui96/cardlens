@@ -69,13 +69,32 @@ describe("Sheet", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
 
-  it("moves focus into itself on open", () => {
+  it("moves focus to the dialog itself on open", () => {
     render(
       <Sheet open onClose={vi.fn()} label="Filters">
         <button type="button">Rarity</button>
       </Sheet>,
     );
-    expect(screen.getByRole("button", { name: "Rarity" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Filters" })).toHaveFocus();
+  });
+
+  it("does not focus a field inside it, because that raises a keyboard", () => {
+    /*
+     * It used to take the first focusable, and in the binder picker that is the
+     * search box — so every tap on a pocket raised the iOS keyboard over a
+     * sheet already covering 62% of a 390x844 screen. Nobody opens that picker
+     * in order to type. A sheet that genuinely wants the keyboard asks for it
+     * itself; `PickBySet` does, in one line, because there the useful thing to
+     * type is the collector number.
+     */
+    render(
+      <Sheet open onClose={vi.fn()} label="Cards">
+        <input aria-label="Search" />
+        <button type="button">Rarity</button>
+      </Sheet>,
+    );
+    expect(screen.getByRole("textbox", { name: "Search" })).not.toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Cards" })).toHaveFocus();
   });
 
   it("closes on Escape", async () => {
@@ -101,7 +120,7 @@ describe("Sheet", () => {
         <button type="button">Rarity</button>
       </Sheet>,
     );
-    expect(screen.getByRole("button", { name: "Rarity" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Filters" })).toHaveFocus();
 
     rerender(
       <Sheet open={false} onClose={vi.fn()} label="Filters">
@@ -122,6 +141,9 @@ describe("Sheet", () => {
     const first = screen.getByRole("button", { name: "First" });
     const last = screen.getByRole("button", { name: "Last" });
 
+    // Opens on the dialog, so the first Tab is what reaches the first control.
+    expect(screen.getByRole("dialog", { name: "Filters" })).toHaveFocus();
+    await userEvent.tab();
     expect(first).toHaveFocus();
     await userEvent.tab();
     expect(last).toHaveFocus();

@@ -263,9 +263,12 @@ test.describe("the Field primitive", () => {
       const fields = page.locator(
         'main input[type="text"], main input[type="search"], main input[type="password"], main input:not([type])',
       );
+      // Waited for rather than counted straight away: /target paints a
+      // connecting state first, so an immediate count is a race — measured as
+      // one flake in a full run. An assertion that cannot be stressed cannot
+      // catch anything, so the count still has to be non-zero, just not yet.
+      await expect(fields.first()).toBeVisible();
       const count = await fields.count();
-      // An assertion that cannot be stressed cannot catch anything: a screen
-      // whose field stopped rendering would otherwise pass this silently.
       expect(count).toBeGreaterThan(0);
       for (let i = 0; i < count; i++) {
         const size = await fields.nth(i).evaluate((el) => getComputedStyle(el).fontSize);

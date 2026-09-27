@@ -425,7 +425,54 @@ test.describe("the picker sheet, on a phone", () => {
     // Below, not beside.
     expect(three.y).toBeGreaterThan(two.y);
   });
+
+  test("does not raise the software keyboard when a pocket is chosen", async ({ page }) => {
+    /*
+     * It used to. `Sheet` focused the first focusable inside itself, and in
+     * this picker that is the search field — so every tap on a pocket brought
+     * up a keyboard, over a sheet already covering 62% of a 390x844 screen.
+     * Nobody taps a pocket in order to type; they tap it to pick out of the set
+     * in front of them. Asserted on the FOCUSED ELEMENT rather than on the
+     * keyboard, which no browser exposes.
+     */
+    await openBinder(page, "fx-empty");
+    await page.getByRole("button", { name: "Pocket 1, empty" }).click();
+    await expect(page.getByRole("dialog", { name: "Cards" })).toBeFocused();
+  });
+
+  test("keeps the pocket being filled above the sheet, and the next one too", async ({ page }) => {
+    /*
+     * The flow this screen exists for, and it was broken in two ways at once.
+     *
+     * `scrollIntoView({ block: "center" })` centres in the LAYOUT viewport,
+     * whose bottom half is the sheet — measured, the pocket landed at y 520
+     * behind a sheet whose top edge was 319. And the page could not have
+     * scrolled clear even if it had tried: a one-page binder is 1113px in an
+     * 844px window, so 269px is the whole of the available scroll. Both halves
+     * are needed, and either one alone looks exactly like no fix at all.
+     */
+    await openBinder(page, "fx-empty");
+    await page.getByRole("button", { name: "Pocket 1, empty" }).click();
+    await expect(page.getByRole("dialog", { name: "Cards" })).toBeVisible();
+    await expect.poll(() => clearOfSheet(page, "0:0")).toBe(true);
+
+    // And after a place, when the selection moves on by itself — the case that
+    // actually fills a binder, one card after another.
+    await firstPickerCard(page).click();
+    await expect(page.getByText("Filling pocket 2 on page 1.")).toBeVisible();
+    await expect.poll(() => clearOfSheet(page, "0:1")).toBe(true);
+  });
 });
+
+/** Whether a pocket is fully visible in the band the picker sheet leaves. */
+function clearOfSheet(page: Page, address: string): Promise<boolean> {
+  return page.evaluate((key) => {
+    const sheet = document.querySelector('[role="dialog"]')?.getBoundingClientRect();
+    const pocket = document.querySelector(`[data-pocket="${key}"]`)?.getBoundingClientRect();
+    if (!sheet || !pocket) return false;
+    return pocket.top >= 0 && pocket.bottom <= sheet.top;
+  }, address);
+}
 
 test.describe("binder @visual", () => {
   test("a full binder looks like itself", async ({ page }) => {

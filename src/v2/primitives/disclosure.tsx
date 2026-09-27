@@ -57,6 +57,15 @@ interface SheetProps {
  * This is the one place in v2 where a focus trap is correct: it is a real
  * modal, so Tab must not walk out of it into a page the user cannot see. Every
  * other surface in the app stays freely tabbable.
+ *
+ * **Opening focuses the DIALOG, not the first control inside it.** It used to
+ * take the first focusable, and in the binder picker that is the search field —
+ * so tapping a pocket on a phone raised the software keyboard every single
+ * time, over a sheet that already covered 62% of a 390x844 screen (measured).
+ * Nobody taps a pocket in order to type; they tap it to pick from the set they
+ * are already looking at. A sheet that needs the keyboard immediately can still
+ * ask for it, and `PickBySet` does exactly that — one line, in the screen that
+ * wants it, rather than as everyone's default.
  */
 export function Sheet({ children, open, onClose, label }: SheetProps) {
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -64,13 +73,40 @@ export function Sheet({ children, open, onClose, label }: SheetProps) {
 
   const close = useCallback(() => onClose(), [onClose]);
 
+  /**
+   * Ride above the software keyboard.
+   *
+   * A fixed element pinned to `bottom: 0` is pinned to the LAYOUT viewport, and
+   * iOS does not shrink that when the keyboard comes up — it shrinks the VISUAL
+   * viewport and leaves the layout alone. So the bottom of this sheet, and the
+   * field the keyboard was raised for, sit underneath it. The difference
+   * between the two viewports is exactly how much keyboard there is.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    const el = sheetRef.current;
+    if (!vv || !el) return;
+    const apply = () => {
+      const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.setProperty("--sheet-lift", `${Math.round(covered)}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
     // Remember where focus came from, so closing puts it back rather than
     // dropping the user at the top of the document.
     returnFocusRef.current = document.activeElement as HTMLElement | null;
-    focusFirst(sheetRef.current);
+    sheetRef.current?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -106,7 +142,17 @@ export function Sheet({ children, open, onClose, label }: SheetProps) {
     <>
       {/* Presentational: the dialog below it is what assistive tech should see. */}
       <div className={styles.sheetScrim} onClick={close} aria-hidden="true" />
-      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={label} ref={sheetRef}>
+      <div
+        className={styles.sheet}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        // Focusable only as a target: the dialog takes focus on open so the
+        // trap has somewhere to start and a screen reader hears the label,
+        // without raising a keyboard nobody asked for.
+        tabIndex={-1}
+        ref={sheetRef}
+      >
         <div className={styles.sheetHandle} aria-hidden="true" />
         <div className={styles.sheetBody}>{children}</div>
       </div>
@@ -132,10 +178,4 @@ function focusableWithin(root: HTMLElement | null): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
     (el) => !el.hasAttribute("hidden") && el.closest("[aria-hidden='true']") === null,
   );
-}
-
-function focusFirst(root: HTMLElement | null): void {
-  const first = focusableWithin(root)[0];
-  if (first) first.focus();
-  else root?.focus?.();
 }

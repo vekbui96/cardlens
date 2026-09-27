@@ -6,6 +6,45 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## Filling a binder on a phone (2026-09-27)
+
+### The phone fill flow was broken in three ways at once
+
+Reported as "I don't like how it works"; measured at 390x844 before touching
+anything, because three separate faults were producing one bad feeling.
+
+| What happened                              | Measured                                                        |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| The keyboard came up on every pocket tap   | focus after the tap was `input[type=search] "Search every set"` |
+| The sheet covered most of the screen       | 525px of 844 — **62%**                                          |
+| The pocket you tapped was hidden behind it | pocket at y 520-634, sheet top edge at y 319                    |
+| The page drifted behind the modal          | `body { overflow: visible }`, scrim did not block touch         |
+
+**`Sheet` focused the first focusable inside itself**, and in the binder picker
+that is the search box. Nobody taps a pocket in order to type; they tap it to
+pick out of the set already in front of them. It focuses the DIALOG now —
+`tabIndex={-1}`, so the trap still has a start and a screen reader still hears
+the label, with no keyboard. A sheet that genuinely wants one asks for it
+itself, which `PickBySet` already did in one line.
+
+**`scrollIntoView({ block: "center" })` centres in the LAYOUT viewport**, whose
+bottom two-thirds is the sheet — so the effect written to keep the pocket
+visible was reliably hiding it. It now centres the pocket in the band the sheet
+leaves, read off the live dialog, which on a desktop (rail, no dialog) is the
+whole window and behaves exactly as before.
+
+**And it could not have scrolled anyway.** A one-page binder is 1113px tall in
+an 844px window, so 269px is the entire available scroll and `scrollTo` clamps
+in silence. The pages stack now reserves the sheet's max-height underneath
+itself while the phone sheet is open. **Either half alone looks identical to no
+fix at all**, which is why both are in one commit with one test across them.
+
+Also: the sheet rides above the software keyboard now (`visualViewport` — iOS
+shrinks the visual viewport and leaves the layout one alone, so a `bottom: 0`
+element sits underneath the keyboard), `dvh` instead of `vh` for the same class
+of reason, and the scrim takes `touch-action: none` so a drag on it cannot
+scroll the binder out from under the sheet.
+
 ## The two missing v2 primitives are built (2026-09-27)
 
 Phase 1 closed with a short list of what it had left behind, and the top of it

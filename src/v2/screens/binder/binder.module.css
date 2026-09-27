@@ -619,3 +619,13 @@ button.pocket:hover {
 .detailAnchor:focus {
   outline: none;
 }
+
+/*
+ * Scroll room beneath the pages while the phone picker is open, so the pocket
+ * being filled can rise above it. Matches `.sheet`'s max-height — see
+ * `phoneSheetOpen` in BinderScreen for the measurement.
+ */
+.fillRoom {
+  padding-bottom: 80vh;
+  padding-bottom: 72dvh;
+}
