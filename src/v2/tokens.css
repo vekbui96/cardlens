@@ -54,6 +54,20 @@
   --v2-fs-body: 15px;
   --v2-fs-small: 13px;
   --v2-fs-tiny: 11px;
+
+  /*
+   * The text-field size, and the only type token here that is not a taste
+   * decision. iOS Safari zooms the whole page when a focused input's computed
+   * font-size is under 16px, and v2's body text is 15px — so a field that
+   * simply inherits shoves the layout sideways on every tap.
+   *
+   * `binders.module.css` tried to guard this with `max(1em, var(--v2-fs-body))`
+   * before `Field` existed, and that cannot work: `1em` is the INHERITED size,
+   * which `shell/reset.css` sets to `--v2-fs-body`. The expression was
+   * `max(15px, 15px)`. It read as a fix and did nothing, in the one stylesheet
+   * that had thought about the problem at all.
+   */
+  --v2-fs-field: 16px;
   --v2-lh-tight: 1.2;
   --v2-lh-body: 1.5;
   --v2-fw-regular: 400;

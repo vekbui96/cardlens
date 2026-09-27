@@ -7,7 +7,10 @@ import reactRefresh from "eslint-plugin-react-refresh";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "coverage", "playwright-report", "test-results", "node_modules"],
+    // `.claude/worktrees` holds full checkouts of this repo, each with its own
+    // node_modules. Without it, `npm run lint` reports every agent worktree's
+    // code as if it were this one's — 7,142 errors from twelve copies.
+    ignores: ["dist", "coverage", "playwright-report", "test-results", "node_modules", ".claude/worktrees"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

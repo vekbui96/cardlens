@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { BINDER_FORMATS, specFor, type BinderFormat } from "../../../models/binderLayout.ts";
-import { Chip, Row, Stack } from "../../primitives/index.ts";
+import { Chip, Field, Row, Stack } from "../../primitives/index.ts";
 import styles from "./binders.module.css";
 
 /**
@@ -49,12 +49,11 @@ export function CreateBinderTile({
             </p>
           ) : null}
 
-          <input
-            className={styles.input}
+          <Field
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Name it"
-            aria-label="Binder name"
+            label="Binder name"
           />
 
           {/* The group is a plain element around the Row: the layout primitives

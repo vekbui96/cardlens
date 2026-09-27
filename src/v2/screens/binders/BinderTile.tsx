@@ -4,6 +4,7 @@ import type { BinderValueSummary } from "../../../models/binderValue.ts";
 import { Card, Chip, Meter, Money, Row, Stack } from "../../primitives/index.ts";
 import { BinderCover } from "./BinderCover.tsx";
 import { metaLine, tileLabel, valuePending, type Owns } from "./shelf.ts";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import styles from "./binders.module.css";
 
 /**
@@ -15,9 +16,10 @@ import styles from "./binders.module.css";
  * names in order. The cover answers that at a glance — and it is free, because
  * the art is already in the binder (see BinderCover).
  *
- * The delete control is a SIBLING of the open button rather than inside it: a
- * button cannot contain a button, and putting the destructive action inside the
- * thing you press to open the binder is how it got pressed by accident.
+ * The delete control is a SIBLING of the open control rather than inside it:
+ * neither a button nor a link may contain interactive content, and putting the
+ * destructive action inside the thing you press to open the binder is how it
+ * got pressed by accident.
  */
 
 interface BinderTileProps {
@@ -54,7 +56,18 @@ export function BinderTile({ binder, owns, summary, valuesLoading, onOpen, onDel
    */
   return (
     <li className={styles.tile} data-binder-tile={binder.id}>
-      <Card onPress={onOpen} label={tileLabel(binder, counts)} className={styles.open}>
+      {/*
+        `href` AND `onPress`: the tile routes in-page on a plain click, and is
+        still a real link for every other way of following one. It was a bare
+        button until `Card` could do both, so opening a binder in a new tab —
+        the obvious move when comparing two of them — did nothing at all.
+      */}
+      <Card
+        href={`#${screenToPath({ name: "binder", binderId: binder.id })}`}
+        onPress={onOpen}
+        label={tileLabel(binder, counts)}
+        className={styles.open}
+      >
         {/*
          * A Stack inside the Card rather than turning the Card itself into a
          * column: `.card` already declares `display`, and two single-class

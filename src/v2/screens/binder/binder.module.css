@@ -441,19 +441,6 @@ button.pocket:hover {
   max-width: 100%;
 }
 
-.input {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: inherit;
-  font-size: var(--v2-fs-small);
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-1) var(--v2-space-2);
-  border-radius: var(--v2-radius-sm);
-  border: var(--v2-border-w) solid var(--v2-border);
-  background: var(--v2-surface-sunken);
-  color: var(--v2-fg);
-}
-
 .error {
   margin: var(--v2-space-0);
   color: var(--v2-error);

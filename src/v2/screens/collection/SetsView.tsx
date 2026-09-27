@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import type { SetTiers } from "../../../models/setCompletion.ts";
-import { Card, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import { Card, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import { rowLabel, type SetGroups, type SetRowModel } from "./setGroups.ts";
 import styles from "./collection.module.css";
 
@@ -42,13 +42,13 @@ export function SetsView({
   return (
     <Stack gap={5}>
       <Row gap={3} align="center" wrap>
-        <input
+        <Field
           type="search"
           className={styles.filter}
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Filter sets"
-          aria-label="Filter sets"
+          label="Filter sets"
         />
         {query.trim() ? (
           <span className={styles.muted}>

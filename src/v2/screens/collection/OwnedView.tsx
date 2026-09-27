@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../../models/finishes.ts";
 import { OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../../models/ownedSort.ts";
@@ -120,6 +121,7 @@ export function OwnedView() {
             {sorted.map((row) => (
               <li key={`${row.cardId}|${row.finish}`}>
                 <Card
+                  href={`#${screenToPath({ name: "details", cardId: row.cardId })}`}
                   onPress={() => push({ name: "details", cardId: row.cardId })}
                   pad={2}
                   label={`${row.name}, ${finishLabel(row.finish)}, ${row.setName} ${row.collectorNumber}`}

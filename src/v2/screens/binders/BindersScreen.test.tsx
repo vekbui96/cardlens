@@ -164,7 +164,7 @@ describe("the art", () => {
     render(<BindersScreen />, { wrapper: harness() });
 
     expect(
-      screen.getByRole("button", { name: "Jolteon, 12-pocket, 9 of 12 pockets filled" }),
+      screen.getByRole("link", { name: "Jolteon, 12-pocket, 9 of 12 pockets filled" }),
     ).toBeInTheDocument();
   });
 

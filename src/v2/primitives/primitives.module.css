@@ -141,6 +141,65 @@
   background: var(--v2-accent-dim);
 }
 
+/* --- Field (a single-line text input) ------------------------------------- */
+
+/*
+ * One text field, because Phase 1 shipped six.
+ *
+ * The six disagreed on the border (three `--v2-border`, three
+ * `--v2-border-strong`), the size (one `--v2-fs-small`, five `--v2-fs-body`),
+ * the padding (`1/2`, `0/3`, `2/3`) and on whether to set `box-sizing` at all.
+ * `--v2-border-strong` wins because a field is an invitation to type and has
+ * to read as an opening in the surface rather than a panel edge.
+ */
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  font-family: var(--v2-font);
+  /* NOT --v2-fs-body. See --v2-fs-field in tokens.css: 15px zooms iOS Safari. */
+  font-size: var(--v2-fs-field);
+  color: var(--v2-fg);
+  background: var(--v2-surface-sunken);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+}
+
+/*
+ * Dim, but no dimmer than `--v2-fg-dim`. A placeholder must not be mistaken
+ * for text that is already typed, and it must still be readable — it is
+ * carrying the field's only visible hint whenever the label is an aria-label.
+ */
+.field::placeholder {
+  color: var(--v2-fg-dim);
+}
+
+.field:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.field:disabled {
+  color: var(--v2-fg-dim);
+  cursor: not-allowed;
+}
+
+/*
+ * Beside a button instead of above it. Declared AFTER `.field` on purpose:
+ * both are one class, so source order is what decides the width, and moving
+ * this rule up would silently restore `width: 100%`.
+ *
+ * `width: auto` matters as much as the flex line. A flex item whose width is
+ * 100% with `flex-basis: auto` refuses to shrink below that, so the field
+ * pushes its own button out of the Row.
+ */
+.fieldGrow {
+  width: auto;
+  flex: 1 1 auto;
+}
+
 /* --- CardArt -------------------------------------------------------------- */
 
 /*

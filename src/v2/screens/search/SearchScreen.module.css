@@ -33,19 +33,6 @@
   color: var(--v2-fg-muted);
 }
 
-.input {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-2) var(--v2-space-3);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  border-radius: var(--v2-radius-sm);
-  background: var(--v2-surface-sunken);
-  color: var(--v2-fg);
-  font-family: var(--v2-font);
-  font-size: var(--v2-fs-body);
-}
-
 .input::placeholder {
   color: var(--v2-fg-dim);
 }

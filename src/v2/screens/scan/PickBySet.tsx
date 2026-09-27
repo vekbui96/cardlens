@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Row, Sheet, Stack } from "../../primitives/index.ts";
+import { Field, Row, Sheet, Stack } from "../../primitives/index.ts";
 import { byCollectorNumber } from "../../../integrations/pokemon/sort.ts";
 import type { CardIndex, IndexedCard } from "../../../scan/cardIndex.ts";
 import styles from "./scan.module.css";
@@ -114,13 +114,11 @@ export function PickBySet({
           </select>
         </div>
 
-        <input
+        <Field
           ref={search}
-          className={styles.input}
-          type="text"
           value={query}
           placeholder="Number or name"
-          aria-label="Filter by number or name"
+          label="Filter by number or name"
           enterKeyHint="done"
           autoCapitalize="off"
           autoCorrect="off"
