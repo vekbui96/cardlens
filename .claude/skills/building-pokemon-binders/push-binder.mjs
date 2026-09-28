@@ -18,8 +18,35 @@ const flag = (n, d) => {
 };
 const dry = args.includes("--dry");
 const name = flag("name");
-const format = flag("format", "9");
-const pockets = format === "12" ? 12 : 9;
+/**
+ * Pockets per page side. Read from the format rather than a two-way guess.
+ *
+ * This was `format === "12" ? 12 : 9`, which silently turned every other value
+ * into a 9 — so `--format 4` laid a jumbo binder out nine to a page, and
+ * `--format 16`, added 2026-09-27, could not be asked for at all. A format the
+ * app supports and this tool quietly rewrites is the worst of both.
+ */
+const POCKETS = { 4: 4, 9: 9, 12: 12, 16: 16 };
+const format = String(flag("format", "9"));
+const pockets = POCKETS[format];
+if (!pockets) {
+  console.error(`unknown --format ${format}; expected one of ${Object.keys(POCKETS).join(", ")}`);
+  process.exit(1);
+}
+/**
+ * The cover, carried through untouched.
+ *
+ * A binder is pushed WHOLE and converges last-write-wins, so every field left
+ * off this object is a field the push deletes. The cover is not one of the
+ * pockets and so never appears in `slots.json` — which meant a rebuild of a
+ * binder that had one silently threw it away, with nothing in the output
+ * saying so. Pass `--cover '<json>'` (the slot, as the server returns it) to
+ * keep it. `--keep-cover` fetches the binder first and reuses what is there.
+ */
+const coverArg = flag("cover");
+const keepCover = args.includes("--keep-cover");
+/** Same reasoning: a trade binder that came back not-for-trade lost a flag. */
+const forTrade = args.includes("--for-trade");
 
 if (!slotsPath || !name) {
   console.error(
@@ -54,7 +81,43 @@ slots.forEach((slot, i) => {
   if (slot) pages[page].slots[i % pockets] = slot;
 });
 
-const binder = { id, name, format: String(pockets), pages, createdAt: Date.now(), updatedAt: Date.now() };
+let cover = coverArg ? JSON.parse(coverArg) : undefined;
+if (keepCover && !cover) {
+  if (!flag("id")) {
+    console.error("--keep-cover needs --id: there is no existing binder to read a cover from");
+    process.exit(1);
+  }
+  if (!token) {
+    console.error("--keep-cover needs COLLECTION_TOKEN to read the binder back");
+    process.exit(1);
+  }
+  const res = await fetch(`${BASE}/api/binders?since=0`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    console.error(`could not read the binder back: HTTP ${res.status}`);
+    process.exit(1);
+  }
+  const body = await res.json().catch(() => null);
+  const existing = (body?.binders ?? []).find((b) => b.id === flag("id"));
+  if (!existing) {
+    console.error(`--keep-cover: the server holds no binder ${flag("id")}`);
+    process.exit(1);
+  }
+  cover = existing.cover;
+  console.log(cover ? "keeping the existing cover" : "the existing binder has no cover");
+}
+
+const binder = {
+  id,
+  name,
+  format: String(pockets),
+  pages,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  // Absent means default — never write a field holding its default value, or
+  // the next sync carries an edit that says nothing. See CLAUDE.md.
+  ...(cover ? { cover } : {}),
+  ...(forTrade ? { forTrade: true } : {}),
+};
 writeFileSync("binder.json", JSON.stringify(binder, null, 2));
 
 const filled = slots.filter(Boolean).length;
