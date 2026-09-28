@@ -394,13 +394,22 @@ export const NEAR_EXACT = 2;
  *
  * The margin is the safety control, and it is asymmetric: a hit that is nearly
  * bit-identical to its catalog entry is trusted at 8, and anything that has
- * drifted must clear 10. Measured against the same 121,230 trials, this is a
- * strict improvement on a blanket 10 in every direction —
+ * drifted must clear 10. Re-measured 2026-09-27 against 123,702 trials on the
+ * 20,617-card index, this is a strict improvement on a blanket 10 in every
+ * direction —
  *
  *   rule                          auto-accept  false accepts  MATCHED  cards lost
- *   margin >= 8   (was shipped)         45.9%              2    91.4%           0
- *   margin >= 10                        36.7%              0    89.9%         312
- *   margin >= 8 if d<=2 else 10         37.4%              0    91.4%           0
+ *   margin >= 8   (was shipped)         45.7%              2    91.1%           0
+ *   margin >= 10                        36.6%              0    89.5%         332
+ *   margin >= 8 if d<=2 else 10          ~37%              0    91.1%           0
+ *
+ * **The index grew from 20,205 to 20,617 cards and the answer did not move.**
+ * The blanket-8 leaks are still exactly two, still `ex3-86` filed as `pop3-11`
+ * and `bw2-32` as `mcd12-6`, both at distance 4 under crop error with margins
+ * of 9 and 8. Distance 4 is past NEAR_EXACT, so both need 10 and both are
+ * refused. The 412 cards added introduced no third leak, even though exact
+ * ties rose from 652 to 735 — which is the measurement that had to be taken
+ * rather than assumed, because a gate measured on a smaller index expires.
  *
  * — and it is identical to a blanket 10 on a HELD-OUT battery of five geometric
  * distortions the rule was not fitted to (2 leaks, the same two cards).

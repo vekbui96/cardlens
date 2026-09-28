@@ -289,12 +289,29 @@ async function fetchStage() {
     );
   };
 
-  const CHUNK = 60;
+  /**
+   * Chunk size and download concurrency, both tunable — a 20k-image run holds
+   * a chunk's worth of base64 in Node AND its decoded form in Chromium at the
+   * same time, and at CHUNK 60 that was enough to get the process killed by the
+   * OS on a machine with 5GB free. Smaller chunks trade throughput for a peak
+   * that fits alongside whatever else is running.
+   *
+   *   node scripts/measure-gate-safety.mjs fetch --resume --chunk=20 --jobs=4
+   */
+  const CHUNK = Number(argv.find((a) => a.startsWith("--chunk="))?.slice("--chunk=".length)) || 60;
+  const JOBS = Number(argv.find((a) => a.startsWith("--jobs="))?.slice("--jobs=".length)) || 8;
+  /**
+   * Checkpoint by CARDS rather than by chunk count. It was `at % (CHUNK * 20)`,
+   * so a kill could cost 1,200 cards of work — and on a machine where the kill
+   * is a memory kill, that is exactly the run that needs to lose the least.
+   */
+  const CHECKPOINT_EVERY = 300;
+  let lastSaved = done;
   const started = Date.now();
   const startedAt = done;
   for (let at = done; at < n; at += CHUNK) {
     const slice = urls.slice(at, at + CHUNK);
-    const images = await mapLimit(slice, 8, async (url) => {
+    const images = await mapLimit(slice, JOBS, async (url) => {
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const res = await fetch(url);
@@ -327,8 +344,9 @@ async function fetchStage() {
     }
 
     done = Math.min(at + CHUNK, n);
-    if (at % (CHUNK * 20) === 0 || done === n) {
+    if (done - lastSaved >= CHECKPOINT_EVERY || done === n) {
       save(done);
+      lastSaved = done;
       const rate = (done - startedAt) / ((Date.now() - started) / 1000);
       console.log(`  ${done.toLocaleString()}/${n.toLocaleString()}  ${rate.toFixed(1)} cards/s`);
     }

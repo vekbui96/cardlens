@@ -6,6 +6,76 @@ Written at the end of a long session so the next one can start without re-derivi
 
 ---
 
+## The card index was stale AND truncated (2026-09-27)
+
+Started as "rebuild the index so the scanner can see 30th Celebration".
+Turned into a live bug.
+
+### `/api/set-information` returned only the first 250 cards
+
+It asked for `pageSize=250` and exactly one page. 250 is the upstream
+maximum, so **every larger set was cut off at 250** — SWSH Black Star
+Promos 250 of 304, Ascended Heroes 250 of 295, Fusion Strike 250 of 284,
+Paldea Evolved 250 of 279, and five more. **220 cards** missing from the
+set screen and absent from the scanner's index, looking exactly like
+cards that do not exist.
+
+Half-known: `models/setCompletion.ts` already took the denominator from
+`set.total` and never from counting, naming this endpoint as the reason.
+That kept the percentage honest and left the cards unreachable.
+
+Fixed, deployed, verified live against seven sets. **The response
+envelope is preserved on purpose** — callers read `cards.data`, so a bare
+array would be the same class of silent shape change one layer up.
+
+### The index: 20,205 -> 20,617
+
+Six sets were absent entirely (30th Celebration and its Classic
+Collection, four McDonald's) and nine were truncated by the above.
+
+- **`--rebuild=<ids>` is new on `build-card-index.mjs`.** `--resume` skips
+  any set already present, which is right for a complete set and wrong
+  for a truncated one — a plain resume would have carried all nine
+  250-card gaps forward forever. Eviction is by name, not by
+  auto-detecting short sets, because several sets are legitimately one
+  card below `set.total` (that card has no image) and a rule that
+  re-downloaded them would never settle.
+- **mcd14/15/17/18 index at 0 of 12, and that is upstream.** The catalog
+  lists all twelve cards of each with image URLs that 404 — verified
+  directly, while mcd16 and mcd19 serve fine. No artwork, no hash, by
+  anyone. **20,617 of 20,668 is the ceiling, not a shortfall.**
+
+### The gate still holds, and that had to be measured
+
+CLAUDE.md is explicit that a gate measured on a smaller index expires.
+Crowding moved — AMBIGUOUS 8.6% -> 8.9% (1,842), exact ties 652 -> 735 —
+so the question was real.
+
+**Re-measured across 123,702 trials: still exactly two blanket-8 leaks,
+still the same two cards** (`ex3-86`->`pop3-11`, `bw2-32`->`mcd12-6`),
+both at distance 4 with margins 9 and 8. Distance 4 is past `NEAR_EXACT`,
+so the shipped asymmetric rule requires 10 and refuses both. The 412 new
+cards introduced no third leak. Figures in `phash.ts` refreshed.
+
+The reasoning is containment, not eyeballing: the asymmetric rule's
+accepts are a SUBSET of blanket-8's, so its false accepts cannot exceed
+blanket-8's two, and both of those are refused.
+
+### Traps this found
+
+- **`measure-gate-safety.mjs` needs `subset.json` regenerated first.** It
+  asserts row-for-row alignment with the index, so after any rebuild run
+  `measure-hash-alternatives.mjs plan` before it, or it dies on ENOENT.
+- **The fetch was killed twice by the OS for memory** at 5GB free on a
+  31GB machine. `--chunk=` and `--jobs=` are now tunable, and the
+  checkpoint moved from every 1,200 cards to every 300 — on a machine
+  where the kill is a memory kill, that is the run that should lose the
+  least. It finished at `--chunk=12 --jobs=3`.
+- **A whole-catalog build can silently omit a set.** `setCards` retries an
+  empty four times and then, under `all`, logs "no cards — skipping" and
+  carries on. Four sets were lost that way on the first pass. Always
+  audit the built index against `set.total` afterwards.
+
 ## 16-pocket (4x4) binders (2026-09-27)
 
 `BINDER_SPECS` gains `"16"`, `BINDER_FORMATS` gains it, and that is the whole
