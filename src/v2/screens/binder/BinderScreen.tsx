@@ -69,6 +69,19 @@ export function BinderScreen({ binderId }: { binderId: string }) {
   const [railOpen, setRailOpen] = useState(false);
   const wide = useWideLayout();
 
+  /**
+   * Which spread is open. One at a time, like the binder on a table.
+   *
+   * Every spread used to render at once and you reached page 14 by scrolling
+   * past thirteen. That is fine for the three-page binder this was built
+   * against and wrong for a real one — the Pikachu binder is 16 pages of 16,
+   * and the Riolu one 11. Paging also costs nothing that was working: a drag
+   * cannot cross a spread anyway, because `useBinderDrag` refuses to scroll
+   * while a card is being carried (a press that moves is a scroll), so the
+   * only pockets a card could ever be dragged between are the ones on screen.
+   */
+  const [spread, setSpread] = useState(0);
+
   // Priced per printing, ONE request per SET rather than per card. A binder
   // spans sets the way a set screen never does — the Riolu one touches thirty.
   const value = useBinderValue(binder);
@@ -120,6 +133,36 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    * it. So centre it in the band the sheet actually leaves, which on a desktop
    * (no sheet, the picker is a rail) is the whole window and behaves as before.
    */
+  /*
+   * Memoised because the effect below depends on it: `pageGroups` builds a new
+   * array every call, so an unmemoised value would be a fresh dependency on
+   * every render and the effect would run forever.
+   */
+  const pageCount = binder?.pages.length ?? 0;
+  const format = binder?.format ?? "9";
+  const groups = useMemo(() => pageGroups(pageCount, format), [pageCount, format]);
+  /**
+   * Clamped, because pages can disappear underneath it. Removing the last page
+   * while looking at it would otherwise leave the screen on a spread that is
+   * not there — which renders as a binder with no pages at all.
+   */
+  const at = Math.min(spread, Math.max(0, groups.length - 1));
+
+  /**
+   * Turn to whichever spread the selection is on.
+   *
+   * Placing a card moves the selection to the next empty pocket, and that
+   * pocket is routinely on another page — it is how a binder gets filled. With
+   * one spread on screen, not following would mean the card you just placed
+   * vanishes and the picker fills a pocket you cannot see.
+   */
+  const selectedPage = selected && selected.kind === "pocket" ? selected.page : null;
+  useEffect(() => {
+    if (selectedPage === null) return;
+    const on = groups.findIndex((g) => g.includes(selectedPage));
+    if (on >= 0 && on !== at) setSpread(on);
+  }, [selectedPage, groups, at]);
+
   const selectedKey = selected ? addressKey(selected) : null;
   const lastScrolled = useRef<string | null>(null);
   useEffect(() => {
@@ -233,6 +276,49 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    */
   const phoneSheetOpen = !wide && selected !== null;
 
+  const open = groups[at];
+  /**
+   * Which pages are open, said in words.
+   *
+   * The spread INDEX is not what anyone is looking for — "spread 7 of 9" needs
+   * arithmetic to turn into the page number printed on the sheet in front of
+   * you. Page numbers are 1-based here for the same reason.
+   */
+  const openLabel = !open
+    ? ""
+    : open.length > 1
+      ? `Pages ${open[0]! + 1}–${open[open.length - 1]! + 1} of ${binder.pages.length}`
+      : `Page ${open[0]! + 1} of ${binder.pages.length}`;
+
+  const turner = groups.length > 1 && (
+    <nav aria-label="Binder pages">
+      <Row gap={2} align="center" wrap>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => setSpread(Math.max(0, at - 1))}
+          disabled={at === 0}
+        >
+          ‹ Previous
+        </button>
+        {/* Polite, not assertive: turning a page is not an interruption, but a
+          screen-reader user who just pressed Next has no other way to learn
+          where they landed. */}
+        <span className={styles.hint} aria-live="polite">
+          {openLabel}
+        </span>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => setSpread(Math.min(groups.length - 1, at + 1))}
+          disabled={at >= groups.length - 1}
+        >
+          Next ›
+        </button>
+      </Row>
+    </nav>
+  );
+
   const pages = (
     <Stack gap={5} className={phoneSheetOpen ? styles.fillRoom : undefined}>
       <p className={styles.hint} aria-live="polite">
@@ -240,23 +326,53 @@ export function BinderScreen({ binderId }: { binderId: string }) {
           ? `Filling ${addressPhrase(selected)} — pick a card, or clear it.`
           : "Choose a pocket to fill it, or drag a card from one pocket to another."}
       </p>
-      {pageGroups(binder.pages.length, binder.format).map((group, i) => (
+      {turner}
+      {open ? (
         <BinderSpread
-          key={group[0]}
+          key={open[0]}
           binder={binder}
-          pages={group}
+          pages={open}
           owns={owns}
           priceFor={value.priceFor}
           trade={Boolean(binder.forTrade)}
           onSelect={selectAt}
           selected={selected}
-          onSlotPointerDown={(at, slot, event) => onPointerDown(event, { kind: "address", at }, slot)}
+          onSlotPointerDown={(a, slot, event) => onPointerDown(event, { kind: "address", at: a }, slot)}
           dropTarget={dropTarget}
           draggingFrom={draggingFrom}
           headingLevel={2}
-          eager={i === 0}
+          // One spread on screen, so it is always the one worth loading now.
+          eager
         />
-      ))}
+      ) : null}
+      {/*
+        Repeated under the spread, and deliberately NOT a second `nav` landmark
+        — two landmarks with one name is worse for a screen reader than two
+        plain buttons, which is what a sighted user sees here anyway. A
+        16-pocket page is taller than a phone, so after reading one the control
+        you want next is the one that scrolled off the top.
+      */}
+      {groups.length > 1 && open ? (
+        <Row gap={2} align="center" wrap>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={() => setSpread(Math.max(0, at - 1))}
+            disabled={at === 0}
+          >
+            ‹ Previous
+          </button>
+          <span className={styles.hint}>{openLabel}</span>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={() => setSpread(Math.min(groups.length - 1, at + 1))}
+            disabled={at >= groups.length - 1}
+          >
+            Next ›
+          </button>
+        </Row>
+      ) : null}
     </Stack>
   );
 
@@ -278,7 +394,19 @@ export function BinderScreen({ binderId }: { binderId: string }) {
           in Settings, because those are decided once and these are pressed
           constantly. */}
       <Row gap={2} wrap>
-        <button type="button" className={styles.button} onClick={() => commit(addPage(binder, Date.now()))}>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => {
+            const next = addPage(binder, Date.now());
+            commit(next);
+            // Turn to it. The page used to appear at the bottom of a long
+            // scroll; with one spread on screen, adding one you cannot see
+            // would read exactly like the button doing nothing — which is the
+            // bug "Add page" already had once, for a different reason.
+            setSpread(pageGroups(next.pages.length, next.format).length - 1);
+          }}
+        >
           Add page
         </button>
         {/* Offered only when it would do something, and only for an EMPTY last

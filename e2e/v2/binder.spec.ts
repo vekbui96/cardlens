@@ -15,6 +15,24 @@ async function openBinder(page: Page, id: string) {
   return openV2(page, `/binder/${id}`, { seed: "binders" });
 }
 
+/**
+ * Turn to the spread holding a page, by its printed (1-based) number.
+ *
+ * The binder shows one spread at a time, so a pocket on page 3 is not in the
+ * DOM until you get there. Clicking Next rather than jumping is deliberate:
+ * it exercises the control a person uses.
+ */
+async function turnTo(page: Page, printedPage: number) {
+  const heading = page.getByRole("heading", { name: `Page ${printedPage}` });
+  for (let i = 0; i < 20; i++) {
+    if (await heading.isVisible().catch(() => false)) return;
+    const next = page.getByRole("button", { name: /Next/ }).first();
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  await expect(heading).toBeVisible();
+}
+
 /** The rendered width of one pocket, by its address. */
 async function pocketWidth(page: Page, address = "0:0"): Promise<number> {
   const box = await page.locator(`[data-pocket="${address}"]`).first().boundingBox();
@@ -142,8 +160,10 @@ test.describe("pages are added and removed on purpose", () => {
 
     // Reloaded WITHOUT the seed: re-seeding would rebuild the fixture binders
     // and this would be asserting that the fixture ran, not that the page kept.
+    // A reload opens the binder at page 1, so turn to it — the point is that
+    // page 2 is still THERE, not which spread the screen starts on.
     await page.goto("/?v=2#/binder/fx-empty");
-    await expect(page.getByRole("heading", { name: "Page 2" })).toBeVisible();
+    await turnTo(page, 2);
   });
 
   test("removing is refused for the only page, and for one that holds cards", async ({ page }) => {
@@ -314,7 +334,12 @@ test.describe("dragging, on a desktop", () => {
    */
   async function twoCardsOnPageThree(page: Page) {
     await openBinder(page, "fx-sparse");
-    await page.getByRole("button", { name: "Pocket 1, empty" }).nth(2).click();
+    // Turn to it: one spread is on screen, so page three's pockets are not in
+    // the DOM until you get there. Addressed by `data-pocket` rather than by
+    // the third "Pocket 1, empty" on the page — that ordinal only meant page
+    // three while every spread rendered at once.
+    await turnTo(page, 3);
+    await page.locator('[data-pocket="2:0"]').click();
     await firstPickerCard(page).click();
     await expect(page.locator('[data-pocket="2:0"]')).not.toHaveAttribute("aria-label", /empty/);
   }
@@ -357,6 +382,8 @@ test.describe("dragging, on a desktop", () => {
     // there, then clear where it came from" at the same address, and the card
     // is destroyed by being moved nowhere.
     await openBinder(page, "fx-sparse");
+    // The sparse fixture's one card is on page three, which is a spread away.
+    await turnTo(page, 3);
     const pocket = page.locator('[data-pocket="2:6"]');
     const before = await pocket.getAttribute("aria-label");
 
@@ -449,6 +476,9 @@ test.describe("the picker sheet, on a phone", () => {
 
   test("stacks pages one at a time, rather than side by side", async ({ page }) => {
     await openBinder(page, "fx-full");
+    // Pages 2 and 3 are one spread; on a phone a spread stacks rather than
+    // sitting abreast, which is what this measures.
+    await turnTo(page, 2);
     const two = (await page.getByRole("heading", { name: "Page 2" }).boundingBox())!;
     const three = (await page.getByRole("heading", { name: "Page 3" }).boundingBox())!;
     // Below, not beside.

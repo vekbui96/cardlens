@@ -160,6 +160,87 @@ describe("pages are added and removed on purpose", () => {
     expect(screen.getByText(/across 2 pages/)).toBeInTheDocument();
   });
 
+  it("shows one spread at a time, and turns between them", async () => {
+    /*
+     * Every spread used to render at once, so page 14 was reached by scrolling
+     * past thirteen. Fine for a three-page binder, wrong for the real ones —
+     * the Pikachu binder is 16 pages and Riolu & Lucario 11.
+     *
+     * Page 1 falls alone against the inside cover, so the spreads are
+     * [1], [2,3], [4,5] — which is why turning once from the start lands on
+     * page 2 AND page 3.
+     */
+    let b = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    b = { ...b, pages: [{ slots: {} }, { slots: {} }, { slots: {} }, { slots: {} }] };
+    save(b);
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.getByRole("heading", { name: "Page 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Page 2" })).not.toBeInTheDocument();
+
+    const nav = screen.getByRole("navigation", { name: "Binder pages" });
+    expect(nav).toHaveTextContent("Page 1 of 4");
+
+    await user.click(screen.getAllByRole("button", { name: /Next/ })[0]!);
+    expect(screen.getByRole("heading", { name: "Page 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Page 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Page 1" })).not.toBeInTheDocument();
+    expect(nav).toHaveTextContent("Pages 2–3 of 4");
+  });
+
+  it("turns forward and back, and stops at both ends", async () => {
+    let b = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    b = { ...b, pages: [{ slots: {} }, { slots: {} }, { slots: {} }] };
+    save(b);
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const next = () => screen.getAllByRole("button", { name: /Next/ })[0]!;
+    const prev = () => screen.getAllByRole("button", { name: /Previous/ })[0]!;
+
+    // Page 1 alone, so Previous has nowhere to go.
+    expect(prev()).toBeDisabled();
+    await user.click(next());
+    expect(screen.getByRole("heading", { name: "Page 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Page 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Page 1" })).not.toBeInTheDocument();
+    // [1], [2,3] is every spread of a three-page binder.
+    expect(next()).toBeDisabled();
+
+    await user.click(prev());
+    expect(screen.getByRole("heading", { name: "Page 1" })).toBeInTheDocument();
+  });
+
+  it("turns to the pocket being filled when the selection moves off the spread", async () => {
+    /*
+     * Placing a card advances the selection to the next empty pocket, and that
+     * pocket is routinely on another page — it is how a binder gets filled.
+     * Without following, the card just placed would vanish and the picker
+     * would be filling a pocket nobody can see.
+     */
+    let b = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    b = { ...b, pages: [{ slots: {} }, { slots: {} }] };
+    // Page 1 full, so the first empty pocket is on page 2 — a different spread.
+    const card = (n: number): CardSlot => ({ kind: "card", cardId: `me5-${n}`, finish: "normal" });
+    for (let i = 0; i < 9; i++) b = placeSlot(b, 0, i, card(i + 1), Date.now());
+    save(b);
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.getByRole("heading", { name: "Page 1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Pocket 1, / }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Page 1" })).toBeInTheDocument());
+  });
+
+  it("does not offer to turn a binder that has only one spread", () => {
+    save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.queryByRole("navigation", { name: "Binder pages" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Next/ })).not.toBeInTheDocument();
+  });
+
   it("refuses to remove the only page", () => {
     save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
     render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });

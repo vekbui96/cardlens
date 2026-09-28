@@ -15,6 +15,20 @@ From `src/web/binders/WebBinderScreen.tsx`, `src/components/BinderPage.tsx`.
 - [ ] Pages as the binder falls open: page 1 alone against the inside front
       cover, then facing pairs. **4-pocket has no facing pages** — two 2-column
       pages abreast are indistinguishable from a 12-pocket page.
+- [x] **One spread on screen, turned with Previous / Next**, not every spread
+      stacked in one scroll. The stacked version was fine for the three-page
+      fixture and wrong for a real binder: Pikachu is 16 pages, Riolu & Lucario 11. The turner repeats under the spread because a 16-pocket page is taller
+      than a phone. It costs dragging nothing — `useBinderDrag` refuses to
+      scroll while a card is carried, so the only pockets a card could ever be
+      dragged between are the ones already on screen.
+  - [x] The spread **follows the selection**: placing advances to the next empty
+        pocket, which is routinely on another page, and a card that landed
+        somewhere invisible reads as the picker doing nothing.
+  - [x] **Add page turns to the page it added** — otherwise the button appears
+        to do nothing, which is the bug it already had once for another reason.
+  - [x] The index is **clamped**, so removing the last page while looking at it
+        cannot leave the screen on a spread that no longer exists.
+  - [x] Absent entirely when the binder has only one spread.
 - [ ] A pocket is a pocket: the same size in 9 and 12; **bigger** in 4-pocket,
       which exists for jumbo cards. The PAGE gets wider with more columns.
 - [ ] The cover: a real slot before page 1, fillable, draggable onto, and **not
