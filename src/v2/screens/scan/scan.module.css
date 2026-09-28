@@ -397,7 +397,6 @@
   color: var(--v2-fg-muted);
 }
 
-.select,
 .pickList {
   list-style: none;
   margin: var(--v2-space-0);

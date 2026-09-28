@@ -429,18 +429,6 @@ button.pocket:hover {
   min-width: 0;
 }
 
-.select {
-  font-family: inherit;
-  font-size: var(--v2-fs-small);
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-1) var(--v2-space-2);
-  border-radius: var(--v2-radius-sm);
-  border: var(--v2-border-w) solid var(--v2-border);
-  background: var(--v2-surface-raised);
-  color: var(--v2-fg);
-  max-width: 100%;
-}
-
 .error {
   margin: var(--v2-space-0);
   color: var(--v2-error);
@@ -462,9 +450,14 @@ button.pocket:hover {
 
 /* --- The picker ----------------------------------------------------------- */
 
+/*
+ * The tray: the cards you are choosing from, laid out beside the page you are
+ * filling. Two across, at `--v2-pick` rather than `--v2-pocket` — see the
+ * token for why a page-sized pocket made this a one-card-at-a-time list.
+ */
 .pickerCards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--v2-pocket), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--v2-pick), 1fr));
   gap: var(--v2-space-2);
   list-style: none;
   margin: var(--v2-space-0);

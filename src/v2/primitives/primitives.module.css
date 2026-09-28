@@ -85,6 +85,68 @@
   margin: var(--v2-space-0);
 }
 
+/* --- Select (a dropdown we draw, not the OS) ------------------------------ */
+
+/*
+ * Field's box, plus a chevron. Two screens had their own before this: the
+ * binder picker's had a border and a surface, and the scan picker's was
+ * grouped with `.pickList` as though a select were a list, which gave it
+ * `display: flex`, no padding and a 40vh scroll box.
+ */
+.select {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--v2-tap);
+  padding-block: var(--v2-space-2);
+  /* Room on the right for the chevron, which is a background image. */
+  padding-inline: var(--v2-space-3) var(--v2-space-6);
+  font-family: var(--v2-font);
+  /* Matches Field: under 16px, iOS zooms the page when this takes focus. */
+  font-size: var(--v2-fs-field);
+  color: var(--v2-fg);
+  background-color: var(--v2-surface-sunken);
+  /*
+   * Inline SVG rather than a pseudo-element, because a `select` may not have
+   * children. The stroke is `--v2-fg-muted` written out: a background-image
+   * cannot read a custom property, so this is the one place in v2 where a
+   * colour is repeated, and it is marked so the token check agrees.
+   */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%239aa7b8' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); /* v2-tokens-allow: a background-image cannot read a custom property */
+  background-repeat: no-repeat;
+  background-position: right var(--v2-space-3) center;
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  cursor: pointer;
+}
+
+.select:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.select:disabled {
+  color: var(--v2-fg-dim);
+  cursor: not-allowed;
+}
+
+/*
+ * The dropped-open list belongs to the platform and is left to it. Only the
+ * options' own colours can be set, and on the platforms that honour them this
+ * stops a white list flashing open out of a dark control.
+ */
+.select option {
+  background: var(--v2-surface);
+  color: var(--v2-fg);
+}
+
+/* Declared after `.select`, for the reason `.fieldGrow` is: source order. */
+.selectGrow {
+  width: auto;
+  flex: 1 1 auto;
+}
+
 /* --- Card (a pressable surface) ------------------------------------------- */
 
 .card {
@@ -397,12 +459,22 @@
   min-width: 0;
 }
 
+/*
+ * `top` clears the shell header, which is itself sticky at `top: 0` with
+ * `z-index: 10`. At `--v2-space-4` the pinned rail slid UNDERNEATH it and the
+ * search box — the first thing in the panel — was the part that went missing.
+ *
+ * The height then follows from the same two numbers, so a pinned rail ends
+ * exactly at the bottom of the viewport instead of running off it. `dvh`, not
+ * `vh`: on iOS `vh` is the large viewport and overshoots (see `Sheet`).
+ */
 .rail {
   position: sticky;
-  top: var(--v2-space-4);
+  top: calc(var(--v2-header-h) + var(--v2-space-4));
   align-self: start;
   width: var(--rail-w);
-  max-height: calc(100vh - var(--v2-header-h) - var(--v2-space-6));
+  max-height: calc(100vh - var(--v2-header-h) - var(--v2-space-5));
+  max-height: calc(100dvh - var(--v2-header-h) - var(--v2-space-5));
   overflow: hidden auto;
   background: var(--v2-surface);
   border: var(--v2-border-w) solid var(--v2-border);

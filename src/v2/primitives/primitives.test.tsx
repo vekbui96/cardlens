@@ -2,7 +2,7 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Card, CardArt, Chip, Field, Meter, Money, Panel } from "./index.ts";
+import { Card, CardArt, Chip, Field, Meter, Money, Panel, Select } from "./index.ts";
 
 /**
  * These cover the decisions, not the markup.
@@ -184,6 +184,42 @@ describe("Card", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "A binder" }), { button: 1 });
     expect(onPress).not.toHaveBeenCalled();
+  });
+});
+
+describe("Select", () => {
+  it("takes its name from the label prop", () => {
+    render(
+      <Select label="Cards from">
+        <option value="a">Base</option>
+      </Select>,
+    );
+    expect(screen.getByRole("combobox", { name: "Cards from" })).toBeInTheDocument();
+  });
+
+  it("takes its name from a visible label when given an id instead", () => {
+    render(
+      <>
+        <label htmlFor="set">Set</label>
+        <Select id="set">
+          <option value="a">Base</option>
+        </Select>
+      </>,
+    );
+    expect(screen.getByRole("combobox", { name: "Set" })).toBeInTheDocument();
+  });
+
+  it("reports what was chosen", async () => {
+    const onChange = vi.fn();
+    render(
+      <Select label="Cards from" defaultValue="a" onChange={onChange}>
+        <option value="a">Base</option>
+        <option value="b">Jungle</option>
+      </Select>,
+    );
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Cards from" }), "b");
+    expect(onChange).toHaveBeenCalled();
+    expect(screen.getByRole("combobox", { name: "Cards from" })).toHaveValue("b");
   });
 });
 

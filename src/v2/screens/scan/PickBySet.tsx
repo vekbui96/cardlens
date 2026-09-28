@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Field, Row, Sheet, Stack } from "../../primitives/index.ts";
+import { Field, Row, Select, Sheet, Stack } from "../../primitives/index.ts";
 import { byCollectorNumber } from "../../../integrations/pokemon/sort.ts";
 import type { CardIndex, IndexedCard } from "../../../scan/cardIndex.ts";
 import styles from "./scan.module.css";
@@ -96,9 +96,8 @@ export function PickBySet({
           <label className={styles.fieldLabel} htmlFor={setFieldId}>
             Set
           </label>
-          <select
+          <Select
             id={setFieldId}
-            className={styles.select}
             value={setId}
             onChange={(e) => {
               setSetId(e.target.value);
@@ -111,7 +110,7 @@ export function PickBySet({
                 {s.name} ({s.cards})
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <Field

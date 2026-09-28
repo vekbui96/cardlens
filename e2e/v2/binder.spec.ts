@@ -548,4 +548,25 @@ test.describe("binder @visual", () => {
      */
     await expect(page).toHaveScreenshot("binder.png", { fullPage: true });
   });
+
+  test("the picker rail looks like itself", async ({ page }) => {
+    /*
+     * The rail had no visual coverage until it was reshaped, which is how it
+     * drifted: `.pickerCards` sized its tracks from `--v2-pocket`, a token
+     * that grows to 168px above 900px for the binder PAGE, so in a 320px rail
+     * exactly one track fitted and stretched to fill — the picker showed one
+     * enormous card at a time out of a set of 250. Nothing would have said so.
+     *
+     * Desktop only: on a phone this content is a `Sheet`, not a rail.
+     */
+    test.skip(test.info().project.name !== "v2-desktop", "the rail is the desktop layout");
+    await openBinder(page, "fx-empty");
+    await page.getByRole("button", { name: "Pocket 1, empty" }).click();
+    const rail = page.getByRole("complementary", { name: "Cards" });
+    await expect(rail).toBeVisible();
+    // The tray has to have something in it, or this asserts an empty panel.
+    await expect(rail.getByRole("listitem").first()).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(rail).toHaveScreenshot("binder-rail.png");
+  });
 });

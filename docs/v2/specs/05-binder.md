@@ -44,6 +44,16 @@ From `src/web/binders/WebBinderScreen.tsx`, `src/components/BinderPage.tsx`.
 - [ ] Add page / Remove page are explicit; **nothing trims trailing empty pages
       automatically** — that made "Add page" a silent no-op for as long as
       binders existed.
+- [x] **The picker rail is a tray**: two cards abreast at `--v2-pick`, not one
+      stretched to the panel's width. It sized its tracks from `--v2-pocket`,
+      which grows to 168px above 900px for the binder PAGE — in a 320px rail
+      exactly one track fitted and `1fr` stretched it, so the picker showed one
+      enormous card at a time out of a set of 250.
+  - [x] The rail clears the sticky shell header. At `top: --v2-space-4` the
+        pinned rail slid under it and the search box was what went missing.
+  - [x] A `@visual` snapshot covers the open rail. There was none, which is how
+        the above drifted without anything saying so.
+
 - [ ] Settings disclosure: pocket size, show-value-in-list, trading. What is on
       shows as a tag when shut.
 - [ ] Trade mode: copies and condition per pocket. Absent means one copy and

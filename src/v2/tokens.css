@@ -130,6 +130,18 @@
   --v2-pocket-lg: 168px;
 
   /*
+   * The picker tray's thumbnail, and deliberately NOT `--v2-pocket`.
+   *
+   * A pocket is sized for the binder PAGE, which has the whole window; above
+   * 900px it is 168px. The tray sits in a 320px rail, so `minmax(168px, 1fr)`
+   * fitted exactly one track and then stretched it to the full width — the
+   * picker showed one enormous card at a time out of a set of 250. Small
+   * enough that two fit beside each other in the rail AND in the phone sheet,
+   * so the tray reads the same in both.
+   */
+  --v2-pick: 132px;
+
+  /*
    * --- Viewport ----------------------------------------------------------
    *
    * v1 sets `--cl-viewport` on `.webSurface` inside `GlassesFrame`. v2 never

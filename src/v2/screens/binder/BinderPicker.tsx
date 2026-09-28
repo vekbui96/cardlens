@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
 import { useCombobox } from "../../../hooks/useCombobox.ts";
 import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
-import { CardArt, Chip, Field, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import { CardArt, Chip, Field, Row, ScreenReaderOnly, Select, Stack, cx } from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../../app/contexts.tsx";
 import { useSets } from "../../../hooks/useSets.ts";
@@ -292,19 +292,25 @@ function BrowseRow({
   canFill: boolean;
   onPlace: (slot: BinderSlot | null) => void;
 }) {
+  /* Generated: the picker can be mounted twice on a page that has both the
+     rail and a sheet in the DOM, and two elements sharing an id would send the
+     label to whichever the browser found first. Same reason as PickBySet. */
+  const setFieldId = useId();
   return (
-    <Stack gap={2}>
-      <Row gap={2} wrap>
-        <label className={styles.hint}>
-          Cards from{" "}
-          <select className={styles.select} value={value} onChange={(e) => onChange(e.target.value)}>
-            {sets.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+    <Stack gap={3}>
+      <Stack gap={1}>
+        <label className={styles.hint} htmlFor={setFieldId}>
+          Cards from
         </label>
+        <Select id={setFieldId} value={value} onChange={(e) => onChange(e.target.value)}>
+          {sets.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      </Stack>
+      <Row gap={2} wrap>
         {/* One of each card, in collector order, at the printing a set binder is
             normally sleeved with. REPLACES the pages — see fillSequential. */}
         <button type="button" className={styles.button} disabled={!canFill} onClick={onFill}>
