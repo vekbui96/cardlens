@@ -29,3 +29,9 @@ Thumbs.db
 # logs
 *.log
 npm-debug.log*
+
+# Agent worktrees: full checkouts of this repo (2.4GB, each with its own
+# node_modules) living inside it. They are already excluded from eslint and
+# prettier; without this, `git add -A .claude` commits twelve gitlinks and a
+# worktree's screenshots, which is exactly what happened once.
+.claude/worktrees/
