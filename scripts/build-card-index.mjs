@@ -42,6 +42,28 @@ const rawArgs = process.argv.slice(2);
  * mix two incompatible index formats in one file.
  */
 const RESUME = rawArgs.includes("--resume");
+/**
+ * Sets to drop from the checkpoint before resuming, comma-separated.
+ *
+ * `--resume` skips a set that is already in the index, which is right when the
+ * set is COMPLETE and wrong when it is not. `/api/set-information` used to
+ * return only the first page of 250, so nine sets were indexed at exactly 250
+ * of their real size — SWSH Black Star Promos at 250 of 304, and so on. Those
+ * sets are present, so a plain resume skips them and the gap survives every
+ * future rebuild.
+ *
+ *   node scripts/build-card-index.mjs --resume --rebuild swshp,sv2 all
+ *
+ * Evicting by name rather than auto-detecting short sets on purpose: several
+ * sets are legitimately one card below `set.total` because that card has no
+ * image, and a rule that re-downloaded them every run would never converge.
+ */
+const REBUILD = new Set(
+  (rawArgs.find((a) => a.startsWith("--rebuild="))?.slice("--rebuild=".length) ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
 const args = rawArgs.filter((a) => !a.startsWith("--"));
 
 /** `all` builds the whole English catalog rather than just what is collected. */
@@ -99,6 +121,20 @@ function readCheckpoint() {
 
     const hashes = [];
     for (let i = 0; i < cards.length; i++) hashes.push([words[i * 2], words[i * 2 + 1]]);
+
+    // Drop the sets named by --rebuild, hashes and metadata together so the two
+    // stay index-aligned. They are then absent from `sets`, so the main loop
+    // treats them as unbuilt and fetches them fresh.
+    if (REBUILD.size > 0) {
+      const keep = cards.map((c) => !REBUILD.has(c.setId));
+      const dropped = keep.filter((k) => !k).length;
+      console.log(`--rebuild: dropping ${dropped} cards from ${[...REBUILD].join(", ")}`);
+      return {
+        cards: cards.filter((_, i) => keep[i]),
+        hashes: hashes.filter((_, i) => keep[i]),
+        sets: new Set(cards.filter((_, i) => keep[i]).map((c) => c.setId)),
+      };
+    }
     return { cards, hashes, sets: new Set(cards.map((c) => c.setId)) };
   } catch {
     return null;
