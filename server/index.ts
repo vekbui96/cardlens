@@ -850,16 +850,66 @@ export function createApp(
       return;
     }
 
-    const cardsPath =
+    /**
+     * EVERY page, not the first one.
+     *
+     * 250 is the upstream maximum and this asked for exactly one page of it,
+     * so every set larger than that was silently cut off at 250 — measured
+     * against `set.total`: SWSH Black Star Promos 250 of 304, Ascended Heroes
+     * 250 of 295, Fusion Strike 250 of 284, Paldea Evolved 250 of 279, and
+     * five more. 220 cards, invisible to the set screen and absent from the
+     * scanner's index, looking exactly like cards that do not exist.
+     *
+     * `models/setCompletion.ts` already worked around it by taking the
+     * denominator from `set.total` and never from counting, which kept the
+     * PERCENTAGE honest while leaving the cards themselves unreachable. That
+     * comment stays true and stays correct after this fix; it just stops being
+     * the only thing standing between a truncated set and a wrong number.
+     */
+    const cardsPage = (page: number) =>
       `/cards?q=${encodeURIComponent(`set.id:${setId}`)}` +
-      `&pageSize=250&orderBy=number&select=${encodeURIComponent(
+      `&pageSize=250&page=${page}&orderBy=number&select=${encodeURIComponent(
         "id,name,number,rarity,images,tcgplayer,set",
       )}`;
+
+    /**
+     * Pages until a short page says there are no more.
+     *
+     * Capped: a bug upstream that kept returning full pages would otherwise
+     * loop forever, and no real set is near 2,500 cards. The cap is a guard,
+     * not a limit — if one ever is, this logs rather than truncating in
+     * silence, which is the failure this whole function is fixing.
+     */
+    async function loadAllCards(): Promise<unknown> {
+      const MAX_PAGES = 10;
+      const all: unknown[] = [];
+      let first: Record<string, unknown> | null = null;
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const body = (await loadCatalog(cardsPage(page))) as Record<string, unknown> | null;
+        first ??= body;
+        const batch = (body?.data as unknown[] | undefined) ?? [];
+        all.push(...batch);
+        if (batch.length < 250) break;
+        if (page === MAX_PAGES) {
+          console.warn(`[cardlens] ${setId}: hit the ${MAX_PAGES}-page cap — the set may be truncated`);
+        }
+      }
+      /*
+       * The FIRST page's envelope with every page's data in it.
+       *
+       * Callers read `cards.data` — the client's schema, `build-card-index`,
+       * `validate-recognition` — so returning a bare array here would be a
+       * silent shape change that reads as "this set has no cards". Keeping the
+       * envelope also keeps `totalCount` and friends for anything that grows a
+       * use for them; only `data` is replaced, and only with a superset.
+       */
+      return { ...(first ?? {}), data: all, count: all.length };
+    }
 
     // Printings are best-effort: a set view without them still works, it just
     // falls back to what pricing implies. Cards are not optional.
     const [cards, printings] = await Promise.all([
-      loadCatalog(cardsPath).catch((err: unknown) => {
+      loadAllCards().catch((err: unknown) => {
         throw err;
       }),
       setName
