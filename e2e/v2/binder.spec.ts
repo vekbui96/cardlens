@@ -430,19 +430,45 @@ test.describe("the picker rail, on a desktop", () => {
     await openBinder(page, "fx-sparse");
     const rail = page.getByRole("complementary", { name: "Cards" });
     await expect(rail).toBeHidden();
-    const shut = await pocketWidth(page);
+
+    /*
+     * Measured on the MAIN COLUMN, not on a pocket.
+     *
+     * It used to compare pocket widths and assert the open rail made them
+     * smaller. That was a proxy, and it stopped holding the moment the pocket
+     * became cap-bound rather than width-bound: at 1440 a page now draws 168px
+     * either way, so the proxy read "the rail costs nothing when open" — which
+     * is not what it was asking. The property is about grid track, so measure
+     * the track.
+     */
+    const column = () =>
+      page.evaluate(() => {
+        // The aside stays in the DOM while shut (`hidden`), so the host grid
+        // and its main column are reachable from it either way.
+        const aside = document.querySelector('aside[aria-label="Cards"]');
+        const host = aside?.parentElement;
+        const main = host?.firstElementChild;
+        if (!host || !main) return null;
+        return {
+          main: Math.round(main.getBoundingClientRect().width),
+          host: Math.round(host.getBoundingClientRect().width),
+        };
+      });
+
+    const shut = await column();
+    // Shut, the rail holds no track at all: the main column is the whole host.
+    expect(shut!.main).toBe(shut!.host);
 
     await page.getByRole("button", { name: "Cards", exact: true }).click();
     await expect(rail).toBeVisible();
-    const open = await pocketWidth(page);
-
-    // Open, the rail takes its width from the spread — which is the proof that
-    // shut it was taking none.
-    expect(open).toBeLessThan(shut);
+    const open = await column();
+    // Open, it takes its width out of that column and nothing else changes.
+    expect(open!.main).toBeLessThan(open!.host);
 
     await page.getByRole("button", { name: "Hide cards" }).click();
     await expect(rail).toBeHidden();
-    expect(await pocketWidth(page)).toBeCloseTo(shut, 0);
+    const again = await column();
+    expect(again!.main).toBe(again!.host);
   });
 
   test("opens by itself when a pocket is chosen, because that IS asking for cards", async ({ page }) => {

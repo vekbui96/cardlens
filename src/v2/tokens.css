@@ -130,6 +130,16 @@
   --v2-pocket-lg: 168px;
 
   /*
+   * The ceiling, once there is room for facing pages at full size.
+   *
+   * 240px at 96dpi is about 63mm, which is how wide a Pokémon card actually
+   * is — so this is life-size and there is no case for going past it. Below
+   * the facing-pages breakpoint the cap stays `--v2-pocket`, and the
+   * breakpoint is chosen so the two meet: no step either way.
+   */
+  --v2-pocket-max: 240px;
+
+  /*
    * The picker tray's thumbnail, and deliberately NOT `--v2-pocket`.
    *
    * A pocket is sized for the binder PAGE, which has the whole window; above

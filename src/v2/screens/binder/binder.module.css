@@ -85,19 +85,27 @@
  * which picks between the rail and the sheet in JavaScript: they are the same
  * decision made in two places because only one of them can be made in CSS.
  */
-@media (min-width: 1000px) /* v2-tokens-allow: no token can express a breakpoint */ {
-  /*
-   * Facing pages. Two page tracks plus the gutter between them, so the pocket
-   * is what EIGHT columns can afford rather than four.
-   *
-   * minmax(0, ...) rather than a fixed track: between 1000px and the width a
-   * 12-pocket spread actually wants, the spread shrinks to fit instead of
-   * pushing out of the window. Both pages shrink by the same amount, so the
-   * formats stay equal to each other the whole way down.
-   */
+/*
+ * Facing pages START WHERE THEY FIT, which is 1500px and not 1000px.
+ *
+ * It was 1000, and that made a wider window draw SMALLER cards. Crossing it
+ * swapped the pocket from what four columns can afford to what eight can, and
+ * a window cannot afford eight at full size until about 1500px — so the
+ * measured sizes ran 168px at 900, 113px at 1024, 145px at 1280, 165px at
+ * 1440. A third of the card size, paid to see two pages at once, on exactly
+ * the windows least able to spare it.
+ *
+ * At 1500 the eight-column figure reaches `--v2-pocket`, so the two formulas
+ * meet here and the pocket is constant across the whole range. Below: one page
+ * at a time, full size. Above: two pages, and the cap lifts to
+ * `--v2-pocket-max` so a wide monitor gets a bigger binder instead of more
+ * whitespace — every format still derives from this one number, so a pocket
+ * is still a pocket.
+ */
+@media (min-width: 1500px) /* v2-tokens-allow: no token can express a breakpoint */ {
   .spread {
     --binder-pocket: min(
-      var(--v2-pocket),
+      var(--v2-pocket-max),
       (100% - var(--v2-space-4) - 6 * var(--binder-gap) - 2 * var(--binder-chrome)) / 8
     );
     grid-template-columns: repeat(2, minmax(0, var(--binder-page)));

@@ -10,9 +10,16 @@ import { useEffect, useState } from "react";
  * calls, so two requests for the same set — and would put a focus trap in the
  * document at every width.
  *
- * 1000px is the number the geometry actually needs, not a device: two 12-pocket
- * pages plus the gutter want more than a phone has, and below that the pages
- * stack one at a time.
+ * 1000px is the number the geometry actually needs, not a device: a 320px rail
+ * beside a readable page wants more than a phone has.
+ *
+ * This used to be the same number as the facing-pages breakpoint in
+ * `binder.module.css`, and the comment there said the two had to agree. They
+ * are not the same decision and no longer share a value: this one asks "is
+ * there room for a panel beside the binder", and that one asks "is there room
+ * for two pages at full pocket size", which turns out to be 1500px. Tying them
+ * together is what made a 1024px window draw cards a third smaller than a
+ * 900px one.
  */
 const WIDE = "(min-width: 1000px)";
 
