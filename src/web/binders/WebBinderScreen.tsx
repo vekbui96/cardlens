@@ -203,6 +203,13 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
 
   /** What the selected pocket already holds — a card, or nothing to describe. */
   const selectedSlot = selected ? slotAt(binder, selected) : null;
+  /**
+   * The set's cards are for filling a pocket. With a filled one selected the
+   * sheet below is about the card already in it — copies, condition, "I own
+   * this" — and a full set list above it buries that under cards nobody asked
+   * for. Search stays, so replacing the card is still one query away.
+   */
+  const showSetCards = !search && !selectedSlot;
 
   const place = (slot: BinderSlot | null) => {
     /*
@@ -535,7 +542,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
               list it is not the source of, and custom art has nothing to do
               with a name search — and on a phone this row costs a row of
               pockets, which is the thing the picker exists to fill. */}
-            {search ? null : (
+            {!showSetCards ? null : (
               <div className={styles.pickerHead}>
                 <label className={styles.setPick}>
                   <span className={styles.setPickLabel}>Cards from</span>
@@ -594,7 +601,7 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                 onChoose={setChosen}
                 compact={Boolean(chosen)}
               />
-            ) : (
+            ) : !showSetCards ? null : (
               <ul className={styles.cards}>
                 {view.cards.flatMap((card) => {
                   const finishes = view.finishesFor(card.collectorNumber, card.variants);
