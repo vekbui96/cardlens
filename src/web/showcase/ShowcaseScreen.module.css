@@ -236,6 +236,12 @@
   max-height: 100%;
 }
 
+/* Focused on open so a screen reader lands in the dialog. The panel itself is
+   not a control, so no ring, matching CardSheet. */
+.viewer:focus {
+  outline: none;
+}
+
 /* Bounded by height as well as width: on a short landscape screen a
    width-bound card runs off the bottom and the close button goes with it. */
 .viewerArt {

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Screen } from "../../components/Screen.tsx";
 import { CardImage } from "../../components/CardImage.tsx";
@@ -11,6 +11,7 @@ import { formatUpdated, formatUsd } from "../../utils/format.ts";
 import { CollectionGraph } from "../../components/CollectionGraph.tsx";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
+import { useDialogFocus } from "../useDialogFocus.ts";
 import styles from "./ShowcaseScreen.module.css";
 
 /**
@@ -41,14 +42,9 @@ interface ViewedSlot {
  */
 function CardViewer({ slot, onClose }: { slot: ViewedSlot; onClose: () => void }) {
   const { card, finish, held, price } = slot;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Takes focus once on open, so a screen reader is moved into the dialog it
+  // just opened, and returns it to the tile on close.
+  const panel = useDialogFocus<HTMLDivElement>(onClose);
 
   /*
    * Portalled to <body>. The app shell's sticky header sits in its own
@@ -60,10 +56,13 @@ function CardViewer({ slot, onClose }: { slot: ViewedSlot; onClose: () => void }
   return createPortal(
     <div className={styles.viewerBackdrop} onClick={onClose} role="presentation">
       <div
+        ref={panel}
         className={styles.viewer}
         role="dialog"
         aria-modal="true"
         aria-label={`${card.name}, ${finishLabel(finish)}`}
+        tabIndex={-1}
+        data-returns-focus
         onClick={(e) => e.stopPropagation()}
       >
         {/* imageLarge where the catalog has it: the whole point is seeing the

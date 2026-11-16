@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { CardImage } from "../../components/CardImage.tsx";
+import { useDialogFocus } from "../useDialogFocus.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -108,7 +109,9 @@ export function CardSheet({
   onRemoveAll: () => void;
   onClose: () => void;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
+  // Focused once on open so the sheet is reachable by keyboard and screen
+  // readers, not only by touch; focus goes back to the opener on close.
+  const panel = useDialogFocus<HTMLDivElement>(onClose);
 
   const ownedValue = useMemo(() => {
     let total: number | undefined;
@@ -123,17 +126,6 @@ export function CardSheet({
   /** A hand-marked finish the set data does not list — must stay visible and removable. */
   const extras = useMemo(() => owned.filter((f) => !finishes.includes(f)), [owned, finishes]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    // Focus the panel so the sheet is reachable by keyboard and screen readers,
-    // not only by touch.
-    panel.current?.focus();
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
     <div className={styles.backdrop} onClick={onClose} role="presentation">
       <div
@@ -143,6 +135,7 @@ export function CardSheet({
         aria-modal="true"
         aria-label={card.name}
         tabIndex={-1}
+        data-returns-focus
         onClick={(e) => e.stopPropagation()}
       >
         {/*

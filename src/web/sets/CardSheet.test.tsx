@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { CardSheet } from "./CardSheet.tsx";
-import type { PokemonCardSummary } from "../../models/cards.ts";
+import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
 
 const card = {
   id: "me5-007",
@@ -58,6 +58,64 @@ describe("CardSheet prices", () => {
     renderSheet({ owned: [] });
 
     expect(screen.queryByTestId("sheet-owned-value")).not.toBeInTheDocument();
+  });
+});
+
+describe("CardSheet focus", () => {
+  function sheet(onClose: () => void, owned: CollectFinish[] = []) {
+    return (
+      <CardSheet
+        card={card}
+        finishes={["normal", "reverse"]}
+        owned={owned}
+        priceFor={() => undefined}
+        onToggle={() => {}}
+        excluded={[]}
+        onToggleExcluded={() => {}}
+        onRemoveAll={() => {}}
+        onClose={onClose}
+      />
+    );
+  }
+
+  it("keeps focus on the printing just pressed when the parent re-renders with a new onClose", () => {
+    // The set screen passes `onClose={() => setOpenCardId(null)}`, a new function
+    // on every render, and a mark re-renders it. Focus must not jump to the panel.
+    const { rerender } = render(sheet(() => {}));
+    const reverse = screen.getByRole("button", { name: /^Reverse Holo/ });
+    reverse.focus();
+
+    rerender(sheet(() => {}, ["reverse"]));
+
+    expect(document.activeElement).toBe(reverse);
+  });
+
+  it("calls the latest onClose on Escape", () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { rerender } = render(sheet(first));
+    rerender(sheet(latest));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(latest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("gives focus back to what opened it when it closes", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const { unmount } = render(sheet(() => {}));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+
+    unmount();
+
+    expect(document.activeElement).toBe(opener);
+    expect(dialog).toHaveAttribute("data-returns-focus");
+    opener.remove();
   });
 });
 
