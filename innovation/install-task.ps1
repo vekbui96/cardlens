@@ -21,7 +21,14 @@
   Afterwards, from a NORMAL (non-admin) PowerShell, prove the non-elevated trigger works:
      powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -SelfTest
 
+  4. With -WithProductReview (or -ProductReviewOnly, which leaves the daily task as it is):
+     innovation-loop-cardlens-review, WEEKLY on -ReviewDay at -ReviewAt,
+     NON-elevated like the daily task, runs `run-loop.ps1 -ProductReview` (read-only research; opens one
+     loop:product-review issue; LOOP.md section 7). Created DISABLED. It shares the daily task's run lock, so
+     the two never run at once (the later one exits).
+
   Enable the daily loop when ready:  Enable-ScheduledTask -TaskName innovation-loop-cardlens
+  Enable the weekly review:          Enable-ScheduledTask -TaskName innovation-loop-cardlens-review
   Remove everything:                 .\install-task.ps1 -Uninstall
 #>
 [CmdletBinding()]
@@ -30,7 +37,11 @@ param(
     [string]$User = 'SERVER-PC\VeBui',
     [string]$ExtraArgs = '',     # e.g. '-ProposeOnly' for the first supervised week
     [switch]$Uninstall,
-    [switch]$ElevatedOnly        # only refresh the elevated copy + deploy task (after git pull)
+    [switch]$ElevatedOnly,       # only refresh the elevated copy + deploy task (after git pull)
+    [switch]$WithProductReview,  # also register the weekly product review task (disabled)
+    [switch]$ProductReviewOnly,  # ONLY the weekly review task (+ the idempotent elevated refresh); the daily task is untouched
+    [ValidateSet('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')][string]$ReviewDay = 'Sunday',
+    [string]$ReviewAt = '10:37'
 )
 $ErrorActionPreference = 'Stop'
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -39,6 +50,7 @@ if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security
 }
 $LoopTask = 'innovation-loop-cardlens'
 $DeployTask = 'innovation-loop-cardlens-deploy'
+$ReviewTask = 'innovation-loop-cardlens-review'
 $ElevHome = 'C:\ProgramData\innovation-loop-cardlens'   # must match lib.ps1 ElevHomeReal
 $Bin = Join-Path $ElevHome 'bin'
 $Files = @('lib.ps1', 'elevated-task.ps1', 'deploy-server.ps1', 'rollback-server.ps1')
@@ -47,7 +59,7 @@ $Here = $PSScriptRoot; if (-not $Here) { $Here = Split-Path -Parent $MyInvocatio
 $RunLoop = Join-Path $Here 'run-loop.ps1'
 
 if ($Uninstall) {
-    foreach ($t in $LoopTask, $DeployTask) { if (Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $t -Confirm:$false; Write-Host "removed $t" } }
+    foreach ($t in $LoopTask, $DeployTask, $ReviewTask) { if (Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName $t -Confirm:$false; Write-Host "removed $t" } }
     Write-Host "left $ElevHome in place (logs, deploy records); delete it by hand if wanted"
     return
 }
@@ -102,7 +114,7 @@ if ($sddl -notmatch [regex]::Escape($ace)) { $t.SetSecurityDescriptor($sddl + $a
 Write-Host "registered $DeployTask (no trigger, highest privileges); DACL: $($t.GetSecurityDescriptor(4))"
 
 # ---- 3. the daily loop: NON-elevated, disabled -------------------------------------------------------
-if (-not $ElevatedOnly) {
+if (-not $ElevatedOnly -and -not $ProductReviewOnly) {
     $argument = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$RunLoop`" $ExtraArgs".Trim()
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument -WorkingDirectory $Here
     $trigger = New-ScheduledTaskTrigger -Daily -At $At
@@ -114,5 +126,19 @@ if (-not $ElevatedOnly) {
     Disable-ScheduledTask -TaskName $LoopTask | Out-Null
     Write-Host "registered $LoopTask (DISABLED, non-elevated, daily $At)"
 }
-Get-ScheduledTask -TaskName $LoopTask, $DeployTask -ErrorAction SilentlyContinue | Format-Table TaskName, State
+
+# ---- 4. the weekly product review: NON-elevated, disabled (optional) ------------------------------------
+if ((-not $ElevatedOnly -and $WithProductReview) -or $ProductReviewOnly) {
+    $argument = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$RunLoop`" -ProductReview"
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument -WorkingDirectory $Here
+    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $ReviewDay -At $ReviewAt
+    $settings = New-ScheduledTaskSettingsSet @settingsCommon -ExecutionTimeLimit (New-TimeSpan -Hours 5) -StartWhenAvailable -RunOnlyIfNetworkAvailable
+    $principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Password -RunLevel Limited
+    $task = New-ScheduledTask -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
+        -Description 'CardLens weekly product review (run-loop.ps1 -ProductReview: read-only, opens one loop:product-review issue), non-elevated. See D:\projects\cardlens\innovation\README.md'
+    Register-ScheduledTask -TaskName $ReviewTask -InputObject $task -User $User -Password $pw -Force | Out-Null
+    Disable-ScheduledTask -TaskName $ReviewTask | Out-Null
+    Write-Host "registered $ReviewTask (DISABLED, non-elevated, weekly $ReviewDay $ReviewAt)"
+}
+Get-ScheduledTask -TaskName $LoopTask, $DeployTask, $ReviewTask -ErrorAction SilentlyContinue | Format-Table TaskName, State
 Write-Host 'Next, from a NORMAL PowerShell:  powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -SelfTest'

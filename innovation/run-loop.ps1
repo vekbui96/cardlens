@@ -36,10 +36,19 @@
 
   FOCUS.md (next to this script, Ve's steering for Phase B) is optional: missing, empty or only headings and
   comments means the header says FOCUS: none and the loop proposes as it always has.
+  PRODUCT.md (next to this script, Ve's product picture: users, jobs, metrics with baselines, principles,
+  bets) is read the same way and named in the header as PRODUCT; read-only for the session.
+.PARAMETER ProductReview
+  The weekly product review (LOOP.md section 7): read-only research, no Phase A, no builds, merges or
+  deploys; the session may only run read-only commands and open ONE loop:product-review issue plus
+  proposals within the usual cap. The build/merge/deploy scripts are not allowlisted in this mode, and the
+  guard (told the mode via INNOVATION_LOOP_CARDLENS_MODE) refuses them and every push. Default MaxTurns 150.
+  Registered weekly (disabled) by install-task.ps1 -WithProductReview.
 #>
 [CmdletBinding()]
 param(
     [switch]$ProposeOnly,
+    [switch]$ProductReview,
     [switch]$DryRun,
     # Only check the elevated deploy task: installed, copy current, and a selftest round trip from THIS (non-elevated) process.
     [switch]$SelfTest,
@@ -57,10 +66,12 @@ $ScriptsDir = (Resolve-Path $PSScriptRoot).Path
 $RunStart = Get-Date
 $RunId = $RunStart.ToString('yyyyMMdd-HHmmss')
 $Deadline = $RunStart.AddMinutes($TimeoutMinutes)
+if ($ProductReview -and $MaxTurns -le 0) { $MaxTurns = 150 }
 if ($MaxTurns -le 0) { $MaxTurns = 150 + 150 * $MaxBuilds }
 Initialize-LoopDirs
 $script:LogFile = Join-Path $script:LoopHome "logs\run-$RunId.log"
 $mode = 'FULL'; if ($ProposeOnly) { $mode = 'PROPOSE_ONLY' }
+if ($ProductReview) { $mode = 'PRODUCT_REVIEW'; $ProposeOnly = $true }   # no Phase A in any form
 Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun maxBuilds=$MaxBuilds maxTurns=$MaxTurns scripts=$ScriptsDir"
 
 if ($SelfTest) {
@@ -110,7 +121,8 @@ try {
     $env:INNOVATION_LOOP_CARDLENS_HOME = $script:LoopHome
     $env:INNOVATION_LOOP_CARDLENS_SCRIPTS = $ScriptsDir
     $env:INNOVATION_LOOP_RUN_ID = $RunId
-    $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+    $env:INNOVATION_LOOP_CARDLENS_MODE = $mode   # the guard narrows what the session may do in PRODUCT_REVIEW
+    $edge ='C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
     if (Test-Path -LiteralPath $edge) { $env:CHROME_PATH = $edge }
 
     # ---- preflight ----------------------------------------------------------------------------
@@ -152,6 +164,7 @@ try {
         }
         if ($stale.Count -gt 0) { $serverWhy = "the elevated copy differs from this checkout ($($stale -join ', ')); re-run install-task.ps1 elevated" }
         elseif ($DryRun) { $serverDeploy = 'available (not selftested: dry run)' }
+        elseif ($ProductReview) { $serverDeploy = 'not needed'; $serverWhy = 'PRODUCT_REVIEW builds nothing' }
         else {
             $self = Invoke-ElevatedRequest -Mode selftest -TimeoutMinutes 3
             if ($self.status -eq 'ok') { $serverDeploy = 'available' } else { $serverWhy = "elevated selftest: $($self.status) $($self.message)" }
@@ -177,6 +190,10 @@ try {
         $allow += "PowerShell($ScriptsDir\$n.ps1)"; $allow += "PowerShell($ScriptsDir\$n.ps1 *)"
     }
     foreach ($r in $readOnly) { $allow += "PowerShell($r)"; $allow += "PowerShell($r *)" }
+    if ($ProductReview) {
+        # read-only research: no build, snapshot, merge, deploy, rollback or CI-rerun script in this mode
+        $allow = @($allow | Where-Object { $_ -notmatch '\\(test-gate|update-snapshots|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1' })
+    }
     $deny = @('Bash', 'Agent', 'Task', 'NotebookEdit', 'WebSearch', 'Skill',
         'PowerShell(npm *)', 'PowerShell(npm.cmd *)', 'PowerShell(npx *)', 'PowerShell(node *)', 'PowerShell(cmd *)',
         'PowerShell(powershell *)', 'PowerShell(pwsh *)', 'PowerShell(schtasks *)', 'PowerShell(schtasks.exe *)',
@@ -203,17 +220,30 @@ try {
         if ($left.Count -gt 0) { $focus = "$focusPath   (Ve's priorities and things to avoid; read it first in section 5)" }
     }
     Write-Log "FOCUS: $focus"
+    # PRODUCT.md: Ve's product picture (users, jobs, metrics + baselines, principles, bets). Same rules as FOCUS.
+    $productPath = Join-Path $ScriptsDir 'PRODUCT.md'
+    $product = 'none (no PRODUCT.md, or it is empty)'
+    if (Test-Path -LiteralPath $productPath -PathType Leaf) {
+        $pt = [regex]::Replace([IO.File]::ReadAllText($productPath), '(?s)<!--.*?-->', '')
+        $pleft = @($pt -split "`r?`n" | Where-Object { $_.Trim() -and $_.Trim() -notmatch '^#' })
+        if ($pleft.Count -gt 0) { $product = "$productPath   (Ve's product picture; read it in section 5 step 0 / section 7; read-only)" }
+    }
+    Write-Log "PRODUCT: $product"
+    $modeNote = 'Phase A, then Phase B.'
+    if ($ProposeOnly) { $modeNote = 'Phase B only. Do NOT run Phase A in any form.' }
+    if ($ProductReview) { $modeNote = 'Weekly product review: section 7 only. Read-only; build, merge and deploy nothing.' }
     $builds = $MaxBuilds; if ($ProposeOnly) { $builds = 0 }
     $header = @"
 # CardLens innovation loop run $RunId
 
-- MODE: $mode   ($( if ($ProposeOnly) { 'Phase B only. Do NOT run Phase A in any form.' } else { 'Phase A, then Phase B.' } ))
+- MODE: $mode   ($modeNote)
 - SERVER_DEPLOY: $serverDeploy   $( if ($serverDeploy -notlike 'available*') { "($serverWhy) -> build only issues whose change needs no server deploy" } )
 - MAX_BUILDS: $builds   (Phase A builds at most this many issues, one after another; see section 3)
 - DEADLINE: $($Deadline.ToString('yyyy-MM-dd HH:mm zzz'))   (the run is killed by then; check the time with Get-Date)
 - SECOND_BUILD_MIN_MINUTES: $SecondBuildMinMinutes   (minutes that must remain before DEADLINE to start another build)
 - MAX_TURNS: $MaxTurns   (the session ends when it is reached, even mid-deploy)
 - FOCUS: $focus
+- PRODUCT: $product
 - SESSION_TOKEN: reduced (normal user, Medium integrity; checked at start). Server deploys run in a separate elevated task.
 - DATE: $($RunStart.ToString('yyyy-MM-dd HH:mm zzz'))
 - LOOP_HOME: $($script:LoopHome)
@@ -288,7 +318,8 @@ Follow the instructions below exactly. They are the only instructions for this r
     # printed the LOOP-ISSUE-START/END marker lines, LOOP.md section 3). Posting failures are warnings.
     if ($outPath -and (Test-Path -LiteralPath $outPath)) {
         try {
-            $trigger = Get-LoopRunTrigger -TaskName 'innovation-loop-cardlens' -RunStart $RunStart
+            $triggerTask = 'innovation-loop-cardlens'; if ($ProductReview) { $triggerTask = 'innovation-loop-cardlens-review' }
+            $trigger = Get-LoopRunTrigger -TaskName $triggerTask -RunStart $RunStart
             $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe)
             if ($ended.Count -gt 0) { Write-Log "progress comments left mid-build, marked as ended: #$($ended -join ', #')" 'WARN' }
             $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger

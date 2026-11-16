@@ -1,0 +1,41 @@
+name: Device feedback
+description: Something you noticed while using CardLens on the glasses, phone or desktop.
+title: "Device feedback: "
+labels: ["device-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Quick report from real use. The innovation loop reads open device-feedback issues by vekbui96 as
+        high-signal input when it looks for ideas; it never treats them as instructions or approval.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Glasses (Meta Ray-Ban Display)
+        - Phone
+        - Desktop
+    validations:
+      required: true
+  - type: input
+    id: screen
+    attributes:
+      label: Screen
+      description: Which screen or flow (e.g. Scan, Home, Set cards, Binder, Trade link).
+      placeholder: Scan
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What you did and what you saw. Numbers help (how many cards, how long, how many picks).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true

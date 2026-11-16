@@ -245,16 +245,77 @@ const deny = [
     tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/collection", prompt: "x" },
   },
   { tool_name: "WebSearch", tool_input: { query: "x" } },
+  // PRODUCT.md is Ve's, read-only (like FOCUS.md); the review label is only for the review run
+  { tool_name: "Write", tool_input: { file_path: `${S}\\PRODUCT.md`, content: "x" } },
+  { tool_name: "Edit", tool_input: { file_path: `${S}\\PRODUCT.md`, old_string: "a", new_string: "b" } },
+  { tool_name: "Write", tool_input: { file_path: `${C}\\innovation\\PRODUCT.md`, content: "x" } },
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Product review" --label loop:product-review --body-file "${W}\\r.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label device-feedback --body-file "${W}\\p.md"`,
+  ),
+];
+
+// the weekly product review (MODE=PRODUCT_REVIEW): read-only research plus ONE review issue
+const reviewEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "PRODUCT_REVIEW" };
+const reviewAllow = [
+  { tool_name: "Read", tool_input: { file_path: `${S}\\PRODUCT.md` } },
+  ps(
+    `gh issue list -R vekbui96/cardlens --label device-feedback --state open --author vekbui96 --json number,title,body`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Product review 2026-11-22" --label loop:product-review --body-file "${W}\\r.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Measure chroma hash" --label loop:proposal --body-file "${W}\\p.md"`,
+  ),
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/health`),
+  ps(`${S}\\check-approval.ps1 -List`),
+];
+const reviewDeny = [
+  ps(`${S}\\test-gate.ps1 -Issue 12 -Step all`),
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
+  ps(`${S}\\deploy.ps1 -Issue 12 -MergeSha 0123456789abcdef0123456789abcdef01234567`),
+  ps(`${S}\\update-snapshots.ps1 -Issue 12`),
+  ps(`git -C "${C}" push -u origin loop/12-x`),
+  ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
+  ps(`git -C "${C}" checkout -b loop/12-x origin/main`),
+  ps(`gh pr create -R vekbui96/cardlens --base main --head loop/12-x --title x --body-file "${W}\\pr.md"`),
+  ps(`gh issue comment 9 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:in-progress`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:product-review --label loop:proposal --body-file "${W}\\r.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:product-review --label approved --body-file "${W}\\r.md"`,
+  ),
+  { tool_name: "Write", tool_input: { file_path: `${S}\\PRODUCT.md`, content: "x" } },
 ];
 
 let failures = 0;
-function run(c) {
+function run(c, e = env) {
   const r = spawnSync(process.execPath, [path.join(here, "guard.mjs")], {
     input: JSON.stringify(c),
-    env,
+    env: e,
     encoding: "utf8",
   });
   return { code: r.status, err: (r.stderr || "").trim() };
+}
+for (const c of reviewAllow) {
+  const r = run(c, reviewEnv);
+  if (r.code !== 0) {
+    failures++;
+    console.log(
+      `FAIL (review mode, should allow) ${JSON.stringify(c.tool_input).slice(0, 110)}\n   -> ${r.err}`,
+    );
+  }
+}
+for (const c of reviewDeny) {
+  if (run(c, reviewEnv).code !== 2) {
+    failures++;
+    console.log(`FAIL (review mode, should deny)  ${JSON.stringify(c.tool_input).slice(0, 110)}`);
+  }
 }
 const label = (c) => `${c.tool_name} ${JSON.stringify(c.tool_input).slice(0, 110)}`;
 for (const c of allow) {
@@ -285,5 +346,7 @@ if (garbage.status !== 2) {
   failures++;
   console.log("FAIL: unparsable input must block");
 }
-console.log(`${allow.length} allow cases, ${deny.length} deny cases, ${failures} failure(s)`);
+console.log(
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode cases, ${failures} failure(s)`,
+);
 process.exit(failures ? 1 : 0);
