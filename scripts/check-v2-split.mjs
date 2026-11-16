@@ -14,8 +14,11 @@
  */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+// fileURLToPath, not URL.pathname: pathname keeps "%20" for a space (C:\Users\Ve Bui)
+// and "%7E" for an 8.3 name, and every readdir under it then fails with ENOENT.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST = join(ROOT, "dist");
 const ASSETS = join(DIST, "assets");
 
