@@ -48,6 +48,10 @@ const allow = [
   ps(`gh pr checks 40 -R vekbui96/cardlens`),
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12 -WaitMinutes 9`),
   ps(`${S}\\ci-rerun.ps1 -Pr 40 -Issue 12 -RunId 123456789`),
+  // progress.ps1: the only way the session updates its live progress comment
+  ps(`${S}\\progress.ps1 -Issue 12 -Stage approval -Status ok -Detail "approval verified"`),
+  ps(`${S}\\progress.ps1 -Issue 12 -Stage ci -Detail "waiting for Playwright E2E (run 123)"`),
+  ps(`${S}\\progress.ps1 -Issue 12 -Stage done -Outcome rolled-back -Detail "health check failed"`),
   ps(`gh api "repos/vekbui96/cardlens/actions/runs?per_page=5" --jq '.workflow_runs[] | .status'`),
   ps(`Invoke-RestMethod http://127.0.0.1:8787/api/health`),
   ps(`Invoke-RestMethod "https://api.pokemontcg.io/v2/sets?pageSize=1&page=1"`),
@@ -80,6 +84,15 @@ const allow = [
   { tool_name: "TodoWrite", tool_input: { todos: [] } },
 ];
 const deny = [
+  // comments are never edited by the session (only progress.ps1, marker-checked, edits its own comment)
+  ps(`gh api repos/vekbui96/cardlens/issues/comments/123 -X PATCH -f body=x`),
+  ps(`gh api -X PATCH repos/vekbui96/cardlens/issues/comments/123 --input "${W}\\b.json"`),
+  ps(`gh api repos/vekbui96/cardlens/issues/comments/123 -f body=x`),
+  ps(`gh issue comment 12 -R vekbui96/cardlens --edit-last --body-file "${W}\\c.md"`),
+  // runner-only helpers
+  ps(`${S}\\reporting.ps1`),
+  ps(`${S}\\test-reporting.ps1`),
+  ps(`${C}\\innovation\\progress.ps1 -Issue 12 -Stage plan`),
   // other repos / never-touch
   ps(`gh issue list -R vekbui96/solid-website`),
   ps(`gh api repos/vekbui96/target-stock-checker/issues`),

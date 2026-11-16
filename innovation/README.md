@@ -67,6 +67,29 @@ as before. It steers proposals only; it never widens what the loop may build or 
   version bumps, secrets / `.env` / NSSM env, Funnel, CORS. `merge-pr.ps1` refuses PRs touching them.
 - To reject: close the issue. The loop will not propose it again.
 
+## What you see on an issue it builds
+
+- **Plan** comment, then one **Progress** comment that the loop edits in place as it goes (approval, plan,
+  branch, local gate, PR, CI, merge, deploy, verify, done; each with a time and the key fact, the current
+  stage on top with how long it has been running, heartbeats while CI or a deploy runs). One notification,
+  not ten. Separate comments (so you are notified) only for: PR opened, a failure, refusal or rollback, and
+  the end.
+- **Final comment**: a plain-language **Synopsis** first (what changed, why it matters to you as a
+  collector, what you will notice, how it was verified; or, on failure, what went wrong and the state left
+  behind), then the technical **Details**.
+- **Run data**, posted by the runner after the session exits: start/end/duration, outcome, turns, tokens
+  (input, output, cache read, cache creation), API-equivalent cost and model for this issue, the run's
+  overhead (preflight + research) and the whole run, the mode and whether the daily schedule or an
+  on-demand start (approval watcher or by hand) began it. Cost is the figure Claude Code reports at API
+  prices; on the Max subscription it is usage, not billing. Per-issue output tokens and cost are the run's
+  exact totals split by the session's `LOOP-ISSUE-START/END` marker lines (marked `~`); without markers the
+  comment says so and shows run totals only. If a session dies mid-build, the runner marks the progress
+  comment "Run ended during: <stage>". New proposals get a one-line run-data footer.
+- All of these carry the hidden `<!-- innovation-loop -->` marker, so they never count as your adjustments.
+  The session itself cannot edit comments: only `progress.ps1` edits, and only its own marker-checked
+  progress comment on this repo; run data is posted by the runner (`reporting.ps1`) with the same gh, after
+  the reduced claude child has exited.
+
 ## Labels
 
 | Label              | Meaning                                  |
@@ -160,18 +183,20 @@ so the server deploy runs in the separate elevated task, which takes no argument
 
 ## Where things are
 
-| Path                                                                    | What                                                                              |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `C:\Users\Ve Bui\.innovation-loop-cardlens\logs\run-<time>.log`         | runner log (start here)                                                           |
-| `...\logs\run-<time>.summary.txt`                                       | the session's final summary, ending in `LOOP-RESULT: ...`                         |
-| `...\logs\run-<time>.jsonl`                                             | full transcript (every tool call)                                                 |
-| `...\logs\{test-gate,merge-pr,deploy,rollback,snapshots}-*.log`         | non-elevated script logs                                                          |
-| `...\clones\cardlens`                                                   | the loop's own clone (never `D:\projects\cardlens`, never `D:\services\cardlens`) |
-| `...\artifacts\<issue>\`                                                | live / rolled-back screenshots                                                    |
-| `...\state\`                                                            | merge and deploy records                                                          |
-| `C:\ProgramData\innovation-loop-cardlens\logs\`                         | elevated logs (`elevated-task`, `deploy-server`, `rollback-server`)               |
-| `C:\ProgramData\innovation-loop-cardlens\state\server-last-deploy.json` | PREV / target of the last server deploy                                           |
-| `D:\services\backups\predeploy-*.zip`                                   | data snapshots taken before each server deploy                                    |
+| Path                                                                     | What                                                                              |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `C:\Users\Ve Bui\.innovation-loop-cardlens\logs\run-<time>.log`          | runner log (start here)                                                           |
+| `...\logs\run-<time>.summary.txt`                                        | the session's final summary, ending in `LOOP-RESULT: ...`                         |
+| `...\logs\run-<time>.jsonl`                                              | full transcript (every tool call)                                                 |
+| `...\logs\run-<time>.rundata.json`, `run-<time>.rundata-<issue>.md`      | run data per issue and the comment bodies the runner posted                       |
+| `...\logs\run-<time>.progress.log`, `...\state\progress\<time>-<n>.json` | progress.ps1 log; the progress comment id and stage times                         |
+| `...\logs\{test-gate,merge-pr,deploy,rollback,snapshots}-*.log`          | non-elevated script logs                                                          |
+| `...\clones\cardlens`                                                    | the loop's own clone (never `D:\projects\cardlens`, never `D:\services\cardlens`) |
+| `...\artifacts\<issue>\`                                                 | live / rolled-back screenshots                                                    |
+| `...\state\`                                                             | merge and deploy records                                                          |
+| `C:\ProgramData\innovation-loop-cardlens\logs\`                          | elevated logs (`elevated-task`, `deploy-server`, `rollback-server`)               |
+| `C:\ProgramData\innovation-loop-cardlens\state\server-last-deploy.json`  | PREV / target of the last server deploy                                           |
+| `D:\services\backups\predeploy-*.zip`                                    | data snapshots taken before each server deploy                                    |
 
 ## Rolling back by hand
 

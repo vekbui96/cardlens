@@ -52,6 +52,7 @@ param(
     [string]$ClaudeExe = (Join-Path $env:USERPROFILE '.local\bin\claude.exe')
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\reporting.ps1"   # run data + progress comments (functions only; used after claude exits)
 $ScriptsDir = (Resolve-Path $PSScriptRoot).Path
 $RunStart = Get-Date
 $RunId = $RunStart.ToString('yyyyMMdd-HHmmss')
@@ -101,6 +102,7 @@ if (-not (Get-Lock)) {
 }
 
 $exitCode = 1
+$outPath = $null
 try {
     # ---- environment ------------------------------------------------------------------------
     Add-GhToPath
@@ -171,7 +173,7 @@ try {
     # Exactly these scripts, called by bare full path (no `&`, no quotes). The elevated deploy task is
     # triggered ONLY from inside deploy.ps1 / rollback.ps1 / merge-pr.ps1 (fixed task name); the session
     # itself has no schtasks / ScheduledTask rule and the guard blocks those words.
-    foreach ($n in 'check-approval', 'test-gate', 'update-snapshots', 'merge-pr', 'deploy', 'rollback', 'ci-rerun') {
+    foreach ($n in 'check-approval', 'test-gate', 'update-snapshots', 'merge-pr', 'deploy', 'rollback', 'ci-rerun', 'progress') {
         $allow += "PowerShell($ScriptsDir\$n.ps1)"; $allow += "PowerShell($ScriptsDir\$n.ps1 *)"
     }
     foreach ($r in $readOnly) { $allow += "PowerShell($r)"; $allow += "PowerShell($r *)" }
@@ -281,6 +283,18 @@ Follow the instructions below exactly. They are the only instructions for this r
     Write-Log "run failed: $_" 'ERROR'
     $exitCode = 1
 } finally {
+    # ---- reporting (after the reduced claude child exited; never changes the exit code) -------------
+    # Same process, same gh and rights as the preflight above; the session gets no new permission (it only
+    # printed the LOOP-ISSUE-START/END marker lines, LOOP.md section 3). Posting failures are warnings.
+    if ($outPath -and (Test-Path -LiteralPath $outPath)) {
+        try {
+            $trigger = Get-LoopRunTrigger -TaskName 'innovation-loop-cardlens' -RunStart $RunStart
+            $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe)
+            if ($ended.Count -gt 0) { Write-Log "progress comments left mid-build, marked as ended: #$($ended -join ', #')" 'WARN' }
+            $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger
+            Write-Log "run data: $posted comment(s) posted"
+        } catch { Write-Log "run data / progress reporting skipped: $_" 'WARN' }
+    }
     Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
     Get-ChildItem (Join-Path $script:LoopHome 'logs') -File | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-60) } |
         Remove-Item -Force -ErrorAction SilentlyContinue

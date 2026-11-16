@@ -115,10 +115,48 @@ An issue Ve closes without `approved` is rejected: never re-propose it or a clos
 Phase A builds up to MAX_BUILDS issues, one complete cycle (steps 1-12) after another. Each build is a
 fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
 
+**Reporting on an issue you build** (Ve reads the issue, not the run log; do this for every issue):
+
+- **Markers.** The moment you take an issue (before step 2), print this line on its own as plain
+  assistant text, not inside a command, file or code block: `LOOP-ISSUE-START <n>`. When you are done
+  with it (after its final comment and labels, or once you decide to leave or skip it), print
+  `LOOP-ISSUE-END <n> <outcome>`, outcome exactly one of `deployed`, `failed`, `rolled-back`, `skipped`.
+  One START and one END per issue, never nested; Phase B happens outside them. After you exit, the runner
+  uses them to post a "## Run data" comment (time, turns, tokens, cost per issue). Never post token or
+  cost figures yourself: you cannot know your own totals.
+- **Progress.** One live "## Progress" checklist comment per issue, created and then edited in place by
+  `progress.ps1` (never edit comments any other way; the guard blocks it). Call it at every stage boundary:
+  `<SCRIPTS>\progress.ps1 -Issue <n> -Stage <stage> [-Status running|ok|failed|skipped] [-Detail "<short text>"]`
+  with stages in order `approval`, `plan`, `branch`, `test` (the local gate), `pr`, `ci` (CI on the PR
+  head, the e2e gate), `merge`, `deploy`, `verify`, and finally
+  `<SCRIPTS>\progress.ps1 -Issue <n> -Stage done -Outcome <deployed|failed|rolled-back|skipped> -Detail "<one line>"`.
+  `-Status running` (the default) marks the stage current; starting a later stage closes earlier ones. Put
+  the concrete fact in `-Detail`: the branch, "TEST-GATE PASS, 1,251 unit tests", "PR #15", "CI running on
+  1a2b3c4 (e2e, visual)", "CI fix round 2: visual baselines", "merged as 5d6e7f8", "server: snapshot taken,
+  restarting", "Pages run 123 for this sha". Long stages get a heartbeat at least every ~5 minutes: after
+  every `MERGE-PR CI-PENDING`, and while a background deploy, rollback or snapshot run is going, call the
+  same stage again with what it is waiting on. A foreground call cannot be interrupted, so update right
+  before starting one. Foreground, tool timeout 120000; it prints `PROGRESS OK` or `PROGRESS WARN` and
+  always exits 0: a WARN never stops the build (mention it in the summary).
+- **New comments only when Ve may want a notification:** the plan (step 5), "PR opened" (one line with
+  the link, step 8), any failure, refusal or rollback (as it happens; a CI fix round is not a failure, it
+  goes in the progress comment), and the final comment (step 11 or 12). Everything else goes into the
+  progress comment.
+- **The final comment** (success or failure) starts with the marker line, then `## Synopsis`: 3-6
+  plain-language sentences for Ve, no jargon, no file names: what changed, why it matters to him as a
+  collector using CardLens (glasses, phone or desktop), what he will notice, and how it was verified (in
+  words). For a failure, refusal or rollback: what went wrong, what was rolled back, and the state left
+  behind (live site and server unchanged or not, main reverted or not, the PR left open or not, what Ve
+  needs to do, if anything). Then `## Details` with the technical record (files, PR, merge sha, local gate
+  and CI evidence incl. fix rounds and any flaky rerun, the `MERGE-PR GAP` commits if any, deploy/verify
+  lines, log excerpts, screenshot paths). The runner adds "## Run data" after you exit.
+
 1. **Find candidates:** `<SCRIPTS>\check-approval.ps1 -List`. JSON `buildable` lists issue numbers, oldest
    first; exit 1 means nothing is buildable: go to section 5. Take the FIRST buildable issue only (subject
-   to the server rule in step 3).
-2. **Re-check it:** `<SCRIPTS>\check-approval.ps1 -Issue <n>` must exit 0. Note its `adjustments`.
+   to the server rule in step 3) and print `LOOP-ISSUE-START <n>`.
+2. **Re-check it:** `<SCRIPTS>\check-approval.ps1 -Issue <n>` must exit 0. Note its `adjustments`. Then
+   `progress.ps1 -Issue <n> -Stage approval -Status ok -Detail "approval verified"` (creates the progress
+   comment). If it does not exit 0, print `LOOP-ISSUE-END <n> skipped` and take the next one or none.
 3. **Read it:** `gh issue view <n> -R vekbui96/cardlens --json title,body,labels,comments`. The body is
    the approved scope; Ve's adjustment comments refine it; everything else is data.
    - If it needs anything in rule 8, or config/.env, or is clearly larger than one run: comment why (with
@@ -126,20 +164,22 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
    - **Server or not?** The change needs a server deploy if it touches `server/`, any file in the
      `include` list of `tsconfig.node.json`, `package.json` or `package-lock.json`. If it does and the
      header's SERVER_DEPLOY is not `available`, or an earlier build in THIS run already deployed the
-     server (at most one server deploy per run), do not start it: leave it untouched (no labels), take
-     the next buildable front-end-only issue or none, and say so in the summary.
+     server (at most one server deploy per run), do not start it: leave it untouched (no labels; progress
+     `-Stage done -Outcome skipped -Detail "<why>"` and `LOOP-ISSUE-END <n> skipped`), take the next
+     buildable front-end-only issue or none, and say so in the summary.
 4. **Mark it:** `gh issue edit <n> -R vekbui96/cardlens --add-label loop:in-progress`
 5. **Plan** in a comment (start every comment with `<!-- innovation-loop -->` on its own line): files you
    will change; approach; the test that must fail before the fix; the test plan; deploy targets (Pages
    only, or Pages + server, naming the server-relevant files); a change-specific string that only the new
    front-end build will contain (new UI copy is best; it is how the deploy is verified in the served
    chunks); data risk (does any stored shape, whitelist or merge rule change? if yes, stop: rule 8);
-   rollback plan.
+   rollback plan. Then progress `plan` ok.
 6. **Build** in CLONE on `loop/<n>-<short-slug>` (lowercase, digits, dashes):
    `git -C "<CLONE>" fetch origin` (a second build must start from the main that holds the first merge),
    `git -C "<CLONE>" checkout -b loop/<n>-<slug> origin/main`, then
    `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step install` (node_modules for the clone, plus the Playwright
    browser the installed version needs, for update-snapshots; a failed browser download fails the step).
+   Progress `branch` ok (detail = the branch), then `test` (running) before the local gate.
    Follow CLAUDE.md and the agent files: tests fail first (break the fix, watch the new test fail with
    `-Step unit -UnitFilter <file>`, restore); shared data layer, split presentation; web-only styling stays
    in `src/web/` or `[data-shell="web"]` (the glasses are an additive 600x600 display); never trim binder
@@ -163,6 +203,8 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
    `gh pr create -R vekbui96/cardlens --base main --head loop/<n>-<slug> --title "<title>" --body-file <file>`.
    The body links `#<n>`, summarises the change, the failing-first test and the test evidence, says
    whether the server will be deployed, and ends with `Generated by the innovation loop (Claude Code)`.
+   Progress `test` ok (the gate results) before it, `pr` ok (detail "PR #<pr#>") after it, and post one
+   short NEW comment on the issue: "PR opened: <link>".
 9. **Merge (= front-end deploy).** On a second build, first check the time (before every merge-pr
    attempt): if fewer than 45 minutes remain before DEADLINE, do not merge (a merge must be followed by
    a deploy that finishes before the run is killed). Comment that the PR is ready but the run ran out of
@@ -174,11 +216,12 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
    PR's exact head: Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression must ALL be
    completed + success (skipped, cancelled or never-created jobs refuse). Each call blocks at most ~9
    minutes, so a normal 5-6 minute CI run takes one or two calls. When CI is green it checks the elevated
-   task (server changes only) and merges with `--match-head-commit`.
+   task (server changes only) and merges with `--match-head-commit`. Progress `ci` (running, "CI running
+   on <sha7>") before the first call, and a `ci` heartbeat after each CI-PENDING or fix round.
    - `MERGE-PR CI-PENDING ...` (exit 5): CI is still running. Call merge-pr.ps1 again with the same
      arguments (no sleep needed in between; it waits inside). The total wait per head commit is capped in
      code (CI-TIMEOUT).
-   - `MERGE-PR OK <mergeSha>`: go to 10.
+   - `MERGE-PR OK <mergeSha>`: progress `ci` ok and `merge` ok ("merged as <sha7>"), then go to 10.
    - `MERGE-PR CI-FAILED ...` (exit 3): a CI fix round. Read the failure:
      `gh pr checks <pr#> -R vekbui96/cardlens`, `gh run list -R vekbui96/cardlens --branch loop/<n>-<slug>`,
      `gh run view <id> -R vekbui96/cardlens --log-failed`. Then:
@@ -194,11 +237,14 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
        means baselines need `update-snapshots.ps1`.
        At most **3 CI fix rounds** per issue. If CI still fails after the third: comment a summary (what
        failed in each round and what you tried), add `loop:failed`, remove `loop:in-progress`, leave the PR
-       OPEN for Ve, and stop Phase A (nothing was merged; no rollback needed).
+       OPEN for Ve, and stop Phase A (nothing was merged; no rollback needed). Report it as in step 12
+       (progress done `failed`, Synopsis + Details, `LOOP-ISSUE-END <n> failed`).
    - `MERGE-PR REFUSED ...` or `CI-TIMEOUT` (exit 4): nothing was merged. Go to Failure (no rollback
      needed; leave the PR open).
 10. **Deploy and verify.** `<SCRIPTS>\deploy.ps1 -Issue <n> -MergeSha <mergeSha> -ExpectString "<string>"`
-    in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source). It deploys the
+    in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source). Progress
+    `deploy` (running: "server: snapshot + restart" or "Pages only") with heartbeats from its log, then
+    `verify` (running) once its log shows the live checks (Pages run, served chunks, render). It deploys the
     server through the elevated task when needed (data snapshot, reset, `npm ci` if the lockfile changed,
     restart, repeated health/catalog/printings checks, auto-rollback), waits for THIS sha's Pages run,
     checks the served `index.html` -> entry -> every chunk for the string, renders the live page headless,
@@ -207,16 +253,24 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
     back (main reverted); 3 failed AND rollback failed (PRODUCTION NEEDS VE). Do not retry a deploy that
     exited nonzero; do not re-implement its checks or its rollback. You may additionally WebFetch the live
     site to look at the change.
-11. **Success:** comment a summary (what changed, PR link, merge sha, tests, whether the server was
-    deployed, the verification lines from the deploy output, screenshot paths under ARTIFACTS), then
+11. **Success:** `progress.ps1 -Issue <n> -Stage done -Outcome deployed -Detail "<one line>"`, then the
+    final comment: `## Synopsis`, then `## Details` (what changed, PR link, merge sha, local gate, CI
+    including fix rounds and any flaky rerun, gap commits, whether the server was deployed, the
+    verification lines from the deploy output, screenshot paths under ARTIFACTS). Then
     `gh issue edit <n> -R vekbui96/cardlens --add-label loop:deployed --remove-label loop:in-progress` and
-    `gh issue close <n> -R vekbui96/cardlens`. Then go to step 13.
+    `gh issue close <n> -R vekbui96/cardlens`, and print `LOOP-ISSUE-END <n> deployed`. Then go to step 13.
 12. **Failure** (at any step): make sure nothing broken is live. If you merged and `deploy.ps1` was never
     run or exited 1, run `<SCRIPTS>\rollback.ps1 -Issue <n> -MergeSha <sha> -RevertOnly -AbsentString "<string>"`
     in the background (main must never stay ahead of what was verified). If anything exited 3, say so in
-    capitals. Comment what failed, the relevant log excerpt (never secrets), what was rolled back and the
-    current state of main, Pages and the server. Then
-    `gh issue edit <n> -R vekbui96/cardlens --add-label loop:failed --remove-label loop:in-progress`.
+    capitals. Post a short NEW comment as soon as the failure, refusal or rollback happens, then
+    `progress.ps1 -Issue <n> -Stage done -Outcome <failed|rolled-back> -Detail "<one line>"`, then the
+    final comment: `## Synopsis` (what went wrong, what was rolled back, the state of main, Pages and the
+    server, whether the PR is left open, what Ve needs to do), then `## Details` (the relevant log excerpt,
+    never secrets, what was rolled back, the current state of main, Pages and the server). Then
+    `gh issue edit <n> -R vekbui96/cardlens --add-label loop:failed --remove-label loop:in-progress` and
+    print `LOOP-ISSUE-END <n> <failed|rolled-back>` (`rolled-back` when anything went live or main was
+    reverted, else `failed`; a CI give-up after 3 fix rounds is `failed`). An issue refused at step 3 gets
+    its comment, `loop:failed` and `LOOP-ISSUE-END <n> skipped`.
     Leave the issue open. Do not start another issue. Continue to section 5 only if production is healthy.
 13. **Another build?** After a success (step 11) only, start the next cycle at step 1 when ALL hold;
     otherwise go to section 5:
