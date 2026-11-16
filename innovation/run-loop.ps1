@@ -22,6 +22,20 @@
 .PARAMETER DryRun
   Do everything up to the claude call (lock, dirs, clone, task check without triggering it, settings,
   prompt), print the command, then stop.
+.PARAMETER MaxBuilds
+  Phase A builds at most this many approved issues per run, strictly one after another (default 2; 1 = one
+  issue per run). A second build starts only after the first ended `loop:deployed`, with at least
+  -SecondBuildMinMinutes left before the run's deadline, and at most one server deploy per run.
+.PARAMETER SecondBuildMinMinutes
+  Minutes that must remain before the deadline (start + TimeoutMinutes) for a second build to start
+  (default 120: one full cycle has taken ~60-75 min and can reach ~110 with a CI fix round, and Phase B
+  still needs ~20-30 min after it).
+.PARAMETER MaxTurns
+  claude's turn limit. Default 150 + 150 x MaxBuilds (300 for one build, as before; 450 for two), because
+  hitting it ends the session, and with it any merge or deploy it is waiting on.
+
+  FOCUS.md (next to this script, Ve's steering for Phase B) is optional: missing, empty or only headings and
+  comments means the header says FOCUS: none and the loop proposes as it always has.
 #>
 [CmdletBinding()]
 param(
@@ -29,18 +43,24 @@ param(
     [switch]$DryRun,
     # Only check the elevated deploy task: installed, copy current, and a selftest round trip from THIS (non-elevated) process.
     [switch]$SelfTest,
-    [int]$MaxTurns = 300,
+    [ValidateRange(1, 2)]
+    [int]$MaxBuilds = 2,
+    [int]$SecondBuildMinMinutes = 120,
+    [int]$MaxTurns = 0,
     [int]$TimeoutMinutes = 240,
     [string]$Model = '',
     [string]$ClaudeExe = (Join-Path $env:USERPROFILE '.local\bin\claude.exe')
 )
 . "$PSScriptRoot\lib.ps1"
 $ScriptsDir = (Resolve-Path $PSScriptRoot).Path
-$RunId = Get-Date -Format 'yyyyMMdd-HHmmss'
+$RunStart = Get-Date
+$RunId = $RunStart.ToString('yyyyMMdd-HHmmss')
+$Deadline = $RunStart.AddMinutes($TimeoutMinutes)
+if ($MaxTurns -le 0) { $MaxTurns = 150 + 150 * $MaxBuilds }
 Initialize-LoopDirs
 $script:LogFile = Join-Path $script:LoopHome "logs\run-$RunId.log"
 $mode = 'FULL'; if ($ProposeOnly) { $mode = 'PROPOSE_ONLY' }
-Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun scripts=$ScriptsDir"
+Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun maxBuilds=$MaxBuilds maxTurns=$MaxTurns scripts=$ScriptsDir"
 
 if ($SelfTest) {
     Write-Log "selftest: elevated=$(Test-IsElevated) (run this from a NORMAL PowerShell to prove the non-elevated trigger)"
@@ -170,17 +190,34 @@ try {
 
     # ---- prompt ----------------------------------------------------------------------------------
     $loopMd = [IO.File]::ReadAllText((Join-Path $ScriptsDir 'LOOP.md'))
+    # FOCUS.md: Ve's steering for Phase B. The session only reads it (the guard blocks writes outside the
+    # clone and the clone's innovation/ is protected). Counts as present only if something is left after
+    # removing HTML comments, headings and blank lines.
+    $focusPath = Join-Path $ScriptsDir 'FOCUS.md'
+    $focus = "none (no FOCUS.md, or it is empty) -> propose as usual"
+    if (Test-Path -LiteralPath $focusPath -PathType Leaf) {
+        $ft = [regex]::Replace([IO.File]::ReadAllText($focusPath), '(?s)<!--.*?-->', '')
+        $left = @($ft -split "`r?`n" | Where-Object { $_.Trim() -and $_.Trim() -notmatch '^#' })
+        if ($left.Count -gt 0) { $focus = "$focusPath   (Ve's priorities and things to avoid; read it first in section 5)" }
+    }
+    Write-Log "FOCUS: $focus"
+    $builds = $MaxBuilds; if ($ProposeOnly) { $builds = 0 }
     $header = @"
 # CardLens innovation loop run $RunId
 
 - MODE: $mode   ($( if ($ProposeOnly) { 'Phase B only. Do NOT run Phase A in any form.' } else { 'Phase A, then Phase B.' } ))
 - SERVER_DEPLOY: $serverDeploy   $( if ($serverDeploy -notlike 'available*') { "($serverWhy) -> build only issues whose change needs no server deploy" } )
+- MAX_BUILDS: $builds   (Phase A builds at most this many issues, one after another; see section 3)
+- DEADLINE: $($Deadline.ToString('yyyy-MM-dd HH:mm zzz'))   (the run is killed by then; check the time with Get-Date)
+- SECOND_BUILD_MIN_MINUTES: $SecondBuildMinMinutes   (minutes that must remain before DEADLINE to start another build)
+- MAX_TURNS: $MaxTurns   (the session ends when it is reached, even mid-deploy)
+- FOCUS: $focus
 - SESSION_TOKEN: reduced (normal user, Medium integrity; checked at start). Server deploys run in a separate elevated task.
-- DATE: $(Get-Date -Format 'yyyy-MM-dd HH:mm zzz')
+- DATE: $($RunStart.ToString('yyyy-MM-dd HH:mm zzz'))
 - LOOP_HOME: $($script:LoopHome)
 - SCRIPTS: $ScriptsDir   (pinned; you cannot edit it)
 - CLONE: $($script:Clone)   (vekbui96/cardlens, reset to origin/main $mainSha)
-- LIVE_SERVER_HEAD: $liveHead   (D:\services\cardlens; read-only for you)
+- LIVE_SERVER_HEAD: $liveHead   (D:\services\cardlens at run start; read-only for you)
 - WORK: $(Join-Path $script:LoopHome 'work')   (scratch: body files for comments, commit messages)
 - ARTIFACTS: $(Join-Path $script:LoopHome 'artifacts')
 

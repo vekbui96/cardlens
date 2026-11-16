@@ -19,15 +19,33 @@ Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`, which starts
 session (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs` PreToolUse hook) that follows
 [`LOOP.md`](LOOP.md). Each run:
 
-1. **Phase A (build), at most one issue.** Takes the oldest open `loop:proposal` + `approved` issue whose
-   approval really came from you (`check-approval.ps1`, against the issue's event history). Posts a plan,
+1. **Phase A (build), up to two issues, one after another.** Takes the oldest open `loop:proposal` +
+   `approved` issue whose approval really came from you (`check-approval.ps1`, against the issue's event history). Posts a plan,
    builds on `loop/<issue>-<slug>` in its own clone, runs the local gates (`test-gate.ps1`: `npm ci`,
    `npm run verify`, a Pages-style build; e2e on alternate ports; Linux visual baselines via Docker when UI
    changed), opens a PR, and merges it with `merge-pr.ps1` only when CI is green on the PR's exact head
    commit. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
    everything back on failure. Success: `loop:deployed`, closed. Failure: `loop:failed`, comment, left open.
-2. **Phase B (propose).** If fewer than 5 proposals are open, it reads the docs (`handoff.md`, the plans),
-   the code and the live site and opens up to 3 new `loop:proposal` issues.
+   After a success it may build a second approved issue with the same full cycle (`-MaxBuilds`, default
+   2), only if every build so far ended `loop:deployed` (a failure or rollback ends Phase A), at least
+   120 minutes of the 240-minute run budget remain (`-SecondBuildMinMinutes`: a cycle has taken ~60-75
+   min, up to ~110 with a CI fix round, and Phase B still has to run), and the turn budget allows it.
+   **At most one server deploy per run**: an issue that needs the server waits for the next run if one
+   already went out. A second build also will not merge with under 45 minutes left: it comments, marks
+   the issue `loop:failed` and leaves the PR open for you.
+2. **Phase B (propose).** If fewer than 5 proposals are open, it reads [`FOCUS.md`](FOCUS.md) (below),
+   the docs (`handoff.md`, the plans), the code and the live site and opens up to 3 new `loop:proposal`
+   issues.
+
+## Steering with FOCUS.md
+
+[`FOCUS.md`](FOCUS.md) is yours: **Priorities** (what you want more of, in order) and **Avoid** (what you
+do not want proposed, not even as Manual / needs Ve). Phase B reads it first and weights its proposals
+toward the priorities; each proposal says which priority it serves. Edit it in this checkout (the loop
+reads it from here, like `LOOP.md`; commit it so the laptop agrees). The loop never writes it: the guard
+blocks writes outside its clone, and `innovation/` is protected in the clone and in `merge-pr.ps1`.
+Missing, empty, or only headings and comments: the run header says `FOCUS: none` and the loop proposes
+as before. It steers proposals only; it never widens what the loop may build or deploy.
 
 ## Approving
 
@@ -70,7 +88,11 @@ Start-ScheduledTask   -TaskName innovation-loop-cardlens        # run once now
 # by hand, from a NORMAL PowerShell:
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -ProposeOnly   # first supervised run
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -DryRun        # everything except the claude call
+powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -MaxBuilds 1   # one build per run (old behaviour)
 ```
+
+For the scheduled task, use `install-task.ps1 -ExtraArgs '-MaxBuilds 1'`. Turns default to
+150 + 150 x MaxBuilds (`-MaxTurns` overrides).
 
 | Task                              | Runs as                       | Trigger                          | Does                                                            |
 | --------------------------------- | ----------------------------- | -------------------------------- | --------------------------------------------------------------- |
