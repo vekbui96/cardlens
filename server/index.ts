@@ -659,13 +659,15 @@ export function createApp(
       return;
     }
     try {
-      const { value, cached } = await printingsStore.get(setId, setName);
+      const { value, cached, complete } = await printingsStore.get(setId, setName);
       if (!value) {
         res.status(404).json({ error: "set_not_found_upstream" });
         return;
       }
-      // Long client cache: printings for a released set do not change.
-      res.setHeader("Cache-Control", "public, max-age=2592000");
+      // Long client cache: printings for a released set do not change. Unless
+      // cards were skipped during a TCGdex burst — then an hour, matching the
+      // server's own window, so a browser does not keep the gap for a month.
+      res.setHeader("Cache-Control", complete ? "public, max-age=2592000" : "public, max-age=3600");
       res.setHeader("X-Cardlens-Cache", cached ? "hit" : "miss");
       res.json(value);
     } catch (err) {
