@@ -55,6 +55,26 @@ export interface SetPrintings {
   byNumber: Record<string, Printing[]>;
 }
 
+/**
+ * A set build plus how many of its cards could not be fetched.
+ *
+ * Kept beside `SetPrintings` rather than inside it: that object is what devices
+ * receive and cache, and the count only matters to whoever decides how long to
+ * trust the answer — the server's printings cache.
+ */
+export interface SetPrintingsReport {
+  printings: SetPrintings;
+  /**
+   * Cards whose fetch failed even after a retry. Zero means the build is
+   * complete; a 404 is not counted, because a listed card that 404s is
+   * permanent and would otherwise mark the set incomplete forever.
+   */
+  skippedCards: number;
+}
+
+/** Pause before the one retry a failed card gets. TCGdex fails in bursts. */
+const CARD_RETRY_DELAY_MS = 1500;
+
 function normalizeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -125,13 +145,25 @@ export class TcgdexClient {
   async getSetPrintings(
     ptcgSetId: string,
     setName: string,
-    opts: {
-      signal?: AbortSignal;
-      concurrency?: number;
-      onProgress?: (done: number, total: number) => void;
-    } = {},
+    opts: SetPrintingsOptions = {},
   ): Promise<SetPrintings | null> {
-    const { signal, concurrency = 6, onProgress } = opts;
+    return (await this.buildSetPrintings(ptcgSetId, setName, opts))?.printings ?? null;
+  }
+
+  /**
+   * `getSetPrintings`, plus a count of the cards that were skipped.
+   *
+   * Each failed card is retried once after a pause. A skipped card used to be
+   * silent, and the server cached the result as complete for 30 days — live,
+   * Fates Collide (xy10) sat at 119 of 125 numbers after a TCGdex 503 burst.
+   * The count lets the cache treat such a build as provisional.
+   */
+  async buildSetPrintings(
+    ptcgSetId: string,
+    setName: string,
+    opts: SetPrintingsOptions = {},
+  ): Promise<SetPrintingsReport | null> {
+    const { signal, concurrency = 6, onProgress, retryDelayMs = CARD_RETRY_DELAY_MS } = opts;
     const tcgdexSetId = await this.resolveSetId(ptcgSetId, setName, signal);
     if (!tcgdexSetId) return null;
 
@@ -144,6 +176,19 @@ export class TcgdexClient {
     const byNumber: Record<string, Printing[]> = {};
     let done = 0;
     let cursor = 0;
+    let skippedCards = 0;
+
+    const fetchCard = async (id: string): Promise<unknown> => {
+      const url = `${this.base}/cards/${encodeURIComponent(id)}`;
+      try {
+        return await fetchJson(url, signal);
+      } catch (err) {
+        // A 404 will 404 again; an abort means nobody is waiting.
+        if (signal?.aborted || (err instanceof ProviderError && err.kind === "not-found")) throw err;
+        if (retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        return await fetchJson(url, signal);
+      }
+    };
 
     const worker = async (): Promise<void> => {
       for (;;) {
@@ -152,9 +197,7 @@ export class TcgdexClient {
         if (!brief) return;
         if (signal?.aborted) return;
         try {
-          const card = TcgdexCardSchema.safeParse(
-            await fetchJson(`${this.base}/cards/${encodeURIComponent(brief.id)}`, signal),
-          );
+          const card = TcgdexCardSchema.safeParse(await fetchCard(brief.id));
           if (card.success) {
             const printings = toPrintings(card.data);
             // localId lives on the brief; the detail echoes it, but the brief is
@@ -165,16 +208,26 @@ export class TcgdexClient {
               }
             }
           }
-        } catch {
-          // One card missing is a gap in the denominator, not a failed set.
+        } catch (err) {
+          // One card missing is a gap in the denominator, not a failed set —
+          // but it is counted, so a cache can tell this build is incomplete.
+          if (!(err instanceof ProviderError && err.kind === "not-found")) skippedCards++;
         }
         onProgress?.(++done, briefs.length);
       }
     };
 
     await Promise.all(Array.from({ length: Math.min(concurrency, briefs.length) }, worker));
-    return { tcgdexSetId, byNumber };
+    return { printings: { tcgdexSetId, byNumber }, skippedCards };
   }
+}
+
+export interface SetPrintingsOptions {
+  signal?: AbortSignal;
+  concurrency?: number;
+  onProgress?: (done: number, total: number) => void;
+  /** Pause before a failed card's one retry; tests pass 0. */
+  retryDelayMs?: number;
 }
 
 /**
