@@ -166,9 +166,23 @@ export class CatalogPriceStore {
     const entry = this.read(setId);
     if (entry && Date.now() - entry.at < CATALOG_PRICE_TTL_MS) return entry.prices;
 
-    const existing = this.inFlight.get(setId);
-    if (existing) return existing;
+    // A caller that joins a run already in flight goes through the same
+    // stale fallback below. Returning the shared promise directly handed the
+    // second caller the rejection while the first was served the stale copy.
+    const promise = this.inFlight.get(setId) ?? this.fetch(setId);
 
+    try {
+      return await promise;
+    } catch (err) {
+      if (entry) {
+        console.warn(`[cardlens] catalog prices failed for ${setId}, serving stale:`, err);
+        return entry.prices;
+      }
+      throw err;
+    }
+  }
+
+  private fetch(setId: string): Promise<SetPriceIndex> {
     const promise = this.fetchCatalog(pricesPath(setId))
       .then((body) => {
         const prices = indexSetPrices(body);
@@ -184,15 +198,6 @@ export class CatalogPriceStore {
       .finally(() => this.inFlight.delete(setId));
 
     this.inFlight.set(setId, promise);
-
-    try {
-      return await promise;
-    } catch (err) {
-      if (entry) {
-        console.warn(`[cardlens] catalog prices failed for ${setId}, serving stale:`, err);
-        return entry.prices;
-      }
-      throw err;
-    }
+    return promise;
   }
 }

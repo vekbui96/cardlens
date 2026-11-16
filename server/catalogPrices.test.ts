@@ -144,6 +144,32 @@ describe("CatalogPriceStore", () => {
     expect(await store.get("sv1")).toEqual({ "sv1-1|holofoil": 12.5 });
   });
 
+  it("serves the stale copy to every caller of a coalesced fetch that fails", async () => {
+    // The caller that joins a run already in flight must get the same fallback
+    // as the one that started it. It used to get the rejection instead, and the
+    // route dropped the set into `missing` while a usable entry sat in memory.
+    writeFileSync(
+      join(dir, "sv1.json"),
+      JSON.stringify({
+        at: Date.now() - CATALOG_PRICE_TTL_MS - 1,
+        v: CATALOG_PRICE_CACHE_VERSION,
+        prices: { "sv1-1|holofoil": 12.5 },
+      }),
+    );
+    const fetchCatalog = vi.fn(
+      () => new Promise((_, reject) => setTimeout(() => reject(new Error("upstream 500")), 0)),
+    );
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    const results = await Promise.allSettled([store.get("sv1"), store.get("sv1")]);
+
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      { status: "fulfilled", value: { "sv1-1|holofoil": 12.5 } },
+      { status: "fulfilled", value: { "sv1-1|holofoil": 12.5 } },
+    ]);
+  });
+
   it("throws when it has never had an answer to give", async () => {
     const store = new CatalogPriceStore(dir, vi.fn().mockRejectedValue(new Error("upstream 500")));
     await expect(store.get("sv1")).rejects.toThrow("upstream 500");

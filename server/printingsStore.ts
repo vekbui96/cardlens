@@ -107,20 +107,10 @@ export class PrintingsStore {
       return { value: entry.value, cached: true };
     }
 
-    const existing = this.inFlight.get(setId);
-    if (existing) return { value: await existing, cached: false };
-
-    const promise = this.client
-      .getSetPrintings(setId, setName)
-      .then((value) => {
-        if (value && Object.keys(value.byNumber).length > 0) {
-          this.write(setId, { at: Date.now(), v: PRINTINGS_CACHE_VERSION, value });
-        }
-        return value;
-      })
-      .finally(() => this.inFlight.delete(setId));
-
-    this.inFlight.set(setId, promise);
+    // A caller that joins a run already in flight goes through the same
+    // stale fallback below. Awaiting the shared promise outside the try handed
+    // the second caller the rejection while the first was served the stale copy.
+    const promise = this.inFlight.get(setId) ?? this.fetch(setId, setName);
 
     try {
       return { value: await promise, cached: false };
@@ -132,5 +122,20 @@ export class PrintingsStore {
       }
       throw err;
     }
+  }
+
+  private fetch(setId: string, setName: string): Promise<SetPrintings | null> {
+    const promise = this.client
+      .getSetPrintings(setId, setName)
+      .then((value) => {
+        if (value && Object.keys(value.byNumber).length > 0) {
+          this.write(setId, { at: Date.now(), v: PRINTINGS_CACHE_VERSION, value });
+        }
+        return value;
+      })
+      .finally(() => this.inFlight.delete(setId));
+
+    this.inFlight.set(setId, promise);
+    return promise;
   }
 }
