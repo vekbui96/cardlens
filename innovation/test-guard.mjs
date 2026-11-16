@@ -50,6 +50,8 @@ const allow = [
   ps(`Get-ChildItem "${C}\\src" -Recurse -Filter *.tsx | Select-Object -First 5`),
   ps(`Remove-Item "${W}\\old.md"`),
   { tool_name: "Read", tool_input: { file_path: `${C}\\CLAUDE.md` } },
+  { tool_name: "Read", tool_input: { file_path: `${S}\\FOCUS.md` } },
+  ps(`git -C "${C}" fetch origin`),
   { tool_name: "Read", tool_input: { file_path: `${C}\\.claude\\skills\\advance\\SKILL.md` } },
   { tool_name: "Read", tool_input: { file_path: `${C}\\.env.example` } },
   { tool_name: "Read", tool_input: { file_path: "D:\\services\\logs\\cardlens.out.log" } },
@@ -170,6 +172,18 @@ const deny = [
   },
   { tool_name: "Write", tool_input: { file_path: `${C}\\innovation\\LOOP.md`, content: "x" } },
   { tool_name: "Write", tool_input: { file_path: `${S}\\guard.mjs`, content: "x" } },
+  // FOCUS.md is Ve's steering: read-only to the loop, in the pinned scripts dir and in the clone
+  { tool_name: "Write", tool_input: { file_path: `${S}\\FOCUS.md`, content: "x" } },
+  { tool_name: "Edit", tool_input: { file_path: `${S}\\FOCUS.md`, old_string: "a", new_string: "b" } },
+  { tool_name: "Write", tool_input: { file_path: `${C}\\innovation\\FOCUS.md`, content: "x" } },
+  {
+    tool_name: "Edit",
+    tool_input: { file_path: `${C}\\innovation\\FOCUS.md`, old_string: "a", new_string: "b" },
+  },
+  ps(`Set-Content "${S}\\FOCUS.md" x`),
+  ps(`Remove-Item "${S}\\FOCUS.md"`),
+  ps(`Copy-Item "${W}\\f.md" "${C}\\innovation\\FOCUS.md"`),
+  ps(`Write-Output x > "${S}\\FOCUS.md"`),
   { tool_name: "Write", tool_input: { file_path: `${HOME}\\elevated\\request.json`, content: "{}" } },
   { tool_name: "Write", tool_input: { file_path: `${HOME}\\state\\deploy-12.json`, content: "{}" } },
   {
