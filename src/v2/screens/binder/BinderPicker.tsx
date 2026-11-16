@@ -138,6 +138,13 @@ export function BinderPicker({
 
   const Heading = `h${headingLevel}` as const;
   const where = selected ? addressPhrase(selected) : "the first empty pocket";
+  /**
+   * The set's cards are for filling a pocket. With a filled one selected the
+   * detail below is about the card already in it, and a full set list above it
+   * buries that under cards nobody asked for. Search stays, so replacing the
+   * card is still one query away.
+   */
+  const showSetCards = !search && !selectedSlot;
 
   return (
     <Stack gap={3}>
@@ -204,7 +211,7 @@ export function BinderPicker({
       {/* The whole row goes while a search is up: the select would label a list
           it is not the source of, and on a phone this row costs a row of
           pockets — which is the thing the picker exists to fill. */}
-      {search ? null : (
+      {!showSetCards ? null : (
         <BrowseRow
           sets={allSets ?? []}
           value={browsing?.id ?? ""}
@@ -217,7 +224,7 @@ export function BinderPicker({
 
       {search ? (
         <SearchResults key={search} query={search} onChoose={setChosen} ownedFinishes={ownedFinishes} />
-      ) : (
+      ) : !showSetCards ? null : (
         <SetCards
           view={view}
           ownedFinishes={ownedFinishes}
