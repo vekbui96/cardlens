@@ -1,5 +1,6 @@
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { usePrefetchProps } from "../../app/screenLoaders.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useSearchAction } from "../../features/search/useSearchAction.ts";
 import { continueTarget, topProgress } from "../../features/home/continueSet.ts";
@@ -25,6 +26,7 @@ import styles from "./WebHomeScreen.module.css";
  */
 export function WebHomeScreen() {
   const { push } = useNavigation();
+  const prefetchProps = usePrefetchProps();
   const {
     collection,
     ownedCountsBySet,
@@ -72,7 +74,12 @@ export function WebHomeScreen() {
             Open a set and tap the printings you own, or search for a card to start.
           </p>
           <div className={styles.emptyActions}>
-            <button type="button" className={styles.primary} onClick={() => push({ name: "sets" })}>
+            <button
+              type="button"
+              className={styles.primary}
+              {...prefetchProps("sets")}
+              onClick={() => push({ name: "sets" })}
+            >
               Browse sets
             </button>
             <button type="button" className={styles.secondary} onClick={() => void typeSearch()}>
@@ -96,6 +103,7 @@ export function WebHomeScreen() {
           <button
             type="button"
             className={styles.value}
+            {...prefetchProps("collection")}
             onClick={() => push({ name: "collection" })}
             aria-label="Collection value, open collection"
           >
@@ -127,6 +135,7 @@ export function WebHomeScreen() {
             <button
               type="button"
               className={styles.resume}
+              {...prefetchProps("set")}
               onClick={() => push({ name: "set", setId: resume.setId, setName: resume.setName })}
             >
               <span className={styles.resumeLabel}>Pick up where you left off</span>
@@ -172,6 +181,7 @@ export function WebHomeScreen() {
                       <button
                         type="button"
                         className={styles.row}
+                        {...prefetchProps("set")}
                         onClick={() => push({ name: "set", setId: row.setId, setName: row.setName })}
                       >
                         <span className={styles.rowName}>{row.setName}</span>

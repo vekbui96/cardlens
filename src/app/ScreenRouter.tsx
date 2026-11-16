@@ -1,32 +1,21 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { useNavigation } from "./NavigationProvider.tsx";
 import { useIsWeb } from "./contexts.tsx";
 import { HomeScreen } from "../features/home/HomeScreen.tsx";
 import { LoadingState } from "../components/States.tsx";
 import { Screen } from "../components/Screen.tsx";
+import * as screens from "./screenLoaders.tsx";
 
 // Home is eager (first screen); the rest are lazy to keep the initial bundle small.
-const ResultsScreen = lazy(() =>
-  import("../features/results/ResultsScreen.tsx").then((m) => ({ default: m.ResultsScreen })),
-);
-const CardDetailsScreen = lazy(() =>
-  import("../features/card-details/CardDetailsScreen.tsx").then((m) => ({ default: m.CardDetailsScreen })),
-);
-const FavoritesScreen = lazy(() =>
-  import("../features/favorites/FavoritesScreen.tsx").then((m) => ({ default: m.FavoritesScreen })),
-);
-const RecentScreen = lazy(() =>
-  import("../features/recent/RecentScreen.tsx").then((m) => ({ default: m.RecentScreen })),
-);
-const PopularScreen = lazy(() =>
-  import("../features/popular/PopularScreen.tsx").then((m) => ({ default: m.PopularScreen })),
-);
-const SetsScreen = lazy(() =>
-  import("../features/sets/SetsScreen.tsx").then((m) => ({ default: m.SetsScreen })),
-);
-const SetCardsScreen = lazy(() =>
-  import("../features/sets/SetCardsScreen.tsx").then((m) => ({ default: m.SetCardsScreen })),
-);
+// The loaders live in screenLoaders.tsx so the web shell can fetch a screen's
+// chunk BEFORE it is tapped, through the very promise `lazy()` awaits.
+const ResultsScreen = screens.ResultsScreen.Component;
+const CardDetailsScreen = screens.CardDetailsScreen.Component;
+const FavoritesScreen = screens.FavoritesScreen.Component;
+const RecentScreen = screens.RecentScreen.Component;
+const PopularScreen = screens.PopularScreen.Component;
+const SetsScreen = screens.SetsScreen.Component;
+const SetCardsScreen = screens.SetCardsScreen.Component;
 /**
  * The first screen where the two shells genuinely diverge rather than differing
  * by a flag: a focus-ring list of text rows on the glasses, a tappable grid of
@@ -34,20 +23,14 @@ const SetCardsScreen = lazy(() =>
  * screen. Everything else is still shared and should stay that way until web
  * actually outgrows it.
  */
-const WebSetCardsScreen = lazy(() =>
-  import("../web/sets/WebSetCardsScreen.tsx").then((m) => ({ default: m.WebSetCardsScreen })),
-);
-const WebSetsScreen = lazy(() =>
-  import("../web/sets/WebSetsScreen.tsx").then((m) => ({ default: m.WebSetsScreen })),
-);
+const WebSetCardsScreen = screens.WebSetCardsScreen.Component;
+const WebSetsScreen = screens.WebSetsScreen.Component;
 /**
  * Web Home is a dashboard, not a menu: the destinations the glasses Home lists
  * live in the app bar here, so repeating them down the page would make Home a
  * worse copy of a menu the user already has.
  */
-const WebHomeScreen = lazy(() =>
-  import("../web/home/WebHomeScreen.tsx").then((m) => ({ default: m.WebHomeScreen })),
-);
+const WebHomeScreen = screens.WebHomeScreen.Component;
 /**
  * Web only, and lazy so the glasses never download it: a flat, sortable list of
  * every printing held. The shared Collection screen answers per-set progress,
@@ -55,52 +38,34 @@ const WebHomeScreen = lazy(() =>
  * printing is worth, which needs a price column and a sort the glasses cannot
  * drive with four gestures.
  */
-const WebOwnedCardsScreen = lazy(() =>
-  import("../web/collection/WebOwnedCardsScreen.tsx").then((m) => ({ default: m.WebOwnedCardsScreen })),
-);
+const WebOwnedCardsScreen = screens.WebOwnedCardsScreen.Component;
 /**
  * Web only: a table of sealed prices, which is the one shape a 600x600 additive
  * display cannot carry. Lazy, so the glasses never download it.
  */
-const WebSealedScreen = lazy(() =>
-  import("../web/collection/WebSealedScreen.tsx").then((m) => ({ default: m.WebSealedScreen })),
-);
+const WebSealedScreen = screens.WebSealedScreen.Component;
 /**
  * Camera, canvas and a 13KB index — none of which the glasses can use, so it is
  * lazy like the rest of the web-only screens and never lands on that bundle.
  */
-const ScanScreen = lazy(() => import("../web/scan/ScanScreen.tsx").then((m) => ({ default: m.ScanScreen })));
+const ScanScreen = screens.ScanScreen.Component;
 /**
  * Web only: the Target restock watchlist. Text entry for a product URL and a
  * table of toggles — neither of which a keyboard-less 600x600 display can carry.
  */
-const WebTargetScreen = lazy(() =>
-  import("../web/target/WebTargetScreen.tsx").then((m) => ({ default: m.WebTargetScreen })),
-);
+const WebTargetScreen = screens.WebTargetScreen.Component;
 /** A link someone was sent; most visitors will never open any other screen. */
-const WebBindersScreen = lazy(() =>
-  import("../web/binders/WebBindersScreen.tsx").then((m) => ({ default: m.WebBindersScreen })),
-);
-const WebBinderScreen = lazy(() =>
-  import("../web/binders/WebBinderScreen.tsx").then((m) => ({ default: m.WebBinderScreen })),
-);
-const LiveShowcaseScreen = lazy(() =>
-  import("../web/showcase/LiveShowcaseScreen.tsx").then((m) => ({ default: m.LiveShowcaseScreen })),
-);
+const WebBindersScreen = screens.WebBindersScreen.Component;
+const WebBinderScreen = screens.WebBinderScreen.Component;
+const LiveShowcaseScreen = screens.LiveShowcaseScreen.Component;
 /**
  * A trade link someone was sent. Like the showcase screens, most visitors who
  * open it will never open another screen in this app — so it is lazy, and it
  * asks for nothing the visitor has to have (no token, no collection).
  */
-const TradeShareScreen = lazy(() =>
-  import("../web/trade/TradeShareScreen.tsx").then((m) => ({ default: m.TradeShareScreen })),
-);
-const ShowcaseScreen = lazy(() =>
-  import("../web/showcase/ShowcaseScreen.tsx").then((m) => ({ default: m.ShowcaseScreen })),
-);
-const CollectionScreen = lazy(() =>
-  import("../features/collection/CollectionScreen.tsx").then((m) => ({ default: m.CollectionScreen })),
-);
+const TradeShareScreen = screens.TradeShareScreen.Component;
+const ShowcaseScreen = screens.ShowcaseScreen.Component;
+const CollectionScreen = screens.CollectionScreen.Component;
 
 export function ScreenRouter() {
   const { screen } = useNavigation();

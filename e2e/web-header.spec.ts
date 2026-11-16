@@ -89,6 +89,49 @@ test.describe("web app bar", () => {
     await expect(page.getByRole("menu")).toBeHidden();
   });
 
+  test("fetches the menu's screens while idle, so Binders opens with no Loading flash", async ({ page }) => {
+    // Matches the dev path (/src/web/binders/WebBindersScreen.tsx) and a
+    // hashed build chunk (WebBindersScreen-XXXX.js) alike.
+    const requested: string[] = [];
+    page.on("request", (r) => requested.push(r.url()));
+    await page.goto("/?ui=web#/");
+    await expect(page.getByRole("banner")).toBeVisible();
+
+    // The idle warm-up runs in menu order, one at a time, so a request for the
+    // screen AFTER Binders (Target restock) proves Binders finished loading.
+    await expect
+      .poll(() => requested.some((u) => /WebBindersScreen/.test(u)), { timeout: 20_000 })
+      .toBe(true);
+    await expect.poll(() => requested.some((u) => /WebTargetScreen/.test(u)), { timeout: 20_000 }).toBe(true);
+
+    // Record any "Loading…" that ever reaches the DOM, however briefly — the
+    // Suspense fallback can be gone again before an assertion looks for it.
+    await page.evaluate(() => {
+      const w = window as unknown as { sawLoading: boolean };
+      w.sawLoading = false;
+      new MutationObserver(() => {
+        if (document.body.textContent?.includes("Loading…")) w.sawLoading = true;
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await page.getByRole("menuitem", { name: /^Binders/ }).click();
+    await expect(page).toHaveURL(/#\/binders$/);
+    await expect(page.getByRole("heading", { name: "Binders" })).toBeVisible();
+
+    const sawLoading = await page.evaluate(() => (window as unknown as { sawLoading: boolean }).sawLoading);
+    expect(sawLoading, "the Suspense fallback flashed on a prefetched screen").toBe(false);
+  });
+
+  test("marks the menu's links for prefetch", async ({ page }) => {
+    await page.goto("/?ui=web#/");
+    await page.getByRole("button", { name: "Open menu" }).click();
+    await expect(page.getByRole("menuitem", { name: /^Binders/ })).toHaveAttribute(
+      "data-prefetch-screen",
+      "binders",
+    );
+  });
+
   test("does not push the screen below the fold", async ({ page }) => {
     // The shell sizes its screen child to the viewport. Adding a bar above it
     // without accounting for the bar's height would overflow by exactly that.

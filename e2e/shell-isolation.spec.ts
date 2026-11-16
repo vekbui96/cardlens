@@ -79,6 +79,21 @@ test.describe("web theme isolation", () => {
     expect(web.accentToken).not.toBe(glasses.accentToken);
   });
 
+  test("the glasses never download a web screen, even once the page is idle", async ({ page }) => {
+    // ScreenRouter promises the glasses fetch only their own screens, and the
+    // web shell now prefetches its screens on idle. Nothing tested the promise
+    // before; this does, for longer than the idle warm-up's 5s ceiling.
+    const webScreens: string[] = [];
+    page.on("request", (r) => {
+      if (/Web[A-Z]\w*Screen|[\\/]web[\\/]scan[\\/]ScanScreen/.test(r.url())) webScreens.push(r.url());
+    });
+    await page.goto("/?ui=glasses");
+    await expect(page.locator('[data-shell="glasses"]')).toBeVisible();
+    await page.waitForTimeout(7_000);
+
+    expect(webScreens, `web screens fetched on the glasses: ${webScreens.join(", ")}`).toEqual([]);
+  });
+
   test("no web-only token leaks into the glasses shell", async ({ page }) => {
     await page.goto("/?ui=glasses");
     const leaked = await page.locator("[data-shell]").evaluate((el) => {

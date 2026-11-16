@@ -6,6 +6,7 @@ import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { usePrefetchProps } from "../../app/screenLoaders.tsx";
 import {
   BINDER_FORMATS,
   countBinder,
@@ -85,6 +86,7 @@ function BinderTile({
    * had a bare red "Delete" sitting next to the name on every row.
    */
   const [confirming, setConfirming] = useState(false);
+  const prefetchProps = usePrefetchProps();
   const counts = countBinder(binder);
   const spec = specFor(binder.format);
   const filledPct = counts.pockets > 0 ? Math.round((counts.filled / counts.pockets) * 100) : 0;
@@ -92,7 +94,7 @@ function BinderTile({
 
   return (
     <li className={styles.tile}>
-      <button type="button" className={styles.open} onClick={onOpen}>
+      <button type="button" className={styles.open} {...prefetchProps("binder")} onClick={onOpen}>
         <span className={styles.coverFrame}>
           <BinderCover binder={binder} owns={owns} />
         </span>
