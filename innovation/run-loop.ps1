@@ -171,7 +171,7 @@ try {
     # Exactly these scripts, called by bare full path (no `&`, no quotes). The elevated deploy task is
     # triggered ONLY from inside deploy.ps1 / rollback.ps1 / merge-pr.ps1 (fixed task name); the session
     # itself has no schtasks / ScheduledTask rule and the guard blocks those words.
-    foreach ($n in 'check-approval', 'test-gate', 'update-snapshots', 'merge-pr', 'deploy', 'rollback') {
+    foreach ($n in 'check-approval', 'test-gate', 'update-snapshots', 'merge-pr', 'deploy', 'rollback', 'ci-rerun') {
         $allow += "PowerShell($ScriptsDir\$n.ps1)"; $allow += "PowerShell($ScriptsDir\$n.ps1 *)"
     }
     foreach ($r in $readOnly) { $allow += "PowerShell($r)"; $allow += "PowerShell($r *)" }

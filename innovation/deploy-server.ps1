@@ -55,7 +55,10 @@ try {
     $fwd = Invoke-Git -Repo $live -Arguments @('merge-base', '--is-ancestor', $prev, $TargetSha) -AllowFail -Quiet
     if ($fwd.Code -ne 0) { throw "live HEAD $prev is not an ancestor of $TargetSha; refusing to move the server sideways/backwards" }
     $changed = Get-ChangedFiles -Repo $live -From $prev -To $TargetSha
-    $prot = @($changed | Where-Object { Test-ProtectedPath $_ })
+    # innovation/** is the loop's own code: the copy in the live dir is never executed (the loop runs from
+    # D:\projects\cardlens\innovation, this task from its admin-only copy), so Ve merging loop changes must not
+    # block server deploys. Every other protected path still refuses.
+    $prot = @($changed | Where-Object { (Test-ProtectedPath $_) -and ($_.Replace('\', '/') -notmatch '^innovation/') })
     if ($prot.Count -gt 0) { throw "changes protected paths (manual / needs Ve): $($prot -join ', ')" }
     $lockChanged = @($changed | Where-Object { $_ -in @('package.json', 'package-lock.json') }).Count -gt 0
     Write-Log "prev=$prev target=$TargetSha files=$($changed.Count) lockChanged=$lockChanged issue=$Issue"
