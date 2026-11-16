@@ -23,6 +23,8 @@ const SCRIPTS = norm(
 ).replace(/\\$/, "");
 const CLONE = HOME + "\\clones\\cardlens";
 const REPO = "vekbui96/cardlens";
+// FULL | PROPOSE_ONLY | PRODUCT_REVIEW (set by run-loop.ps1). PRODUCT_REVIEW is read-only research.
+const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpperCase();
 
 function block(msg) {
   process.stderr.write(`innovation-loop guard blocked this: ${msg}\n`);
@@ -295,7 +297,17 @@ if (tool === "Bash" || tool === "PowerShell") {
             );
       }
       if (g2 === "create") {
-        if (!/--label\s+["']?loop:proposal\b/i.test(c)) block("gh issue create needs --label loop:proposal");
+        // the weekly product review opens ONE loop:product-review issue (never built: no loop:proposal),
+        // and only in that mode; every other issue the loop opens is a loop:proposal
+        const isReview = /--label\s+["']?loop:product-review\b/i.test(c);
+        if (isReview && MODE !== "PRODUCT_REVIEW")
+          block("loop:product-review issues are opened only by the weekly product review run");
+        if (isReview && /--label\s+["']?loop:proposal\b/i.test(c))
+          block("a product review issue is never a loop:proposal (it must never be buildable)");
+        if (!isReview && !/--label\s+["']?loop:proposal\b/i.test(c))
+          block("gh issue create needs --label loop:proposal");
+        if (/--label\s+["']?device-feedback\b/i.test(c))
+          block("device-feedback issues are Ve's, never the loop's");
         if (/--label\s+["']?[^"'\s]*\bapproved\b/i.test(c)) block("only Ve adds 'approved'");
         if (!/--body-file\s/i.test(c)) block("gh issue create needs --body-file <file in WORK>");
       }
@@ -308,6 +320,20 @@ if (tool === "Bash" || tool === "PowerShell") {
       !/^\s*\S*gh(\.exe)?["']?\s+(issue|pr)\s+(list|view|status)\b/i.test(c)
     )
       block("only Ve adds or removes 'approved'");
+  }
+
+  // the weekly product review is read-only research: no pushes, commits, PRs or label changes
+  if (MODE === "PRODUCT_REVIEW") {
+    if (
+      /\bgit(\.exe)?\b[^|;&]*\b(push|commit|merge|rebase|reset|checkout\s+-b|switch\s+-c|branch\s+\S)/i.test(
+        c,
+      )
+    )
+      block("the product review is read-only: no commits, branches or pushes");
+    if (/\bgh(\.exe)?["']?\s+(pr\s+(create|merge|comment|close)|issue\s+(edit|close|comment))\b/i.test(c))
+      block(
+        "the product review only reads and opens its review issue / proposals; no PRs, edits or comments",
+      );
   }
 
   // git
@@ -461,6 +487,10 @@ if (tool === "Bash" || tool === "PowerShell") {
       )
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
+        );
+      if (MODE === "PRODUCT_REVIEW" && !/\\check-approval\.ps1$/.test(f))
+        block(
+          `the product review is read-only: ${s} builds, merges or deploys and is not allowed in this mode`,
         );
     }
   }

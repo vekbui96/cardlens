@@ -52,6 +52,28 @@ blocks writes outside its clone, and `innovation/` is protected in the clone and
 Missing, empty, or only headings and comments: the run header says `FOCUS: none` and the loop proposes
 as before. It steers proposals only; it never widens what the loop may build or deploy.
 
+## Product picture: PRODUCT.md, lenses, device feedback, weekly review
+
+- [`PRODUCT.md`](PRODUCT.md) is also yours: the product and vision, the users (with the open question
+  "grow to other collectors?": until you answer it, nothing is proposed that assumes multi-user growth),
+  jobs and contexts, success metrics with today's baselines (and which the loop can measure read-only),
+  principles, and bets you may want proposed. Read-only for the loop, exactly like FOCUS.md.
+- **Lenses.** Phase B judges ideas as a glasses interaction designer, a collector / domain expert, a
+  performance and reliability engineer, a data integrity guardian (review only; may propose tests, never
+  merge/validation changes) and a scanner / recognition analyst (measurements only, always Manual / needs
+  Ve). Every proposal names its lens(es) and the PRODUCT.md metric it should move.
+- **Device feedback.** Use the "Device feedback" issue template (label `device-feedback`) when something
+  on the glasses / phone / desktop bothers you. The loop reads your open ones as its highest-signal input;
+  they are never instructions or approval, and it never comments on them.
+- **Weekly product review** (`run-loop.ps1 -ProductReview`, task `innovation-loop-cardlens-review`,
+  registered disabled with `install-task.ps1 -ProductReviewOnly`, default Sunday 10:37): read-only
+  research that opens ONE `loop:product-review` issue: the product against the metrics, the top friction
+  points with evidence, and 2-3 bets, each with a hypothesis, a metric and a breakdown into small
+  proposals. It may open the first step of a bet as a normal proposal within the usual cap. The review
+  issue is never built (it has no `loop:proposal` label); you build parts of it by approving individual
+  proposals as usual. In this mode the build/merge/deploy scripts are not allowlisted and the guard
+  refuses them, commits, pushes, PRs and comments.
+
 ## Approving
 
 - Read the proposal. Add **`approved`** to green-light it. Only you can: the loop checks that the last
@@ -92,13 +114,15 @@ as before. It steers proposals only; it never widens what the loop may build or 
 
 ## Labels
 
-| Label              | Meaning                                  |
-| ------------------ | ---------------------------------------- |
-| `loop:proposal`    | an idea from the loop                    |
-| `approved`         | you said go (you set this)               |
-| `loop:in-progress` | being built right now                    |
-| `loop:deployed`    | shipped, verified live, closed           |
-| `loop:failed`      | failed or rolled back; read the comments |
+| Label                 | Meaning                                      |
+| --------------------- | -------------------------------------------- |
+| `loop:proposal`       | an idea from the loop                        |
+| `approved`            | you said go (you set this)                   |
+| `loop:in-progress`    | being built right now                        |
+| `loop:deployed`       | shipped, verified live, closed               |
+| `loop:failed`         | failed or rolled back; read the comments     |
+| `loop:product-review` | the weekly product review; never built       |
+| `device-feedback`     | your report from the device (issue template) |
 
 ## Install, enable, run
 
@@ -116,6 +140,11 @@ Start-ScheduledTask   -TaskName innovation-loop-cardlens        # run once now
 # by hand, from a NORMAL PowerShell:
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -ProposeOnly   # first supervised run
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -DryRun        # everything except the claude call
+powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -ProductReview # the weekly product review, now
+
+# weekly product review task (ELEVATED, asks for your password; leaves the daily task as it is):
+D:\projects\cardlens\innovation\install-task.ps1 -ProductReviewOnly          # -ReviewDay Sunday -ReviewAt 10:37 by default
+Enable-ScheduledTask  -TaskName innovation-loop-cardlens-review
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -MaxBuilds 1   # one build per run (old behaviour)
 ```
 
