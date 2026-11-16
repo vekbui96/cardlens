@@ -150,7 +150,39 @@ $stF = Update-ProgressState $stF 'done' -Outcome 'deployed' -Detail 'live and ve
 $final = Format-ProgressComment -State $stF -Now $t.AddMinutes(30)
 Check ($final -match 'Done: deployed' -and $final -match 'total 26m 00s') 'progress: final state deployed with total time'
 $stX = Update-ProgressState (Read-ProgressState $sp) 'done' -Outcome 'rolled-back' -Detail 'health check failed; snapshot restored' -Now $t.AddMinutes(25)
-Check ($stX.stages['deploy'].status -eq 'failed' -and $stX.outcome -eq 'rolled back') 'progress: rollback marks the running stage failed'
+Check ($stX.stages['deploy'].status -eq 'stopped' -and $stX.stages['done'].status -eq 'failed' -and $stX.outcome -eq 'rolled back') 'progress: rollback ends failed; the stage still running shows as stopped, not failed'
+$hour = [char]::ConvertFromUtf32(0x23F3); $cross = [char]::ConvertFromUtf32(0x274C)
+# #22: CI merely pending (ci running) when merge-pr refused for another reason: CI must not get a red cross
+$stC = New-ProgressState -Issue 22 -RunId 'R22' -Repo 'o/r' -Stages $stages
+$stC = Update-ProgressState $stC 'pr' 'ok' 'PR #24' -Now $t
+$stC = Update-ProgressState $stC 'ci' 'running' 'CI running on 725bbbf (e2e, visual)' -Now $t.AddMinutes(1)
+$pend = Format-ProgressComment -State $stC -Now $t.AddMinutes(2)
+Check ($pend.Contains("- $hour **CI checks**") -and -not $pend.Contains($cross)) 'progress: CI pending renders an hourglass, no cross'
+$stC = Update-ProgressState $stC 'done' -Outcome 'failed' -Detail 'merge refused: protected path in a gap commit' -Now $t.AddMinutes(2)
+$endC = Format-ProgressComment -State $stC -Now $t.AddMinutes(3)
+Check ($stC.stages['ci'].status -eq 'stopped' -and $endC.Contains("- $hour CI checks (not finished)") -and -not $endC.Contains("$cross CI checks")) 'progress: CI pending when the build failed elsewhere stays an hourglass (the #22 bug)'
+Check ($endC.Contains("**$cross Done: failed**")) 'progress: the failed end itself is the cross'
+# marking the failing stage explicitly does not turn an earlier pending stage into ok or failed
+$stM = New-ProgressState -Issue 22 -RunId 'R22b' -Repo 'o/r' -Stages $stages
+$stM = Update-ProgressState $stM 'ci' 'running' 'CI running' -Now $t
+$stM = Update-ProgressState $stM 'merge' 'failed' 'MERGE-PR REFUSED protected paths' -Now $t.AddMinutes(1)
+Check ($stM.stages['ci'].status -eq 'stopped' -and $stM.stages['merge'].status -eq 'failed') 'progress: merge failed -> ci stopped (not ok, not failed), merge failed'
+# a real CI failure is still a cross
+$stR = New-ProgressState -Issue 22 -RunId 'R22c' -Repo 'o/r' -Stages $stages
+$stR = Update-ProgressState $stR 'ci' 'failed' 'MERGE-PR CI-FAILED Playwright E2E: failure' -Now $t
+Check ((Format-ProgressComment -State $stR -Now $t).Contains("- $cross CI checks")) 'progress: a real CI failure renders the cross'
+
+# run data: the live-server gap merge-pr recorded for this issue in this run
+$gh = Join-Path $tmp 'gaphome'; New-Item -ItemType Directory -Path (Join-Path $gh 'state') -Force | Out-Null
+$gapRec = @{ issue = 22; runId = 'RG'; commits = @('c435202 Merge pull request #23', '6efec14 Innovation loop: PRODUCT.md'); inertProtected = @('.github/ISSUE_TEMPLATE/device-feedback.yml', 'innovation/PRODUCT.md')
+    serverCommits = @('abc1234 server: faster prices @someone'); blocked = @(); refused = $false }
+[IO.File]::WriteAllText((Join-Path $gh 'state\merge-gap-22.json'), ($gapRec | ConvertTo-Json -Depth 4))
+$gl = Get-RunDataGapLine -LoopHome $gh -RunId 'RG' -Issue 22
+Check ($gl -match '2 commit\(s\)' -and $gl -match 'device-feedback\.yml' -and $gl -match 'went live with this change' -and $gl -notmatch '@someone') "run data: gap line lists commits, inert files and server commits ($gl)"
+Check ((Get-RunDataGapLine -LoopHome $gh -RunId 'OTHER' -Issue 22) -eq '') 'run data: a gap record from another run is ignored'
+Check ((Get-RunDataGapLine -LoopHome $gh -RunId 'RG' -Issue 99) -eq '') 'run data: no gap record -> nothing'
+$cg = Format-RunDataComment -Data $d -Issue 4 -Part $d.Parts[0] -RunId 'RG' -Mode 'FULL' -Trigger 'x' -Gap $gl
+Check ($cg -match 'Live-server gap when merging') 'run data: the gap line is in the comment'
 # runner finalisation text (no network: render only)
 $stW = Read-ProgressState $sp; $stW.warning = 'Run ended during: Deploying. The session stopped before this issue finished; see the run log run-x.log.'; $stW.stages['deploy'].status = 'warn'
 $warn = Format-ProgressComment -State $stW -Now $t.AddMinutes(40)

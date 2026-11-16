@@ -9,8 +9,10 @@
   This runs exactly that script with Git's bash, in the loop's clone only, and lists the PNGs it changed so
   the loop can look at them (Read the images) before committing them with explicit paths.
 
-  bash is used ONLY for this script: it builds nothing with VITE_BASE, so the Git Bash path-mangling trap
-  (CLAUDE.md) does not apply. Takes 3-10 minutes: start it in the background.
+  bash is used ONLY for this script, and with MSYS path conversion switched off (MSYS_NO_PATHCONV=1,
+  MSYS2_ARG_CONV_EXCL=*): the Git Bash path-mangling trap (CLAUDE.md) otherwise rewrites the container
+  paths it hands to docker (`-w /build` became `C:/Program Files/Git/build`). Takes 3-10 minutes: start it
+  in the background.
 #>
 [CmdletBinding()]
 param([string]$Issue = 'adhoc', [string]$RepoPath = '')
@@ -27,7 +29,17 @@ try {
     if (-not (Test-Path -LiteralPath $bash)) { throw "no $bash" }
     $d = Invoke-Native -File 'docker' -Arguments @('version', '--format', '{{.Server.Version}}') -AllowFail -Quiet
     if ($d.Code -ne 0) { throw 'docker is not reachable for this user (is Docker Desktop running?)' }
-    $r = Invoke-Native -File $bash -Arguments @('scripts/snapshots-linux.sh') -WorkDir $full -AllowFail -Quiet
+    # MSYS path conversion OFF for this call (bash and the docker.exe it starts inherit it). Without it Git's
+    # bash rewrote `-w /build` into `C:/Program Files/Git/build` and the `-v <pwd>/e2e/v2:/out` mount into a
+    # `...;C` path list, so docker refused before running anything (#12, #22). Docker Desktop takes the
+    # unconverted `/c/Users/...` host paths that `$(pwd)` gives as they are.
+    $savedConv = @{ MSYS_NO_PATHCONV = $env:MSYS_NO_PATHCONV; MSYS2_ARG_CONV_EXCL = $env:MSYS2_ARG_CONV_EXCL }
+    $env:MSYS_NO_PATHCONV = '1'; $env:MSYS2_ARG_CONV_EXCL = '*'
+    try {
+        $r = Invoke-Native -File $bash -Arguments @('scripts/snapshots-linux.sh') -WorkDir $full -AllowFail -Quiet
+    } finally {
+        foreach ($k in @($savedConv.Keys)) { if ($null -eq $savedConv[$k]) { Remove-Item -LiteralPath "env:$k" -ErrorAction SilentlyContinue } else { Set-Item -LiteralPath "env:$k" -Value $savedConv[$k] } }
+    }
     foreach ($l in @($r.Output | Select-Object -Last 30)) { Write-Log "  $l" }
     if ($r.Code -ne 0) { throw "snapshots-linux.sh exited $($r.Code)" }
     $changed = @((Invoke-Git -Repo $full -Arguments @('status', '--porcelain', '--', 'e2e/v2') -Quiet).Output | Where-Object { $_.Trim() })

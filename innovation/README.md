@@ -207,8 +207,17 @@ so the server deploy runs in the separate elevated task, which takes no argument
   auto-restart can hide a crash loop), catalog + printings GETs with retries (pokemontcg.io fails ~25%),
   Funnel. Rollback: reset to PREV, restore `node_modules.prev`, restart, re-verify, then revert main.
   **Data is never restored automatically**; the snapshot zip is named in the logs.
-- The loop refuses to deploy the server if main already holds server changes that are not live (yours,
-  not deployed yet): deploy those first. It never restarts `recognition`.
+- **The live-server gap.** Pages-only deploys never move `D:\services\cardlens`, so main runs ahead of the
+  live checkout with every front-end merge, and the next server deploy resets live across all of it. In
+  that gap (commits already on main) the loop refuses only protected paths the server actually runs: the
+  card index (needs a `recognition` restart, which the loop never does), the shared sync merge/validation
+  rules, the Target bot, `.env`. Everything else there (`innovation/**`, `.github/**`, docs, e2e,
+  client-only `src/**`, scripts) is inert on server-pc and is only listed (`MERGE-PR GAP` lines, the
+  issue, Run data). Ordinary server changes you merged but did not deploy go live with the loop's next
+  merge, and merge-pr says so on the issue (`MERGE-PR GAP-SERVER`); deploy them yourself first if you
+  want them to go out on their own. The PR's own diff may never touch a protected path. merge-pr,
+  deploy.ps1 and the elevated `deploy-server.ps1` share one classifier (`lib.ps1`
+  `Split-ProtectedByLiveImpact`).
 
 ## Where things are
 

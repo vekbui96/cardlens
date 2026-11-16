@@ -294,6 +294,35 @@ function Test-IsServerPath {
     return $false
 }
 
+# Does a file in the live checkout change what server-pc RUNS? The server deploy rule (server/, the shared src
+# files of tsconfig.node.json, package.json, package-lock.json; -ServerPaths from Get-ServerPaths) minus the two
+# build/test configs that list only exists to typecheck (vite.config.ts, playwright.config.ts: the server never
+# imports them), plus public/card-index/** (recognition reads its index from the live checkout and keeps it
+# until a restart no loop script does) and .env* files. Everything else there (innovation/, .github/, docs,
+# e2e, client-only src, scripts) is never executed on server-pc: moving the live checkout across it is inert.
+function Test-LiveAffectingPath {
+    param([string]$Path, [string[]]$ServerPaths)
+    $p = $Path.Replace('\', '/')
+    if ($p -match '^public/card-index/' -or $p -match '(^|/)\.env') { return $true }
+    if ($p -in @('vite.config.ts', 'playwright.config.ts')) { return $false }
+    return (Test-IsServerPath $p $ServerPaths)
+}
+
+# Protected paths changed between the live HEAD and a target, split by what they would do to the live server.
+#   Block  protected AND live-affecting (card index, sync merge/validation rules, Target bot, .env): the live
+#          checkout never moves across these without Ve
+#   Inert  protected but never executed on server-pc (innovation/, .github/, playwright.config.ts, client-only
+#          src such as caches.ts, scripts): listed, never a reason to refuse
+# Shared by merge-pr / deploy (gate-rules.ps1 Get-GapDecision) and the elevated deploy-server.ps1.
+function Split-ProtectedByLiveImpact {
+    param([string[]]$Protected, [string[]]$ServerPaths)
+    $block = New-Object System.Collections.ArrayList; $inert = New-Object System.Collections.ArrayList
+    foreach ($f in @($Protected | Where-Object { $_ } | ForEach-Object { "$_".Replace('\', '/') } | Select-Object -Unique)) {
+        if (Test-LiveAffectingPath $f $ServerPaths) { [void]$block.Add($f) } else { [void]$inert.Add($f) }
+    }
+    return [pscustomobject]@{ Block = @($block); Inert = @($inert) }
+}
+
 function Get-ChangedFiles {
     param([string]$Repo, [string]$From, [string]$To)
     $r = Invoke-Git -Repo $Repo -Arguments @('diff', '--name-only', "$From..$To") -Quiet
@@ -575,9 +604,11 @@ function Get-LiveHead {
 }
 # What a deploy of $Target means for the server, judged against the LIVE checkout's HEAD.
 #   ServerNeeded  server/, a tsconfig.node.json shared file, package.json or the lockfile changed
-#   Protected     protected paths changed (never auto-deployed)
-#   Foreign       server-relevant files changed by commits that are NOT part of -OwnCommitsFrom..$Target
-#                 (i.e. undeployed server work already on main that the loop would ship by accident)
+#   Protected     protected paths changed (judged by gate-rules.ps1 Get-GapDecision)
+#   Foreign       commits that are NOT part of -OwnCommitsFrom..$Target but change server files: server work
+#                 Ve already merged to main that the live server lacks. The deploy carries it (the live
+#                 checkout is reset to the merge); merge-pr / deploy list these commits so the issue says so.
+#   ServerPaths   Get-ServerPaths at $Target (for Get-GapDecision / Test-LiveAffectingPath)
 function Get-ServerPlan {
     param([string]$Repo, [string]$Target, [string]$OwnCommitsFrom = '')
     $liveHead = Get-LiveHead
@@ -596,7 +627,7 @@ function Get-ServerPlan {
         $touching = @((Invoke-Git -Repo $Repo -Arguments (@('rev-list', "$liveHead..$Target", '--') + $serverFiles) -Quiet).Output | Where-Object { $_ })
         $foreign = @($touching | Where-Object { $own -notcontains $_ })
     }
-    return [pscustomobject]@{ LiveHead = $liveHead; Changed = $changed; ServerFiles = $serverFiles; ServerNeeded = ($serverFiles.Count -gt 0); Protected = $protected; Foreign = $foreign }
+    return [pscustomobject]@{ LiveHead = $liveHead; Changed = $changed; ServerPaths = $serverPaths; ServerFiles = $serverFiles; ServerNeeded = ($serverFiles.Count -gt 0); Protected = $protected; Foreign = $foreign }
 }
 
 # Revert a merge on main and verify Pages served the reverted build (the change-specific string is gone

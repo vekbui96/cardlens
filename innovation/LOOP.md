@@ -133,7 +133,9 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
   with stages in order `approval`, `plan`, `branch`, `test` (the local gate), `pr`, `ci` (CI on the PR
   head, the e2e gate), `merge`, `deploy`, `verify`, and finally
   `<SCRIPTS>\progress.ps1 -Issue <n> -Stage done -Outcome <deployed|failed|rolled-back|skipped> -Detail "<one line>"`.
-  `-Status running` (the default) marks the stage current; starting a later stage closes earlier ones. Put
+  `-Status running` (the default) marks the stage current; starting a later stage closes earlier ones (as
+  done, or as "not finished" when the new stage or the end is a failure; only `-Status failed` and a failed
+  end draw a red cross). Put
   the concrete fact in `-Detail`: the branch, "TEST-GATE PASS, 1,251 unit tests", "PR #15", "CI running on
   1a2b3c4 (e2e, visual)", "CI fix round 2: visual baselines", "merged as 5d6e7f8", "server: snapshot taken,
   restarting", "Pages run 123 for this sha". Long stages get a heartbeat at least every ~5 minutes: after
@@ -169,7 +171,10 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
      header's SERVER_DEPLOY is not `available`, or an earlier build in THIS run already deployed the
      server (at most one server deploy per run), do not start it: leave it untouched (no labels; progress
      `-Stage done -Outcome skipped -Detail "<why>"` and `LOOP-ISSUE-END <n> skipped`), take the next
-     buildable front-end-only issue or none, and say so in the summary.
+     buildable front-end-only issue or none, and say so in the summary. (Server changes Ve already merged
+     that the live server lacks also go out with the next loop merge, see step 9 `GAP-SERVER`; if the
+     header's LIVE_SERVER_HEAD differs from main and SERVER_DEPLOY is not `available`, merge-pr may refuse
+     a front-end change for that reason and says which commits.)
 4. **Mark it:** `gh issue edit <n> -R vekbui96/cardlens --add-label loop:in-progress`
 5. **Plan** in a comment (start every comment with `<!-- innovation-loop -->` on its own line): files you
    will change; approach; the test that must fail before the fix; the test plan; deploy targets (Pages
@@ -213,9 +218,14 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
    a deploy that finishes before the run is killed). Comment that the PR is ready but the run ran out of
    time, add `loop:failed` and remove `loop:in-progress`, leave the PR open for Ve, and go to section 5.
    `<SCRIPTS>\merge-pr.ps1 -Pr <pr#> -Issue <n>` in the FOREGROUND (tool timeout 600000). It re-checks
-   approval, the PR's branch/author, protected paths (in the commits between the live server and the PR,
-   `innovation/**` is ignored as inert; its `MERGE-PR GAP <sha> <subject>` lines list those commits, put
-   them in your final comment), CORS/Target/`D:\services`/`VITE_` secret lines, then waits for CI on the
+   approval, the PR's branch/author, protected paths (the PR's own diff may touch none; in the commits
+   already on main that the live server lacks, only protected paths the server RUNS refuse: card index,
+   shared sync rules, Target bot, `.env`; `innovation/**`, `.github/**`, docs, e2e and client-only files
+   are inert there. Its `MERGE-PR GAP <sha> <subject>` lines list those commits, and its
+   `MERGE-PR GAP-SERVER <sha> <subject>` lines the ones whose server changes go live with this merge's server deploy: put both
+   in the `merge` progress detail and your final comment; merge-pr itself also notes GAP-SERVER commits on
+   the issue after merging. A GAP-SERVER line makes this a server deploy even for a front-end change, so it
+   counts as this run's one server deploy), CORS/Target/`D:\services`/`VITE_` secret lines, then waits for CI on the
    PR's exact head: Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression must ALL be
    completed + success (skipped, cancelled or never-created jobs refuse). Each call blocks at most ~9
    minutes, so a normal 5-6 minute CI run takes one or two calls. When CI is green it checks the elevated
@@ -265,7 +275,10 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
 12. **Failure** (at any step): make sure nothing broken is live. If you merged and `deploy.ps1` was never
     run or exited 1, run `<SCRIPTS>\rollback.ps1 -Issue <n> -MergeSha <sha> -RevertOnly -AbsentString "<string>"`
     in the background (main must never stay ahead of what was verified). If anything exited 3, say so in
-    capitals. Post a short NEW comment as soon as the failure, refusal or rollback happens, then
+    capitals. Post a short NEW comment as soon as the failure, refusal or rollback happens, mark the stage
+    that actually failed (`progress.ps1 -Issue <n> -Stage <stage> -Status failed -Detail "<why>"`: `merge`
+    for a MERGE-PR REFUSED, `ci` only for a real CI failure, `deploy`/`verify` for a rollback; a stage that
+    was merely still running, such as CI pending, then shows as not finished, never as failed), then
     `progress.ps1 -Issue <n> -Stage done -Outcome <failed|rolled-back> -Detail "<one line>"`, then the
     final comment: `## Synopsis` (what went wrong, what was rolled back, the state of main, Pages and the
     server, whether the PR is left open, what Ve needs to do), then `## Details` (the relevant log excerpt,

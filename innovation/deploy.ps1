@@ -6,8 +6,10 @@
 
 .DESCRIPTION
   Merging to main already started the Pages deploy (deploy-pages.yml runs on every push). So:
-  1. preconditions: -MergeSha is on origin/main; the server plan (live HEAD..merge) has no protected path
-     and no server change from commits outside this merge; if the server needs deploying, the elevated
+  1. preconditions: -MergeSha is on origin/main; the merge itself touches no protected path and the commits
+     between the live server and it touch none that changes what the server runs (gate-rules.ps1
+     Get-GapDecision; inert ones such as .github/** are listed only). Server changes already on main from
+     other commits go live with this deploy and are logged; if the server needs deploying, the elevated
      task must be installed (a precondition failure AFTER the merge still reverts main, see 4)
   2. server (only if server/, a tsconfig.node.json shared file, package.json or the lockfile changed):
      elevated request mode=deploy -> deploy-server.ps1 (data snapshot, reset, npm ci if needed, restart,
@@ -80,13 +82,17 @@ try {
     $plan = Get-ServerPlan -Repo $script:Clone -Target $MergeSha -OwnCommitsFrom $parent
     $state.liveHeadBefore = $plan.LiveHead
     Write-Log "server plan: liveHead=$($plan.LiveHead) needed=$($plan.ServerNeeded) files=$($plan.ServerFiles -join ',') protected=$($plan.Protected -join ',') foreign=$($plan.Foreign -join ',')"
-    # innovation/** in commits Ve merged since the last server deploy is inert in the live dir; anything else
-    # protected (in the merge itself or in that gap) still stops the deploy (gate-rules.ps1 Get-GapDecision)
-    $gap = Get-GapDecision -Protected $plan.Protected -OwnFiles $mergeFiles
-    if ($gap.Ignored.Count -gt 0) { Write-Log "ignoring innovation/ files between the live server and the merge (inert in the live dir): $($gap.Ignored -join ', ')" }
-    foreach ($c in @((Invoke-Git -Repo $script:Clone -Arguments @('log', '--format=%h %s', "$($plan.LiveHead)..$parent") -AllowFail -Quiet).Output | Where-Object { $_ })) { Write-Log "also carried to the server (already on main, merged before this change): $c" }
+    # Same rule as merge-pr (gate-rules.ps1 Get-GapDecision): a protected path in the merge itself, or one in
+    # the gap that changes what the server runs, stops the deploy; inert protected paths in the gap are listed.
+    # Non-protected server changes Ve already merged ride along (the live checkout is reset to the merge).
+    $gap = Get-GapDecision -Protected $plan.Protected -OwnFiles $mergeFiles -ServerPaths $plan.ServerPaths
+    if ($gap.Ignored.Count -gt 0) { Write-Log "protected but inert on server-pc, between the live server and the merge (ignored): $($gap.Ignored -join ', ')" }
+    foreach ($c in @((Invoke-Git -Repo $script:Clone -Arguments @('log', '--format=%h %s', "$($plan.LiveHead)..$parent") -AllowFail -Quiet).Output | Where-Object { $_ })) { Write-Log "also carried to the live checkout (already on main, merged before this change): $c" }
+    if ($plan.Foreign.Count -gt 0) {
+        $state.gapServerCommits = @($plan.Foreign | ForEach-Object { "$_".Substring(0, 7) })
+        Write-Log "server changes already on main that go live with this deploy (listed on the issue by merge-pr): $($state.gapServerCommits -join ', ')"
+    }
     if ($gap.Refuse.Count -gt 0) { throw "protected paths between live and the merge (manual / needs Ve): $($gap.Refuse -join ', ')" }
-    if ($plan.Foreign.Count -gt 0) { throw "main carries undeployed server changes from other commits ($($plan.Foreign -join ', ')); Ve must deploy those first" }
 } catch {
     Undo "precondition failed after the merge: $_"
 }
