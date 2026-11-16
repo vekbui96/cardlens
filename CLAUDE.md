@@ -10,6 +10,11 @@ outages.
 
 **Starting a session?** `docs/handoff.md` says where things stand right now — what is half-built, what is waiting on the user's device, and what not to re-litigate. This file is the durable knowledge; that one is the current state.
 
+**Innovation loop.** `innovation/` holds a daily unattended loop (`innovation/README.md`) that proposes
+small changes as `loop:proposal` issues and builds only the ones Ve labels `approved`. It is for the loop's
+OWN ideas only: Ve's direct requests never go through it and need no issue — do them as usual. Do not edit
+`innovation/` as part of other work, and never add the `approved` label.
+
 ## Commands
 
 - `npm run verify` — **format:check + typecheck + lint + test.** Run this before every commit; CI runs the same set, and `format:check` was once missing here, so script-applied edits passed locally and failed the deploy.
