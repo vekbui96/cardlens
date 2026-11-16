@@ -454,7 +454,11 @@ if (tool === "Bash" || tool === "PowerShell") {
       const f = norm(s);
       if (!f.startsWith(SCRIPTS + "\\"))
         block(`scripts must be called by bare full path from ${SCRIPTS}\\<name>.ps1 (saw ${s})`);
-      if (!/\\(check-approval|test-gate|update-snapshots|merge-pr|deploy|rollback|ci-rerun)\.ps1$/.test(f))
+      if (
+        !/\\(check-approval|test-gate|update-snapshots|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1$/.test(
+          f,
+        )
+      )
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );
