@@ -21,10 +21,15 @@ session (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs` PreToolUse
 
 1. **Phase A (build), up to two issues, one after another.** Takes the oldest open `loop:proposal` +
    `approved` issue whose approval really came from you (`check-approval.ps1`, against the issue's event history). Posts a plan,
-   builds on `loop/<issue>-<slug>` in its own clone, runs the local gates (`test-gate.ps1`: `npm ci`,
-   `npm run verify`, a Pages-style build; e2e on alternate ports; Linux visual baselines via Docker when UI
-   changed), opens a PR, and merges it with `merge-pr.ps1` only when CI is green on the PR's exact head
-   commit. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
+   builds on `loop/<issue>-<slug>` in its own clone, runs the local gates (`test-gate.ps1`: `npm ci` +
+   the Playwright browser, Prettier, `npm run verify`, a Pages-style build; Linux visual baselines via Docker
+   when UI changed), opens a PR, and merges it with `merge-pr.ps1` only when all three CI jobs
+   (Typecheck/Lint/Unit/Build, Playwright E2E, v2 Visual Regression) are completed + success on the PR's
+   exact head commit. **CI is the e2e gate for every change**: the loop does not run Playwright locally
+   (on 2026-11-16 a local run took 2.6 to 15 minutes, plus reruns when a flaky Target spec failed, and it
+   duplicated what CI runs anyway on the PR head). On a CI failure it reads the log, fixes,
+   pushes to the same branch and waits again, at most 3 rounds, then leaves the PR open with `loop:failed`;
+   a failure only in the known-flaky specs (bulk-mark timing, Target) may get one `ci-rerun.ps1` rerun. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
    everything back on failure. Success: `loop:deployed`, closed. Failure: `loop:failed`, comment, left open.
    After a success it may build a second approved issue with the same full cycle (`-MaxBuilds`, default
    2), only if every build so far ended `loop:deployed` (a failure or rollback ends Phase A), at least
@@ -201,7 +206,8 @@ rolled back, `3` rollback failed (look now), `4` install failed (server rolled b
   GET-only HTTP to known hosts and never the write routes; one command per call; edits only in the loop's
   clone and never to protected paths; no `D:\services` paths or `VITE_*TOKEN` in new code; pushes only to
   `loop/<n>-<slug>`; never `approved`. `node innovation\test-guard.mjs` runs its allow/deny cases.
-- e2e never touches the live service: `test-gate.ps1` sets `CI=1` (no server reuse), ports 5273/8887,
+- The loop's flow runs no local e2e. `test-gate.ps1 -Step e2e` is kept for manual runs and never touches
+  the live service: it sets `CI=1` (no server reuse), ports 5273/8887,
   scratch data for every `*_FILE` / `*_DIR` (including `CATALOG_PRICES_DIR`, which `playwright.config.ts`
   does not set), dead `RECOGNITION_URL` / `TARGET_BOT_URL`, and refuses if a port is busy.
 - The guard is a guardrail, not a sandbox, and UAC is not a security boundary: anything running as VeBui

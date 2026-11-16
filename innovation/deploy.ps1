@@ -31,6 +31,7 @@ param(
     [string]$ExpectString = ''
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\gate-rules.ps1"
 Start-ScriptLog "deploy-$Issue"
 Add-GhToPath
 $null = Clear-SecretEnv
@@ -79,7 +80,12 @@ try {
     $plan = Get-ServerPlan -Repo $script:Clone -Target $MergeSha -OwnCommitsFrom $parent
     $state.liveHeadBefore = $plan.LiveHead
     Write-Log "server plan: liveHead=$($plan.LiveHead) needed=$($plan.ServerNeeded) files=$($plan.ServerFiles -join ',') protected=$($plan.Protected -join ',') foreign=$($plan.Foreign -join ',')"
-    if ($plan.Protected.Count -gt 0) { throw "protected paths between live and the merge (manual / needs Ve): $($plan.Protected -join ', ')" }
+    # innovation/** in commits Ve merged since the last server deploy is inert in the live dir; anything else
+    # protected (in the merge itself or in that gap) still stops the deploy (gate-rules.ps1 Get-GapDecision)
+    $gap = Get-GapDecision -Protected $plan.Protected -OwnFiles $mergeFiles
+    if ($gap.Ignored.Count -gt 0) { Write-Log "ignoring innovation/ files between the live server and the merge (inert in the live dir): $($gap.Ignored -join ', ')" }
+    foreach ($c in @((Invoke-Git -Repo $script:Clone -Arguments @('log', '--format=%h %s', "$($plan.LiveHead)..$parent") -AllowFail -Quiet).Output | Where-Object { $_ })) { Write-Log "also carried to the server (already on main, merged before this change): $c" }
+    if ($gap.Refuse.Count -gt 0) { throw "protected paths between live and the merge (manual / needs Ve): $($gap.Refuse -join ', ')" }
     if ($plan.Foreign.Count -gt 0) { throw "main carries undeployed server changes from other commits ($($plan.Foreign -join ', ')); Ve must deploy those first" }
 } catch {
     Undo "precondition failed after the merge: $_"

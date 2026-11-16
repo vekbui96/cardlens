@@ -252,8 +252,16 @@ if (tool === "Bash" || tool === "PowerShell") {
       if (/(-X|--method)\s*["']?(?!GET\b)\w+/i.test(c) || /\s(-f|-F|--field|--raw-field|--input)\s/i.test(c))
         block("gh api is read-only for the session (GET); use gh issue / gh pr subcommands to write");
     }
-    if (g1 === "run" && !["list", "view", "watch", "download"].includes(g2))
-      block(`gh run ${g2} is not allowed (deploy.ps1 handles Pages runs)`);
+    // CI is the e2e gate: the session may READ runs and checks to fix a CI failure (gh run list / view,
+    // incl. --log-failed, and gh pr checks), all on this repo (the naming rule above). It never dispatches,
+    // cancels, watches or re-runs: waiting is merge-pr.ps1's job, and the one allowed rerun of known-flaky
+    // specs goes through ci-rerun.ps1, which checks the run belongs to the PR's current head.
+    if (g1 === "run" && !["list", "view"].includes(g2))
+      block(
+        `gh run ${g2} is not allowed (read CI with gh run list/view; wait with merge-pr.ps1; flaky rerun via ci-rerun.ps1)`,
+      );
+    if (g1 === "run" && g2 === "view" && /\s--web\b|\s-w\b/i.test(c))
+      block("gh run view --web is not allowed");
     if (g1 === "pr") {
       if (g2 === "merge")
         block(
@@ -446,7 +454,7 @@ if (tool === "Bash" || tool === "PowerShell") {
       const f = norm(s);
       if (!f.startsWith(SCRIPTS + "\\"))
         block(`scripts must be called by bare full path from ${SCRIPTS}\\<name>.ps1 (saw ${s})`);
-      if (!/\\(check-approval|test-gate|update-snapshots|merge-pr|deploy|rollback)\.ps1$/.test(f))
+      if (!/\\(check-approval|test-gate|update-snapshots|merge-pr|deploy|rollback|ci-rerun)\.ps1$/.test(f))
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );

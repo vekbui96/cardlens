@@ -3,8 +3,13 @@
   Local test gate for cardlens, run ONLY in the loop's clone. Last output line: TEST-GATE PASS|FAIL ...
 
 .DESCRIPTION
-  Steps (-Step, default 'all' = install, verify, build):
+  Steps (-Step, default 'all' = install, format, verify, build: the local gate. CI is the e2e gate for every
+  change, so the loop does not run the Playwright suite locally; merge-pr.ps1 requires CI's Playwright E2E and
+  v2 Visual Regression jobs green on the PR head):
     install  npm.cmd ci                                     (package-lock; never npm install, never --omit=dev)
+             then `playwright install chromium` (no --with-deps on Windows) so the browser revision the
+             installed @playwright/test wants is present after a Playwright bump (update-snapshots and a
+             manual e2e need it); logs the revision; a failed download fails the gate
     format   npm.cmd run format                              (Prettier is enforced by CI; run after edits)
     verify   npm.cmd run verify                              (format:check, typecheck, lint, check:v2, unit tests)
     unit     npm.cmd exec -- vitest run <-UnitFilter>        (quick iteration on one test file)
@@ -17,8 +22,8 @@
              *_DIR at a scratch dir, sends RECOGNITION_URL / TARGET_BOT_URL to a dead port, refuses to run if
              either port is busy, and refuses if playwright.config.ts no longer sets the scratch paths.
              --workers=4 overrides CI=1's single worker (one worker took ~2 hours locally).
-             Start it in the background.
-    all      install, verify, build
+             MANUAL USE ONLY (not part of the loop's flow; LOOP.md does not call it). Start it in the background.
+    all      install, format, verify, build
 
   The clone path is fixed (~\.innovation-loop-cardlens\clones\cardlens); D:\projects\cardlens and
   D:\services\cardlens are refused. No secrets are needed or read.
@@ -42,6 +47,31 @@ $null = Clear-SecretEnv
 
 function Fail([string]$m) { [void]$failures.Add($m); Write-Log "FAIL: $m" 'ERROR' }
 
+# Make sure the Chromium build that the INSTALLED @playwright/test expects is present (a Playwright bump in
+# the lockfile needs a new browser revision, and the loop has no other way to fetch it). Windows: no
+# --with-deps. Logs the revisions; returns '' or a failure message.
+function Install-PlaywrightBrowser {
+    param([string]$Dir)
+    $bj = Join-Path $Dir 'node_modules\playwright-core\browsers.json'
+    $want = @()
+    if (Test-Path -LiteralPath $bj) {
+        try { $want = @((Get-Content -LiteralPath $bj -Raw | ConvertFrom-Json).browsers | Where-Object { $_.name -in @('chromium', 'chromium-headless-shell') }) } catch { }
+    }
+    $pwVer = ''
+    $pj = Join-Path $Dir 'node_modules\@playwright\test\package.json'
+    if (Test-Path -LiteralPath $pj) { try { $pwVer = "$((Get-Content -LiteralPath $pj -Raw | ConvertFrom-Json).version)" } catch { } }
+    Write-Log ("playwright {0}; wants {1}" -f $pwVer, (@($want | ForEach-Object { "$($_.name) r$($_.revision) ($($_.browserVersion))" }) -join ', '))
+    $r = Invoke-Native -File $script:NpmCmd -Arguments @('exec', '--', 'playwright', 'install', 'chromium') -WorkDir $Dir -AllowFail -Quiet
+    if ($r.Code -ne 0) { return ("npx playwright install chromium failed (exit $($r.Code)); the browser for @playwright/test $pwVer could not be downloaded: " + (($r.Output | Select-Object -Last 4) -join ' | ')) }
+    $root = $env:PLAYWRIGHT_BROWSERS_PATH; if (-not $root -or $root -eq '0') { $root = Join-Path $env:LOCALAPPDATA 'ms-playwright' }
+    foreach ($b in $want) {
+        $dirName = '{0}-{1}' -f ($b.name -replace '-', '_'), $b.revision
+        if (Test-Path -LiteralPath (Join-Path $root $dirName)) { Write-Log "browser present: $root\$dirName" }
+        else { return "after playwright install, $root\$dirName is still missing (browser revision $($b.revision) for @playwright/test $pwVer)" }
+    }
+    return ''
+}
+
 function Test-PortFree {
     param([int]$Port)
     $l = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -59,7 +89,7 @@ try {
 }
 
 $npm = $script:NpmCmd
-$steps = if ($Step -eq 'all') { @('install', 'verify', 'build') } else { @($Step) }
+$steps = if ($Step -eq 'all') { @('install', 'format', 'verify', 'build') } else { @($Step) }
 
 foreach ($s in $steps) {
     if ($failures.Count -gt 0) { break }
@@ -68,7 +98,9 @@ foreach ($s in $steps) {
         switch ($s) {
             'install' {
                 $r = Invoke-Native -File $npm -Arguments @('ci', '--no-audit', '--no-fund') -WorkDir $full -AllowFail -Quiet
-                if ($r.Code -ne 0) { Fail "npm ci failed (exit $($r.Code)); package.json and package-lock.json must agree (the loop cannot run npm install)" }
+                if ($r.Code -ne 0) { Fail "npm ci failed (exit $($r.Code)); package.json and package-lock.json must agree (the loop cannot run npm install)"; break }
+                $pw = Install-PlaywrightBrowser -Dir $full
+                if ($pw) { Fail "playwright browser: $pw" }
             }
             'format' {
                 $r = Invoke-Native -File $npm -Arguments @('run', 'format') -WorkDir $full -AllowFail -Quiet
@@ -130,10 +162,8 @@ foreach ($s in $steps) {
                 $env:RECOGNITION_URL = 'http://127.0.0.1:9'                     # never the live recogniser (CI has none either)
                 $env:TARGET_BOT_URL = 'http://127.0.0.1:9'                      # never the real Target bot
                 $env:PORT = '8887'
-                $browsers = Join-Path $env:LOCALAPPDATA 'ms-playwright'
-                if (-not (Get-ChildItem -LiteralPath $browsers -Directory -Filter 'chromium*' -ErrorAction SilentlyContinue)) {
-                    Invoke-Native -File $npm -Arguments @('exec', '--', 'playwright', 'install', 'chromium') -WorkDir $full -Quiet | Out-Null
-                }
+                $pw = Install-PlaywrightBrowser -Dir $full
+                if ($pw) { Fail "playwright browser: $pw"; break }
                 $r = Invoke-Native -File $npm -Arguments @('run', 'e2e', '--', '--reporter=line', '--workers=4') -WorkDir $full -AllowFail -Quiet
                 $tail = @($r.Output | Where-Object { $_ -match '\d+ (passed|failed|flaky|skipped)|Error:|\[fail|failed' } | Select-Object -Last 20)
                 foreach ($t in $tail) { Write-Log "  $t" }

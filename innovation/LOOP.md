@@ -65,19 +65,22 @@ handle them, and you never touch Ve's own (non-`loop:proposal`) issues.
     Write tool and pass `--body-file <file>`.
 11. **Tools.** PowerShell tool, **one command per call**: no `;`, `&&`, `|` into anything but read-only
     formatting cmdlets, no `cd`. Always `git -C "<CLONE>" ...` and absolute paths. You cannot run npm, npx,
-    node, cmd, docker, schtasks or services directly: install / format / verify / unit / build / e2e go
-    through `test-gate.ps1`, visual baselines through `update-snapshots.ps1`, merging through
-    `merge-pr.ps1`, deploys through `deploy.ps1`. Edits are allowed only inside CLONE (and WORK).
+    node, cmd, docker, schtasks or services directly: install / format / verify / unit / build go
+    through `test-gate.ps1`, visual baselines through `update-snapshots.ps1`, waiting for CI and merging
+    through `merge-pr.ps1`, the one flaky-spec rerun through `ci-rerun.ps1`, deploys through `deploy.ps1`.
+    CI is read with `gh pr checks` and `gh run list|view` only (never `gh run rerun|watch|cancel`, never a
+    workflow dispatch). Edits are allowed only inside CLONE (and WORK).
 12. **Scripts** are called exactly like this: the bare full path from the header's SCRIPTS, no `&`, no
     quotes around the path, no `powershell -File`:
     `<SCRIPTS>\<name>.ps1 <args>` e.g. `D:\projects\cardlens\innovation\check-approval.ps1 -List`
     The last output line states the result; the exit code is in `$LASTEXITCODE`.
     **Timeouts.** A foreground tool call is killed after 10 minutes. So:
-    - foreground (tool timeout 600000): `check-approval.ps1`, `test-gate.ps1 -Step install|format|verify|unit|build|all`
+    - foreground (tool timeout 600000): `check-approval.ps1`, `test-gate.ps1 -Step install|format|verify|unit|build|all`,
+      `merge-pr.ps1` (blocks at most ~9 minutes per call while it waits for CI, then says CI-PENDING:
+      call it again), `ci-rerun.ps1`
     - BACKGROUND (`run_in_background: true`, timeout 3600000), then poll with `Start-Sleep -Seconds 120`
-      and the task's output until it finishes: `test-gate.ps1 -Step e2e`, `update-snapshots.ps1`,
-      `merge-pr.ps1` (waits for CI), `deploy.ps1`, `rollback.ps1`. Never start a second merge, deploy or
-      rollback while one runs. Never kill one half way.
+      and the task's output until it finishes: `update-snapshots.ps1`, `deploy.ps1`, `rollback.ps1`.
+      Never start a second merge, deploy or rollback while one runs. Never kill one half way.
 13. **At most MAX_BUILDS issues per run, strictly one at a time** (section 3.13 says when a second may
     start). Never work on two issues at once, never start one after a failure. If an issue turns out
     bigger than planned, stop and comment rather than shipping half of it.
@@ -135,25 +138,27 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
 6. **Build** in CLONE on `loop/<n>-<short-slug>` (lowercase, digits, dashes):
    `git -C "<CLONE>" fetch origin` (a second build must start from the main that holds the first merge),
    `git -C "<CLONE>" checkout -b loop/<n>-<slug> origin/main`, then
-   `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step install` (node_modules for the clone).
+   `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step install` (node_modules for the clone, plus the Playwright
+   browser the installed version needs, for update-snapshots; a failed browser download fails the step).
    Follow CLAUDE.md and the agent files: tests fail first (break the fix, watch the new test fail with
    `-Step unit -UnitFilter <file>`, restore); shared data layer, split presentation; web-only styling stays
    in `src/web/` or `[data-shell="web"]` (the glasses are an additive 600x600 display); never trim binder
    pages automatically; never make printings an enum; `keydown` is all the glasses send. Keep the diff
    minimal and in the codebase's style. Never edit a protected path (rule 8).
-7. **Test** (all must pass; on failure fix within reason, else go to Failure):
-   - `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step format` (Prettier is enforced by CI), then
-     `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step all -ExpectString "<string>"`: npm ci, `npm run verify`
-     (format:check, typecheck, lint, check:v2, ~1,250 unit tests), and a Pages-style build whose
-     `index.html` must reference `/cardlens/assets/index-*.js` and whose chunks must contain the string.
-     Last line `TEST-GATE PASS`.
-   - If you changed a screen, a server route or a shared file: `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step e2e`
-     in the BACKGROUND (alternate ports 5273/8887, scratch data; never the live server).
+7. **Test locally** (all must pass; on failure fix within reason, else go to Failure). **CI is the e2e
+   gate for every change: you do not run the Playwright suite locally** (merge-pr.ps1 requires CI's
+   Playwright E2E and v2 Visual Regression jobs green on the PR's exact head; `test-gate.ps1 -Step e2e`
+   exists for Ve's manual use only, do not run it).
+   - `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step all -ExpectString "<string>"`: npm ci + the Playwright
+     browser, Prettier (`format`, enforced by CI), `npm run verify` (format:check, typecheck, lint, check:v2,
+     ~1,250 unit tests), and a Pages-style build whose `index.html` must reference
+     `/cardlens/assets/index-*.js` and whose chunks must contain the string. Last line `TEST-GATE PASS`.
+     For quick iteration on one test file: `-Step unit -UnitFilter <file>`.
    - If you changed anything a v2 visual snapshot covers (`src/v2/`, `src/web/`, shared UI): run
      `<SCRIPTS>\update-snapshots.ps1 -Issue <n>` in the BACKGROUND. It lists the baseline PNGs that
      changed. **Read every changed PNG** and confirm the change is the one you intended and nothing else
-     moved; commit those files with your change. A baseline that changed for a screen you did not touch
-     means something is wrong: stop and investigate.
+     moved; commit those files with your change BEFORE opening the PR (CI compares against them). A
+     baseline that changed for a screen you did not touch means something is wrong: stop and investigate.
 8. **PR.** Stage explicit paths, commit with `-F`, `git -C "<CLONE>" push -u origin loop/<n>-<slug>`, then
    `gh pr create -R vekbui96/cardlens --base main --head loop/<n>-<slug> --title "<title>" --body-file <file>`.
    The body links `#<n>`, summarises the change, the failing-first test and the test evidence, says
@@ -162,16 +167,36 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
    attempt): if fewer than 45 minutes remain before DEADLINE, do not merge (a merge must be followed by
    a deploy that finishes before the run is killed). Comment that the PR is ready but the run ran out of
    time, add `loop:failed` and remove `loop:in-progress`, leave the PR open for Ve, and go to section 5.
-   `<SCRIPTS>\merge-pr.ps1 -Pr <pr#> -Issue <n>` in the BACKGROUND. It
-   re-checks approval, the PR's branch/author, protected paths, CORS/Target/`D:\services`/`VITE_` secret
-   lines, whether the server side is deployable (elevated task selftest), and waits for CI (verify, e2e,
-   visual) on the PR's exact head commit, then merges with `--match-head-commit`.
+   `<SCRIPTS>\merge-pr.ps1 -Pr <pr#> -Issue <n>` in the FOREGROUND (tool timeout 600000). It re-checks
+   approval, the PR's branch/author, protected paths (in the commits between the live server and the PR,
+   `innovation/**` is ignored as inert; its `MERGE-PR GAP <sha> <subject>` lines list those commits, put
+   them in your final comment), CORS/Target/`D:\services`/`VITE_` secret lines, then waits for CI on the
+   PR's exact head: Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression must ALL be
+   completed + success (skipped, cancelled or never-created jobs refuse). Each call blocks at most ~9
+   minutes, so a normal 5-6 minute CI run takes one or two calls. When CI is green it checks the elevated
+   task (server changes only) and merges with `--match-head-commit`.
+   - `MERGE-PR CI-PENDING ...` (exit 5): CI is still running. Call merge-pr.ps1 again with the same
+     arguments (no sleep needed in between; it waits inside). The total wait per head commit is capped in
+     code (CI-TIMEOUT).
    - `MERGE-PR OK <mergeSha>`: go to 10.
-   - `MERGE-PR CI-FAILED ...`: read the failure (`gh run list -R vekbui96/cardlens --commit <sha>`,
-     `gh run view <id> -R vekbui96/cardlens --log-failed`), fix on the branch, re-run the local gates,
-     push, run merge-pr again. At most 2 fix rounds, then Failure. A visual diff usually means baselines
-     need `update-snapshots.ps1`.
-   - `MERGE-PR REFUSED ...` or `CI-TIMEOUT`: nothing was merged. Go to Failure (no rollback needed).
+   - `MERGE-PR CI-FAILED ...` (exit 3): a CI fix round. Read the failure:
+     `gh pr checks <pr#> -R vekbui96/cardlens`, `gh run list -R vekbui96/cardlens --branch loop/<n>-<slug>`,
+     `gh run view <id> -R vekbui96/cardlens --log-failed`. Then:
+     - if the ONLY failure is in Playwright E2E and every failing spec is a known-flaky one unrelated to
+       your diff (`e2e/bulk-mark.spec.ts`, the bulk-mark timing window; `e2e/v2/target-sealed.spec.ts`, the
+       Target specs), you may ask for ONE rerun of that run's failed jobs:
+       `<SCRIPTS>\ci-rerun.ps1 -Pr <pr#> -Issue <n> -RunId <id>` (it re-checks all of that in code and
+       refuses otherwise; a run is re-run at most once). Then call merge-pr.ps1 again. A rerun is not a fix
+       round; say in the final comment that it happened and why.
+     - otherwise fix it on the same `loop/<n>-<slug>` branch, re-run the local gate
+       (`test-gate.ps1 -Step all`, plus `update-snapshots.ps1` if visuals changed), commit, push to the
+       same branch, and call merge-pr.ps1 again (it waits for the new head's run). A visual diff usually
+       means baselines need `update-snapshots.ps1`.
+       At most **3 CI fix rounds** per issue. If CI still fails after the third: comment a summary (what
+       failed in each round and what you tried), add `loop:failed`, remove `loop:in-progress`, leave the PR
+       OPEN for Ve, and stop Phase A (nothing was merged; no rollback needed).
+   - `MERGE-PR REFUSED ...` or `CI-TIMEOUT` (exit 4): nothing was merged. Go to Failure (no rollback
+     needed; leave the PR open).
 10. **Deploy and verify.** `<SCRIPTS>\deploy.ps1 -Issue <n> -MergeSha <mergeSha> -ExpectString "<string>"`
     in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source). It deploys the
     server through the elevated task when needed (data snapshot, reset, `npm ci` if the lockfile changed,
@@ -207,9 +232,12 @@ fresh cycle: its own approval checks, plan, branch, gates, PR, merge and deploy.
 
 ## 4. Gates (summary)
 
-- Local: `test-gate.ps1 -Step all` PASS (verify + Pages-style build with the string in the chunks); e2e on
-  alternate ports when screens/server changed; visual baselines regenerated and read when UI changed.
-- Merge: `merge-pr.ps1` (approval, protected paths, CI green on the exact head sha).
+- Local: `test-gate.ps1 -Step all` PASS (install + browser, format, verify, Pages-style build with the
+  string in the chunks); visual baselines regenerated and read when UI changed. No local e2e.
+- CI (the e2e gate for every change): Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression
+  all completed + success on the PR's exact head; at most 3 fix rounds; one rerun only for known-flaky
+  specs via `ci-rerun.ps1`.
+- Merge: `merge-pr.ps1` (approval, protected paths, CI green on the exact head sha, `--match-head-commit`).
 - Deploy: `deploy.ps1` exit 0 (server health with a stable pid when deployed; the Pages run of this sha;
   served bytes contain the string; the page renders).
 
