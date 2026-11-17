@@ -23,8 +23,11 @@ const SCRIPTS = norm(
 ).replace(/\\$/, "");
 const CLONE = HOME + "\\clones\\cardlens";
 const REPO = "vekbui96/cardlens";
-// FULL | PROPOSE_ONLY | PRODUCT_REVIEW (set by run-loop.ps1). PRODUCT_REVIEW is read-only research.
+// The session kind, set by run-loop.ps1 before each session: BUILD (one approved issue), PROPOSE (Phase B
+// proposals), PRODUCT_REVIEW (the weekly review). FULL (unset: tests, older runners) allows both build and
+// proposal commands. PROPOSE and PRODUCT_REVIEW are read-only research plus opening issues.
 const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpperCase();
+const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY"].includes(MODE);
 
 function block(msg) {
   process.stderr.write(`innovation-loop guard blocked this: ${msg}\n`);
@@ -157,12 +160,12 @@ if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].inclu
 if (tool === "WebFetch") {
   const u = String(ti.url || "");
   if (
-    !/^https:\/\/(vekbui96\.github\.io\/cardlens|server-pc\.tail0e4194\.ts\.net:8443\/api\/(health|catalog|printings)|api\.pokemontcg\.io|api\.tcgdex\.net)(\/|\?|$)/i.test(
+    !/^https:\/\/(vekbui96\.github\.io\/cardlens|server-pc\.tail0e4194\.ts\.net:8443\/api\/(health|catalog|printings|metrics\/summary)|api\.pokemontcg\.io|api\.tcgdex\.net)(\/|\?|$)/i.test(
       u,
     )
   ) {
     block(
-      "WebFetch is limited to the live site, GET-safe live API routes (health/catalog/printings), pokemontcg.io and TCGdex",
+      "WebFetch is limited to the live site, GET-safe live API routes (health/catalog/printings/metrics/summary), pokemontcg.io and TCGdex",
     );
   }
   process.exit(0);
@@ -256,11 +259,11 @@ if (tool === "Bash" || tool === "PowerShell") {
     }
     // CI is the e2e gate: the session may READ runs and checks to fix a CI failure (gh run list / view,
     // incl. --log-failed, and gh pr checks), all on this repo (the naming rule above). It never dispatches,
-    // cancels, watches or re-runs: waiting is merge-pr.ps1's job, and the one allowed rerun of known-flaky
+    // cancels, watches or re-runs: waiting is wait-ci.ps1's (and merge-pr.ps1's) job, and the one allowed rerun of known-flaky
     // specs goes through ci-rerun.ps1, which checks the run belongs to the PR's current head.
     if (g1 === "run" && !["list", "view"].includes(g2))
       block(
-        `gh run ${g2} is not allowed (read CI with gh run list/view; wait with merge-pr.ps1; flaky rerun via ci-rerun.ps1)`,
+        `gh run ${g2} is not allowed (read CI with gh run list/view; wait with wait-ci.ps1; flaky rerun via ci-rerun.ps1)`,
       );
     if (g1 === "run" && g2 === "view" && /\s--web\b|\s-w\b/i.test(c))
       block("gh run view --web is not allowed");
@@ -271,6 +274,8 @@ if (tool === "Bash" || tool === "PowerShell") {
         );
       if (["edit", "review", "ready", "reopen", "lock", "unlock", "update-branch", "revert"].includes(g2))
         block(`gh pr ${g2} is not allowed`);
+      if (g2 === "checks" && /\s--watch\b|\s-w\b/i.test(c))
+        block("wait for CI with wait-ci.ps1 -Pr <n> (one call, one result line), not gh pr checks --watch");
       if (g2 === "create" && !/--head\s+["']?loop\/\d+-[a-z0-9-]+\b/i.test(c))
         block("gh pr create needs --head loop/<issue#>-<slug>");
       if ((g2 === "create" || g2 === "comment") && /\s(-b|--body)\s/i.test(c))
@@ -300,18 +305,31 @@ if (tool === "Bash" || tool === "PowerShell") {
           block("the loop never removes loop:retried (it limits a failed build to one automatic retry)");
       }
       if (g2 === "create") {
+        // a build session builds its one issue and opens nothing (proposals are the proposal session's job)
+        if (MODE === "BUILD")
+          block("a build session does not open issues (proposals and specs come from the proposal session)");
+        // every --label value, comma lists split: gh issue create --label a --label b,c
+        const created = [...c.matchAll(/--label[\s=]+["']?([^"'\s]+)/gi)].flatMap((m) =>
+          m[1].toLowerCase().split(","),
+        );
         // the weekly product review opens ONE loop:product-review issue (never built: no loop:proposal),
-        // and only in that mode; every other issue the loop opens is a loop:proposal
-        const isReview = /--label\s+["']?loop:product-review\b/i.test(c);
+        // and only in that mode; every other issue the loop opens is a loop:proposal. A spec is a proposal
+        // too (it takes one slot) that check-approval.ps1 never builds: loop:proposal + loop:spec.
+        const isReview = created.includes("loop:product-review");
         if (isReview && MODE !== "PRODUCT_REVIEW")
           block("loop:product-review issues are opened only by the weekly product review run");
-        if (isReview && /--label\s+["']?loop:proposal\b/i.test(c))
+        if (isReview && created.includes("loop:proposal"))
           block("a product review issue is never a loop:proposal (it must never be buildable)");
-        if (!isReview && !/--label\s+["']?loop:proposal\b/i.test(c))
+        if (!isReview && !created.includes("loop:proposal"))
           block("gh issue create needs --label loop:proposal");
-        if (/--label\s+["']?device-feedback\b/i.test(c))
-          block("device-feedback issues are Ve's, never the loop's");
-        if (/--label\s+["']?[^"'\s]*\bapproved\b/i.test(c)) block("only Ve adds 'approved'");
+        if (isReview && created.includes("loop:spec")) block("a product review issue is not a spec");
+        if (created.includes("device-feedback")) block("device-feedback issues are Ve's, never the loop's");
+        if (created.some((l) => /\bapproved\b/.test(l))) block("only Ve adds 'approved'");
+        for (const l of created)
+          if (!/^(loop:proposal|loop:spec|loop:product-review|size:small|test-only)$/.test(l))
+            block(
+              `gh issue create may only use the labels loop:proposal, loop:spec, size:small, test-only (and loop:product-review in the review run); saw ${l}`,
+            );
         if (!/--body-file\s/i.test(c)) block("gh issue create needs --body-file <file in WORK>");
       }
       if (g2 === "comment" && (/\s(-b|--body)\s/i.test(c) || /--edit-last|--delete-last/i.test(c)))
@@ -325,17 +343,17 @@ if (tool === "Bash" || tool === "PowerShell") {
       block("only Ve adds or removes 'approved'");
   }
 
-  // the weekly product review is read-only research: no pushes, commits, PRs or label changes
-  if (MODE === "PRODUCT_REVIEW") {
+  // proposal and review sessions are read-only research: no pushes, commits, PRs or label changes
+  if (READ_ONLY) {
     if (
       /\bgit(\.exe)?\b[^|;&]*\b(push|commit|merge|rebase|reset|checkout\s+-b|switch\s+-c|branch\s+\S)/i.test(
         c,
       )
     )
-      block("the product review is read-only: no commits, branches or pushes");
+      block("proposal and review sessions are read-only: no commits, branches or pushes");
     if (/\bgh(\.exe)?["']?\s+(pr\s+(create|merge|comment|close)|issue\s+(edit|close|comment))\b/i.test(c))
       block(
-        "the product review only reads and opens its review issue / proposals; no PRs, edits or comments",
+        "proposal and review sessions only read and open issues (proposals, specs, the review); no PRs, edits or comments",
       );
   }
 
@@ -395,12 +413,12 @@ if (tool === "Bash" || tool === "PowerShell") {
       )
         block(`HTTP host not allowed: ${u}`);
       if (
-        /\/(merge|share|binders|target|collection|recognize|session|companion)\b/i.test(
+        /\/(merge|share|binders|target|collection|recognize|session|companion)\b|\/metrics(?!\/summary\b)/i.test(
           u.replace(/^https?:\/\/[^/]+/, ""),
         ) &&
         !/api\.(pokemontcg|tcgdex)/i.test(u)
       )
-        block(`route not allowed from the session: ${u}`);
+        block(`route not allowed from the session: ${u} (metrics: GET /api/metrics/summary only)`);
     }
   }
 
@@ -484,16 +502,16 @@ if (tool === "Bash" || tool === "PowerShell") {
       if (!f.startsWith(SCRIPTS + "\\"))
         block(`scripts must be called by bare full path from ${SCRIPTS}\\<name>.ps1 (saw ${s})`);
       if (
-        !/\\(check-approval|test-gate|update-snapshots|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1$/.test(
+        !/\\(check-approval|test-gate|update-snapshots|wait-ci|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1$/.test(
           f,
         )
       )
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );
-      if (MODE === "PRODUCT_REVIEW" && !/\\check-approval\.ps1$/.test(f))
+      if (READ_ONLY && !/\\check-approval\.ps1$/.test(f))
         block(
-          `the product review is read-only: ${s} builds, merges or deploys and is not allowed in this mode`,
+          `proposal and review sessions are read-only: ${s} builds, merges or deploys and is not allowed in this session`,
         );
     }
   }

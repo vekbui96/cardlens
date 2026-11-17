@@ -76,7 +76,7 @@ function Get-RunDataNum { param($Obj, [string]$Name) if ($null -ne $Obj -and $Ob
 # MarkersFound, Notes, CreatedIssues (slug#n from `gh issue create` results), TouchedIssues (from gh issue
 # edit/close/comment/reopen commands), Status (LOOP-RESULT word) and HasResult.
 function Read-LoopTranscript {
-    param([Parameter(Mandatory)][string]$Path)
+    param([Parameter(Mandatory)][string]$Path, [int]$SessionIssue = 0)
     $markerRx = [regex]'(?m)^[ \t>*`_]*LOOP-ISSUE-(START|END)[ \t]+#?(\d+)(?:[ \t]+([A-Za-z][A-Za-z \-]*?))?[ \t*`_]*$'
 
     # ---- pass 1: events -> ordered items (a message is placed at its FIRST event) ----
@@ -175,6 +175,9 @@ function Read-LoopTranscript {
         elseif ($p.Ended) { $p.Ended = $false; $p.Outcome = '' }
         return $p
     }
+    # A build session exists for ONE issue: everything in it (its preflight reading included) is that issue's
+    # cost, and its LOOP-ISSUE-END marker only sets the outcome.
+    if ($SessionIssue -gt 0) { $cur = & $open $SessionIssue; $markersFound = $true }
 
     foreach ($it in $items) {
         if ($it.Kind -eq 'think') {
@@ -221,7 +224,7 @@ function Read-LoopTranscript {
                 if (-not $p) { $p = & $open $n; Add-RunDataTime $p $it.Last; [void]$notes.Add("issue #$n had an end marker but no start marker") }
                 $p.Outcome = (Get-RunDataOutcome $marks[$i].Groups[3].Value)
                 $p.Ended = $true
-                if ($cur -eq $p) { $cur = $overhead }
+                if ($cur -eq $p -and $p.Issue -ne $SessionIssue) { $cur = $overhead }
             }
         }
         # commands that touched hub issues (fallback attribution when there are no markers)
@@ -290,6 +293,13 @@ function Read-LoopTranscript {
         if ($overhead.Cost -lt 0) { $overhead.Cost = 0 }
         $sumTurns = 0; foreach ($p in $parts) { $sumTurns += $p.Turns }
         $overhead.Turns = [math]::Max(0, $tot.Turns - $sumTurns)
+        # a build session: the remainder (its final turn, rounding) is its issue's too
+        if ($SessionIssue -gt 0 -and $byIssue.ContainsKey($SessionIssue)) {
+            $own = $byIssue[$SessionIssue]
+            $own.Turns += $overhead.Turns; $overhead.Turns = 0
+            $own.Output += $overhead.Output; $overhead.Output = 0
+            $own.Cost += $overhead.Cost; $overhead.Cost = 0
+        }
     } else {
         [void]$notes.Add('the transcript has no result message (claude was killed or crashed), so output tokens and cost are unavailable')
         $tot.Output = -1; foreach ($p in $all) { $p.Output = -1 }
@@ -301,6 +311,80 @@ function Read-LoopTranscript {
         CreatedIssues = @($created); TouchedIssues = @($touched); Status = $status; HasResult = ($null -ne $result)
         IsError = $isError; Subtype = $subtype; DurationMs = $durationMs; Wall = $wall
     }
+}
+
+# One run = several claude sessions (one per build, one for proposals; run-loop.ps1). Combine their parsed
+# transcripts into the shape Read-LoopTranscript returns, so the comments and the json summary need no
+# special case. $Sessions: {Kind (build | propose | review); Issue; Model; Data (Read-LoopTranscript)}.
+#   Parts     every session's issue parts (a build session's whole cost is its issue's)
+#   Overhead  the sum of the sessions' overheads (in practice: the proposal / review session)
+#   Totals    the sum of the sessions' totals. If a session has no result message (killed), output tokens are
+#             n/a for the run and the cost is the sum of the sessions that reported one (a note says so)
+#   Sessions  one summary row per session (kind, issue, model, turns, tokens, cost, LOOP-RESULT)
+# -Status: the run's LOOP-RESULT word (run-loop.ps1 Get-RunResult); each session's own is in Sessions.
+function Merge-LoopRunData {
+    param([object[]]$Sessions = @(), [string]$Status = '')
+    $parts = New-Object System.Collections.ArrayList
+    $byIssue = @{}
+    $oh = New-RunDataPart -Kind 'overhead'; $tot = New-RunDataPart -Kind 'total'
+    $notes = New-Object System.Collections.ArrayList; $created = New-Object System.Collections.ArrayList; $touched = New-Object System.Collections.ArrayList
+    $rows = @(); $allResult = $true; $anyMarkers = $false; $dur = [long]0; $anyCost = $false
+    $addModels = { param($to, $from) foreach ($m in @($from)) { if ($m -and -not $to.Models.Contains($m)) { [void]$to.Models.Add($m) } } }
+    $sum = {
+        param($to, $from)
+        $to.Turns += $from.Turns; $to.Requests += $from.Requests; $to.Input += $from.Input; $to.CacheRead += $from.CacheRead; $to.CacheWrite += $from.CacheWrite
+        if ($from.Output -lt 0 -or $to.Output -lt 0) { $to.Output = -1 } else { $to.Output += $from.Output }
+        if ($from.HasCost) { $to.Cost += $from.Cost; $to.HasCost = $true }
+        & $addModels $to $from.Models
+        Add-RunDataTime $to $from.Start; Add-RunDataTime $to $from.End
+    }
+    foreach ($s in @($Sessions | Where-Object { $_ -and $_.Data })) {
+        $d = $s.Data
+        $label = "$($s.Kind)"; if ($s.Issue) { $label += " #$($s.Issue)" }
+        foreach ($p in $d.Parts) {
+            $q = $byIssue[[int]$p.Issue]
+            if (-not $q) { $q = New-RunDataPart -Kind 'issue' -Issue $p.Issue; $q.Ended = $p.Ended; $q.Outcome = $p.Outcome; $byIssue[[int]$p.Issue] = $q; [void]$parts.Add($q) }
+            elseif ($p.Ended) { $q.Outcome = $p.Outcome; $q.Ended = $true }
+            & $sum $q $p
+        }
+        & $sum $oh $d.Overhead
+        & $sum $tot $d.Totals
+        if (-not $d.HasResult) { $allResult = $false }
+        if ($d.Totals.HasCost) { $anyCost = $true }
+        if ($d.MarkersFound) { $anyMarkers = $true }
+        if ($d.DurationMs) { $dur += [long]$d.DurationMs }
+        foreach ($n in $d.Notes) { [void]$notes.Add("$label session: $n") }
+        foreach ($c in $d.CreatedIssues) { if (-not $created.Contains($c)) { [void]$created.Add($c) } }
+        foreach ($c in $d.TouchedIssues) { if (-not $touched.Contains($c)) { [void]$touched.Add($c) } }
+        $rows += [pscustomobject]@{ Kind = "$($s.Kind)"; Issue = [int]$s.Issue; Model = "$($s.Model)"; Status = $d.Status; HasResult = $d.HasResult
+            Turns = $d.Totals.Turns; Input = $d.Totals.Input; Output = $d.Totals.Output; CacheRead = $d.Totals.CacheRead; CacheWrite = $d.Totals.CacheWrite
+            Cost = $d.Totals.Cost; HasCost = $d.Totals.HasCost; Start = $d.Totals.Start; End = $d.Totals.End; Models = @($d.Totals.Models) }
+    }
+    if (-not $allResult -and $rows.Count -gt 0) {
+        [void]$notes.Add('a session has no result message (killed or crashed): the run''s output tokens are n/a and its cost covers only the sessions that reported one')
+        $tot.Output = -1; $oh.Output = -1
+    }
+    $wall = $null; if ($tot.Start -and $tot.End) { $wall = $tot.End - $tot.Start }
+    return [pscustomobject]@{
+        Parts = @($parts); Overhead = $oh; Totals = $tot; MarkersFound = $anyMarkers; Notes = @($notes)
+        CreatedIssues = @($created); TouchedIssues = @($touched); Status = $Status; HasResult = ($allResult -and $rows.Count -gt 0)
+        IsError = $null; Subtype = ''; DurationMs = $dur; Wall = $wall; Sessions = @($rows)
+    }
+}
+
+# "Sessions: build #12 (claude-opus-5-5, 96 turns, $3.10, deployed); proposals (claude-sonnet-5-5, 41 turns, $0.62)"
+function Format-RunDataSessions {
+    param($Data)
+    $rows = @(); if ($Data.PSObject.Properties.Name -contains 'Sessions') { $rows = @($Data.Sessions) }
+    if ($rows.Count -eq 0) { return '' }
+    $names = @{ build = 'build'; propose = 'proposals'; review = 'product review' }
+    $txt = @($rows | ForEach-Object {
+            $n = $names["$($_.Kind)"]; if (-not $n) { $n = "$($_.Kind)" }; if ($_.Issue) { $n += " #$($_.Issue)" }
+            $c = 'cost n/a'; if ($_.HasCost) { $c = '$' + ([double]$_.Cost).ToString('0.00', $script:RunDataInv) }
+            $m = "$($_.Model)"; if (-not $m) { $m = (@($_.Models) -join '+') }; if (-not $m) { $m = 'model n/a' }
+            $st = ''; if ($_.Status) { $st = ", $($_.Status)" } elseif (-not $_.HasResult) { $st = ', no result (killed?)' }
+            "$n ($m, $($_.Turns) turns, $c$st)" })
+    return "Sessions ($($rows.Count), one per job): $($txt -join '; ')."
 }
 
 function Get-RunDataOutcome {
@@ -377,7 +461,9 @@ function Format-RunDataComment {
     $tCost = Format-RunDataCost $t
     if ($Part) {
         $models = ($Part.Models -join ', '); if (-not $models) { $models = 'n/a' }
-        [void]$sb.AppendLine("| | Issue #$Issue | Run overhead (preflight + research) | Whole run |")
+        $ohLabel = 'Run overhead (preflight + research)'
+        if ($Data.PSObject.Properties.Name -contains 'Sessions' -and @($Data.Sessions).Count -gt 0) { $ohLabel = 'Rest of run (proposal / review session)' }
+        [void]$sb.AppendLine("| | Issue #$Issue | $ohLabel | Whole run |")
         [void]$sb.AppendLine('| --- | --- | --- | --- |')
         [void]$sb.AppendLine("| Outcome | **$($Part.Outcome)** | | LOOP-RESULT: $(if ($Data.Status) { $Data.Status } else { 'none' }) |")
         [void]$sb.AppendLine("| Start | $(Format-RunDataTs $Part.Start) | | $(Format-RunDataTs $t.Start) |")
@@ -407,6 +493,8 @@ function Format-RunDataComment {
         [void]$sb.AppendLine("| Cost (API equivalent) | $tCost |")
         [void]$sb.AppendLine("| Model(s) | $(($t.Models -join ', ')) |")
     }
+    $sl = Format-RunDataSessions $Data
+    if ($sl) { [void]$sb.AppendLine(); [void]$sb.AppendLine($sl) }
     if ($Gap) { [void]$sb.AppendLine(); [void]$sb.AppendLine($Gap) }
     if ($Waiting) { [void]$sb.AppendLine(); [void]$sb.AppendLine($Waiting) }
     if ($Data.Notes.Count -gt 0) { [void]$sb.AppendLine(); foreach ($n in $Data.Notes) { [void]$sb.AppendLine("Note: $n.") } }
@@ -441,6 +529,7 @@ function Get-RunDataGapLine {
 function Format-RunDataProposalComment {
     param([Parameter(Mandatory)]$Data, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Waiting = '')
     $oh = $Data.Overhead; $label = 'Run overhead (preflight + research)'
+    if ($Data.PSObject.Properties.Name -contains 'Sessions' -and @($Data.Sessions).Count -gt 0) { $label = 'The proposal / review session' }
     if (-not $Data.MarkersFound -and $Data.Parts.Count -eq 0) { $label = 'Whole run' ; $oh = $Data.Totals }
     $approx = ($Data.Parts.Count -gt 0)
     $line = "<sub>Run data: proposed by run ``$RunId`` ($Mode, started by: $Trigger). $label, shared by every proposal it opened: $($oh.Turns) turns, tokens $(Format-RunDataTokens $oh -Approx:$approx), $(Format-RunDataCost $oh -Approx:$approx) API-equivalent (usage on the Max plan, not billing).</sub>"
@@ -463,7 +552,10 @@ function Invoke-RunDataGh {
 # the transcript. Returns the number of comments posted. Never throws.
 function Publish-LoopRunData {
     param(
-        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$TranscriptPath = '',
+        # one run = several sessions: {Path; Kind (build | propose | review); Issue (build sessions); Model}
+        [object[]]$Sessions = @(),
+        [string]$Status = '',    # the run's LOOP-RESULT word when -Sessions is used
         [Parameter(Mandatory)][string]$Repo,
         [Parameter(Mandatory)][string]$GhExe,
         [string]$RunId, [string]$Mode, [string]$Trigger = 'unknown',
@@ -476,8 +568,15 @@ function Publish-LoopRunData {
     )
     $posted = 0
     try {
-        $data = Read-LoopTranscript -Path $TranscriptPath
-        if (-not $OutDir) { $OutDir = Split-Path -Parent $TranscriptPath }
+        if (@($Sessions).Count -gt 0) {
+            $parsed = @($Sessions | Where-Object { $_ -and $_.Path -and (Test-Path -LiteralPath $_.Path) } | ForEach-Object {
+                    [pscustomobject]@{ Kind = $_.Kind; Issue = [int]$_.Issue; Model = $_.Model; Data = (Read-LoopTranscript -Path $_.Path -SessionIssue ([int]$_.Issue)) } })
+            $data = Merge-LoopRunData -Sessions $parsed -Status $Status
+            if (-not $OutDir) { $OutDir = Split-Path -Parent (@($Sessions)[0].Path) }
+        } else {
+            $data = Read-LoopTranscript -Path $TranscriptPath
+            if (-not $OutDir) { $OutDir = Split-Path -Parent $TranscriptPath }
+        }
         $base = Join-Path $OutDir "run-$RunId.rundata"
         $t = $data.Totals
         Write-RunDataLog ("run data: issues=[{0}] markers={1} turns={2} tokens(in/out/cr/cw)={3}/{4}/{5}/{6} cost={7} proposals=[{8}] trigger={9}" -f `
@@ -488,7 +587,8 @@ function Publish-LoopRunData {
                 totals = $t | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 overhead = $data.Overhead | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
-                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting }
+                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting
+                sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         } catch { Write-RunDataLog "run data: could not write $base.json: $_" 'WARN' }
 
@@ -747,12 +847,13 @@ function Invoke-LoopProgress {
 # Runner side, after claude exited: any progress comment of this run that never reached "done" gets a
 # warning naming the stage it stopped in. Returns the issues it marked. Never throws.
 function Complete-LoopProgress {
-    param([string]$LoopHome, [string]$RunId, [string]$GhExe, [string]$Marker = '<!-- innovation-loop -->', [string]$LogName = '')
+    param([string]$LoopHome, [string]$RunId, [string]$GhExe, [string]$Marker = '<!-- innovation-loop -->', [string]$LogName = '', [int]$Issue = 0)
     $marked = @()
     try {
         $dir = Join-Path $LoopHome 'state\progress'
         if (-not (Test-Path -LiteralPath $dir)) { return @() }
-        foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter "$RunId-*.json" -File)) {
+        $filter = "$RunId-*.json"; if ($Issue -gt 0) { $filter = "$RunId-$Issue.json" }   # -Issue: only that build session's issue
+        foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter $filter -File)) {
             try {
                 $st = Read-ProgressState $f.FullName
                 if (-not $st -or $st.current -eq 'done' -or $st.commentId -le 0) { continue }
@@ -769,4 +870,64 @@ function Complete-LoopProgress {
         }
     } catch { Write-RunDataLog "progress: finalize skipped: $_" 'WARN' }
     return $marked
+}
+
+# ==================================================================================================
+# Spec progress (runner side, after the sessions): ONE "## Spec progress" checklist comment per approved
+# spec, created and then edited in place, and the spec closed once every slice is done. $Specs: the `specs`
+# array of check-approval.ps1 -List (approval already verified there; only approved ones are touched).
+# Needs gate-rules.ps1 (Format-SpecProgress) dot-sourced. Never throws; returns the issues it updated.
+# ==================================================================================================
+function Publish-SpecProgress {
+    param([string]$LoopHome, [string]$RunId, [string]$Repo, [string]$GhExe, [object[]]$Specs = @(), [string]$Marker = '<!-- innovation-loop -->',
+        [string]$Who = 'the owner', [switch]$NoPost)
+    $done = @()
+    foreach ($s in @($Specs | Where-Object { $_ -and $_.approved })) {
+        try {
+            $n = [int]$s.issue
+            $plan = [pscustomobject]@{ Issue = $n; Of = [int]$s.of; Valid = [bool]$s.valid; Problem = "$($s.problem)"; Complete = [bool]$s.complete; Duplicates = @()
+                Slices = @(@($s.slices) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ K = [int]$_.k; Title = "$($_.title)"; Issue = [int]$_.issue; Status = "$($_.status)"; Done = [bool]$_.done } }) }
+            $body = Format-SpecProgress -Plan $plan -RunId $RunId -Marker $Marker -Who $Who
+            $dir = Join-Path $LoopHome 'state\spec'
+            if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            $sp = Join-Path $dir "spec-$n.json"
+            $st = $null; if (Test-Path -LiteralPath $sp) { $st = [IO.File]::ReadAllText($sp) | ConvertFrom-Json }
+            # the checklist without its "updated after run" footer decides whether anything changed
+            $key = (($body -split "`n") | Where-Object { $_ -notmatch '^<sub>Updated by the runner' }) -join "`n"
+            $hash = [BitConverter]::ToString((New-Object Security.Cryptography.SHA256Managed).ComputeHash([Text.Encoding]::UTF8.GetBytes($key))) -replace '-', ''
+            $cid = [long]0; if ($st) { $cid = [long]$st.commentId }
+            if ($NoPost) { [IO.File]::WriteAllText((Join-Path $dir "spec-$n.md"), $body, (New-Object Text.UTF8Encoding $false)); $done += $n; continue }
+            if ($st -and "$($st.hash)" -eq $hash -and -not $plan.Complete) { continue }
+            $v = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$n")
+            if ($v.Code -ne 0) { Write-RunDataLog "spec progress: cannot read $Repo#$n" 'WARN'; continue }
+            $iss = $v.Output | ConvertFrom-Json
+            $labels = @($iss.labels | ForEach-Object { $_.name })
+            if ($iss.state -ne 'open' -or $labels -notcontains 'loop:spec' -or $labels -notcontains 'loop:proposal' -or ($iss.PSObject.Properties.Name -contains 'pull_request' -and $iss.pull_request)) {
+                Write-RunDataLog "spec progress: $Repo#$n is not an open loop:spec issue; not touching it" 'WARN'; continue
+            }
+            $tmp = Join-Path $dir "spec-$n.body.json"
+            [IO.File]::WriteAllText($tmp, (@{ body = $body } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+            $ok = $false
+            if ($cid -gt 0) {
+                $g = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/comments/$cid")
+                $own = $false
+                if ($g.Code -eq 0) { $c = $g.Output | ConvertFrom-Json; $own = ("$($c.issue_url)" -like "*/repos/$Repo/issues/$n") -and "$($c.body)".Contains($Marker) -and "$($c.body)".Contains($script:SpecProgressMarker) }
+                if ($own) { $r = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/comments/$cid", '-X', 'PATCH', '--input', $tmp); $ok = ($r.Code -eq 0) }
+                else { Write-RunDataLog "spec progress: comment $cid is not this loop's checklist on #$n; posting a new one" 'WARN'; $cid = 0 }
+            }
+            if ($cid -le 0) {
+                $r = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$n/comments", '-X', 'POST', '--input', $tmp)
+                if ($r.Code -eq 0) { $cid = [long](($r.Output | ConvertFrom-Json).id); $ok = $true }
+            }
+            if (-not $ok) { Write-RunDataLog "spec progress: could not write the checklist on #$n" 'WARN'; continue }
+            [IO.File]::WriteAllText($sp, (@{ issue = $n; commentId = $cid; hash = $hash; runId = $RunId } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+            Write-RunDataLog "spec progress: #$n checklist updated ($(@($plan.Slices | Where-Object { $_.Done }).Count) of $($plan.Slices.Count) slices done)"
+            if ($plan.Complete) {
+                $cl = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('issue', 'close', "$n", '-R', $Repo, '--reason', 'completed')
+                if ($cl.Code -eq 0) { Write-RunDataLog "spec progress: every slice of #$n is done; closed the spec" } else { Write-RunDataLog "spec progress: closing #$n failed: $($cl.Output)" 'WARN' }
+            }
+            $done += $n
+        } catch { Write-RunDataLog "spec progress: #$($s.issue): $_" 'WARN' }
+    }
+    return @($done)
 }

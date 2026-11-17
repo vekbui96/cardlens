@@ -1,0 +1,21 @@
+{
+  "_readme": "Ve's file: the model, turn cap and time limit of each kind of claude session (run-loop.ps1 starts one session per job). Edit by hand; the loop only reads it. Missing or empty values fall back to the defaults in gate-rules.ps1 ($SessionDefaults). A build uses build.smallModel when its issue carries one of build.smallLabels, else build.model. run-loop.ps1 -Model / -MaxTurns override every session for one run.",
+  "build": {
+    "model": "claude-opus-5-5",
+    "smallModel": "claude-sonnet-5-5",
+    "smallLabels": ["size:small", "test-only"],
+    "maxTurns": 150,
+    "timeoutMinutes": 150
+  },
+  "propose": {
+    "model": "claude-sonnet-5-5",
+    "maxTurns": 80,
+    "timeoutMinutes": 45,
+    "minMinutes": 15
+  },
+  "review": {
+    "model": "claude-sonnet-5-5",
+    "maxTurns": 120,
+    "timeoutMinutes": 60
+  }
+}
