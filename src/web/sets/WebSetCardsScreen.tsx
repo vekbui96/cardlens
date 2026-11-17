@@ -23,6 +23,8 @@ import { ownedIn } from "../../features/collection/completionTier.ts";
 import { encodeShowcase } from "../../models/showcase.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
+import { handOverLink } from "../handOverLink.ts";
+import { LinkFallback } from "../LinkFallback.tsx";
 import styles from "./WebSetCardsScreen.module.css";
 
 /**
@@ -132,6 +134,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
    * standing notice, and it stays until a live link actually succeeds.
    */
   const [shareFallback, setShareFallback] = useState<ShareFallback | null>(null);
+  /** The URL itself, when the browser would neither share nor copy it. */
+  const [linkFallback, setLinkFallback] = useState<string | null>(null);
   /** Minting can take the full 8s request timeout; a dead button for that long
       reads as a broken one, and invites a second press. */
   const [sharing, setSharing] = useState(false);
@@ -369,15 +373,16 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
       setShareFallback(failure);
 
       const url = `${window.location.origin}${window.location.pathname}#${path}`;
-      try {
-        // The share sheet where there is one — on a phone this is the difference
-        // between sharing a set and copying a string into another app by hand.
-        if (navigator.share) await navigator.share({ title: `${setName} — CardLens`, url });
-        else await navigator.clipboard.writeText(url);
+      // The share sheet where there is one — on a phone this is the difference
+      // between sharing a set and copying a string into another app by hand. A
+      // cancelled sheet says nothing; a refused one (the tap's permission can
+      // expire while the server mints the link) copies instead, and if that is
+      // refused too the link goes on screen rather than nowhere.
+      const result = await handOverLink(url, `${setName} — CardLens`);
+      setLinkFallback(result === "failed" ? url : null);
+      if (result === "shared" || result === "copied") {
         setCopied(failure ? "snapshot" : "live");
         setTimeout(() => setCopied(null), 2500);
-      } catch {
-        // Cancelling the share sheet rejects, and that is not a failure.
       }
     } finally {
       setSharing(false);
@@ -487,6 +492,12 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           <button type="button" className={styles.chip} disabled={sharing} onClick={() => void share()}>
             Try live link
           </button>
+        </div>
+      ) : null}
+
+      {linkFallback ? (
+        <div className={styles.linkFallback}>
+          <LinkFallback url={linkFallback} label="Set link" />
         </div>
       ) : null}
 

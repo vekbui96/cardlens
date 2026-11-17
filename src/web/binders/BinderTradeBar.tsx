@@ -9,6 +9,8 @@ import {
   revokeTradeLink,
   type TradeLink,
 } from "../../services/tradeShares.ts";
+import { handOverLink } from "../handOverLink.ts";
+import { LinkFallback } from "../LinkFallback.tsx";
 import styles from "./WebBinderScreen.module.css";
 
 /**
@@ -34,6 +36,7 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const labelId = useId();
 
   /**
@@ -64,15 +67,17 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
   const tradeUrl = (shareId: string) =>
     `${window.location.origin}${window.location.pathname}#${screenToPath({ name: "trade", shareId })}`;
 
-  /** Hand the URL over the way the device does it best, and say that it worked. */
+  /**
+   * Hand the URL over the way the device does it best, and say what happened.
+   * A cancelled sheet says nothing; a refused one copies instead, and if that
+   * is refused too the link is put on screen — never a tap that ends in silence.
+   */
   const handOver = async (url: string) => {
-    try {
-      if (navigator.share) await navigator.share({ title: `${binder.name} — for trade`, url });
-      else await navigator.clipboard.writeText(url);
+    const result = await handOverLink(url, `${binder.name} — for trade`);
+    setFallbackUrl(result === "failed" ? url : null);
+    if (result === "shared" || result === "copied") {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // Cancelling the share sheet rejects, and that is not a failure.
     }
   };
 
@@ -107,6 +112,8 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
     try {
       await revokeTradeLink(token, link.id);
       setLink(null);
+      // The link on screen is dead now; leaving it there would invite pasting it.
+      setFallbackUrl(null);
     } catch {
       setError("Could not reach the server to stop sharing.");
     } finally {
@@ -156,6 +163,9 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
           <p className={styles.error} role="alert">
             {error}
           </p>
+        ) : null}
+        {fallbackUrl && link && binder.forTrade ? (
+          <LinkFallback url={fallbackUrl} label="Trade link" />
         ) : null}
       </div>
     </div>
