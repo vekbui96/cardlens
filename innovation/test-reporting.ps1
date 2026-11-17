@@ -98,6 +98,18 @@ Test-Sums $d2 'no markers'
 $null = Publish-LoopRunData -TranscriptPath $noMark -Repo 'o/r' -GhExe 'gh-not-called' -RunId 'nm' -Mode 'FULL' -OutDir $tmp -NoPost
 Check ((Test-Path (Join-Path $tmp 'run-nm.rundata-4.md')) -and (Test-Path (Join-Path $tmp 'run-nm.rundata-5.md')) -and (Test-Path (Join-Path $tmp 'run-nm.rundata-9.md'))) 'publish -NoPost wrote bodies for #4, #5 and proposal #9'
 Check (Test-Path (Join-Path $tmp 'run-nm.rundata.json')) 'publish wrote the json summary'
+Check (-not ([IO.File]::ReadAllText((Join-Path $tmp 'run-nm.rundata-4.md')) -match 'waiting on')) 'no -Waiting: no waiting line'
+
+# "Failed, waiting on Ve" (failed issues no longer take a proposal slot, so every run-data comment lists them)
+$wl = 'Failed, waiting on Ve: #33 (tests: tests or CI still failed after the fix rounds).'
+$cw = Format-RunDataComment -Data $d -Issue 4 -Part $d.Parts[0] -RunId 'RW' -Mode 'FULL' -Trigger 'x' -Waiting $wl
+Check ($cw.Contains($wl) -and $cw.IndexOf($wl) -lt $cw.IndexOf('<sub>Cost')) 'issue comment carries the waiting line above the cost note'
+$cwp = Format-RunDataProposalComment -Data $d -RunId 'RW' -Mode 'FULL' -Trigger 'x' -Waiting $wl
+Check ($cwp.Contains("<sub>$wl</sub>")) 'proposal footer carries the waiting line'
+Check (-not (Format-RunDataProposalComment -Data $d -RunId 'RW' -Mode 'FULL' -Trigger 'x').Contains('waiting on')) 'proposal footer without -Waiting has no waiting line'
+$null = Publish-LoopRunData -TranscriptPath $noMark -Repo 'o/r' -GhExe 'gh-not-called' -RunId 'nw' -Mode 'FULL' -OutDir $tmp -NoPost -Waiting $wl
+Check (([IO.File]::ReadAllText((Join-Path $tmp 'run-nw.rundata-4.md'))).Contains($wl) -and ([IO.File]::ReadAllText((Join-Path $tmp 'run-nw.rundata-9.md'))).Contains($wl)) 'publish passes the waiting line to issue comments and proposal footers'
+Check ((([IO.File]::ReadAllText((Join-Path $tmp 'run-nw.rundata.json'))) | ConvertFrom-Json).waitingOnVe -eq $wl) 'the run-data json records it too'
 
 # killed run: no result line, #5 never ended
 $killed = Join-Path $tmp 'killed.jsonl'

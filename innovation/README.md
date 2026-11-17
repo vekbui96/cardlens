@@ -38,9 +38,33 @@ session (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs` PreToolUse
    **At most one server deploy per run**: an issue that needs the server waits for the next run if one
    already went out. A second build also will not merge with under 45 minutes left: it comments, marks
    the issue `loop:failed` and leaves the PR open for you.
-2. **Phase B (propose).** If fewer than 5 proposals are open, it reads [`FOCUS.md`](FOCUS.md) (below),
-   the docs (`handoff.md`, the plans), the code and the live site and opens up to 3 new `loop:proposal`
-   issues.
+2. **Phase B (propose).** If fewer than 5 proposals await your review, it reads [`FOCUS.md`](FOCUS.md)
+   (below), the docs (`handoff.md`, the plans), the code and the live site and opens up to 3 new
+   `loop:proposal` issues.
+
+**Proposal slots (one rule everywhere).** A proposal holds one of the 5 slots while it awaits your review:
+open, `loop:proposal`, and neither `approved` nor `loop:failed`. Approved work is your build queue and does
+not block new ideas; failed issues are listed instead (below). The loop (`check-approval.ps1 -Slots`,
+`gate-rules.ps1 Get-ProposalSlots`) and the approval watcher's refill trigger count the same way.
+
+**No-op runs cost nothing.** Before it starts claude, `run-loop.ps1` asks `check-approval.ps1 -List` for
+the queue. When nothing approved is buildable (FULL mode) and no proposal slot is free, it logs `precheck:
+launch=False (...)`, writes a summary ending `LOOP-RESULT: NOTHING-TO-DO` and `run-<id>.rundata.json`
+(cost 0), and exits 0 without a session. If that check fails, the run starts claude as before.
+
+**Failed builds: one automatic retry, and never silent.** Every failure comment carries a hidden failure
+marker with a class (LOOP.md section 3, "Failure classes"). When the cause was outside the change (CI
+infrastructure, CI timeout, the live-server gap refusal, the elevated task or its lock unavailable, running
+out of time, the run's time or turn limit), the next run builds it ONCE more: it swaps `loop:failed` for
+`loop:retried`, continues the open PR if there is one, and a second failure waits for you. A failure caused
+by the change (tests still failing after the fix rounds, a refusal of the PR's own diff, out of scope, a
+rolled-back deploy) is never retried automatically. If the session is killed mid-build (time limit, turn
+limit), the runner marks the issue `loop:failed` itself (class `timeout` / `max-turns`, retried once;
+anything already merged in that run is `session-ended` and waits for you). Failed issues no longer take a
+proposal slot, so the run summary and every Run data comment end with `Failed, waiting on Ve: #n
+(reason)`. Failures from before this rule have no marker and are never retried automatically. To build
+one again yourself: remove `loop:failed` (and `loop:retried`) and, if the body changed, remove and re-add
+`approved`.
 
 ## Steering with FOCUS.md
 
@@ -121,6 +145,7 @@ as before. It steers proposals only; it never widens what the loop may build or 
 | `loop:in-progress`    | being built right now                        |
 | `loop:deployed`       | shipped, verified live, closed               |
 | `loop:failed`         | failed or rolled back; read the comments     |
+| `loop:retried`        | its one automatic retry was used             |
 | `loop:product-review` | the weekly product review; never built       |
 | `device-feedback`     | your report from the device (issue template) |
 

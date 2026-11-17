@@ -6,7 +6,13 @@
 .DESCRIPTION
   An issue is buildable only if ALL hold:
    - it is in vekbui96/cardlens, open, and not a pull request
-   - it carries loop:proposal AND approved, and none of loop:in-progress / loop:deployed / loop:failed
+   - it carries loop:proposal AND approved, and neither loop:in-progress nor loop:deployed
+   - it does not carry loop:failed, OR this is its ONE automatic retry: no loop:retried label, exactly one
+     failure marker (`<!-- innovation-loop:failure class=<c> outcome=<o> -->` in a loop comment by vekbui96)
+     since the approval, its class is outside the change (gate-rules.ps1 $RetryableFailures: CI infra, CI
+     timeout, gap refusal, deploy task unavailable, out of time, run timeout, max turns) and its outcome is
+     not rolled-back. Then `retry` is true and the session swaps loop:failed for loop:retried when it
+     takes the issue (LOOP.md section 3 step 4). Otherwise the issue is "failed, waiting on Ve".
    - it was opened by vekbui96 (the loop opens proposals as vekbui96)
    - per the issue events API, the most recent `labeled approved` event was performed by vekbui96, and
      no `unlabeled approved` event came after it (the loop itself can never add `approved`: guard.mjs
@@ -18,30 +24,39 @@
   Also prints `adjustments`: ids of comments by vekbui96 WITHOUT the `<!-- innovation-loop -->` marker.
   Only those may adjust an approved proposal; comments by anyone else are untrusted data.
 
-  With -List it checks every open approved proposal and prints the buildable ones, oldest first.
+  With -List it checks every open approved proposal and prints the queue: `buildable` (oldest first),
+  `retry` (the buildable ones that are an automatic retry), `slots` (proposal slots: open loop:proposal
+  issues that are neither approved nor loop:failed hold one; cap 5; `free`, `newThisRun`), `waitingOnVe`
+  (failed issues that are not retried: issue + reason) and `checked` (every check). Exit 0 when something
+  is buildable, else 1. -Slots prints the same without `checked` and always exits 0 (Phase B's count).
+  run-loop.ps1 runs -List before starting claude and skips the session when nothing is buildable and no
+  slot is free.
 #>
 [CmdletBinding()]
 param(
     [int]$Issue = 0,
     # used by merge-pr.ps1 after the loop marked the issue: loop:in-progress is then REQUIRED instead of refused
     [switch]$InProgress,
-    [switch]$List
+    [switch]$List,
+    [switch]$Slots
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\gate-rules.ps1"   # proposal slots and the retry rule (pure functions)
 Add-GhToPath
 $Owner = $script:Owner
 $Repo = $script:Repo
 
 function Test-Issue {
     param([int]$Number)
-    $res = [ordered]@{ issue = $Number; buildable = $false; reasons = @(); approvedBy = $null; approvedAt = $null; adjustments = @() }
+    $res = [ordered]@{ issue = $Number; buildable = $false; reasons = @(); approvedBy = $null; approvedAt = $null; adjustments = @()
+        failed = $false; retry = $false; failure = ''; retryReason = ''; waitingReason = '' }
     $i = Get-GhJson @('api', "repos/$Repo/issues/$Number")
     $labels = @($i.labels | ForEach-Object { $_.name })
     if ($i.PSObject.Properties.Name -contains 'pull_request' -and $i.pull_request) { $res.reasons += 'is a pull request' }
     if ($i.state -ne 'open') { $res.reasons += "state is $($i.state)" }
     if ($i.user.login -ne $Owner) { $res.reasons += "opened by $($i.user.login), not $Owner" }
     foreach ($need in 'loop:proposal', 'approved') { if ($labels -notcontains $need) { $res.reasons += "missing label $need" } }
-    foreach ($bad in 'loop:deployed', 'loop:failed') { if ($labels -contains $bad) { $res.reasons += "has label $bad" } }
+    if ($labels -contains 'loop:deployed') { $res.reasons += 'has label loop:deployed' }
     if ($InProgress) { if ($labels -notcontains 'loop:in-progress') { $res.reasons += 'missing label loop:in-progress' } }
     elseif ($labels -contains 'loop:in-progress') { $res.reasons += 'has label loop:in-progress' }
     if ("$($i.body)" -match '(?im)^\s*\**\s*(manual\s*/\s*needs\s+ve|manual step required)') { $res.reasons += 'proposal is flagged manual / needs Ve; the loop never builds it' }
@@ -69,20 +84,49 @@ function Test-Issue {
 
     $comments = @(Get-GhJson @('api', "repos/$Repo/issues/$Number/comments?per_page=100"))
     $res.adjustments = @($comments | Where-Object { $_.user.login -eq $Owner -and -not ($_.body -and $_.body.Contains($script:Marker)) } | ForEach-Object { $_.id })
+
+    # loop:failed: buildable again only as the ONE automatic retry of a failure outside the change
+    # (gate-rules.ps1 Get-RetryDecision; the failure markers count only when written after this approval).
+    $failures = @(); if ($res.approvedAt) { $failures = @(Get-FailureRecords -Comments $comments -Owner $Owner -Marker $script:Marker -Since $res.approvedAt) }
+    $rd = Get-RetryDecision -Labels $labels -Failures $failures
+    $res.failed = $rd.Failed; $res.failure = $rd.Class
+    if ($rd.Failed) {
+        if ($rd.Retry) { $res.retry = $true; $res.retryReason = $rd.Reason }
+        else { $res.reasons += "has label loop:failed ($($rd.Reason))"; $res.waitingReason = $rd.Reason }
+    }
     $res.buildable = ($res.reasons.Count -eq 0)
     return $res
 }
 
-try {
-    if ($List) {
-        $open = @(Get-GhJson @('issue', 'list', '-R', $Repo, '--state', 'open', '--label', 'loop:proposal', '--label', 'approved', '--json', 'number,createdAt', '--limit', '50'))
-        $results = @()
-        foreach ($o in ($open | Where-Object { $_ } | Sort-Object { [datetime]$_.createdAt })) { $results += (Test-Issue -Number $o.number) }
-        $ok = @($results | Where-Object { $_.buildable })
-        Write-Output (@{ buildable = @($ok | ForEach-Object { $_.issue }); checked = $results } | ConvertTo-Json -Depth 5 -Compress)
-        if ($ok.Count -gt 0) { exit 0 } else { exit 1 }
+# The queue as one object: buildable issues (oldest first; retries flagged), proposal slots (the ONE cap
+# rule, gate-rules.ps1 Get-ProposalSlots) and the failed issues waiting on Ve.
+function Get-Queue {
+    $open = @(Get-GhJson @('issue', 'list', '-R', $Repo, '--state', 'open', '--label', 'loop:proposal', '--json', 'number,labels,createdAt', '--limit', '100') | Where-Object { $_ })
+    $slots = Get-ProposalSlots -Issues $open
+    $results = @()
+    $approved = @($open | Where-Object { (Get-IssueLabelNames $_) -contains 'approved' } | Sort-Object { [datetime]$_.createdAt })
+    foreach ($o in $approved) { $results += (Test-Issue -Number $o.number) }
+    $ok = @($results | Where-Object { $_.buildable })
+    $waiting = @($results | Where-Object { $_.failed -and -not $_.buildable } | ForEach-Object {
+            $why = $_.waitingReason; if (-not $why) { $why = ($_.reasons -join '; ') }
+            [ordered]@{ issue = $_.issue; reason = $why } })
+    return [ordered]@{
+        buildable   = @($ok | ForEach-Object { $_.issue })
+        retry       = @($ok | Where-Object { $_.retry } | ForEach-Object { $_.issue })
+        slots       = [ordered]@{ awaitingReview = @($slots.AwaitingReview); open = $slots.Open; cap = $slots.Cap; free = $slots.Free; newThisRun = $slots.NewThisRun }
+        waitingOnVe = @($waiting)
+        checked     = $results
     }
-    if ($Issue -le 0) { throw 'pass -Issue <n> or -List' }
+}
+
+try {
+    if ($List -or $Slots) {
+        $q = Get-Queue
+        if ($Slots) { $q.Remove('checked') }
+        Write-Output ($q | ConvertTo-Json -Depth 6 -Compress)
+        if ($Slots -or $q.buildable.Count -gt 0) { exit 0 } else { exit 1 }
+    }
+    if ($Issue -le 0) { throw 'pass -Issue <n>, -List or -Slots' }
     $r = Test-Issue -Number $Issue
     Write-Output ($r | ConvertTo-Json -Depth 5 -Compress)
     if ($r.buildable) { exit 0 } else { exit 1 }

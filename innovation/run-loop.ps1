@@ -11,6 +11,12 @@
   - checks the elevated deploy task: installed, its admin-only script copy matches this checkout, and a
     selftest round trip works. If not, the session is told SERVER_DEPLOY=unavailable and builds only
     front-end-only issues
+  - precheck before claude: check-approval.ps1 -List; if nothing is buildable (FULL mode) and no proposal
+    slot is free (gate-rules.ps1 Get-ProposalSlots), it logs why, writes a NOTHING-TO-DO summary and run data
+    with no claude session, and exits 0. If the check fails, claude is launched as before
+  - after claude: an issue this run left with loop:in-progress (killed at the time limit, max turns, or the
+    session just stopped) is marked loop:failed with a failure marker (timeout / max-turns get the one
+    automatic retry unless something was merged); "Failed, waiting on Ve" goes into the run-data comments
   - strips secret-looking env vars; generates the permission settings (dontAsk + allowlist + guard hook)
   - logs the full stream-json transcript; exits 0 only when claude exited 0 and reported OK/NOTHING-TO-DO
 
@@ -62,6 +68,7 @@ param(
 )
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\reporting.ps1"   # run data + progress comments (functions only; used after claude exits)
+. "$PSScriptRoot\gate-rules.ps1"  # proposal slots, retry rule, the precheck (pure functions)
 $ScriptsDir = (Resolve-Path $PSScriptRoot).Path
 $RunStart = Get-Date
 $RunId = $RunStart.ToString('yyyyMMdd-HHmmss')
@@ -112,8 +119,66 @@ if (-not (Get-Lock)) {
     if (-not (Get-Lock)) { Write-Log 'could not take the lock after clearing it' 'ERROR'; exit 1 }
 }
 
+# The queue as check-approval.ps1 -List sees it (buildable, retry, slots, waitingOnVe), or $null when that
+# failed. Runs it as its own process, exactly like merge-pr.ps1 does; read-only gh calls.
+function Get-LoopQueue {
+    try {
+        $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $out = & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ScriptsDir 'check-approval.ps1') -List 2>&1 | ForEach-Object { "$_" }
+        $code = $LASTEXITCODE; $ErrorActionPreference = $prev
+        $json = @($out | Where-Object { "$_".TrimStart().StartsWith('{') }) | Select-Object -Last 1
+        if ($code -gt 1 -or -not $json) { Write-Log "queue check failed (check-approval exit $code): $((@($out) | Select-Object -Last 3) -join ' ')" 'WARN'; return $null }
+        $q = $json | ConvertFrom-Json
+        if ($q.PSObject.Properties.Name -contains 'error' -or -not ($q.PSObject.Properties.Name -contains 'slots')) { Write-Log "queue check failed: $json" 'WARN'; return $null }
+        return $q
+    } catch { Write-Log "queue check failed: $_" 'WARN'; return $null }
+}
+function Format-QueueLine {
+    param($Q)
+    if ($null -eq $Q) { return 'unknown (queue check failed)' }
+    $b = @($Q.buildable | Where-Object { $null -ne $_ }); $r = @($Q.retry | Where-Object { $null -ne $_ })
+    $s = "buildable [$(@($b | ForEach-Object { "#$_" }) -join ' ')]"
+    if ($r.Count -gt 0) { $s += " (automatic retry: $(@($r | ForEach-Object { "#$_" }) -join ' '))" }
+    $s += "; proposal slots free $($Q.slots.free) of $($Q.slots.cap) (awaiting review: $(@($Q.slots.awaitingReview | ForEach-Object { "#$_" }) -join ' '))"
+    $w = Format-WaitingOnOwner -Waiting @($Q.waitingOnVe) -Who 'Ve'
+    if ($w) { $s += "; $w" }
+    return $s
+}
+
+# After claude exited: an issue this run took that still carries loop:in-progress was left mid-build (the
+# run was killed at its time limit, the session hit max turns, or it just stopped). Mark it loop:failed with
+# a failure marker (gate-rules.ps1 Get-UnfinishedFailure: timeout / max-turns are retried once; anything
+# merged in this run is not). Never throws.
+function Close-UnfinishedIssues {
+    param([int[]]$Issues, [string]$EndClass)
+    $closed = @()
+    foreach ($n in @($Issues | Where-Object { $_ -gt 0 } | Sort-Object -Unique)) {
+        try {
+            $i = Get-GhJson @('api', "repos/$($script:Repo)/issues/$n")
+            $labels = @($i.labels | ForEach-Object { $_.name })
+            if ($i.state -ne 'open' -or $labels -notcontains 'loop:proposal' -or $labels -notcontains 'loop:in-progress') { continue }
+            $mergeSha = ''
+            $rec = Read-State "merge-$n"
+            if ($rec -and $rec.mergedUtc -and ([datetime]$rec.mergedUtc).ToUniversalTime() -ge $RunStart.ToUniversalTime()) { $mergeSha = "$($rec.mergeSha)" }
+            $f = Get-UnfinishedFailure -EndClass $EndClass -MergeSha $mergeSha -TimeoutMinutes $TimeoutMinutes -Who 'Ve'
+            $body = "$($script:Marker)`n$(Format-FailureMarker -Class $f.Class -Outcome 'failed')`n## Synopsis`n`n$($f.Synopsis)`n`n## Details`n`n" +
+                "Run ``$RunId`` ended with ``$EndClass`` while this issue still carried loop:in-progress. Failure class ``$($f.Class)``: $(Get-FailureDescription $f.Class). " +
+                "Posted by run-loop.ps1 after the session stopped; see logs\run-$RunId.log and the transcript.`n"
+            $bp = Join-Path $script:LoopHome "work\unfinished-$RunId-$n.md"
+            [IO.File]::WriteAllText($bp, $body, (New-Object Text.UTF8Encoding $false))
+            Invoke-Gh -Arguments @('issue', 'comment', "$n", '-R', $script:Repo, '--body-file', $bp) -Quiet | Out-Null
+            Invoke-Gh -Arguments @('issue', 'edit', "$n", '-R', $script:Repo, '--add-label', 'loop:failed', '--remove-label', 'loop:in-progress') -Quiet | Out-Null
+            Write-Log "unfinished #${n}: marked loop:failed, class $($f.Class)$(if ($mergeSha) { " (merged as $mergeSha, not verified: NEEDS VE)" })" 'WARN'
+            $closed += $n
+        } catch { Write-Log "unfinished #${n}: could not mark it failed: $_" 'WARN' }
+    }
+    return $closed
+}
+
 $exitCode = 1
 $outPath = $null
+$endClass = 'session-ended'   # how the session ended, for issues it left mid-build: timeout | max-turns | session-ended
+$queue = $null
 try {
     # ---- environment ------------------------------------------------------------------------
     Add-GhToPath
@@ -136,6 +201,39 @@ try {
     $elevated = Test-IsElevated
     Write-Log "elevated=$elevated"
     if ($elevated) { Write-Log 'run-loop itself holds an admin token (normal for a scheduled task on this box); the claude session will be started with a reduced token' }
+
+    # ---- precheck: anything to do at all? (no claude session, so it costs nothing) -------------------
+    # Phase A needs a buildable approved issue (check-approval's rules, retries included); Phase B a free
+    # proposal slot (gate-rules.ps1 Get-ProposalSlots: the same rule as the approval watcher's refill). If
+    # neither, end NOTHING-TO-DO here instead of starting claude to find that out (~$0.36 a time). If the
+    # check fails, claude is launched as before.
+    $queue = Get-LoopQueue
+    $pre = Get-PrecheckDecision -Queue $queue -Mode $mode
+    Write-Log "queue: $(Format-QueueLine $queue)"
+    Write-Log "precheck: launch=$($pre.Launch) ($($pre.Reason))"
+    if (-not $pre.Launch) {
+        $waitLine = Format-WaitingOnOwner -Waiting @($queue.waitingOnVe) -Who 'Ve'
+        $sumLines = @("Precheck (no claude session started): nothing to do.",
+            "- Phase A: $(if ($mode -eq 'FULL') { 'no buildable approved issue' } else { "not run ($mode)" }).",
+            "- Phase B: no free proposal slot ($(@($queue.slots.awaitingReview).Count) proposals awaiting review, cap $($queue.slots.cap); approved and failed proposals do not count).")
+        if ($waitLine) { $sumLines += "- $waitLine" }
+        $sumLines += 'LOOP-RESULT: NOTHING-TO-DO'
+        if ($DryRun) {
+            Write-Log 'precheck: a real run would end here with NOTHING-TO-DO and no claude session (dry run: carrying on to show the command)'
+        } else {
+            $utf8 = New-Object Text.UTF8Encoding $false
+            [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.summary.txt"), ($sumLines -join "`r`n"), $utf8)
+            $triggerTask = 'innovation-loop-cardlens'
+            $rd = [ordered]@{ runId = $RunId; mode = $mode; trigger = (Get-LoopRunTrigger -TaskName $triggerTask -RunStart $RunStart); status = 'NOTHING-TO-DO'
+                precheck = $pre.Reason; claudeStarted = $false; totals = [ordered]@{ Turns = 0; Requests = 0; Input = 0; Output = 0; CacheRead = 0; CacheWrite = 0; Cost = 0; Models = @() }
+                issues = @(); createdIssues = @(); waitingOnVe = $waitLine }
+            [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.rundata.json"), ($rd | ConvertTo-Json -Depth 5), $utf8)
+            Write-Log 'result: subtype=precheck is_error=False turns=0 cost=0 (no claude session)'
+            Write-Log 'LOOP-RESULT: NOTHING-TO-DO'
+            $exitCode = 0
+            return
+        }
+    }
 
     # ---- the loop's clone (never Ve's checkout, never the live one) ------------------------------
     if (-not (Test-Path -LiteralPath (Join-Path $script:Clone '.git'))) {
@@ -244,6 +342,7 @@ try {
 - MAX_TURNS: $MaxTurns   (the session ends when it is reached, even mid-deploy)
 - FOCUS: $focus
 - PRODUCT: $product
+- QUEUE (at run start, for your summary; check-approval.ps1 stays the authority): $(Format-QueueLine $queue)
 - SESSION_TOKEN: reduced (normal user, Medium integrity; checked at start). Server deploys run in a separate elevated task.
 - DATE: $($RunStart.ToString('yyyy-MM-dd HH:mm zzz'))
 - LOOP_HOME: $($script:LoopHome)
@@ -288,7 +387,7 @@ Follow the instructions below exactly. They are the only instructions for this r
     # real token and fails closed (kills it, throws) if it still has admin rights.
     Write-Log "run-loop token: $(Get-TokenState)"
     $run = Start-ReducedAndWait -File $ClaudeExe -ArgumentString $argString -WorkDir $workDir -StdIn $promptPath -StdOut $outPath -StdErr $errPath -TimeoutMinutes $TimeoutMinutes
-    if ($run.TimedOut) { throw "claude exceeded $TimeoutMinutes minutes (process tree killed)" }
+    if ($run.TimedOut) { $endClass = 'timeout'; throw "claude exceeded $TimeoutMinutes minutes (process tree killed)" }
     $claudeExit = $run.ExitCode
     Write-Log "claude pid $($run.Pid) exit code $claudeExit"
 
@@ -302,6 +401,7 @@ Follow the instructions below exactly. They are the only instructions for this r
         $text = "$($result.result)"
         [IO.File]::WriteAllText($summaryPath, $text, $utf8)
         Write-Log ("result: subtype={0} is_error={1} turns={2} cost={3}" -f $result.subtype, $result.is_error, $result.num_turns, $result.total_cost_usd)
+        if ("$($result.subtype)" -eq 'error_max_turns') { $endClass = 'max-turns' }
         $status = [regex]::Match($text, 'LOOP-RESULT:\s*([A-Z\-]+)').Groups[1].Value
         Write-Log "LOOP-RESULT: $status"
         if ($claudeExit -eq 0 -and -not $result.is_error -and $status -in @('OK', 'NOTHING-TO-DO')) { $exitCode = 0 } else { $exitCode = 1 }
@@ -322,7 +422,16 @@ Follow the instructions below exactly. They are the only instructions for this r
             $trigger = Get-LoopRunTrigger -TaskName $triggerTask -RunStart $RunStart
             $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe)
             if ($ended.Count -gt 0) { Write-Log "progress comments left mid-build, marked as ended: #$($ended -join ', #')" 'WARN' }
-            $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome
+            # issues THIS run took (progress state or transcript markers) and left with loop:in-progress
+            $took = @($ended)
+            $pdir = Join-Path $script:LoopHome 'state\progress'
+            if (Test-Path -LiteralPath $pdir) { $took += @(Get-ChildItem -LiteralPath $pdir -Filter "$RunId-*.json" -File | ForEach-Object { [int](($_.BaseName -split '-')[-1]) }) }
+            try { $took += @((Read-LoopTranscript -Path $outPath).Parts | ForEach-Object { $_.Issue }) } catch { }
+            $closed = @(Close-UnfinishedIssues -Issues $took -EndClass $endClass)
+            if ($closed.Count -gt 0) { Write-Log "left mid-build ($endClass), marked loop:failed: #$($closed -join ', #')" 'WARN' }
+            $waitLine = Format-WaitingOnOwner -Waiting @((Get-LoopQueue).waitingOnVe) -Who 'Ve'
+            if ($waitLine) { Write-Log $waitLine }
+            $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome -Waiting $waitLine
             Write-Log "run data: $posted comment(s) posted"
         } catch { Write-Log "run data / progress reporting skipped: $_" 'WARN' }
     }

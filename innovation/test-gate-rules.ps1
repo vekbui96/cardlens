@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
   Unit tests for gate-rules.ps1: the CI verdict merge-pr.ps1 merges on, the one-rerun rule for known-flaky
-  e2e specs, and the live-server gap rule. No network, no git.
+  e2e specs, the live-server gap rule, and the queue rules (proposal slots, failure markers and the one
+  automatic retry, the precheck before claude, issues left mid-build). No network, no git.
   powershell -ExecutionPolicy Bypass -File innovation\test-gate-rules.ps1
 #>
 $ErrorActionPreference = 'Stop'
@@ -108,6 +109,81 @@ Check (-not (Test-LiveAffectingPath 'e2e/v2/home.spec.ts' $sp)) 'not live-affect
 Check (-not (Test-LiveAffectingPath 'serverless/x.ts' $sp)) 'not live-affecting: prefix match is per path segment'
 $s = Split-ProtectedByLiveImpact -Protected @('innovation/lib.ps1', '.github/workflows/ci.yml', 'server/binderStore.ts') -ServerPaths $sp
 Check ($s.Block.Count -eq 1 -and $s.Block[0] -eq 'server/binderStore.ts' -and $s.Inert.Count -eq 2) 'elevated split: only the server-run protected path blocks'
+
+# ---- proposal slots: the ONE cap rule (loop + watcher) -----------------------------------------------
+function Iss { param([int]$N, [string[]]$L) [pscustomobject]@{ number = $N; labels = @($L | ForEach-Object { [pscustomobject]@{ name = $_ } }) } }
+$open5 = @((Iss 33 'loop:proposal', 'approved', 'loop:failed'), (Iss 45 'loop:proposal'), (Iss 50 'loop:proposal', 'approved', 'loop:in-progress'),
+    (Iss 57 'loop:proposal', 'area:x'), (Iss 59 'loop:proposal'))
+$s = Get-ProposalSlots -Issues $open5
+Check (($s.AwaitingReview -join ',') -eq '45,57,59' -and $s.Free -eq 2 -and $s.Open -eq 5 -and $s.NewThisRun -eq 2) "approved and failed do not hold slots (got awaiting $($s.AwaitingReview -join ','), free $($s.Free))"
+$s = Get-ProposalSlots -Issues @(1..5 | ForEach-Object { Iss $_ 'loop:proposal' })
+Check ($s.Free -eq 0 -and $s.NewThisRun -eq 0) '5 awaiting review -> no slot'
+$s = Get-ProposalSlots -Issues @(1..7 | ForEach-Object { Iss $_ 'loop:proposal' })
+Check ($s.Free -eq 0) 'over the cap -> free 0, never negative'
+$s = Get-ProposalSlots -Issues @()
+Check ($s.Free -eq 5 -and $s.NewThisRun -eq 3) 'none open -> 5 free, at most 3 new per run'
+$s = Get-ProposalSlots -Issues @((Iss 1 'loop:product-review'), (Iss 2 'loop:proposal', 'loop:failed'))
+Check ($s.Free -eq 5 -and $s.Open -eq 1) 'only loop:proposal issues count; a failed one (even unapproved) holds no slot'
+$s = Get-ProposalSlots -Issues @([pscustomobject]@{ number = 9; labels = @('loop:proposal') })
+Check ($s.AwaitingReview -contains 9) 'labels as plain strings work too'
+
+# ---- failure markers + the one automatic retry ------------------------------------------------------
+$appr = '2026-11-16T10:00:00Z'
+function Cm { param([string]$Body, [string]$At, [string]$By = 'vekbui96', [long]$Id = 1) [pscustomobject]@{ id = $Id; body = $Body; created_at = $At; user = [pscustomobject]@{ login = $By } } }
+$mk = '<!-- innovation-loop -->'
+Check ((Format-FailureMarker 'ci-infra' 'failed') -eq '<!-- innovation-loop:failure class=ci-infra outcome=failed -->') 'marker format'
+Check ((Format-FailureMarker 'made-up' 'weird') -eq '<!-- innovation-loop:failure class=other outcome=failed -->') 'unknown class/outcome normalised'
+$cs = @((Cm "$mk`n$(Format-FailureMarker 'tests')`n## Synopsis" '2026-11-15T10:00:00Z' -Id 1),   # before the approval: ignored
+    (Cm "$mk`n$(Format-FailureMarker 'gap-refused')`n## Synopsis" '2026-11-16T12:00:00Z' -Id 2),
+    (Cm "$(Format-FailureMarker 'ci-infra')`nno loop marker" '2026-11-16T12:30:00Z' -Id 3),       # no loop marker: ignored
+    (Cm "$mk`n$(Format-FailureMarker 'ci-infra')" '2026-11-16T13:00:00Z' -By 'someone' -Id 4))   # not the owner: ignored
+$fr = @(Get-FailureRecords -Comments $cs -Owner 'vekbui96' -Marker $mk -Since $appr)
+Check ($fr.Count -eq 1 -and $fr[0].Class -eq 'gap-refused' -and $fr[0].Outcome -eq 'failed') "only the owner's loop comments after the approval count (got $($fr.Count): $(@($fr | ForEach-Object { $_.Class }) -join ','))"
+function Fr { param([string]$Class, [string]$Outcome = 'failed') [pscustomobject]@{ Class = $Class; Outcome = $Outcome } }
+$L = @('loop:proposal', 'approved', 'loop:failed')
+foreach ($c in 'ci-infra', 'ci-timeout', 'gap-refused', 'deploy-unavailable', 'out-of-time', 'timeout', 'max-turns') {
+    $d = Get-RetryDecision -Labels $L -Failures @(Fr $c)
+    Check ($d.Retry -and $d.Failed -and $d.Class -eq $c) "$c (outside the change) -> one retry"
+}
+foreach ($c in 'tests', 'guard-refused', 'scope', 'deploy-failed', 'session-ended', 'other', 'unknown-x') {
+    $d = Get-RetryDecision -Labels $L -Failures @(Fr $c)
+    Check (-not $d.Retry -and $d.Reason -match [regex]::Escape($c)) "$c (the change / unknown) -> not retried, reason names it ($($d.Reason))"
+}
+$d = Get-RetryDecision -Labels $L -Failures @(Fr 'ci-infra' 'rolled-back')
+Check (-not $d.Retry -and $d.Reason -match 'rolled back') 'retryable class but rolled back -> not retried'
+$d = Get-RetryDecision -Labels ($L + 'loop:retried') -Failures @(Fr 'ci-infra')
+Check (-not $d.Retry -and $d.Reason -match 'after the one automatic retry') 'loop:retried -> never a second retry'
+$d = Get-RetryDecision -Labels $L -Failures @((Fr 'ci-infra'), (Fr 'ci-timeout'))
+Check (-not $d.Retry -and $d.Reason -match 'failed 2 times') 'two failures since the approval (retried without the label) -> not retried'
+$d = Get-RetryDecision -Labels $L -Failures @()
+Check (-not $d.Retry -and $d.Reason -match 'not classified') 'no marker (older failure, or the session forgot) -> not retried'
+$d = Get-RetryDecision -Labels @('loop:proposal', 'approved') -Failures @(Fr 'ci-infra')
+Check (-not $d.Failed -and -not $d.Retry -and $d.Reason -eq '') 'not loop:failed -> no retry decision at all (e.g. during the retry itself)'
+
+# ---- precheck before claude -------------------------------------------------------------------------
+function Q { param([int[]]$B, [int]$Free, [int[]]$Aw = @()) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 5; awaitingReview = @($Aw) }; waitingOnVe = @() } }
+$p = Get-PrecheckDecision -Queue (Q @() 0 @(1, 2, 3, 4, 5)) -Mode 'FULL'
+Check (-not $p.Launch -and $p.Reason -match '0 buildable' -and $p.Reason -match '0 free proposal slot') "nothing buildable, no slot -> skip ($($p.Reason))"
+Check ((Get-PrecheckDecision -Queue (Q @(33) 0) -Mode 'FULL').Launch) 'a buildable issue (e.g. a retry) -> launch'
+Check ((Get-PrecheckDecision -Queue (Q @() 2) -Mode 'FULL').Launch) 'a free slot -> launch'
+Check (-not (Get-PrecheckDecision -Queue (Q @(33) 0) -Mode 'PROPOSE_ONLY').Launch) 'PROPOSE_ONLY ignores buildable issues: no slot -> skip'
+Check ((Get-PrecheckDecision -Queue (Q @() 1) -Mode 'PROPOSE_ONLY').Launch) 'PROPOSE_ONLY with a slot -> launch'
+Check ((Get-PrecheckDecision -Queue (Q @() 0) -Mode 'PRODUCT_REVIEW').Launch) 'product review always launches'
+$p = Get-PrecheckDecision -Queue $null -Mode 'FULL'
+Check ($p.Launch -and $p.Reason -match 'queue check failed') 'gh failed -> launch as before'
+Check ((Format-WaitingOnOwner @() 'Ve') -eq '') 'nothing waiting -> empty line'
+$w = Format-WaitingOnOwner @([pscustomobject]@{ issue = 33; reason = 'tests: x' }, [pscustomobject]@{ issue = 40; reason = 'scope: y' }) 'Ve'
+Check ($w -eq 'Failed, waiting on Ve: #33 (tests: x); #40 (scope: y).') "waiting line ($w)"
+
+# ---- an issue left mid-build when the session stopped ----------------------------------------------
+$u = Get-UnfinishedFailure -EndClass 'timeout' -TimeoutMinutes 240 -Who 'Ve'
+Check ($u.Class -eq 'timeout' -and $u.Synopsis -match '240-minute' -and $u.Synopsis -match 'retries it once') 'killed at the time limit, nothing merged -> timeout (retryable)'
+$u = Get-UnfinishedFailure -EndClass 'max-turns'
+Check ($u.Class -eq 'max-turns') 'turn limit -> max-turns (retryable)'
+$u = Get-UnfinishedFailure -EndClass 'timeout' -MergeSha 'abc1234' -Who 'Ve'
+Check ($u.Class -eq 'session-ended' -and $u.Synopsis -match 'abc1234' -and $u.Synopsis -match 'needs Ve') 'merged in this run but not verified -> session-ended (never retried)'
+$u = Get-UnfinishedFailure -EndClass 'session-ended'
+Check ($u.Class -eq 'session-ended' -and -not (Get-RetryDecision -Labels $L -Failures @(Fr $u.Class)).Retry) 'session just stopped -> not retried'
 
 if ($script:fail -gt 0) { Write-Host "TEST-GATE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-GATE-RULES PASS ($script:pass checks)"
