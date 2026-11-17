@@ -26,6 +26,8 @@ import {
 } from "../services/sync/collectionSync.ts";
 import { BinderSyncClient } from "../services/sync/binderSync.ts";
 import { SyncNotFoundError } from "../services/sync/http.ts";
+import { track } from "../services/metrics.ts";
+import { syncFailureMetric } from "../services/sync/syncMetric.ts";
 import { pendingBinders } from "../storage/binders.ts";
 import type { Binder } from "../models/binderLayout.ts";
 
@@ -168,8 +170,21 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [storageDegraded, setStorageDegraded] = useState(false);
   const [binders, setBinders] = useState<Binder[]>(() => repo.getBinders());
 
-  const saveBinder = useCallback((binder: Binder) => setBinders(repo.saveBinder(binder)), [repo]);
-  const deleteBinder = useCallback((id: string) => setBinders(repo.deleteBinder(id)), [repo]);
+  const saveBinder = useCallback(
+    (binder: Binder) => {
+      const isNew = !repo.getBinders().some((b) => b.id === binder.id);
+      setBinders(repo.saveBinder(binder));
+      track(isNew ? "binder.created" : "binder.edited");
+    },
+    [repo],
+  );
+  const deleteBinder = useCallback(
+    (id: string) => {
+      setBinders(repo.deleteBinder(id));
+      track("binder.deleted");
+    },
+    [repo],
+  );
 
   const isFavorite = useCallback((id: string) => favorites.some((c) => c.id === id), [favorites]);
 
@@ -365,6 +380,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       const result =
         outgoing.length > 0 ? await client.push(outgoing) : await client.pull(settings.lastPulledAt);
 
+      if (result.dropped) track("sync.dropped_rows", result.dropped);
       setCollection(repo.mergeIncoming(result.rows));
       // Committed BEFORE the binders are attempted. If the binder half then
       // fails, the collection's work is still banked — otherwise a persistently
@@ -391,6 +407,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           outgoingBinders.length > 0
             ? await binderClient.push(outgoingBinders)
             : await binderClient.pull(settings.bindersPulledAt);
+        if (binderResult.dropped) track("sync.dropped_binders", binderResult.dropped);
         setBinders(repo.mergeIncomingBinders(binderResult.binders));
         setSync(
           repo.setSyncSettings({
@@ -409,7 +426,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         console.info("[cardlens] this server has no binder sync yet — skipping it");
       }
       setSyncState("idle");
+      track("sync.ok");
     } catch (err) {
+      track(syncFailureMetric(err));
       // A wrong token or a server with sync switched off stays broken until
       // someone acts, so those are surfaced distinctly from being offline.
       if (err instanceof SyncAuthError) setSyncState("bad-token");

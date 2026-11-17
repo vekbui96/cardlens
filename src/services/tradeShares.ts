@@ -1,6 +1,7 @@
 import { companionBase } from "./companionApi.ts";
 import { fetchJson } from "./http.ts";
 import { ProviderError } from "../integrations/providers.ts";
+import { track } from "./metrics.ts";
 
 /**
  * Managing the trade link for a binder.
@@ -58,6 +59,7 @@ export async function createTradeLink(token: string, binderId: string): Promise<
 
   const v = raw as Record<string, unknown>;
   if (typeof v?.id !== "string") throw new Error("The server did not return a link");
+  track("trade_link.minted");
   return {
     id: v.id,
     binderId,

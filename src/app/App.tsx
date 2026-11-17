@@ -10,6 +10,7 @@ import { layoutOverrideFromLocation, resolveLayoutMode, type LayoutMode } from "
 import { DevPanel } from "../components/dev/DevPanel.tsx";
 import { migrateStorage } from "../storage/versioned.ts";
 import { activeUiVersion } from "./uiVersion.ts";
+import { MetricsBoot } from "./MetricsBoot.tsx";
 
 /**
  * The rebuild, behind one lazy import.
@@ -93,6 +94,7 @@ export function App() {
                 stack there would be a second source of truth for nothing.
               */}
               <NavigationProvider urlBacked={mode === "web"}>
+                <MetricsBoot mode={mode} uiVersion={uiVersion} />
                 <LibraryProvider>
                   <TextEntryProvider>
                     {isV2 ? (

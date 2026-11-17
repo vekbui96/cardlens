@@ -2,6 +2,7 @@ import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { continueTarget, topProgress } from "../../../features/home/continueSet.ts";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
+import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { countBinder, type Binder } from "../../../models/binderLayout.ts";
 import { Card, Panel, Stack } from "../../primitives/index.ts";
@@ -59,6 +60,7 @@ export function HomeScreen() {
   } = useLibrary();
   const { data: sets } = useSets();
   const value = useLibraryValue();
+  useHomeLoadMetric(value);
 
   const notice = syncNotice(syncStatus);
 

@@ -328,6 +328,10 @@ Sync failure is a status line, never a toast: the local write already succeeded.
   `COLLECTION_TOKEN`, which is what lets `binders.spec.ts` exercise the actual
   image upload instead of asserting against a 401. Without those paths a test
   run on SERVER-PC would write into the live collection.
+- **On SERVER-PC itself, run e2e on other ports**: `CL_E2E_PORT=5273
+CL_E2E_API_PORT=8887`. The default API port is 8787 — the LIVE `cardlens`
+  service's port — and `reuseExistingServer` is on locally, so a plain run there
+  reuses the live server and none of the scratch paths apply.
 - **e2e runs on in-memory mocks** (`VITE_USE_MOCKS: "true"` in `playwright.config.ts`). `page.route` interception does nothing for catalog data, so network-failure behaviour cannot be tested there — use a component test with a provider you control.
 - **A hanging request is not an aborted one.** An abort settles the query and lets error/empty states through; a hang pins `isLoading` forever. The Collection screen bug (permanent "Loading sets…" on the glasses) only reproduces with a promise that never resolves.
 - **Verify a regression test actually fails without the fix.** Two attempts at the above passed against the bug before one reproduced it.
@@ -437,6 +441,15 @@ Sync failure is a status line, never a toast: the local write already succeeded.
   the set, so ten rows from one set cost one request. Falls back to
   Normal/Reverse while loading — a row with no finishes cannot be committed, so
   an absent server would make scanned cards silently unaddable.
+- **Usage metrics are counts only** (`server/metricsStore.ts`,
+  `src/services/metrics.ts`, vocabulary in the SHARED `src/models/metricsEvents.ts`).
+  `POST /api/metrics` takes `{ days: { "YYYY-MM-DD": { event: n } } }` behind
+  `COLLECTION_TOKEN`; `GET /api/metrics/summary?days=N` is public so the
+  innovation loop can read it without the token. Stored in `metrics.json` beside
+  `COLLECTION_FILE` (so e2e scratch follows), 180-day retention. A new event is a
+  name added to the shared list — and therefore a server deploy; until then the
+  server ignores it rather than failing the flush. The client must never surface
+  a metrics failure in any way.
 - The service-wide CSP is `default-src 'none'`, which is right for a JSON API
   and fatal for any HTML route — it blocks inline script and style. Set a
   per-route CSP, as `/api/recognize/bench` does. Config in per-service `.env`; re-run `04-install-services.ps1` to apply changes.

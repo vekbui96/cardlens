@@ -25,6 +25,7 @@ import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
 import { handOverLink } from "../handOverLink.ts";
 import { LinkFallback } from "../LinkFallback.tsx";
+import { track } from "../../services/metrics.ts";
 import styles from "./WebSetCardsScreen.module.css";
 
 /**
@@ -318,6 +319,7 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
         body: JSON.stringify({ setId, setName }),
       })) as { id?: unknown };
       if (typeof created?.id !== "string") throw new Error("the server returned no share id");
+      track("share.created");
       return { path: screenToPath({ name: "live", shareId: created.id }) };
     } catch (err) {
       // Logged as well as shown: the notice says which of three things to fix,

@@ -14,6 +14,8 @@ import {
   type ScanResult,
 } from "../../scan/cardIndex.ts";
 import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
+import { track } from "../../services/metrics.ts";
+import { scanBatchMetrics, scanOutcomeMetric } from "./scanMetrics.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
 import { ScanFinishes } from "./ScanFinishes.tsx";
 import { ScanCardPicker } from "./ScanCardPicker.tsx";
@@ -290,7 +292,9 @@ export function ScanScreen() {
       // pre-answered, or the review turns into rubber-stamping.
       // A confident row will never show its number band, so the crop is
       // released here rather than held for the life of the batch.
-      const settle = (result: ScanResult, via: Via, note: string | null) =>
+      const settle = (result: ScanResult, via: Via, note: string | null) => {
+        track(scanOutcomeMetric(result));
+        if (via) track(via === "server" ? "scan.via.server" : "scan.via.device");
         apply({
           result,
           via,
@@ -298,6 +302,7 @@ export function ScanScreen() {
           choice: result.confident ? 0 : null,
           ...(result.confident ? { numberBand: null } : {}),
         });
+      };
       if (engine === "server") {
         try {
           const result = await recogniseRemote(canvas, repo.getSyncSettings().token, index);
@@ -315,6 +320,7 @@ export function ScanScreen() {
       }
 
       if (!index) {
+        track("scan.unknown");
         apply({ result: null, via: null, note: "No server and no index — nothing could identify this." });
         return;
       }
@@ -386,6 +392,17 @@ export function ScanScreen() {
 
   const commit = () => {
     const kept = queue.filter(isKept);
+    for (const [event, n] of scanBatchMetrics(
+      queue.map((c) => ({
+        kept: isKept(c),
+        rejected: c.rejected,
+        manual: c.manual !== null,
+        confident: Boolean(c.result?.confident),
+        choseFirst: c.choice === 0,
+      })),
+    )) {
+      track(event, n);
+    }
     // One merge and one write for the whole batch. Adding them one at a time
     // re-reads and re-serialises the entire collection per card, which is
     // quadratic over a batch and exactly what a scanner produces. Never

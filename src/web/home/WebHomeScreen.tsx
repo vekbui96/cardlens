@@ -6,6 +6,7 @@ import { useSearchAction } from "../../features/search/useSearchAction.ts";
 import { continueTarget, topProgress } from "../../features/home/continueSet.ts";
 import { CollectionGraph } from "../../components/CollectionGraph.tsx";
 import { useLibraryValue } from "../../hooks/useLibraryValue.ts";
+import { useHomeLoadMetric } from "../../hooks/useHomeLoadMetric.ts";
 import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { tierLabel } from "../../features/collection/completionTier.ts";
@@ -39,6 +40,7 @@ export function WebHomeScreen() {
   const { data: sets } = useSets();
   const { typeSearch } = useSearchAction();
   const value = useLibraryValue();
+  useHomeLoadMetric(value);
 
   const resume = continueTarget(
     collection,

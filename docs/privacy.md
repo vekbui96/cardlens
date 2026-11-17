@@ -21,7 +21,7 @@ browser's site-data controls) removes it permanently.
 - **No microphone.**
 - **No location.**
 - **No accounts.** No sign-up, no login.
-- **No analytics or tracking** by default.
+- **No third-party analytics or tracking.** See "Usage counts" below for the one first-party exception.
 - **No payment information** is ever collected or stored.
 - **No advertising identifiers.**
 
@@ -44,6 +44,23 @@ If you use the phone companion to type a search:
 - Sessions **expire automatically** and are **not stored permanently**. One session cannot read
   another's data.
 - No account is required.
+
+## Usage counts (devices connected to your own server only)
+
+A device that has a sync token counts a few things about how the app is used — scan outcomes
+(auto-accepted / ambiguous / unknown / picked by hand / corrected), which recogniser answered, sync
+results, which screens are opened, layout mode, and a handful of feature uses — and sends **daily
+totals** to your own CardLens server (`POST /api/metrics`, behind the sync token).
+
+- **Counts only**: a fixed list of event names (`src/models/metricsEvents.ts`) and a number for each.
+  No card ids, set ids, binder names, collection contents, search text, IP addresses, user agents
+  or device ids are sent or stored. The server refuses any name not on the list.
+- Bucketed by **UTC day**, kept for **180 days**, in their own file (`metrics.json`) beside — never
+  inside — the collection.
+- A device **without a token sends nothing** and keeps nothing. On the device, unsent counts are a
+  small capped blob under `cardlens:v1:metrics`.
+- The aggregate summary (`GET /api/metrics/summary`) is readable without a token so the project's
+  automated improvement loop can use it; it holds the same daily totals and nothing else.
 
 ## Security posture
 

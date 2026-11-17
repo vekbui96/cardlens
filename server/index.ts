@@ -17,6 +17,7 @@ import { BinderStore, MAX_BINDERS_PER_REQUEST, parseBinder } from "./binderStore
 import { isLiveBinder } from "../src/storage/binders.ts";
 import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderImages.ts";
 import { callRecogniser, recogniserHealth, MAX_IMAGE_BYTES as MAX_RECOGNITION_BYTES } from "./recognition.ts";
+import { MetricsStore, metricsRouter } from "./metricsStore.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -64,6 +65,12 @@ const RECOGNITION_URL = (process.env.RECOGNITION_URL ?? "http://127.0.0.1:8200")
 const SHARES_FILE = process.env.SHARES_FILE ?? "D:/services/data/shares.json";
 const BINDERS_FILE = process.env.BINDERS_FILE ?? "D:/services/data/binders.json";
 const BINDER_IMAGES_DIR = process.env.BINDER_IMAGES_DIR ?? "D:/services/data/binder-images";
+/**
+ * Usage metrics, beside the collection rather than under an env var of its own
+ * by default: no service config change to deploy it, and the e2e server, which
+ * points COLLECTION_FILE at a scratch dir, writes its metrics there too.
+ */
+const METRICS_FILE = process.env.METRICS_FILE ?? join(dirname(COLLECTION_FILE), "metrics.json");
 
 /** Upstream failed with nothing cached to fall back on. */
 class UpstreamError extends Error {
@@ -109,6 +116,7 @@ export function createApp(
   shares: ShareStore = new ShareStore(SHARES_FILE),
   binders: BinderStore = new BinderStore(BINDERS_FILE),
   binderImages: BinderImageStore = new BinderImageStore(BINDER_IMAGES_DIR),
+  metrics: MetricsStore = new MetricsStore(METRICS_FILE),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -238,6 +246,20 @@ export function createApp(
     const rows = collection.merge(incoming);
     res.json({ rows, at: Date.now(), dropped });
   });
+
+  // --- Usage metrics ---------------------------------------------------------
+  /**
+   * Aggregate counts only — see server/metricsStore.ts. The write is behind the
+   * collection token; the summary is a public read so the innovation loop can
+   * fetch it without ever holding that token.
+   */
+  app.use(
+    metricsRouter(metrics, {
+      auth: requireToken,
+      writeLimiter: rateLimiter(30, 60_000),
+      readLimiter: rateLimiter(30, 60_000),
+    }),
+  );
 
   // --- Binder sync -----------------------------------------------------------
   /**
