@@ -6,6 +6,7 @@ import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionSto
 import { PrintingsStore } from "./printingsStore.ts";
 import { dirname, join } from "node:path";
 import { CatalogPriceStore } from "./catalogPrices.ts";
+import { CatalogNameStore, type SetNameIndex } from "./catalogNames.ts";
 import { CatalogSetsStore } from "./catalogSetsStore.ts";
 import { catalogCardsParams } from "./catalogParams.ts";
 import { SealedStore } from "./sealedStore.ts";
@@ -51,6 +52,8 @@ const CATALOG_PRICES_DIR = process.env.CATALOG_PRICES_DIR ?? "D:/services/data/c
  * scratch dir, gets a scratch set-list cache with it.
  */
 const CATALOG_SETS_DIR = join(dirname(PRINTINGS_DIR), "catalog-sets");
+/** My cards' names and art, placed the same way and for the same reasons. */
+const CATALOG_NAMES_DIR = join(dirname(PRINTINGS_DIR), "catalog-names");
 /**
  * The card recogniser, on loopback. Tailscale Funnel only permits 443, 8443 and
  * 10000, and two are already spent — so this service fronts it rather than the
@@ -833,6 +836,9 @@ export function createApp(
    */
   const catalogPrices = new CatalogPriceStore(CATALOG_PRICES_DIR, loadCatalog);
 
+  /** Names and art for whole sets, cached the same way. See server/catalogNames.ts. */
+  const catalogNames = new CatalogNameStore(CATALOG_NAMES_DIR, loadCatalog);
+
   /**
    * The set list, on disk for a day, through the same retry policy. See
    * server/catalogSetsStore.ts: the memory cache's stale copy died with every
@@ -1006,6 +1012,49 @@ export function createApp(
     // the same reason the device keeps a single index rather than nesting.
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.json({ prices, missing });
+  });
+
+  /**
+   * Names, collector numbers and art for every set a collection holds, in one
+   * request — My cards' half of what `/api/catalog/prices` did for Home. It
+   * asked the plain card proxy once per owned set, about nineteen at once,
+   * against a 60-second cache. Same set cap, same partial success: a set that
+   * cannot be named is listed in `missing` and the device asks for that one
+   * alone.
+   */
+  app.get("/api/catalog/names", proxyLimiter, async (req, res) => {
+    const requested = String(req.query.sets ?? "")
+      .split(",")
+      .map((id) => id.trim().replace(/[^A-Za-z0-9._-]/g, ""))
+      .filter(Boolean);
+    const setIds = [...new Set(requested)].slice(0, MAX_PRICE_SETS);
+
+    if (setIds.length === 0) {
+      res.status(400).json({ error: "sets_required" });
+      return;
+    }
+
+    const indexes = await Promise.all(
+      setIds.map((setId) =>
+        catalogNames.get(setId).then(
+          (cards) => ({ setId, cards }),
+          (err: unknown) => {
+            console.warn(`[cardlens] catalog names unavailable for ${setId}:`, err);
+            return { setId, cards: null };
+          },
+        ),
+      ),
+    );
+
+    const cards: SetNameIndex = {};
+    const missing: string[] = [];
+    for (const { setId, cards: found } of indexes) {
+      if (found === null) missing.push(setId);
+      else Object.assign(cards, found);
+    }
+
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json({ cards, missing });
   });
 
   app.get("/api/catalog/sets", proxyLimiter, async (req, res) => {
