@@ -12,12 +12,16 @@ import { setCardsCache, printingsCache } from "../storage/caches.ts";
 import { buildPrintingIndex, type SetPrintingIndex } from "../models/printingIndex.ts";
 import { companionBase } from "../services/companionApi.ts";
 import { fetchJson } from "../services/http.ts";
+import { withProvisional, type LoadedPrintings } from "../models/printingsFreshness.ts";
 
 export interface SetInformation {
   /** Every card in the set, unfiltered — rarity filtering happens in memory. */
   cards: PokemonCardSummary[];
-  /** Raw TCGdex printings, or null when the server could not supply them. */
-  printings: SetPrintings | null;
+  /**
+   * Raw TCGdex printings, or null when the server could not supply them.
+   * `provisional` when the server built them while TCGdex was skipping cards.
+   */
+  printings: LoadedPrintings | null;
 }
 
 /**
@@ -59,6 +63,7 @@ export async function fetchSetInformation(
   const json = (await fetchJson(url, { ...(signal ? { signal } : {}) })) as {
     cards?: unknown;
     printings?: unknown;
+    printingsComplete?: unknown;
   };
 
   const parsed = CardListResponseSchema.safeParse(json.cards);
@@ -70,8 +75,29 @@ export async function fetchSetInformation(
     // Same order the provider produces, so the cache entry this warms is
     // indistinguishable from one the per-set query wrote.
     cards: parsed.data.data.map(toSummary).sort(byPriceDesc),
-    printings: toSetPrintings(json.printings),
+    // Only an explicit `false` is provisional: TCGdex skipped cards while the
+    // server built the set. A missing field is a server from before it existed,
+    // whose answers always meant complete, so the two halves deploy in any order.
+    printings: withProvisional(toSetPrintings(json.printings), json.printingsComplete === false),
   };
+}
+
+/**
+ * Write an answer into the device caches the per-set paths also read.
+ *
+ * Exported for tests, for the same reason as `fetchSetInformation`.
+ */
+export function rememberSetInformation(setId: string, info: SetInformation): void {
+  const { cards, printings } = info;
+  if (cards.length > 0) setCardsCache.set(`${setId}|`, cards);
+  // Only when the payload named its TCGdex set. A SetPrintings records where
+  // the data came from, and fabricating that to satisfy the cache would put a
+  // lie in storage for 30 days. Nor when it is provisional: Home and binders
+  // read this cache for 30 days, and a half-built set would stay half-priced
+  // there long after the server healed.
+  if (printings?.tcgdexSetId && !printings.provisional && Object.keys(printings.byNumber).length > 0) {
+    printingsCache.set(setId, printings);
+  }
 }
 
 export interface SetInformationResult {
@@ -132,14 +158,7 @@ export function useSetInformation(setId: string, setName: string): SetInformatio
 
   useEffect(() => {
     if (!query.isSuccess || !query.data) return;
-    const { cards, printings } = query.data;
-    if (cards.length > 0) setCardsCache.set(`${setId}|`, cards);
-    // Only when the payload named its TCGdex set. A SetPrintings records where
-    // the data came from, and fabricating that to satisfy the cache would put a
-    // lie in storage for 30 days.
-    if (printings?.tcgdexSetId && Object.keys(printings.byNumber).length > 0) {
-      printingsCache.set(setId, printings);
-    }
+    rememberSetInformation(setId, query.data);
   }, [setId, query.isSuccess, query.data]);
 
   const printings = useMemo(() => buildPrintingIndex(query.data?.printings?.byNumber), [query.data]);
