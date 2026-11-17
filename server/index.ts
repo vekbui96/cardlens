@@ -4,7 +4,9 @@ import compression from "compression";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
+import { dirname, join } from "node:path";
 import { CatalogPriceStore } from "./catalogPrices.ts";
+import { CatalogSetsStore } from "./catalogSetsStore.ts";
 import { catalogCardsParams } from "./catalogParams.ts";
 import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
@@ -43,6 +45,12 @@ const COLLECTION_FILE = process.env.COLLECTION_FILE ?? "D:/services/data/collect
 const PRINTINGS_DIR = process.env.PRINTINGS_DIR ?? "D:/services/data/printings";
 const SEALED_DIR = process.env.SEALED_DIR ?? "D:/services/data/sealed";
 const CATALOG_PRICES_DIR = process.env.CATALOG_PRICES_DIR ?? "D:/services/data/catalog-prices";
+/**
+ * Beside the printings cache rather than its own env var: no service config
+ * change to deploy it, and the e2e server, which points PRINTINGS_DIR at a
+ * scratch dir, gets a scratch set-list cache with it.
+ */
+const CATALOG_SETS_DIR = join(dirname(PRINTINGS_DIR), "catalog-sets");
 /**
  * The card recogniser, on loopback. Tailscale Funnel only permits 443, 8443 and
  * 10000, and two are already spent — so this service fronts it rather than the
@@ -825,10 +833,21 @@ export function createApp(
    */
   const catalogPrices = new CatalogPriceStore(CATALOG_PRICES_DIR, loadCatalog);
 
+  /**
+   * The set list, on disk for a day, through the same retry policy. See
+   * server/catalogSetsStore.ts: the memory cache's stale copy died with every
+   * restart, so a deploy followed by an upstream burst blanked Home.
+   */
+  const catalogSets = new CatalogSetsStore(CATALOG_SETS_DIR, loadCatalog);
+
   /** Stream a catalog path straight to a client. */
-  async function proxy(path: string, res: Response): Promise<void> {
+  async function proxy(
+    path: string,
+    res: Response,
+    load: (path: string) => Promise<unknown> = loadCatalog,
+  ): Promise<void> {
     try {
-      res.json(await loadCatalog(path));
+      res.json(await load(path));
     } catch (err) {
       const status = err instanceof UpstreamError ? err.status : 0;
       if (status === 0) res.status(502).json({ error: "upstream_unreachable" });
@@ -995,7 +1014,10 @@ export function createApp(
       const value = req.query[key];
       if (typeof value === "string") params.set(key, value);
     }
-    await proxy(`/sets?${params.toString()}`, res);
+    // A free-text `q` keeps the short memory path: user-typed filters never
+    // reach disk. The device's own set-list query carries none.
+    const load = params.has("q") ? loadCatalog : (path: string) => catalogSets.get(path);
+    await proxy(`/sets?${params.toString()}`, res, load);
   });
 
   app.get("/api/catalog/cards", proxyLimiter, async (req, res) => {
