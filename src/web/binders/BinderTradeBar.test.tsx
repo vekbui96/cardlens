@@ -122,3 +122,57 @@ describe("BinderTradeBar sharing", () => {
     expect(await screen.findByRole("button", { name: "Link copied" })).toBeInTheDocument();
   });
 });
+
+/**
+ * A link outlives "For trade" being switched off: the server keeps serving it
+ * until it is revoked. Hiding "Stop sharing" with the flag left a live link
+ * the owner could neither see nor stop.
+ */
+describe("BinderTradeBar after For trade is switched off", () => {
+  const notForTrade = setForTrade(binder, false, NOW + 1);
+
+  function serveShares(shares: object[]) {
+    const fetchFn = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.method === "DELETE" ? { ok: true } : { shares };
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchFn);
+    return fetchFn;
+  }
+
+  function renderNotForTrade() {
+    return render(
+      <RepositoriesProvider>
+        <BinderTradeBar binder={notForTrade} onSave={() => {}} />
+      </RepositoriesProvider>,
+    );
+  }
+
+  it("says the link is still live and offers Stop sharing", async () => {
+    const user = userEvent.setup();
+    const fetchFn = serveShares([{ id: "live42", kind: "binder", binderId: "b1", binderName: "Trades" }]);
+    renderNotForTrade();
+
+    expect(await screen.findByText("Trade link still live")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Share for trade|Copy trade link/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Stop sharing" }));
+
+    await waitFor(() => expect(screen.queryByText("Trade link still live")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Stop sharing" })).toBeNull();
+    const deleted = fetchFn.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect(String(deleted?.[0])).toMatch(/\/share\/live42$/);
+  });
+
+  it("shows no sharing controls when no link exists", async () => {
+    const fetchFn = serveShares([]);
+    renderNotForTrade();
+
+    await waitFor(() => expect(fetchFn).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "For trade" })).toBeInTheDocument();
+    expect(screen.queryByText("Trade link still live")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Stop sharing|Share for trade|Copy trade link/ })).toBeNull();
+  });
+});
