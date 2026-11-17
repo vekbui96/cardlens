@@ -10,10 +10,14 @@ import { ImageFullView } from "../../components/ImageFullView.tsx";
 import { LoadingState } from "../../components/States.tsx";
 import { useBackableFocus } from "../../hooks/useBackableFocus.ts";
 import { useCardDetails, useCardPrices } from "../../hooks/useCardDetails.ts";
+import { useSetPrintings } from "../../hooks/useSetPrintings.ts";
+import { printingPrice } from "../../models/printingIndex.ts";
+import { printingsOf } from "../../v2/screens/details/printings.ts";
+import { setIdFromCardId } from "../../utils/cardId.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useScreenInputEnabled } from "../../app/TextEntryProvider.tsx";
-import { formatCollector } from "../../utils/format.ts";
+import { formatCollector, formatUsd } from "../../utils/format.ts";
 import styles from "./CardDetailsScreen.module.css";
 
 interface Props {
@@ -24,6 +28,8 @@ interface Props {
 interface Action {
   key: string;
   label: string;
+  /** Market price (USD) of this printing, when the printings oracle has one. */
+  price?: number;
   onSelect: () => void;
 }
 
@@ -38,6 +44,8 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
 
   // Prefer freshly-fetched details; fall back to the summary passed in for instant paint.
   const header = card ?? summary;
+  // One cached request per set, shared with the set screen and scan review.
+  const printings = useSetPrintings(setIdFromCardId(cardId), header?.setName ?? "");
   const favorited = isFavorite(cardId);
   const held = ownedFinishes(cardId);
 
@@ -48,22 +56,36 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
   }, [cardId, Boolean(header)]);
 
   const actions = useMemo<Action[]>(() => {
-    // Printings the pricing data implies come first, then every other finish a
-    // collector might hold. Poké Ball and Master Ball patterns never appear in
-    // the payload (verified across eight sets), so without the second group
-    // they would be untrackable — but they stay below the suggested ones so the
-    // common case is still the first thing under the thumb.
-    const suggested = availableFinishes(header?.variants);
+    // The printings the card really exists in come first: the set's TCGdex
+    // printings, the same oracle the set screen trusts. pokemontcg.io reports no
+    // variants at all for whole sets (0/120 Pitch Black), so the pricing payload
+    // is only the fallback — while printings load, or with the server off.
+    // Every other finish a collector might hold follows. Poké Ball and Master
+    // Ball patterns never appear in the pricing payload (verified across eight
+    // sets), so without the second group they would be untrackable — but they
+    // stay below the suggested ones so the common case is still the first thing
+    // under the thumb.
+    const number = header?.collectorNumber ?? "";
+    const real = printingsOf(printings.index, number);
+    const suggested = real.source === "printings" ? real.finishes : availableFinishes(header?.variants);
     // Held printings come next even when nothing suggested them — that is how a
     // hand-marked Poké Ball stays visible and removable.
     const alsoHeld = held.filter((f) => !suggested.includes(f)).sort(compareFinishes);
     const extra = ALL_COLLECT_FINISHES.filter((f) => !suggested.includes(f) && !alsoHeld.includes(f));
 
-    const list: Action[] = [...suggested, ...alsoHeld, ...extra].map((finish) => ({
-      key: `own-${finish}`,
-      label: `${held.includes(finish) ? "✓" : "＋"} ${finishLabel(finish)}`,
-      onSelect: () => toggleOwned(cardId, finish),
-    }));
+    const list: Action[] = [...suggested, ...alsoHeld, ...extra].map((finish) => {
+      // Only a printing the oracle prices gets a figure. Unpriced shows nothing
+      // rather than a guess, and rides on the row that already exists, so the
+      // glasses lose no list space to it.
+      const price = printingPrice(printings.index, number, finish);
+      const priceText = price !== undefined ? ` · ${formatUsd(price)}` : "";
+      return {
+        key: `own-${finish}`,
+        label: `${held.includes(finish) ? "✓" : "＋"} ${finishLabel(finish)}${priceText}`,
+        ...(price !== undefined ? { price } : {}),
+        onSelect: () => toggleOwned(cardId, finish),
+      };
+    });
     list.push({
       key: "favorite",
       label: favorited ? "★ Remove favorite" : "☆ Favorite",
@@ -76,7 +98,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
       list.push({ key: "retry", label: "Try again", onSelect: () => prices.refetch() });
     }
     return list;
-  }, [favorited, held, cardId, header, openResults, toggleFavorite, toggleOwned, prices]);
+  }, [favorited, held, cardId, header, openResults, toggleFavorite, toggleOwned, prices, printings.index]);
 
   // Focus ring content: [card image, ...actions]. Selecting the image opens the
   // full-screen viewer.
@@ -159,6 +181,7 @@ export function CardDetailsScreen({ cardId, summary }: Props) {
               role="option"
               aria-selected={on}
               className={`${styles.action} ${on ? styles.actionFocused : ""}`}
+              data-printing-price={action.price}
               onClick={() => action.onSelect()}
             >
               {action.label}
