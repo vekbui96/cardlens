@@ -43,7 +43,11 @@ vi.mock("../app/LibraryProvider.tsx", () => ({
 // are under test. The pricing tests name the sets they want priced.
 let SETS: { id: string; name: string }[] = [];
 vi.mock("./useSets.ts", () => ({ useSets: () => ({ data: SETS }) }));
-vi.mock("./useCatalogPrices.ts", () => ({ useCatalogPrices: () => NO_PRICES }));
+// Whether the market-price batch is still in flight; see the pricing tests.
+let CATALOG_LOADING = false;
+vi.mock("./useCatalogPrices.ts", () => ({
+  useCatalogPrices: () => ({ prices: NO_PRICES, pricesLoading: CATALOG_LOADING }),
+}));
 // The live catalog, which is the only configuration the batch endpoint serves.
 vi.mock("../integrations/pokemon/index.ts", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -83,6 +87,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
   SETS = [];
+  CATALOG_LOADING = false;
 });
 
 describe("useOwnedCards names", () => {
@@ -192,6 +197,20 @@ describe("useOwnedCards pricing status", () => {
 
     answer(jsonResponse({ tcgdexSetId: "sv01", byNumber: {} }));
     await waitFor(() => expect(result.current.pricing).toBe(0));
+  });
+
+  it("keeps pricing while only the market-price batch is still loading", async () => {
+    // Names answered, and no set name is known, so no printings are asked for
+    // (and none can count). The second oracle has not answered: for promos and
+    // older cards it is the only price, so the total is not final yet.
+    CATALOG_LOADING = true;
+    serverWithPrintings(new Promise<Response>(() => {}));
+
+    const { result } = renderHook(() => useOwnedCards(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.rows[0]?.name).toBe("Sprigatito"));
+    expect(result.current.pending).toBe(0);
+    expect(result.current.pricing).toBe(1);
   });
 
   it("never counts a set it cannot ask about as pricing", async () => {

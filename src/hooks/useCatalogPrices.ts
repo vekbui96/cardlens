@@ -8,6 +8,16 @@ import { companionBase } from "../services/companionApi.ts";
 import { shouldUseMocks } from "../integrations/pokemon/index.ts";
 import { fetchJson } from "../services/http.ts";
 
+export interface CatalogPrices {
+  prices: Map<string, number>;
+  /**
+   * True while an enabled request is in flight with no answer yet: the batch,
+   * or any per-set fallback query. A disabled query is `isPending` forever, so
+   * only `fetchStatus !== "idle"` counts — otherwise "pricing…" never ends.
+   */
+  pricesLoading: boolean;
+}
+
 /**
  * pokemontcg.io market prices for every card in the given sets, as one index.
  *
@@ -27,8 +37,13 @@ import { fetchJson } from "../services/http.ts";
  * settling on "480 of 973 printings priced". `/api/catalog/prices` answers all
  * of them from a twelve-hour disk cache and sends prices alone, which is a
  * fiftieth of the bytes of the card summaries this used to throw away.
+ *
+ * **It says when it is still loading.** That request is the slow one on a cold
+ * cache (8669ms measured, 97ms warm), and for promos and older cards it is the
+ * only price. A bare map hid that, so callers counted only the printings and
+ * called those cards "unpriced" in a total that read as final mid-request.
  */
-export function useCatalogPrices(setIds: string[]): Map<string, number> {
+export function useCatalogPrices(setIds: string[]): CatalogPrices {
   const { provider, sourceKey } = useCatalog();
   const key = setIds.join(",");
   /**
@@ -76,7 +91,11 @@ export function useCatalogPrices(setIds: string[]): Map<string, number> {
 
   const fallbackStamp = settledKey(queries);
 
-  return useMemo(
+  const pricesLoading =
+    (batch.isPending && batch.fetchStatus !== "idle") ||
+    queries.some((q) => q.isPending && q.fetchStatus !== "idle");
+
+  const prices = useMemo(
     () => {
       // Card ids are globally unique, so one flat index across sets needs no
       // per-set nesting and cannot collide.
@@ -90,6 +109,8 @@ export function useCatalogPrices(setIds: string[]): Map<string, number> {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; its settled data is what matters
     [batch.data, fallbackStamp],
   );
+
+  return useMemo(() => ({ prices, pricesLoading }), [prices, pricesLoading]);
 }
 
 /**
