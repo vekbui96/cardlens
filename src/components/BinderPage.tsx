@@ -34,6 +34,7 @@ export function BinderPageView({
   onSlotPointerDown,
   dropTarget,
   draggingFrom,
+  footer,
 }: {
   page: PageData;
   format: BinderFormat;
@@ -77,6 +78,13 @@ export function BinderPageView({
   dropTarget?: string | null;
   /** `data-pocket` of the pocket a card was picked up from, while it is in the air. */
   draggingFrom?: string | null;
+  /**
+   * Under the pockets, inside the page — the web builder's per-page actions.
+   *
+   * Inside rather than wrapped around it, because a spread's grid and its
+   * facing-page rules address the PAGE as a direct child. Omit for nothing.
+   */
+  footer?: React.ReactNode;
 }) {
   const spec = specFor(format);
   const interactive = typeof onSlotClick === "function";
@@ -174,6 +182,7 @@ export function BinderPageView({
           );
         })}
       </ul>
+      {footer}
     </section>
   );
 }

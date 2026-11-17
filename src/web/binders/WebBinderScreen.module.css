@@ -353,6 +353,48 @@ label.chip {
     grid-column: auto;
   }
 }
+/*
+ * Per-page actions, under each page's pockets.
+ *
+ * Quieter than the toolbar chips — borderless, dim — because they repeat on
+ * every page and must not read as part of the binder's contents. Still 44px
+ * tall: the web shell's touch target does not shrink because a control is
+ * secondary.
+ */
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cl-gap-xs, 4px);
+  margin-top: var(--cl-gap-xs, 4px);
+}
+
+.pageAction {
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cl-radius-sm, 8px);
+  background: none;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  cursor: pointer;
+}
+
+.pageAction:hover:not(:disabled) {
+  color: var(--cl-fg);
+}
+
+.pageAction:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pageAction:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
 /* --- The pocket sheet ---------------------------------------------------- */
 
 /*

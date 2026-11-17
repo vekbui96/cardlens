@@ -32,6 +32,7 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { useBinderDrag, type DragSource } from "./useBinderDrag.ts";
+import { canRemovePage, insertPageBefore, removePage } from "./pageEdits.ts";
 import { BinderCoverLeaf } from "./BinderCoverLeaf.tsx";
 import { finishLabel } from "../../models/finishes.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -463,6 +464,43 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                   onSlotClick={(index) => selectAt({ kind: "pocket", page: i, index })}
                   onSlotPointerDown={(index, slot, event) =>
                     onPointerDown(event, { kind: "address", at: { kind: "pocket", page: i, index } }, slot)
+                  }
+                  footer={
+                    /* The ring-binder move: clip a blank page in where it
+                       belongs instead of adding one at the end and dragging
+                       every later card down a page. Both clear the selection,
+                       because the page it was on has just changed number.
+                       Remove is offered only on an EMPTY page — there is no
+                       undo, and a card must never go with it. */
+                    <div className={styles.pageActions}>
+                      <button
+                        type="button"
+                        className={styles.pageAction}
+                        aria-label={`Insert page before page ${i + 1}`}
+                        title="Adds a blank page here. This page and every later one move back by one, so facing pages after it change."
+                        onClick={() => {
+                          commit(insertPageBefore(binder, i, Date.now()));
+                          setSelected(null);
+                        }}
+                      >
+                        Insert page before
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pageAction}
+                        // Never "Remove page N": the toolbar's "Remove page"
+                        // must stay the only control whose name starts that way.
+                        aria-label={`Remove this page (page ${i + 1})`}
+                        title="Only an empty page can be removed."
+                        disabled={!canRemovePage(binder, i)}
+                        onClick={() => {
+                          commit(removePage(binder, i, Date.now()));
+                          setSelected(null);
+                        }}
+                      >
+                        Remove this page
+                      </button>
+                    </div>
                   }
                 />
               ))}
