@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InputProvider, CatalogProvider, RepositoriesProvider } from "../../app/contexts.tsx";
@@ -9,10 +9,12 @@ import { MockInputAdapter } from "../../integrations/meta/MockInputAdapter.ts";
 import { MockPokemonProvider, type MockBehavior } from "../../integrations/pokemon/index.ts";
 import { ResultsScreen } from "./ResultsScreen.tsx";
 
-function harness(behavior?: MockBehavior) {
-  const mock = new MockInputAdapter();
+function harness(
+  behavior?: MockBehavior,
+  base = new MockPokemonProvider(behavior ?? {}),
+  mock = new MockInputAdapter(),
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const base = new MockPokemonProvider(behavior ?? {});
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
@@ -50,5 +52,38 @@ describe("ResultsScreen", () => {
     const Wrapper = harness({ forceEmpty: true });
     render(<ResultsScreen query="Charizard" />, { wrapper: Wrapper });
     expect(await screen.findByText(/No cards found/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("lands on the first result when a rarity swipe returns to a cached filter", async () => {
+    // A filter seen before is served from the query cache without a loading
+    // state, so the list is swapped without passing through zero and focus
+    // used to keep its row number.
+    const base = new MockPokemonProvider({});
+    const original = base.searchCards.bind(base);
+    vi.spyOn(base, "searchCards").mockImplementation(async (q, opts) => {
+      const all = await original(q);
+      return opts?.rarities ? all.slice(0, 2) : all;
+    });
+    const mock = new MockInputAdapter();
+    render(<ResultsScreen query="Charizard" />, { wrapper: harness(undefined, base, mock) });
+
+    const focusedIndex = () =>
+      screen.getAllByRole("option").findIndex((o) => o.getAttribute("aria-selected") === "true");
+
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(3), { timeout: 3000 });
+    const allCount = screen.getAllByRole("option").length;
+    expect(focusedIndex()).toBe(0);
+    for (let i = 0; i < 3; i++) act(() => mock.swipeDown());
+    expect(focusedIndex()).toBe(3);
+
+    act(() => mock.swipeRight()); // All -> IR, fetched for the first time
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2), { timeout: 3000 });
+    expect(focusedIndex()).toBe(0);
+    act(() => mock.swipeDown());
+    expect(focusedIndex()).toBe(1);
+
+    act(() => mock.swipeLeft()); // IR -> All, straight from the cache
+    expect(screen.getAllByRole("option")).toHaveLength(allCount);
+    expect(focusedIndex()).toBe(0);
   });
 });

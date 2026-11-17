@@ -253,6 +253,11 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
     // a browsing concern and the gesture is worth more here.
     onLeft: (i) => (collectMode ? stepFinish(-1, i) : setRarityIndex((n) => n - 1)),
     onRight: (i) => (collectMode ? stepFinish(1, i) : setRarityIndex((n) => n + 1)),
+    // A new rarity is a new list: start at its first card, below the chrome.
+    // Collect mode's swipes never change the rarity, so focus stays on the
+    // card being marked.
+    resetFocusOn: rarity.key,
+    resetTo: CHROME_ROWS,
     onSelect: (i) => {
       if (i === 0) {
         setCollectMode((on) => !on);
