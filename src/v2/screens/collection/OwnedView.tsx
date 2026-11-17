@@ -36,7 +36,7 @@ type ViewKey = (typeof VIEWS)[number]["key"];
  */
 export function OwnedView() {
   const { push } = useNavigation();
-  const { rows, pending } = useOwnedCards();
+  const { rows, pending, pricing } = useOwnedCards();
   const [sort, setSort] = useState<OwnedSortKey>("price");
   const [view, setView] = useState<ViewKey>("showcase");
 
@@ -77,11 +77,18 @@ export function OwnedView() {
           */}
           {total > 0 ? " · " : null}
           {total > 0 ? <Money value={total} /> : null}
-          {pending > 0
-            ? ` · pricing ${pending === 1 ? "1 set" : `${pending} sets`}…`
-            : unpriced > 0
-              ? ` · ${unpriced} unpriced`
-              : null}
+          {/*
+            Prices first: names arrive in one batch while the printings are
+            still loading, and "unpriced" before pricing has finished counts
+            cards that are merely not priced YET.
+          */}
+          {pricing > 0
+            ? ` · still pricing ${pricing === 1 ? "1 set" : `${pricing} sets`}…`
+            : pending > 0
+              ? ` · loading ${pending === 1 ? "1 set" : `${pending} sets`}…`
+              : unpriced > 0
+                ? ` · ${unpriced} unpriced`
+                : null}
         </span>
       }
     >

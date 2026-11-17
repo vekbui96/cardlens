@@ -39,8 +39,10 @@ vi.mock("../app/contexts.tsx", () => ({
 vi.mock("../app/LibraryProvider.tsx", () => ({
   useLibrary: () => ({ collection: COLLECTION, backfillNumbers }),
 }));
-// No set names, so the printings oracle is never asked: only names are under test.
-vi.mock("./useSets.ts", () => ({ useSets: () => ({ data: [] }) }));
+// No set names by default, so the printings oracle is never asked: only names
+// are under test. The pricing tests name the sets they want priced.
+let SETS: { id: string; name: string }[] = [];
+vi.mock("./useSets.ts", () => ({ useSets: () => ({ data: SETS }) }));
 vi.mock("./useCatalogPrices.ts", () => ({ useCatalogPrices: () => NO_PRICES }));
 // The live catalog, which is the only configuration the batch endpoint serves.
 vi.mock("../integrations/pokemon/index.ts", async (importOriginal) => ({
@@ -80,6 +82,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+  SETS = [];
 });
 
 describe("useOwnedCards names", () => {
@@ -141,5 +144,63 @@ describe("useOwnedCards names", () => {
       { timeout: 5000 },
     );
     expect(getCardsBySet).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * "pricing N sets…" must mean prices, not names.
+ *
+ * Names arrive in one batch while each set's printings (the prices) are still
+ * on their way. Counting only the names made the line read as finished with a
+ * partial total, and called cards "unpriced" that were merely not priced yet.
+ */
+describe("useOwnedCards pricing status", () => {
+  const ALL_NAMED = {
+    cards: { ...named("sv1-1", "Sprigatito"), ...named("sv2-1", "Iono"), ...named("sv3-1", "Charizard") },
+    missing: [],
+  };
+
+  function jsonResponse(body: unknown) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  /** Names answer at once; every printings request waits on `printings`. */
+  function serverWithPrintings(printings: Promise<Response>) {
+    const fetchMock = vi.fn((url: RequestInfo | URL) =>
+      String(url).includes("/printings/") ? printings : Promise.resolve(jsonResponse(ALL_NAMED)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("counts a set as pricing while its printings are still loading, after names have arrived", async () => {
+    SETS = [{ id: "sv1", name: "Scarlet & Violet" }];
+    // A hang, not an abort: an abort settles the query and hides the bug.
+    let answer: (res: Response) => void = () => {};
+    serverWithPrintings(new Promise<Response>((resolve) => (answer = resolve)));
+
+    const { result } = renderHook(() => useOwnedCards(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.rows[0]?.name).toBe("Sprigatito"));
+    expect(result.current.pending).toBe(0);
+    // sv2 and sv3 have no known name, so nothing is asking for their prices
+    // (a disabled query is isPending forever) — they are not "pricing".
+    expect(result.current.pricing).toBe(1);
+
+    answer(jsonResponse({ tcgdexSetId: "sv01", byNumber: {} }));
+    await waitFor(() => expect(result.current.pricing).toBe(0));
+  });
+
+  it("never counts a set it cannot ask about as pricing", async () => {
+    const fetchMock = serverWithPrintings(new Promise<Response>(() => {}));
+
+    const { result } = renderHook(() => useOwnedCards(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.pending).toBe(0));
+    expect(result.current.pricing).toBe(0);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/printings/"))).toBe(false);
   });
 });

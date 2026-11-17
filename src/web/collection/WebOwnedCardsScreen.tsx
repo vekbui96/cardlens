@@ -32,7 +32,7 @@ const VIEWS = [
 
 export function WebOwnedCardsScreen() {
   const { push } = useNavigation();
-  const { rows, pending } = useOwnedCards();
+  const { rows, pending, pricing } = useOwnedCards();
   const [sort, setSort] = useState<OwnedSortKey>("price");
   const [view, setView] = useState<"showcase" | "list">("showcase");
 
@@ -57,8 +57,18 @@ export function WebOwnedCardsScreen() {
               <span className={styles.total}>{formatUsd(total)}</span>
             </>
           ) : null}
-          {pending > 0 ? (
-            <span className={styles.pending}> · pricing {pending === 1 ? "1 set" : `${pending} sets`}…</span>
+          {/*
+            Prices first: names arrive in one batch while the printings are
+            still loading, and "unpriced" before pricing has finished counts
+            cards that are merely not priced YET.
+          */}
+          {pricing > 0 ? (
+            <span className={styles.pending}>
+              {" "}
+              · still pricing {pricing === 1 ? "1 set" : `${pricing} sets`}…
+            </span>
+          ) : pending > 0 ? (
+            <span className={styles.pending}> · loading {pending === 1 ? "1 set" : `${pending} sets`}…</span>
           ) : unpriced > 0 ? (
             <span className={styles.pending}> · {unpriced} unpriced</span>
           ) : null}
