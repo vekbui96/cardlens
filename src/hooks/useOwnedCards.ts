@@ -8,6 +8,7 @@ import { printingsQuery } from "./useCollectionValue.ts";
 import { buildPrintingIndex } from "../models/printingIndex.ts";
 import { collectorNumberFromCardId, marketPrice } from "../models/marketPrice.ts";
 import { useCatalogPrices } from "./useCatalogPrices.ts";
+import { useCatalogNames } from "./useCatalogNames.ts";
 import type { OwnedPrintingRow } from "../models/ownedSort.ts";
 import { setCardsCache } from "../storage/caches.ts";
 
@@ -19,9 +20,10 @@ import { setCardsCache } from "../storage/caches.ts";
  * This joins them back together: card details from the catalog, prices from the
  * TCGdex printings the value total already uses.
  *
- * Two requests per set held, both already cached by other screens: the card list
- * shares setCardsCache with the set screen, and the printings share a queryKey
- * with useCollectionValue so a set is never fetched twice.
+ * Names and art for every set in one `/api/catalog/names` request, and the
+ * printings per set on a queryKey shared with useCollectionValue so a set is
+ * never fetched twice. The per-set card list (shared with the set screen and
+ * setCardsCache) runs only for sets the batch cannot answer for.
  */
 export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
   const { collection, backfillNumbers } = useLibrary();
@@ -39,6 +41,26 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     return names;
   }, [sets]);
 
+  /**
+   * Names, numbers and art for every set in ONE request (`/api/catalog/names`),
+   * instead of one catalog call per owned set — nineteen at once on the
+   * author's device, against an upstream that fails a quarter of the time.
+   */
+  const { live: namesLive, query: names } = useCatalogNames(setIds);
+
+  /**
+   * A set is asked for on its own only when the batch cannot answer for it: a
+   * mocked or simulated catalog, an older server without the endpoint (an
+   * error), or a set the server named in `missing`.
+   */
+  const perSet = (setId: string) => !namesLive || names.isError || (names.data?.missing.has(setId) ?? false);
+
+  useEffect(() => {
+    if (names.isError) {
+      console.warn("[cardlens] owned names unavailable, naming set by set:", names.error);
+    }
+  }, [names.isError, names.error]);
+
   const cardQueries = useQueries({
     queries: setIds.map((setId) => {
       const cached = sourceKey === "base" ? setCardsCache.get(`${setId}|`) : null;
@@ -47,6 +69,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
         // and opening this list do not each pay for the catalog.
         queryKey: ["set-cards", sourceKey, setId, ""],
         queryFn: ({ signal }: { signal?: AbortSignal }) => provider.getCardsBySet(setId, { signal }),
+        enabled: perSet(setId),
         staleTime: 30 * 60_000,
         retry: 1,
         ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),
@@ -87,14 +110,19 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
    * repository fills only absent numbers, never touches `at`, and reports back
    * that it wrote nothing on the second pass, so this cannot loop.
    */
+  const namesSettledAt = names.dataUpdatedAt;
+
   useEffect(() => {
     const known: { id: string; collectorNumber: string }[] = [];
+    for (const [id, card] of names.data?.cards ?? []) {
+      if (card.number) known.push({ id, collectorNumber: card.number });
+    }
     for (const query of cardQueries) {
       for (const card of query.data ?? []) known.push({ id: card.id, collectorNumber: card.collectorNumber });
     }
     if (known.length > 0) backfillNumbers(known);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; cardsSettledAt is when its data actually changed
-  }, [backfillNumbers, cardsSettledAt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; cardsSettledAt / namesSettledAt are when their data actually changed
+  }, [backfillNumbers, cardsSettledAt, namesSettledAt]);
 
   return useMemo(() => {
     const cardsBySet = new Map<
@@ -105,7 +133,10 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     let pending = 0;
 
     setIds.forEach((setId, i) => {
-      if (cardQueries[i]?.isPending) pending += 1;
+      // A disabled query reports isPending forever, so a set counts as pending
+      // only on the path actually asking for it.
+      const fromBatch = !perSet(setId);
+      if (fromBatch ? names.isPending && !cardQueries[i]?.data : cardQueries[i]?.isPending) pending += 1;
       const byId = new Map<string, { name: string; number: string; image?: string; large?: string }>();
       for (const c of cardQueries[i]?.data ?? []) {
         byId.set(c.id, {
@@ -122,7 +153,9 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     const rows: OwnedPrintingRow[] = [];
     for (const card of collection) {
       const setId = card.setId ?? card.id.slice(0, card.id.lastIndexOf("-"));
-      const info = cardsBySet.get(setId)?.get(card.id);
+      // The batch where it answered; the per-set list (or its device cache) for
+      // a set it could not name.
+      const info = names.data?.cards.get(card.id) ?? cardsBySet.get(setId)?.get(card.id);
       // The catalog's own number when it has answered, and the card id's tail
       // until then, so a row can list before its name arrives.
       const number = info?.number ?? collectorNumberFromCardId(card.id);
@@ -147,5 +180,15 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
 
     return { rows, pending };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query arrays are new each render; their settled data is what matters
-  }, [collection, setIds, setNames, catalogPrices, cardsSettledAt, pricesSettledAt]);
+  }, [
+    collection,
+    setIds,
+    setNames,
+    catalogPrices,
+    cardsSettledAt,
+    pricesSettledAt,
+    namesSettledAt,
+    names.status,
+    namesLive,
+  ]);
 }
