@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MOCK_CARDS } from "../integrations/pokemon/fixtures.ts";
 import { ProviderError } from "../integrations/providers.ts";
-import { fetchSetInformation, toSetPrintings } from "./useSetInformation.ts";
+import { printingsCache, setCardsCache } from "../storage/caches.ts";
+import { fetchSetInformation, rememberSetInformation, toSetPrintings } from "./useSetInformation.ts";
 
 /**
  * The hook itself switches off under mocks — deliberately, so tests and the e2e
@@ -94,6 +95,60 @@ describe("fetchSetInformation", () => {
     );
 
     await expect(fetchSetInformation("sv3", "Obsidian Flames")).rejects.toBeInstanceOf(ProviderError);
+  });
+});
+
+/**
+ * A set built while TCGdex was skipping cards must not stick on the device.
+ *
+ * `/api/printings` says so through `Cache-Control`; this combined endpoint
+ * caches for an hour either way, so it says so with `printingsComplete`. The
+ * printings it hands over seed `printingsCache`, which Home and binders read
+ * for 30 days — the gap #28 closed for the other path. Live, Fates Collide sat
+ * at 119 of 125 numbers.
+ */
+describe("set-information and incomplete printings", () => {
+  const PRINTINGS = { tcgdexSetId: "xy10", byNumber: { "1": [{ type: "normal" }] } };
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it("marks the printings provisional when the server says they are incomplete", async () => {
+    respondWith({ cards: { data: MOCK_CARDS }, printings: PRINTINGS, printingsComplete: false });
+
+    const info = await fetchSetInformation("xy10", "Fates Collide");
+
+    expect(info.printings?.provisional).toBe(true);
+    expect(info.printings?.byNumber).toEqual(PRINTINGS.byNumber);
+  });
+
+  it("leaves complete printings, and an older server's, unmarked", async () => {
+    respondWith({ cards: { data: MOCK_CARDS }, printings: PRINTINGS, printingsComplete: true });
+    expect((await fetchSetInformation("xy10", "Fates Collide")).printings).toEqual(PRINTINGS);
+
+    // No field at all: a server from before it existed, whose answers were
+    // always taken as complete.
+    respondWith({ cards: { data: MOCK_CARDS }, printings: PRINTINGS });
+    expect((await fetchSetInformation("xy10", "Fates Collide")).printings).toEqual(PRINTINGS);
+  });
+
+  it("does not store provisional printings, but still stores the cards", async () => {
+    respondWith({ cards: { data: MOCK_CARDS }, printings: PRINTINGS, printingsComplete: false });
+    const info = await fetchSetInformation("xy10", "Fates Collide");
+
+    rememberSetInformation("xy10", info);
+
+    expect(printingsCache.get("xy10")).toBeNull();
+    expect(setCardsCache.get("xy10|")?.value).toHaveLength(MOCK_CARDS.length);
+  });
+
+  it("stores complete printings for the long haul", async () => {
+    respondWith({ cards: { data: MOCK_CARDS }, printings: PRINTINGS, printingsComplete: true });
+    const info = await fetchSetInformation("xy10", "Fates Collide");
+
+    rememberSetInformation("xy10", info);
+
+    expect(printingsCache.get("xy10")?.value).toEqual(PRINTINGS);
   });
 });
 

@@ -4,6 +4,7 @@ import compression from "compression";
 import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
+import { setInformationBody, type PrintingsAnswer } from "./setInformation.ts";
 import { dirname, join } from "node:path";
 import { CatalogPriceStore } from "./catalogPrices.ts";
 import { CatalogNameStore, type SetNameIndex } from "./catalogNames.ts";
@@ -942,7 +943,7 @@ export function createApp(
       }),
       setName
         ? printingsStore.get(setId, setName).then(
-            (r) => r.value,
+            (r): PrintingsAnswer => ({ value: r.value, complete: r.complete }),
             (err: unknown) => {
               console.warn(`[cardlens] printings unavailable for ${setId}:`, err);
               return null;
@@ -960,8 +961,9 @@ export function createApp(
     // The whole SetPrintings, same as /api/printings returns, not just its
     // byNumber map: the client caches this for 30 days and the record names
     // which TCGdex set it came from. The client accepts either shape, so the two
-    // halves can deploy in either order.
-    res.json({ setId, cards, printings: printings ?? null });
+    // halves can deploy in either order. `printingsComplete` says whether TCGdex
+    // skipped cards while the printings were built (see setInformation.ts).
+    res.json(setInformationBody(setId, cards, printings));
   });
 
   /**
