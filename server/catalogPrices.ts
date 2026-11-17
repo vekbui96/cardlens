@@ -31,6 +31,19 @@ import { normalizeTcgplayerPricing, type RawTcgplayer } from "../src/integration
 export const CATALOG_PRICE_TTL_MS = 12 * 60 * 60_000;
 
 /**
+ * How long an EMPTY answer is remembered, in memory only.
+ *
+ * Empty is a real answer for several modern sets (pokemontcg.io prices 0/120
+ * Pitch Black) and is never persisted, because it cannot be told apart from a
+ * response that arrived malformed. Forgetting it entirely, though, sent every
+ * Home visit back upstream for that set, and the route awaits every set — one
+ * unpriceable set held the whole answer to a fresh run against an API that
+ * fails a quarter of the time. An hour bounds the malformed case and a restart
+ * clears it.
+ */
+export const CATALOG_PRICE_EMPTY_TTL_MS = 60 * 60_000;
+
+/**
  * Bump when the cached SHAPE changes, or when a value callers already read
  * starts meaning something different. Entries live for half a day and are
  * treated as fresh, so a TTL alone cannot retire a bad shape — the same hazard
@@ -120,6 +133,11 @@ export function pricesPath(setId: string, page = 1): string {
 
 export class CatalogPriceStore {
   private memory = new Map<string, CacheEntry>();
+  /**
+   * When each set last answered EMPTY. Memory only, never `write()` — see
+   * CATALOG_PRICE_EMPTY_TTL_MS. A failure is never recorded here.
+   */
+  private emptyAt = new Map<string, number>();
   /** In-flight fetches, so a device holding twenty sets causes one run each. */
   private inFlight = new Map<string, Promise<SetPriceIndex>>();
 
@@ -181,6 +199,9 @@ export class CatalogPriceStore {
     const entry = this.read(setId);
     if (entry && Date.now() - entry.at < CATALOG_PRICE_TTL_MS) return entry.prices;
 
+    const empty = this.emptyAt.get(setId);
+    if (empty !== undefined && Date.now() - empty < CATALOG_PRICE_EMPTY_TTL_MS) return {};
+
     // A caller that joins a run already in flight goes through the same
     // stale fallback below. Returning the shared promise directly handed the
     // second caller the rejection while the first was served the stale copy.
@@ -228,9 +249,13 @@ export class CatalogPriceStore {
         // An empty index is a legitimate answer — pokemontcg.io prices none of
         // several modern sets (measured: 0/120 Pitch Black) — but it is
         // indistinguishable from a response that arrived malformed, so it is
-        // not written. Re-asking costs one request every twelve hours.
+        // never written. It is remembered in memory for an hour instead, or
+        // every request would go back upstream for it.
         if (Object.keys(prices).length > 0) {
+          this.emptyAt.delete(setId);
           this.write(setId, { at: Date.now(), v: CATALOG_PRICE_CACHE_VERSION, prices });
+        } else {
+          this.emptyAt.set(setId, Date.now());
         }
         return prices;
       })

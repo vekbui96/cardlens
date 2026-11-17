@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CATALOG_PRICE_CACHE_VERSION,
+  CATALOG_PRICE_EMPTY_TTL_MS,
   CATALOG_PRICE_TTL_MS,
   CatalogPriceStore,
   indexSetPrices,
@@ -238,6 +239,65 @@ describe("CatalogPriceStore", () => {
     const store = new CatalogPriceStore(dir, vi.fn().mockResolvedValue({ data: [] }));
     expect(await store.get("me5")).toEqual({});
     expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("remembers an empty answer in memory instead of re-asking upstream on every visit", async () => {
+    // Pitch Black prices 0/120 at pokemontcg.io. Home awaits every set, so a
+    // set re-fetched on each request held the whole response to an upstream
+    // run while every priced set answered from cache.
+    const fetchCatalog = vi.fn().mockResolvedValue({ data: [card("me5-1", { holofoil: { market: null } })] });
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    expect(await store.get("me5")).toEqual({});
+    expect(await store.get("me5")).toEqual({});
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+    // Still never on disk: a malformed answer must not strand a set past a restart.
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("asks again once the empty answer is an hour old, and keeps prices that appear", async () => {
+    vi.useFakeTimers();
+    const fetchCatalog = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [card("me5-1", { holofoil: { market: 3 } })] });
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    await store.get("me5");
+    vi.setSystemTime(Date.now() + CATALOG_PRICE_EMPTY_TTL_MS - 1);
+    expect(await store.get("me5")).toEqual({});
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 2);
+    expect(await store.get("me5")).toEqual({ "me5-1|holofoil": 3 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
+    expect(readdirSync(dir)).toEqual(["me5.json"]);
+  });
+
+  it("holds an empty answer for far less than the twelve-hour price cache", () => {
+    expect(CATALOG_PRICE_EMPTY_TTL_MS).toBeGreaterThan(0);
+    expect(CATALOG_PRICE_EMPTY_TTL_MS).toBeLessThanOrEqual(CATALOG_PRICE_TTL_MS / 4);
+  });
+
+  it("does not remember a failure as an empty answer", async () => {
+    // Empty is an answer; a failed fetch is not. Remembering it as `{}` would
+    // turn an outage into an hour of "nothing priced" instead of `missing`.
+    const fetchCatalog = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("upstream 500"))
+      .mockResolvedValueOnce({ data: [card("sv1-1", { holofoil: { market: 2 } })] });
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    await expect(store.get("sv1")).rejects.toThrow("upstream 500");
+    expect(await store.get("sv1")).toEqual({ "sv1-1|holofoil": 2 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets empty answers on restart", async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({ data: [] });
+    await new CatalogPriceStore(dir, fetchCatalog).get("me5");
+    await new CatalogPriceStore(dir, fetchCatalog).get("me5");
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a cache entry written by an older version", async () => {
