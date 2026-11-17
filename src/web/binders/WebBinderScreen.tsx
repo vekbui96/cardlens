@@ -183,6 +183,40 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
   const dropTarget = drag?.over ?? null;
   const draggingFrom = drag && drag.source.kind === "address" ? addressKey(drag.source.at) : null;
 
+  /**
+   * Which spread is on screen, by the index of its first page.
+   *
+   * Every spread is drawn in one long scroll, and on a phone a 16-pocket page
+   * is taller than the screen — page 14 of a 16-page binder was about thirteen
+   * screen-heights down. The page row jumps there; this keeps its highlight on
+   * whatever spread the user has actually scrolled to.
+   *
+   * An IntersectionObserver where the browser has one: the spread nearest the
+   * top of the viewport wins. A tap sets it too, straight away, so the row
+   * answers the tap even before the smooth scroll settles.
+   */
+  const [currentSpread, setCurrentSpread] = useState(0);
+  const spreadLayout = binder ? `${binder.pages.length}:${binder.format}` : "";
+  useEffect(() => {
+    if (!spreadLayout || typeof IntersectionObserver === "undefined") return;
+    const visible = new Set<number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const first = Number((entry.target as HTMLElement).dataset.spread);
+          if (entry.isIntersecting) visible.add(first);
+          else visible.delete(first);
+        }
+        if (visible.size > 0) setCurrentSpread(Math.min(...visible));
+      },
+      // Only the top part of the viewport counts, so a spread is "current" once
+      // it has reached the top rather than as soon as its first row peeks in.
+      { rootMargin: "0px 0px -60% 0px" },
+    );
+    document.querySelectorAll<HTMLElement>("[data-spread]").forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [spreadLayout]);
+
   if (!binder) {
     return (
       <Screen title="Binder" headerLeft={<BackRow focused={false} onActivate={pop} />} canGoBack>
@@ -193,6 +227,14 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
 
   const spec = specFor(binder.format);
   const counts = countBinder(binder);
+  const spreads = pageGroups(binder.pages.length, binder.format);
+
+  const jumpTo = (first: number) => {
+    setCurrentSpread(first);
+    document
+      .querySelector(`[data-spread="${first}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
 
   /**
    * No trimming. It used to run on every commit, which meant "Add page" grew
@@ -402,14 +444,43 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                 : `Pocket ${selected.index + 1} on page ${selected.page + 1} selected — pick a card, or clear it.`
               : "Tap a pocket to fill it, or drag a card from one pocket to another."}
           </p>
+          {/* One button per spread, grouped exactly as the spreads below are
+              drawn, so "2–3" is the pair you will land on. Absent for a binder
+              one spread long: there is nowhere to jump to. */}
+          {spreads.length > 1 ? (
+            <nav className={styles.pageJump} aria-label="Jump to binder pages">
+              <span className={styles.pageJumpLabel} aria-hidden="true">
+                Pages
+              </span>
+              {spreads.map((spread) => {
+                const first = spread[0];
+                const last = spread[spread.length - 1];
+                const current = first === currentSpread;
+                return (
+                  <button
+                    key={first}
+                    type="button"
+                    className={styles.pageJumpButton}
+                    {...(current ? { "aria-current": "true" as const } : {})}
+                    onClick={() => jumpTo(first)}
+                  >
+                    {first === last ? `${first + 1}` : `${first + 1}–${last + 1}`}
+                  </button>
+                );
+              })}
+            </nav>
+          ) : null}
           {/* Laid out the way the binder actually falls open: page 1 alone, then
           facing pairs. A half spread keeps its empty right side rather than
           centring the page — that gap is where the next page goes, and the
           binder should look like it is waiting for it. */}
-          {pageGroups(binder.pages.length, binder.format).map((spread) => (
+          {spreads.map((spread) => (
             <div
               key={spread[0]}
               className={styles.spread}
+              // What the page row scrolls to, and what it watches to know which
+              // spread is on screen.
+              data-spread={spread[0]}
               data-single={spread.length === 1 || undefined}
               // A format with no facing pages is one page per row, full width —
               // not half a spread with an empty side waiting for a neighbour that

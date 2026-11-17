@@ -417,6 +417,50 @@ describe("WebBinderScreen page edits", () => {
   });
 });
 
+describe("WebBinderScreen page jump", () => {
+  function seedPages(count: number) {
+    const base = emptyBinder(BINDER_ID, "Favourites", "9", Date.now());
+    new Repositories().saveBinder({
+      ...base,
+      pages: Array.from({ length: count }, () => ({ slots: {} })),
+      updatedAt: base.updatedAt + 1,
+    });
+  }
+
+  it("offers one button per spread, and scrolls the chosen spread into view", async () => {
+    // Every spread is drawn in one long scroll, so page 14 of a 16-page binder
+    // was thirteen screen-heights down on a phone with no way to get there but
+    // scrolling past every page before it.
+    seedPages(5);
+    const scrolled: Element[] = [];
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+      scrolled.push(this);
+    });
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const nav = screen.getByRole("navigation", { name: "Jump to binder pages" });
+    const buttons = within(nav).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["1", "2–3", "4–5"]);
+
+    await user.click(within(nav).getByRole("button", { name: "4–5" }));
+
+    // The spread that holds page 4, not merely "something scrolled".
+    const target = scrolled.at(-1);
+    expect(target).toBeDefined();
+    expect(within(target as HTMLElement).getByLabelText("Page 4")).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "4–5" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("button", { name: "1" })).not.toHaveAttribute("aria-current");
+    spy.mockRestore();
+  });
+
+  it("is not drawn for a binder that is one spread long", () => {
+    // A single page has nowhere to jump to; the row would be chrome for nothing.
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    expect(screen.queryByRole("navigation", { name: "Jump to binder pages" })).not.toBeInTheDocument();
+  });
+});
+
 describe("WebBinderScreen settings", () => {
   it("keeps page actions on the toolbar and settings behind the panel", async () => {
     // The split the panel exists for: things pressed constantly stay out,
