@@ -24,8 +24,14 @@ import { setCardsCache } from "../storage/caches.ts";
  * printings per set on a queryKey shared with useCollectionValue so a set is
  * never fetched twice. The per-set card list (shared with the set screen and
  * setCardsCache) runs only for sets the batch cannot answer for.
+ *
+ * Two counts, because names and prices arrive separately: `pending` is sets
+ * still waiting on names, `pricing` sets still waiting on their printings. Names
+ * come back in one batch while the printings are still on their way, so a
+ * screen that read "pricing" off the names alone called the total final — and
+ * cards "unpriced" — while prices were still loading.
  */
-export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
+export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pricing: number } {
   const { collection, backfillNumbers } = useLibrary();
   const { provider, sourceKey } = useCatalog();
   const { data: sets } = useSets();
@@ -94,6 +100,9 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
    */
   const cardsSettledAt = settledKey(cardQueries);
   const pricesSettledAt = settledKey(priceQueries);
+  // Settling is not the only change `pricing` must see: a set whose name just
+  // arrived goes from never-asked to in flight without settling anything.
+  const pricesFetching = priceQueries.map((q) => q.fetchStatus).join(",");
 
   /**
    * Teach the stored rows their collector numbers, from the card lists this
@@ -131,12 +140,17 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     >();
     const pricesBySet = new Map<string, ReturnType<typeof buildPrintingIndex>>();
     let pending = 0;
+    let pricing = 0;
 
     setIds.forEach((setId, i) => {
       // A disabled query reports isPending forever, so a set counts as pending
       // only on the path actually asking for it.
       const fromBatch = !perSet(setId);
       if (fromBatch ? names.isPending && !cardQueries[i]?.data : cardQueries[i]?.isPending) pending += 1;
+      // The same trap for prices: a set with no known name is never asked
+      // (`fetchStatus` "idle"), and waiting on it would read "pricing…" forever.
+      const price = priceQueries[i];
+      if (price?.isPending && price.fetchStatus !== "idle") pricing += 1;
       const byId = new Map<string, { name: string; number: string; image?: string; large?: string }>();
       for (const c of cardQueries[i]?.data ?? []) {
         byId.set(c.id, {
@@ -178,7 +192,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
       }
     }
 
-    return { rows, pending };
+    return { rows, pending, pricing };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query arrays are new each render; their settled data is what matters
   }, [
     collection,
@@ -187,6 +201,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number } {
     catalogPrices,
     cardsSettledAt,
     pricesSettledAt,
+    pricesFetching,
     namesSettledAt,
     names.status,
     namesLive,
