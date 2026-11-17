@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -344,6 +344,76 @@ describe("WebBinderScreen trading", () => {
 
     expect(placedCards()[0].quantity).toBe(2);
     expect(screen.queryByRole("button", { name: "One more copy" })).not.toBeInTheDocument();
+  });
+});
+
+describe("WebBinderScreen page edits", () => {
+  /** Page 1 holds one card in pocket 1; pages 2 and 3 are empty. */
+  function seedThreePages() {
+    const base = emptyBinder(BINDER_ID, "Favourites", "9", Date.now());
+    const umbreon: CardSlot = { kind: "card", cardId: "swsh7-215", finish: "holo", name: "Umbreon VMAX" };
+    new Repositories().saveBinder({
+      ...base,
+      pages: [{ slots: { 0: umbreon } }, { slots: {} }, { slots: {} }],
+      updatedAt: base.updatedAt + 1,
+    });
+  }
+
+  const stored = () => new Repositories().getBinders().find((b) => b.id === BINDER_ID);
+
+  /** A per-page action, found inside its own "Page N" region. */
+  const onPage = (n: number, name: string) =>
+    within(screen.getByLabelText(`Page ${n}`)).getByRole("button", { name });
+
+  it("offers both actions on every page, and refuses to remove one holding a card", () => {
+    seedThreePages();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    expect(screen.getAllByRole("button", { name: "Insert page before" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Remove this page" })).toHaveLength(3);
+    expect(onPage(1, "Remove this page")).toBeDisabled();
+    expect(onPage(2, "Remove this page")).toBeEnabled();
+    // The toolbar's end-of-binder button keeps a name of its own; e2e finds it
+    // by "Remove page", which must not also match a per-page button.
+    expect(screen.getAllByRole("button", { name: /Remove page/i })).toHaveLength(1);
+    // And each page is still the ONLY thing labelled "Page N": e2e looks pages
+    // up with a substring label match, which a per-page aria-label would break.
+    expect(screen.getAllByLabelText(/page 2/i)).toHaveLength(1);
+  });
+
+  it("inserts a blank page before a page, moving its cards back, and clears the selection", async () => {
+    seedThreePages();
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(
+      within(screen.getByLabelText("Page 1")).getByRole("button", { name: "Pocket 2, empty" }),
+    );
+    expect(screen.getByText(/Pocket 2 on page 1 selected/)).toBeInTheDocument();
+
+    await user.click(onPage(1, "Insert page before"));
+
+    const pages = stored()?.pages ?? [];
+    expect(pages).toHaveLength(4);
+    expect(pages[0].slots).toEqual({});
+    expect(pages[1].slots[0]).toEqual(expect.objectContaining({ cardId: "swsh7-215" }));
+    expect(screen.queryByText(/selected — pick a card/)).not.toBeInTheDocument();
+    // The card's page can no longer be removed; the new blank one can.
+    expect(onPage(2, "Remove this page")).toBeDisabled();
+    expect(onPage(1, "Remove this page")).toBeEnabled();
+  });
+
+  it("removes an empty page from the middle of the binder", async () => {
+    seedThreePages();
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(onPage(2, "Remove this page"));
+
+    const pages = stored()?.pages ?? [];
+    expect(pages).toHaveLength(2);
+    expect(pages[0].slots[0]).toEqual(expect.objectContaining({ cardId: "swsh7-215" }));
+    expect(screen.queryByLabelText("Page 3")).not.toBeInTheDocument();
   });
 });
 

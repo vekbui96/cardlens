@@ -32,6 +32,7 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { useBinderDrag, type DragSource } from "./useBinderDrag.ts";
+import { canRemovePage, insertPageBefore, removePage } from "./pageEdits.ts";
 import { BinderCoverLeaf } from "./BinderCoverLeaf.tsx";
 import { finishLabel } from "../../models/finishes.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -463,6 +464,45 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                   onSlotClick={(index) => selectAt({ kind: "pocket", page: i, index })}
                   onSlotPointerDown={(index, slot, event) =>
                     onPointerDown(event, { kind: "address", at: { kind: "pocket", page: i, index } }, slot)
+                  }
+                  footer={
+                    /* The ring-binder move: clip a blank page in where it
+                       belongs instead of adding one at the end and dragging
+                       every later card down a page. Both clear the selection,
+                       because the page it was on has just changed number.
+                       Remove is offered only on an EMPTY page — there is no
+                       undo, and a card must never go with it.
+
+                       Named by their visible text only, with no aria-label:
+                       they sit inside the page's own "Page N" region, which
+                       says which page they act on, and a label mentioning
+                       "page 2" would also answer every lookup of the region
+                       by that label. */
+                    <div className={styles.pageActions}>
+                      <button
+                        type="button"
+                        className={styles.pageAction}
+                        title="Adds a blank page here. This page and every later one move back by one, so facing pages after it change."
+                        onClick={() => {
+                          commit(insertPageBefore(binder, i, Date.now()));
+                          setSelected(null);
+                        }}
+                      >
+                        Insert page before
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pageAction}
+                        title="Only an empty page can be removed."
+                        disabled={!canRemovePage(binder, i)}
+                        onClick={() => {
+                          commit(removePage(binder, i, Date.now()));
+                          setSelected(null);
+                        }}
+                      >
+                        Remove this page
+                      </button>
+                    </div>
                   }
                 />
               ))}
