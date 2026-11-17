@@ -117,3 +117,38 @@ Requires Meta AI app **v272+** and glasses software **v125+**.
    permissions).
 
 (The exact labels can shift during Developer Preview — re-verify against the Setup/Test docs above.)
+
+## Gesture history and rules (moved from CLAUDE.md)
+
+- **`keydown` is all the docs promise.** No key-up, no auto-repeat, no hold gesture. Anything derived from those must degrade gracefully — `SELECT` fires on press until a key-up proves the device sends them, because waiting for one that never comes would make the app unusable.
+- 600×600 additive display: black is transparent. Prefer bright glyphs and shape differences over colour alone; every row of chrome costs roughly two card rows of list.
+- No on-glasses keyboard. Text entry is the companion phone or the letter picker.
+
+**Anything that behaves differently on the glasses than on desktop should be suspected first.** A triple-pinch gesture worked perfectly on a keyboard and never fired on the hardware, because it lived in the input adapter and reset on any stray event the neural band produced.
+
+### Gestures, and what is actually confirmed on hardware
+
+| Gesture                                  | Status                                             |
+| ---------------------------------------- | -------------------------------------------------- |
+| Swipes, pinch, middle-pinch              | Documented and working                             |
+| **Triple-pinch on one card** (bulk mark) | **Confirmed working on the glasses**               |
+| Hold                                     | **Tried and removed — never fired on the glasses** |
+
+`keydown` really is all there is: a hold derived from key-up timing and auto-repeat worked on a desktop keyboard and did nothing on the device. Do not reach for it again.
+
+Three rules came out of getting this wrong:
+
+- **Burst detection belongs on the screen, not the input adapter.** The adapter cannot see what is focused, so it had to reset on every other event to avoid firing during rapid marking — and any stray event from the neural band then killed the gesture silently. Keyed on the focused card it is both stricter and more forgiving.
+- **Gesture timings must suit a neural band, not a mouse.** 500ms between pinches was mouse double-click timing and felt broken; 1200ms works.
+- **The viewport meta once hardcoded `width=600, height=600`**, so every device reported a 600×600 layout viewport and a phone was indistinguishable from the glasses in both JS and CSS. It is `width=device-width` now; the glasses report 600 naturally and their surface is a fixed 600px in CSS regardless.
+
+## Two interaction models (detail)
+
+`src/app/layoutMode.ts` resolves `glasses | web | preview`; `useIsWeb()` is what screens branch on. Override with `?ui=`.
+
+The screens and all logic are shared — only interaction differs, and it differs completely:
+
+- **Glasses**: focus ring driven by four gestures, fixed 600×600, no pointer. The collect-mode toggle and printing picker exist solely because a pinch needs something to say _which_ printing it means.
+- **Web** (phone/browser, **confirmed working**): focus ring OFF — it preventDefaults arrows and Enter, which fights native scrolling. Printing badges are tappable buttons with 44px targets, so collect mode and the picker are hidden as they answer a question a finger never asks.
+
+Detection is by **shape**, not size: the glasses are small AND square, a phone is small and tall.
