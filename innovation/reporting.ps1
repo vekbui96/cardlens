@@ -367,7 +367,7 @@ function Get-RunDataContextLine {
 
 # The "## Run data" comment for one issue. -Part $null = no per-issue split (markers missing).
 function Format-RunDataComment {
-    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->')
+    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Gap = '')
     $t = $Data.Totals; $oh = $Data.Overhead
     $sb = New-Object Text.StringBuilder
     [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:RunDataMarker)
@@ -407,9 +407,33 @@ function Format-RunDataComment {
         [void]$sb.AppendLine("| Cost (API equivalent) | $tCost |")
         [void]$sb.AppendLine("| Model(s) | $(($t.Models -join ', ')) |")
     }
+    if ($Gap) { [void]$sb.AppendLine(); [void]$sb.AppendLine($Gap) }
     if ($Data.Notes.Count -gt 0) { [void]$sb.AppendLine(); foreach ($n in $Data.Notes) { [void]$sb.AppendLine("Note: $n.") } }
     [void]$sb.AppendLine(); [void]$sb.AppendLine((Get-RunDataCostNote))
     return $sb.ToString()
+}
+
+# One paragraph on the live-server gap merge-pr.ps1 saw for this issue in THIS run (state\merge-gap-<n>.json,
+# written by merge-pr only; ignored when it belongs to another run). '' when there was no gap.
+function Get-RunDataGapLine {
+    param([string]$LoopHome, [string]$RunId, [int]$Issue)
+    try {
+        if (-not $LoopHome -or -not $RunId) { return '' }
+        $p = Join-Path $LoopHome "state\merge-gap-$Issue.json"
+        if (-not (Test-Path -LiteralPath $p)) { return '' }
+        $g = [IO.File]::ReadAllText($p) | ConvertFrom-Json
+        if ("$($g.runId)" -ne $RunId) { return '' }
+        $commits = @($g.commits | Where-Object { $_ })
+        if ($commits.Count -eq 0) { return '' }
+        $clean = { param($s) ConvertTo-ProgressText "$s" 120 }
+        $t = "Live-server gap when merging: $($commits.Count) commit(s) already on main were not yet on the live server: $((@($commits | ForEach-Object { & $clean $_ })) -join '; ')."
+        $inert = @($g.inertProtected | Where-Object { $_ })
+        if ($inert.Count -gt 0) { $t += " Protected but inert on server-pc (ignored): $((@($inert | Select-Object -First 12 | ForEach-Object { & $clean $_ })) -join ', ')$(if ($inert.Count -gt 12) { ', ...' })." }
+        $srv = @($g.serverCommits | Where-Object { $_ })
+        if ($srv.Count -gt 0) { $t += " Server changes that went live with this change's deploy: $((@($srv | ForEach-Object { & $clean $_ })) -join '; ')." }
+        if ($g.refused) { $t += " The merge was refused: protected paths the server runs ($((@($g.blocked) | ForEach-Object { & $clean $_ }) -join ', '))." }
+        return $t
+    } catch { return '' }
 }
 
 # One-line footer for a proposal opened by this run.
@@ -443,6 +467,7 @@ function Publish-LoopRunData {
         [string]$RunId, [string]$Mode, [string]$Trigger = 'unknown',
         [string]$Marker = '<!-- innovation-loop -->',
         [string]$OutDir = '',
+        [string]$LoopHome = '',
         [int]$MaxIssues = 6, [int]$MaxProposals = 5,
         [switch]$NoPost
     )
@@ -481,7 +506,10 @@ function Publish-LoopRunData {
         if ($proposals.Count -gt $MaxProposals) { $proposals = @($proposals | Select-Object -First $MaxProposals) }
 
         $jobs = New-Object System.Collections.ArrayList
-        foreach ($tg in $targets) { [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = (Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker) }) }
+        foreach ($tg in $targets) {
+            $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
+            [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = (Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine) })
+        }
         foreach ($n in $proposals) { [void]$jobs.Add([pscustomobject]@{ Issue = $n; Body = (Format-RunDataProposalComment -Data $data -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker) }) }
         if ($jobs.Count -eq 0) { Write-RunDataLog 'run data: no issue to post on'; return 0 }
         foreach ($j in $jobs) {
@@ -526,6 +554,7 @@ function Get-ProgressIcon {
     switch ($Status) {
         'ok' { return [char]::ConvertFromUtf32(0x2705) }        # white heavy check mark
         'running' { return [char]::ConvertFromUtf32(0x23F3) }   # hourglass
+        'stopped' { return [char]::ConvertFromUtf32(0x23F3) }   # hourglass: was still running when the build stopped
         'failed' { return [char]::ConvertFromUtf32(0x274C) }    # cross mark
         'skipped' { return [char]::ConvertFromUtf32(0x23ED) }   # next track (skipped)
         'warn' { return [char]::ConvertFromUtf32(0x26A0) }      # warning sign
@@ -567,17 +596,21 @@ function Save-ProgressState {
 }
 
 # Apply one update. -Status: running (default) | ok | failed | skipped. -Stage done needs -Outcome.
-# Advancing to a stage closes every earlier stage still running as ok.
+# Advancing to a stage closes every earlier stage still running: ok normally, 'stopped' on a failure.
 function Update-ProgressState {
     param($State, [string]$Stage, [string]$Status = 'running', [string]$Detail = '', [string]$Outcome = '', [DateTime]$Now = [DateTime]::UtcNow)
     $stages = $State.stages
     if (-not $stages.Contains($Stage)) { throw "unknown stage '$Stage' (known: $(@($stages.Keys) -join ', '))" }
     $nowS = $Now.ToUniversalTime().ToString('o')
     $keys = @($stages.Keys); $idx = [array]::IndexOf($keys, $Stage)
-    # advancing closes earlier stages still running: as ok, or as failed when this is a failed/rolled-back end
+    # Advancing closes earlier stages still running: as ok on the normal path. On a failure (a stage marked
+    # failed, or a failed/rolled-back end) they become 'stopped' (still an hourglass, "not finished"): a stage
+    # that was still running proves nothing about itself. On #22 a merge-pr refusal ended the build while CI
+    # was merely pending, and the old close-as-failed rule showed a red cross on CI. Only a stage explicitly
+    # marked -Status failed, or the done line of a failed end, shows the cross.
     $closeAs = 'ok'
-    if ($Stage -eq 'done' -and (Get-RunDataOutcome $Outcome) -notin @('deployed', 'skipped')) { $closeAs = 'failed' }
-    if ($Stage -ne 'done' -and $Status -eq 'failed') { $closeAs = 'ok' }
+    if ($Stage -eq 'done' -and (Get-RunDataOutcome $Outcome) -notin @('deployed', 'skipped')) { $closeAs = 'stopped' }
+    if ($Stage -ne 'done' -and $Status -eq 'failed') { $closeAs = 'stopped' }
     for ($i = 0; $i -lt $idx; $i++) {
         $e = $stages[$keys[$i]]
         if ($e.status -eq 'running') { $e.status = $closeAs; $e.end = $nowS }
@@ -633,7 +666,7 @@ function Format-ProgressComment {
         elseif ($en) { $when = Format-ProgressClock $en }
         elseif ($s) { $when = "since $(Format-ProgressClock $s)" }
         $line = "- $(Get-ProgressIcon $e.status) "
-        if ($e.status -eq 'running') { $line += "**$txt**" } else { $line += $txt }
+        if ($e.status -eq 'running') { $line += "**$txt**" } elseif ($e.status -eq 'stopped') { $line += "$txt (not finished)" } else { $line += $txt }
         if ($when) { $line += " | $when" }
         if ($e.detail) { $line += " | $($e.detail)" }
         [void]$sb.AppendLine($line)

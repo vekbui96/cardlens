@@ -19,6 +19,18 @@ import { TcgdexClient, type SetPrintings } from "../src/integrations/tcgdex/clie
 export const PRINTINGS_TTL_MS = 30 * 24 * 60 * 60_000;
 
 /**
+ * How long a build with skipped cards counts as fresh.
+ *
+ * Only a COMPLETE set earns the 30 days above. A card skipped during a TCGdex
+ * 503 burst is not a card without printings, and caching the gap for a month
+ * hid it: live, Fates Collide (xy10) served 119 of 125 numbers while TCGdex had
+ * all six missing cards with variants. An hour is long enough not to hammer
+ * TCGdex mid-burst and short enough that the gap heals the same day. The
+ * incomplete entry keeps serving meanwhile, and as the stale fallback.
+ */
+export const PARTIAL_PRINTINGS_TTL_MS = 60 * 60_000;
+
+/**
  * Bump whenever the cached SHAPE gains something callers read.
  *
  * The TTL alone cannot do this job: entries are held for 30 days and treated as
@@ -44,12 +56,32 @@ interface CacheEntry {
   /** Absent on v1 entries written before this existed. */
   v?: number;
   value: SetPrintings;
+  /**
+   * Cards the build could not fetch. Absent means complete — every entry
+   * written before this existed reads that way, which is what they were
+   * treated as, so no version bump (and no set-wide refetch) is needed.
+   */
+  skippedCards?: number;
+}
+
+/** What one upstream run produced, after the cache has had its say. */
+interface Built {
+  value: SetPrintings | null;
+  complete: boolean;
+}
+
+function isComplete(entry: CacheEntry): boolean {
+  return !entry.skippedCards;
+}
+
+function freshFor(entry: CacheEntry): number {
+  return isComplete(entry) ? PRINTINGS_TTL_MS : PARTIAL_PRINTINGS_TTL_MS;
 }
 
 export class PrintingsStore {
   private memory = new Map<string, CacheEntry>();
   /** In-flight fetches, so ten devices opening a set cause one upstream run. */
-  private inFlight = new Map<string, Promise<SetPrintings | null>>();
+  private inFlight = new Map<string, Promise<Built>>();
 
   constructor(
     private readonly dir: string,
@@ -100,11 +132,17 @@ export class PrintingsStore {
    * A stale entry is returned rather than refetched on the spot: the data is
    * effectively immutable once a set ships, and making a device wait ~2s to
    * confirm that is a bad trade.
+   *
+   * `complete` is false when the answer is missing cards TCGdex failed to
+   * serve, so the route can tell browsers not to hold it for a month.
    */
-  async get(setId: string, setName: string): Promise<{ value: SetPrintings | null; cached: boolean }> {
+  async get(
+    setId: string,
+    setName: string,
+  ): Promise<{ value: SetPrintings | null; cached: boolean; complete: boolean }> {
     const entry = this.read(setId);
-    if (entry && Date.now() - entry.at < PRINTINGS_TTL_MS) {
-      return { value: entry.value, cached: true };
+    if (entry && Date.now() - entry.at < freshFor(entry)) {
+      return { value: entry.value, cached: true, complete: isComplete(entry) };
     }
 
     // A caller that joins a run already in flight goes through the same
@@ -113,25 +151,46 @@ export class PrintingsStore {
     const promise = this.inFlight.get(setId) ?? this.fetch(setId, setName);
 
     try {
-      return { value: await promise, cached: false };
+      const built = await promise;
+      return { value: built.value, cached: false, complete: built.complete };
     } catch (err) {
       // Serving a stale copy beats failing when upstream is down.
       if (entry) {
         console.warn(`[cardlens] printings fetch failed for ${setId}, serving stale:`, err);
-        return { value: entry.value, cached: true };
+        return { value: entry.value, cached: true, complete: isComplete(entry) };
       }
       throw err;
     }
   }
 
-  private fetch(setId: string, setName: string): Promise<SetPrintings | null> {
+  private fetch(setId: string, setName: string): Promise<Built> {
     const promise = this.client
-      .getSetPrintings(setId, setName)
-      .then((value) => {
-        if (value && Object.keys(value.byNumber).length > 0) {
-          this.write(setId, { at: Date.now(), v: PRINTINGS_CACHE_VERSION, value });
+      .buildSetPrintings(setId, setName)
+      .then((report): Built => {
+        if (!report) return { value: null, complete: true };
+        const { printings: value, skippedCards } = report;
+        const numbers = Object.keys(value.byNumber).length;
+        if (numbers === 0) return { value, complete: skippedCards === 0 };
+
+        if (skippedCards > 0) {
+          // A rebuild that lands inside the next burst must not make the set
+          // worse. Keep the fuller entry, re-stamped so it waits out another
+          // short window rather than rebuilding on every request.
+          const previous = this.read(setId);
+          if (previous && Object.keys(previous.value.byNumber).length >= numbers) {
+            this.write(setId, { ...previous, at: Date.now() });
+            return { value: previous.value, complete: isComplete(previous) };
+          }
+          console.warn(`[cardlens] printings for ${setId} skipped ${skippedCards} card(s); caching for 1h`);
         }
-        return value;
+
+        this.write(setId, {
+          at: Date.now(),
+          v: PRINTINGS_CACHE_VERSION,
+          value,
+          ...(skippedCards > 0 ? { skippedCards } : {}),
+        });
+        return { value, complete: skippedCards === 0 };
       })
       .finally(() => this.inFlight.delete(setId));
 

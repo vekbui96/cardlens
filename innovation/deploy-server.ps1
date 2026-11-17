@@ -7,7 +7,9 @@
 .DESCRIPTION
   1. preconditions: elevated; live dir is a clean git checkout; after a fresh `git fetch origin main`,
      -TargetSha is on origin/main and the live HEAD is an ancestor of it (never moves backwards); no
-     protected path (card index, scanner gate, merge rules, .env, ...) changes between them
+     protected path that the server runs (card index, shared merge/validation rules, Target bot, .env, ...)
+     changes between them (protected paths nothing on server-pc executes, e.g. innovation/**, .github/**,
+     are logged, not refused)
   2. snapshot ALL of D:\services\data to D:\services\backups\predeploy-<stamp>.zip (read-only on data;
      the zip is verified by entry count; the newest 10 predeploy zips are kept, nothing else is touched)
   3. record PREV (live HEAD) in C:\ProgramData\innovation-loop-cardlens\state\server-last-deploy.json
@@ -55,11 +57,15 @@ try {
     $fwd = Invoke-Git -Repo $live -Arguments @('merge-base', '--is-ancestor', $prev, $TargetSha) -AllowFail -Quiet
     if ($fwd.Code -ne 0) { throw "live HEAD $prev is not an ancestor of $TargetSha; refusing to move the server sideways/backwards" }
     $changed = Get-ChangedFiles -Repo $live -From $prev -To $TargetSha
-    # innovation/** is the loop's own code: the copy in the live dir is never executed (the loop runs from
-    # D:\projects\cardlens\innovation, this task from its admin-only copy), so Ve merging loop changes must not
-    # block server deploys. Every other protected path still refuses.
-    $prot = @($changed | Where-Object { (Test-ProtectedPath $_) -and ($_.Replace('\', '/') -notmatch '^innovation/') })
-    if ($prot.Count -gt 0) { throw "changes protected paths (manual / needs Ve): $($prot -join ', ')" }
+    # Only protected paths that change what this server RUNS refuse (lib.ps1 Split-ProtectedByLiveImpact: card
+    # index, shared sync rules, Target bot, .env). Protected paths that nothing on server-pc executes
+    # (innovation/**: the loop runs from D:\projects\cardlens\innovation and this task from its admin-only
+    # copy; .github/**, playwright config, client-only src, scripts) are inert in the live dir: logged only.
+    # A loop change's OWN files never touch any protected path (merge-pr.ps1 refuses that before merging).
+    $serverPaths = Get-ServerPaths -Repo $live -Ref $TargetSha
+    $split = Split-ProtectedByLiveImpact -Protected @($changed | Where-Object { Test-ProtectedPath $_ }) -ServerPaths $serverPaths
+    if ($split.Inert.Count -gt 0) { Write-Log "protected but inert on this server (not refused): $($split.Inert -join ', ')" }
+    if ($split.Block.Count -gt 0) { throw "changes protected paths that the server runs (manual / needs Ve): $($split.Block -join ', ')" }
     $lockChanged = @($changed | Where-Object { $_ -in @('package.json', 'package-lock.json') }).Count -gt 0
     Write-Log "prev=$prev target=$TargetSha files=$($changed.Count) lockChanged=$lockChanged issue=$Issue"
     foreach ($c in $changed) { Write-Log "  changed: $c" }

@@ -5,7 +5,9 @@
 
 .DESCRIPTION
   Kept out of lib.ps1 on purpose: lib.ps1 is one of the elevated side's files, and changing it makes the
-  elevated copy stale until Ve re-runs install-task.ps1 -ElevatedOnly. Nothing here runs elevated.
+  elevated copy stale until Ve re-runs install-task.ps1 -ElevatedOnly. Nothing here runs elevated. The gap
+  rule's path classifier (Split-ProtectedByLiveImpact) does live in lib.ps1, because deploy-server.ps1 must
+  apply the identical rule; dot-source lib.ps1 before this file.
 
   Get-CiVerdict       are the required CI jobs on the PR head green, still running, failed, or unacceptable?
   Get-FlakyRerunVerdict  may a failed CI run get its one rerun of failed jobs (known-flaky e2e specs only)?
@@ -73,23 +75,29 @@ function Get-FlakyRerunVerdict {
 }
 
 # Protected paths changed between the live server's HEAD and the target (merge-pr: the PR head; deploy: the
-# merge). They come from two places:
+# merge). Needs lib.ps1 dot-sourced first (Split-ProtectedByLiveImpact, shared with the elevated side). They
+# come from two places:
 #   the PR's / merge's OWN files   always refuse (a loop change may never touch a protected path)
-#   the gap (commits Ve already merged to main that the live server does not have yet):
-#     innovation/**                ignored: the live dir's copy is inert (the loop runs from
-#                                  D:\projects\cardlens\innovation, the elevated side from its admin-only
-#                                  copy in ProgramData), so Ve merging loop changes never blocks deploys
-#     any other protected path     refuse: deploy-server.ps1 (elevated) refuses the same set, and widening the
-#                                  elevated rule beyond innovation/** is a decision for Ve, not a side effect
-# Callers log every gap commit so the issue shows what the deploy also carries.
+#   the gap (commits already on main, merged by Ve or by the loop through its own gates, that the live server
+#   does not have yet; Pages-only deploys never move the live checkout, so the gap grows with every
+#   front-end merge):
+#     inert there                  ignored, but listed (Ignored): innovation/**, .github/**, playwright config,
+#                                  client-only src, scripts... nothing on server-pc executes them
+#     changes what the server RUNS refuse (Block): card index (recognition restart), sync merge/validation
+#                                  rules, the Target bot, .env. Those are Ve's merged changes, but they are
+#                                  exactly what the loop may never take to production on its own; the refusal
+#                                  names the commits so Ve can deploy them by hand first.
+#   Non-protected server changes in the gap are not decided here: they ride along with the deploy (the live
+#   checkout is reset to the merge) and merge-pr / deploy list them (Get-ServerPlan Foreign).
+# deploy-server.ps1 (elevated) applies the same Block rule to live HEAD..target.
 function Get-GapDecision {
-    param([string[]]$Protected, [string[]]$OwnFiles = @())
-    $refuse = New-Object System.Collections.ArrayList; $ignored = New-Object System.Collections.ArrayList
+    param([string[]]$Protected, [string[]]$OwnFiles = @(), [string[]]$ServerPaths = @('server', 'package.json', 'package-lock.json'))
+    $refuse = New-Object System.Collections.ArrayList; $gapFiles = New-Object System.Collections.ArrayList
     $own = @($OwnFiles | ForEach-Object { "$_".Replace('\', '/') })
     foreach ($f in @($Protected | Where-Object { $_ } | ForEach-Object { "$_".Replace('\', '/') } | Select-Object -Unique)) {
-        if ($own -contains $f) { [void]$refuse.Add("$f (changed by this PR)") }
-        elseif ($f -match '^innovation/') { [void]$ignored.Add($f) }
-        else { [void]$refuse.Add("$f (in commits between the live server and this change)") }
+        if ($own -contains $f) { [void]$refuse.Add("$f (changed by this PR)") } else { [void]$gapFiles.Add($f) }
     }
-    return [pscustomobject]@{ Refuse = @($refuse); Ignored = @($ignored) }
+    $split = Split-ProtectedByLiveImpact -Protected @($gapFiles) -ServerPaths $ServerPaths
+    foreach ($f in $split.Block) { [void]$refuse.Add("$f (in commits between the live server and this change; it changes what the live server runs)") }
+    return [pscustomobject]@{ Refuse = @($refuse); Ignored = @($split.Inert); Block = @($split.Block) }
 }

@@ -144,6 +144,55 @@ describe("TcgdexClient.getSetPrintings", () => {
     expect(result?.byNumber["14"]).toBeUndefined();
   });
 
+  /** Like mockFetch, but `path` answers 503 for its first `failures` requests. */
+  function flakyFetch(path: string, failures: number) {
+    const ok = mockFetch({ ...CARDS, "/sets/me05": PITCH_BLACK, "/sets": SETS });
+    let left = failures;
+    return vi.fn((url: string) => {
+      if (url.includes(path) && left > 0) {
+        left--;
+        return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) } as Response);
+      }
+      return ok(url);
+    });
+  }
+
+  it("retries a card once, so a single 503 does not leave a gap", async () => {
+    // TCGdex fails in bursts; live xy10 was cached at 119 of 125 numbers.
+    const fetchMock = flakyFetch("/cards/me05-014", 1);
+    vi.stubGlobal("fetch", fetchMock);
+    const report = await new TcgdexClient().buildSetPrintings("me5", "Pitch Black", { retryDelayMs: 0 });
+    expect(report?.printings.byNumber["14"]).toBeDefined();
+    expect(report?.skippedCards).toBe(0);
+  });
+
+  it("counts a card that fails twice as skipped", async () => {
+    vi.stubGlobal("fetch", flakyFetch("/cards/me05-014", 2));
+    const report = await new TcgdexClient().buildSetPrintings("me5", "Pitch Black", { retryDelayMs: 0 });
+    expect(report?.printings.byNumber["1"]).toBeDefined();
+    expect(report?.printings.byNumber["14"]).toBeUndefined();
+    expect(report?.skippedCards).toBe(1);
+  });
+
+  it("neither retries nor counts a card that 404s", async () => {
+    // A card the set lists but that 404s is permanent. Counting it would mark
+    // the set incomplete forever and rebuild it every hour for nothing.
+    const partial = { ...CARDS };
+    delete partial["/cards/me05-014"];
+    const fetchMock = mockFetch({ ...partial, "/sets/me05": PITCH_BLACK, "/sets": SETS });
+    vi.stubGlobal("fetch", fetchMock);
+    const report = await new TcgdexClient().buildSetPrintings("me5", "Pitch Black", { retryDelayMs: 0 });
+    expect(report?.skippedCards).toBe(0);
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes("/cards/me05-014"))).toHaveLength(1);
+  });
+
+  it("returns exactly the SetPrintings shape from getSetPrintings", async () => {
+    // Devices cache this object; the skip count must not leak into it.
+    vi.stubGlobal("fetch", flakyFetch("/cards/me05-014", 2));
+    const result = await new TcgdexClient().getSetPrintings("me5", "Pitch Black", { retryDelayMs: 0 });
+    expect(Object.keys(result ?? {}).sort()).toEqual(["byNumber", "tcgdexSetId"]);
+  });
+
   it("reports progress as cards resolve", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...CARDS, "/sets/me05": PITCH_BLACK, "/sets": SETS }));
     const seen: number[] = [];

@@ -322,7 +322,7 @@ Follow the instructions below exactly. They are the only instructions for this r
             $trigger = Get-LoopRunTrigger -TaskName $triggerTask -RunStart $RunStart
             $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe)
             if ($ended.Count -gt 0) { Write-Log "progress comments left mid-build, marked as ended: #$($ended -join ', #')" 'WARN' }
-            $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger
+            $posted = Publish-LoopRunData -TranscriptPath $outPath -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome
             Write-Log "run data: $posted comment(s) posted"
         } catch { Write-Log "run data / progress reporting skipped: $_" 'WARN' }
     }

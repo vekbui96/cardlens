@@ -12,8 +12,11 @@
   3. no changed file matches a protected path (lib.ps1 ProtectedPathPatterns: card index, scanner gate,
      merge/validation rules, cache versions, Target, CI, .claude, innovation, .env, deploy config, the e2e
      config) and no added line mentions D:\services, a token in a VITE_ variable, CORS origins or the
-     Target routes; between the live server and the PR only innovation/** is tolerated (MERGE-PR GAP lines
-     list those commits)
+     Target routes. Between the live server and the PR (the gap: commits already on main), a protected path
+     refuses only when it changes what the live server RUNS (card index, shared sync rules, Target bot,
+     .env); innovation/**, .github/**, docs, e2e, client-only src are inert there and only listed.
+     MERGE-PR GAP lines list every gap commit; MERGE-PR GAP-SERVER lines the ones whose server changes go
+     live with this PR's server deploy (the live checkout is reset to the merge)
   4. CI for the head sha (CI is the e2e gate for every change; nothing runs Playwright locally): Typecheck /
      Lint / Unit / Build, Playwright E2E and v2 Visual Regression must ALL be completed + success
      (gate-rules.ps1 Get-CiVerdict). Skipped, cancelled, neutral or never-created jobs refuse; failure
@@ -89,21 +92,32 @@ try {
     $base = Get-GitValue -Repo $script:Clone -Arguments @('merge-base', 'origin/main', $headSha)
     $plan = Get-ServerPlan -Repo $script:Clone -Target $headSha -OwnCommitsFrom $base
     Write-Log "server plan: liveHead=$($plan.LiveHead) needed=$($plan.ServerNeeded) files=$($plan.ServerFiles -join ',') foreign=$($plan.Foreign -join ',')"
-    # $plan.Protected covers live HEAD..PR head. The PR's own files were checked in step 3; in the gap (commits
-    # Ve already merged that the live server lacks) innovation/** is ignored and everything else still refuses
-    # (gate-rules.ps1 Get-GapDecision says why). Every gap commit is printed so the issue can list it.
+    # $plan.Protected covers live HEAD..PR head. The PR's own files were checked in step 3 (strict). In the gap
+    # (commits already on main that the live server lacks) only protected paths that change what the server
+    # RUNS refuse; the rest is inert on server-pc and only listed (gate-rules.ps1 Get-GapDecision says why).
+    # Non-protected server changes in the gap ride along with this PR's server deploy and are listed too.
     $ownNames = @($files | ForEach-Object { $_.filename; $_.previous_filename } | Where-Object { $_ })
-    $gap = Get-GapDecision -Protected $plan.Protected -OwnFiles $ownNames
-    $gapCommits = @()
+    $gap = Get-GapDecision -Protected $plan.Protected -OwnFiles $ownNames -ServerPaths $plan.ServerPaths
+    $gapCommits = @(); $gapServerCommits = @(); $gapBlockCommits = @()
     if ($plan.LiveHead -and $base -and $plan.LiveHead -ne $base) {
-        $gapCommits = @((Invoke-Git -Repo $script:Clone -Arguments @('log', '--format=%h %s', "$($plan.LiveHead)..$base") -AllowFail -Quiet).Output | Where-Object { $_ })
+        $range = "$($plan.LiveHead)..$base"
+        $gapCommits = @((Invoke-Git -Repo $script:Clone -Arguments @('log', '--format=%h %s', $range) -AllowFail -Quiet).Output | Where-Object { $_ })
+        $gapLive = @((Get-ChangedFiles -Repo $script:Clone -From $plan.LiveHead -To $base) | Where-Object { Test-LiveAffectingPath $_ $plan.ServerPaths })
+        if ($gapLive.Count -gt 0) { $gapServerCommits = @((Invoke-Git -Repo $script:Clone -Arguments (@('log', '--format=%h %s', $range, '--') + $gapLive) -AllowFail -Quiet).Output | Where-Object { $_ }) }
+        if ($gap.Block.Count -gt 0) { $gapBlockCommits = @((Invoke-Git -Repo $script:Clone -Arguments (@('log', '--format=%h %s', $range, '--') + $gap.Block) -AllowFail -Quiet).Output | Where-Object { $_ }) }
     }
     foreach ($c in $gapCommits) { Write-Log "gap commit (on main, not yet on the live server): $c"; Write-Output "MERGE-PR GAP $c" }
-    if ($gap.Ignored.Count -gt 0) { Write-Log "gap: ignoring innovation/ files (inert in the live dir): $($gap.Ignored -join ', ')" }
-    if ($gap.Refuse.Count -gt 0) { Refuse "protected paths between the live server and this PR: $($gap.Refuse -join ', ')" }
-    Save-State "merge-gap-$Issue" @{ issue = $Issue; pr = $Pr; liveHead = $plan.LiveHead; base = $base; commits = $gapCommits; innovationIgnored = $gap.Ignored }
-    $mainPlan = Get-ServerPlan -Repo $script:Clone -Target (Get-GitValue -Repo $script:Clone -Arguments @('rev-parse', 'origin/main'))
-    if ($mainPlan.ServerNeeded) { Refuse "main already carries server changes the live server does not have ($($mainPlan.ServerFiles -join ', ')); Ve must deploy those first" }
+    foreach ($c in $gapServerCommits) { Write-Log "gap commit that changes what the server runs (goes live with this PR's server deploy): $c"; Write-Output "MERGE-PR GAP-SERVER $c" }
+    if ($gap.Ignored.Count -gt 0) { Write-Log "gap: protected but inert on server-pc, ignored: $($gap.Ignored -join ', ')" }
+    Save-State "merge-gap-$Issue" @{ issue = $Issue; pr = $Pr; runId = "$env:INNOVATION_LOOP_RUN_ID"; liveHead = $plan.LiveHead; base = $base; commits = $gapCommits
+        serverCommits = $gapServerCommits; inertProtected = $gap.Ignored; blocked = $gap.Block; refused = ($gap.Refuse.Count -gt 0) }
+    if ($gap.Refuse.Count -gt 0) {
+        $why = "protected paths between the live server and this PR: $($gap.Refuse -join ', ')"
+        if ($gapBlockCommits.Count -gt 0) {
+            $why += ". Already on main in: $($gapBlockCommits -join '; '). The loop never takes those to the live server itself (card index, sync rules, Target bot, .env need Ve); deploy them by hand first (docs/runbook.md: server deploy, plus Restart-Service recognition for a card-index change), then the loop can merge"
+        }
+        Refuse $why
+    }
     # ---- 4. CI on the exact head sha -----------------------------------------------------
     # CI is the e2e gate for EVERY change (the loop runs no Playwright suite locally). All three required
     # jobs (gate-rules.ps1 $CiRequiredJobs) must be completed + success on this exact head; a skipped,
@@ -134,7 +148,10 @@ try {
     # ---- 4b. the elevated task, only now that CI is green (merge == Pages deploy, so decided before merging)
     if ($plan.ServerNeeded) {
         $self = Invoke-ElevatedRequest -Mode selftest -TimeoutMinutes 5
-        if ($self.status -ne 'ok') { Refuse "this PR needs a server deploy but the elevated deploy task is not usable: $($self.status) $($self.message)" }
+        if ($self.status -ne 'ok') {
+            $gs = ''; if ($gapServerCommits.Count -gt 0) { $gs = " (server changes already on main and not yet live: $($gapServerCommits -join '; '))" }
+            Refuse "this merge needs a server deploy ($($plan.ServerFiles -join ', '))$gs but the elevated deploy task is not usable: $($self.status) $($self.message)"
+        }
         Write-Log "elevated task selftest ok: $($self.message)"
     }
 
@@ -148,6 +165,16 @@ try {
     if (-not $mergeSha) { throw 'merge reported success but no merge commit sha was found' }
     Save-State "merge-$Issue" @{ issue = $Issue; pr = $Pr; headSha = $headSha; mergeSha = $mergeSha; mergedUtc = [DateTime]::UtcNow.ToString('o') }
     Write-Log "merged PR #$Pr as $mergeSha"
+    if ($gapServerCommits.Count -gt 0) {
+        # say it on the issue in code, not only via the session: Ve's merged server work goes live with this deploy
+        try {
+            $lines = @($gapServerCommits | ForEach-Object { '- ' + ("$_" -replace '@', '&#64;' -replace '<!--', '&lt;!--') })
+            $body = "<!-- innovation-loop -->`nThe server deploy for this change also takes these commits, already on main but not yet on the live server, live (the live checkout is reset to the merge $($mergeSha.Substring(0,7))):`n`n$($lines -join "`n")`n`nIf the deploy fails verification it is rolled back as a whole and these stay undeployed, as before."
+            $nf = Join-Path $script:LoopHome "work\gap-note-$Issue.md"
+            [IO.File]::WriteAllText($nf, $body, (New-Object Text.UTF8Encoding $false))
+            $null = Invoke-Gh -Arguments @('issue', 'comment', "$Issue", '-R', $Repo, '--body-file', $nf) -AllowFail -Quiet
+        } catch { Write-Log "could not post the gap note: $_" 'WARN' }
+    }
     Write-Output "MERGE-PR OK $mergeSha"
     exit 0
 } catch {
