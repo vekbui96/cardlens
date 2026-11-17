@@ -5,6 +5,7 @@ import { SessionStore } from "./sessionStore.ts";
 import { CollectionStore, MAX_ROWS_PER_REQUEST, parseRow } from "./collectionStore.ts";
 import { PrintingsStore } from "./printingsStore.ts";
 import { CatalogPriceStore } from "./catalogPrices.ts";
+import { catalogCardsParams } from "./catalogParams.ts";
 import { SealedStore } from "./sealedStore.ts";
 import { callBot, validTcin } from "./targetBot.ts";
 import { ShareStore } from "./shareStore.ts";
@@ -998,11 +999,7 @@ export function createApp(
   });
 
   app.get("/api/catalog/cards", proxyLimiter, async (req, res) => {
-    const q = typeof req.query.q === "string" ? req.query.q : "";
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (typeof req.query.pageSize === "string") params.set("pageSize", req.query.pageSize);
-    if (typeof req.query.select === "string") params.set("select", req.query.select);
+    const params = catalogCardsParams(req.query as Record<string, unknown>);
     await proxy(`/cards?${params.toString()}`, res);
   });
 
