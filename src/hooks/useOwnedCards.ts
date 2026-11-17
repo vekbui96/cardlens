@@ -87,7 +87,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pr
     queries: setIds.map((setId) => printingsQuery(setId, setNames[setId] ?? "")),
   });
 
-  const catalogPrices = useCatalogPrices(setIds);
+  const { prices: catalogPrices, pricesLoading } = useCatalogPrices(setIds);
 
   /**
    * When each query set last settled, as one string apiece.
@@ -164,6 +164,10 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pr
       pricesBySet.set(setId, buildPrintingIndex(priceQueries[i]?.data?.byNumber));
     });
 
+    // The market-price batch is one more thing still pricing: for promos and
+    // older cards it is the only price, so "unpriced" is not yet true.
+    if (pricesLoading) pricing += 1;
+
     const rows: OwnedPrintingRow[] = [];
     for (const card of collection) {
       const setId = card.setId ?? card.id.slice(0, card.id.lastIndexOf("-"));
@@ -199,6 +203,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pr
     setIds,
     setNames,
     catalogPrices,
+    pricesLoading,
     cardsSettledAt,
     pricesSettledAt,
     pricesFetching,
