@@ -291,10 +291,13 @@ if (tool === "Bash" || tool === "PowerShell") {
         );
         if (labels.length === 0) block("gh issue edit is only for the loop:* state labels");
         for (const l of labels)
-          if (!/^loop:(in-progress|deployed|failed)$/i.test(l))
+          if (!/^loop:(in-progress|deployed|failed|retried)$/i.test(l))
             block(
-              `the loop may only add/remove loop:in-progress, loop:deployed, loop:failed (saw ${l}); never 'approved'`,
+              `the loop may only add/remove loop:in-progress, loop:deployed, loop:failed (and add loop:retried) (saw ${l}); never 'approved'`,
             );
+        // loop:retried caps the automatic retry of a failed build at one; only Ve may take it off
+        if (/--remove-label\s+["']?[^"'\s]*loop:retried\b/i.test(c))
+          block("the loop never removes loop:retried (it limits a failed build to one automatic retry)");
       }
       if (g2 === "create") {
         // the weekly product review opens ONE loop:product-review issue (never built: no loop:proposal),

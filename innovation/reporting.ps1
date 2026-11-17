@@ -367,7 +367,7 @@ function Get-RunDataContextLine {
 
 # The "## Run data" comment for one issue. -Part $null = no per-issue split (markers missing).
 function Format-RunDataComment {
-    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Gap = '')
+    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Gap = '', [string]$Waiting = '')
     $t = $Data.Totals; $oh = $Data.Overhead
     $sb = New-Object Text.StringBuilder
     [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:RunDataMarker)
@@ -408,6 +408,7 @@ function Format-RunDataComment {
         [void]$sb.AppendLine("| Model(s) | $(($t.Models -join ', ')) |")
     }
     if ($Gap) { [void]$sb.AppendLine(); [void]$sb.AppendLine($Gap) }
+    if ($Waiting) { [void]$sb.AppendLine(); [void]$sb.AppendLine($Waiting) }
     if ($Data.Notes.Count -gt 0) { [void]$sb.AppendLine(); foreach ($n in $Data.Notes) { [void]$sb.AppendLine("Note: $n.") } }
     [void]$sb.AppendLine(); [void]$sb.AppendLine((Get-RunDataCostNote))
     return $sb.ToString()
@@ -438,11 +439,12 @@ function Get-RunDataGapLine {
 
 # One-line footer for a proposal opened by this run.
 function Format-RunDataProposalComment {
-    param([Parameter(Mandatory)]$Data, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->')
+    param([Parameter(Mandatory)]$Data, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Waiting = '')
     $oh = $Data.Overhead; $label = 'Run overhead (preflight + research)'
     if (-not $Data.MarkersFound -and $Data.Parts.Count -eq 0) { $label = 'Whole run' ; $oh = $Data.Totals }
     $approx = ($Data.Parts.Count -gt 0)
     $line = "<sub>Run data: proposed by run ``$RunId`` ($Mode, started by: $Trigger). $label, shared by every proposal it opened: $($oh.Turns) turns, tokens $(Format-RunDataTokens $oh -Approx:$approx), $(Format-RunDataCost $oh -Approx:$approx) API-equivalent (usage on the Max plan, not billing).</sub>"
+    if ($Waiting) { $line += "`n`n<sub>$Waiting</sub>" }
     return "$Marker`n$($script:RunDataMarker)`n$line`n"
 }
 
@@ -468,6 +470,7 @@ function Publish-LoopRunData {
         [string]$Marker = '<!-- innovation-loop -->',
         [string]$OutDir = '',
         [string]$LoopHome = '',
+        [string]$Waiting = '',   # 'Failed, waiting on Ve: #n (reason)' line (run-loop.ps1), appended to every comment
         [int]$MaxIssues = 6, [int]$MaxProposals = 5,
         [switch]$NoPost
     )
@@ -485,7 +488,7 @@ function Publish-LoopRunData {
                 totals = $t | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 overhead = $data.Overhead | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
-                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues }
+                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         } catch { Write-RunDataLog "run data: could not write $base.json: $_" 'WARN' }
 
@@ -508,9 +511,9 @@ function Publish-LoopRunData {
         $jobs = New-Object System.Collections.ArrayList
         foreach ($tg in $targets) {
             $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
-            [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = (Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine) })
+            [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = (Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting) })
         }
-        foreach ($n in $proposals) { [void]$jobs.Add([pscustomobject]@{ Issue = $n; Body = (Format-RunDataProposalComment -Data $data -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker) }) }
+        foreach ($n in $proposals) { [void]$jobs.Add([pscustomobject]@{ Issue = $n; Body = (Format-RunDataProposalComment -Data $data -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Waiting $Waiting) }) }
         if ($jobs.Count -eq 0) { Write-RunDataLog 'run data: no issue to post on'; return 0 }
         foreach ($j in $jobs) {
             $bodyPath = "$base-$($j.Issue).md"

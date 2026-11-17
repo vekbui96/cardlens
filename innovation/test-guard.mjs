@@ -32,6 +32,15 @@ const allow = [
   ps(`gh issue view 12 -R vekbui96/cardlens --json title,body,labels,comments`),
   ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:in-progress`),
   ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:deployed --remove-label loop:in-progress`),
+  // the one automatic retry of a failed build: swap loop:failed for loop:retried, continue the open PR
+  ps(`${S}\\check-approval.ps1 -Slots`),
+  ps(
+    `gh issue edit 12 -R vekbui96/cardlens --remove-label loop:failed --add-label loop:retried --add-label loop:in-progress`,
+  ),
+  ps(`git -C "${C}" checkout -b loop/12-binder-hint origin/loop/12-binder-hint`),
+  ps(`git -C "${C}" merge --no-edit origin/main`),
+  ps(`git -C "${C}" merge --abort`),
+  ps(`gh pr list -R vekbui96/cardlens --state open --json number,headRefName,title`),
   ps(`gh issue comment 12 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
   ps(
     `gh issue create -R vekbui96/cardlens --title "Copy set link" --label loop:proposal --body-file "${W}\\p.md"`,
@@ -126,6 +135,11 @@ const deny = [
   // approval / issues
   ps(`gh issue edit 12 -R vekbui96/cardlens --add-label approved`),
   ps(`gh issue edit 12 -R vekbui96/cardlens --remove-label approved`),
+  // loop:retried caps the automatic retry at one: the loop may add it, never remove it
+  ps(`gh issue edit 12 -R vekbui96/cardlens --remove-label loop:retried`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:failed --remove-label loop:retried`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --remove-label loop:in-progress,loop:retried`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:retry-forever`),
   ps(`gh issue edit 12 -R vekbui96/cardlens --body "new scope"`),
   ps(
     `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label approved --body-file "${W}\\p.md"`,
