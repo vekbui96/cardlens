@@ -34,6 +34,8 @@ const RESULT_LIMIT = 40;
  */
 const FULL_PAGE_SIZE = FULL_SEARCH_LIMIT;
 const SET_PAGE_SIZE = 250;
+/** A guard, not a limit: no real set is near 2,500 cards. */
+const MAX_SET_PAGES = 10;
 
 const SELECT_FIELDS =
   "id,name,supertype,subtypes,number,artist,rarity,nationalPokedexNumbers,set,images,tcgplayer,cardmarket";
@@ -122,16 +124,38 @@ export class PokemonTcgIoProvider implements CardCatalogProvider, CardPricingPro
     if (opts?.rarities && opts.rarities.length > 0) {
       clauses.push(`(${opts.rarities.map((r) => `rarity:"${r}"`).join(" OR ")})`);
     }
-    const url =
+    const base =
       `${this.baseUrl}/cards?q=${encodeURIComponent(clauses.join(" "))}` +
-      `&pageSize=${SET_PAGE_SIZE}&select=${encodeURIComponent(SELECT_FIELDS)}`;
-    const json = await this.get(url, opts?.signal);
-    const parsed = CardListResponseSchema.safeParse(json);
-    if (!parsed.success) {
-      throw new ProviderError("Unexpected set-cards response", "validation", { cause: parsed.error });
+      `&pageSize=${SET_PAGE_SIZE}&orderBy=number&select=${encodeURIComponent(SELECT_FIELDS)}`;
+
+    /*
+     * EVERY page, not the first. 250 is the upstream maximum, so one request
+     * cut Paldea Evolved at 250 of 279, Fusion Strike at 250 of 284 — and the
+     * cards past it are the secret rares, which then showed in My cards as bare
+     * ids. Same loop as the server's set-information route.
+     *
+     * A proxy that predates paging ignores `page` and answers page 1 every
+     * time; the echoed `page` catches that after one extra request, and the
+     * de-dupe by id keeps the result exactly what it was before this change.
+     * A failed later page fails the whole read rather than caching part of a
+     * set as all of it.
+     */
+    const byId = new Map<string, RawCard>();
+    for (let page = 1; page <= MAX_SET_PAGES; page++) {
+      const json = await this.get(`${base}&page=${page}`, opts?.signal);
+      const parsed = CardListResponseSchema.safeParse(json);
+      if (!parsed.success) {
+        throw new ProviderError("Unexpected set-cards response", "validation", { cause: parsed.error });
+      }
+      if (parsed.data.page !== undefined && parsed.data.page !== page) break;
+      for (const card of parsed.data.data) if (!byId.has(card.id)) byId.set(card.id, card);
+      if (parsed.data.data.length < SET_PAGE_SIZE) break;
+      if (page === MAX_SET_PAGES) {
+        console.warn("[cardlens] getCardsBySet hit the page cap; the set may be truncated:", setId);
+      }
     }
     // Browsing a set: surface the most valuable cards (chase cards) first.
-    return parsed.data.data.map(toSummary).sort(byPriceDesc);
+    return [...byId.values()].map(toSummary).sort(byPriceDesc);
   }
 
   private async fetchRawCard(id: string, opts?: FetchOpts): Promise<RawCard> {
