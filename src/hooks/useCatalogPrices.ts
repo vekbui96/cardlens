@@ -18,6 +18,19 @@ export interface CatalogPrices {
   pricesLoading: boolean;
 }
 
+/** One `/api/catalog/prices` answer: what it priced, and the sets it could not. */
+export interface CatalogPriceBatch {
+  prices: Map<string, number>;
+  missing: string[];
+}
+
+/**
+ * How long the follow-up for `missing` sets waits. pokemontcg.io's failures
+ * cluster in time, and the server proxy already retries across ~4s, so an
+ * immediate second ask would land in the same burst.
+ */
+export const MISSING_RETRY_DELAY_MS = 5_000;
+
 /**
  * pokemontcg.io market prices for every card in the given sets, as one index.
  *
@@ -54,7 +67,7 @@ export function useCatalogPrices(setIds: string[]): CatalogPrices {
    */
   const live = sourceKey === "base" && !shouldUseMocks();
 
-  const batch = useQuery<Map<string, number>>({
+  const batch = useQuery<CatalogPriceBatch>({
     queryKey: ["catalog-prices", key],
     queryFn: ({ signal }) => loadCatalogPrices(setIds, signal),
     // Mocked and simulated catalogs are served by the mock provider, which this
@@ -63,6 +76,34 @@ export function useCatalogPrices(setIds: string[]): CatalogPrices {
     enabled: live && setIds.length > 0,
     staleTime: 30 * 60_000,
     retry: 1,
+  });
+
+  /**
+   * One more ask for the sets the batch named `missing`, and only those.
+   *
+   * pokemontcg.io fails in bursts and the server does not cache a failure, so a
+   * set missed in one burst is usually there seconds later — measured
+   * 2026-11-16: a five-set batch came back `missing: ["sv3"]`, and `sv3` alone
+   * a moment later priced 406 printings. `retry` cannot see this: the batch
+   * SUCCEEDED, so without a second ask the gap stood for the whole staleTime.
+   *
+   * The wait puts it outside the burst (the server already retries across ~4s).
+   * Its own `missing` is ignored and it never retries, so a set the server can
+   * never price costs exactly one extra request, not a loop. It is left out of
+   * `pricesLoading` for the same reason: the first answer is already a usable
+   * total, and holding "pricing…" over an unpriceable promo set on every visit
+   * would say the total is unfinished when it is as finished as it gets.
+   */
+  const missing = batch.data?.missing ?? [];
+  const followUp = useQuery<CatalogPriceBatch>({
+    queryKey: ["catalog-prices-retry-missing", missing.join(",")],
+    queryFn: async ({ signal }) => {
+      await abortableDelay(MISSING_RETRY_DELAY_MS, signal);
+      return loadCatalogPrices(missing, signal);
+    },
+    enabled: live && missing.length > 0,
+    staleTime: 30 * 60_000,
+    retry: 0,
   });
 
   /**
@@ -100,14 +141,17 @@ export function useCatalogPrices(setIds: string[]): CatalogPrices {
       // Card ids are globally unique, so one flat index across sets needs no
       // per-set nesting and cannot collide.
       const catalog = catalogPriceIndex(queries.flatMap((q) => q.data ?? []));
-      if (!batch.data) return catalog;
-      // The batch is authoritative where it has an answer, but a set it could
-      // not price (`missing`) may still have been filled by the fallback, so
-      // this merges rather than replacing.
-      return catalog.size === 0 ? batch.data : new Map([...catalog, ...batch.data]);
+      const batchPrices = batch.data?.prices;
+      const retried = followUp.data?.prices;
+      if (!batchPrices) return catalog;
+      // The batch is authoritative where it has an answer. The per-set fallback
+      // only runs when the whole batch failed, so a set the batch named
+      // `missing` is filled by the follow-up ask or not at all.
+      if (catalog.size === 0 && !retried?.size) return batchPrices;
+      return new Map([...catalog, ...batchPrices, ...(retried ?? [])]);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; its settled data is what matters
-    [batch.data, fallbackStamp],
+    [batch.data, followUp.data, fallbackStamp],
   );
 
   return useMemo(() => ({ prices, pricesLoading }), [prices, pricesLoading]);
@@ -120,22 +164,41 @@ export function useCatalogPrices(setIds: string[]): CatalogPrices {
  * driving it through React would never exercise this path at all — the same
  * arrangement fetchSetInformation uses.
  */
-export async function loadCatalogPrices(
-  setIds: string[],
-  signal?: AbortSignal,
-): Promise<Map<string, number>> {
+export async function loadCatalogPrices(setIds: string[], signal?: AbortSignal): Promise<CatalogPriceBatch> {
   const url = `${companionBase()}/catalog/prices?sets=${encodeURIComponent(setIds.join(","))}`;
   // Pricing a whole collection is a bigger job than a card lookup, and the
   // first call after a cache expiry pays for the sets behind it.
-  const body = await fetchJson(url, { timeoutMs: 20_000, ...(signal ? { signal } : {}) });
-  const prices = (body as { prices?: unknown } | null)?.prices;
-  if (!prices || typeof prices !== "object") return new Map();
+  const body = (await fetchJson(url, { timeoutMs: 20_000, ...(signal ? { signal } : {}) })) as {
+    prices?: unknown;
+    missing?: unknown;
+  } | null;
 
+  // Only sets that were actually asked about: the follow-up request is built
+  // from this list, and an odd body must not make the client ask for others.
+  const asked = new Set(setIds);
+  const missing = Array.isArray(body?.missing)
+    ? body.missing.filter((id): id is string => typeof id === "string" && asked.has(id))
+    : [];
+
+  const prices = body?.prices;
   const out = new Map<string, number>();
+  if (!prices || typeof prices !== "object") return { prices: out, missing };
+
   for (const [key, value] of Object.entries(prices as Record<string, unknown>)) {
     // Only positive prices: absent means unknown, and a zero would total up as
     // though the printing were worthless.
     if (typeof value === "number" && Number.isFinite(value) && value > 0) out.set(key, value);
   }
-  return out;
+  return { prices: out, missing };
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    });
+  });
 }

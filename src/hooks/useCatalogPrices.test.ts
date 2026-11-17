@@ -40,7 +40,7 @@ describe("loadCatalogPrices", () => {
   it("keys prices the way the collection looks them up", async () => {
     respondWith({ prices: { "sv1-1|holofoil": 12.5, "sv1-2|normal": 0.25 } });
 
-    const prices = await loadCatalogPrices(["sv1"]);
+    const { prices } = await loadCatalogPrices(["sv1"]);
 
     expect(prices.get("sv1-1|holofoil")).toBe(12.5);
     expect(prices.get("sv1-2|normal")).toBe(0.25);
@@ -53,9 +53,28 @@ describe("loadCatalogPrices", () => {
       prices: { "sv1-1|holofoil": 0, "sv1-2|normal": "3.00", "sv1-3|normal": null, "sv1-4|normal": 2 },
     });
 
-    const prices = await loadCatalogPrices(["sv1"]);
+    const { prices } = await loadCatalogPrices(["sv1"]);
 
     expect([...prices.keys()]).toEqual(["sv1-4|normal"]);
+  });
+
+  it("returns the sets the server could not price, limited to the ones asked about", async () => {
+    // The hook asks again for exactly this list, so a stray id or a non-string
+    // in the body must not turn into a request for a set nobody holds.
+    respondWith({ prices: { "sv1-1|holofoil": 12.5 }, missing: ["sv3", "base1", 7, null] });
+
+    const { prices, missing } = await loadCatalogPrices(["sv1", "sv3"]);
+
+    expect(missing).toEqual(["sv3"]);
+    expect(prices.get("sv1-1|holofoil")).toBe(12.5);
+  });
+
+  it("treats an absent or malformed missing list as nothing missing", async () => {
+    respondWith({ prices: {} });
+    expect((await loadCatalogPrices(["sv1"])).missing).toEqual([]);
+
+    respondWith({ prices: {}, missing: "sv1" });
+    expect((await loadCatalogPrices(["sv1"])).missing).toEqual([]);
   });
 
   it("returns nothing rather than throwing when the body is the wrong shape", async () => {
@@ -63,10 +82,10 @@ describe("loadCatalogPrices", () => {
     // and the hook falls back on. A 200 carrying something unexpected is the
     // case that would otherwise crash Home.
     respondWith({ unexpected: true });
-    expect((await loadCatalogPrices(["sv1"])).size).toBe(0);
+    expect((await loadCatalogPrices(["sv1"])).prices.size).toBe(0);
 
     respondWith(null);
-    expect((await loadCatalogPrices(["sv1"])).size).toBe(0);
+    expect((await loadCatalogPrices(["sv1"])).prices.size).toBe(0);
   });
 
   it("throws when the server has no such endpoint, so the caller can fall back", async () => {
