@@ -9,6 +9,15 @@ export interface BackableFocusOptions {
   onLeft?: (index: number) => void;
   onRight?: (index: number) => void;
   enabled?: boolean;
+  /**
+   * When this value changes, the list has been replaced (a rarity swipe), so
+   * focus jumps to content item `resetTo`. Without it focus keeps its row
+   * NUMBER: a cached or locally filtered list swaps without passing through
+   * zero, so only the clamp runs and a short filter opens on its last card.
+   */
+  resetFocusOn?: unknown;
+  /** Content index a `resetFocusOn` change lands on (default 0, the first item). */
+  resetTo?: number;
 }
 
 export interface BackableFocusState {
@@ -28,7 +37,7 @@ export interface BackableFocusState {
  * loads.
  */
 export function useBackableFocus(options: BackableFocusOptions): BackableFocusState {
-  const { count, onSelect, onBack, onLeft, onRight, enabled = true } = options;
+  const { count, onSelect, onBack, onLeft, onRight, enabled = true, resetFocusOn, resetTo = 0 } = options;
 
   const { focusIndex, setFocusIndex } = useFocusList({
     count: count + 1, // slot 0 = Back
@@ -49,6 +58,29 @@ export function useBackableFocus(options: BackableFocusOptions): BackableFocusSt
     if (prevCount.current === 0 && count > 0 && focusIndex === 0) setFocusIndex(1);
     prevCount.current = count;
   }, [count, focusIndex, setFocusIndex]);
+
+  // A replaced list starts at its top. If the target row does not exist yet
+  // (the new list is still loading, or is empty), remember the slot focus was
+  // parked on and finish the move when the rows arrive — unless the user has
+  // moved focus in the meantime, which always wins.
+  const lastResetKey = useRef(resetFocusOn);
+  const parkedAt = useRef<number | null>(null);
+  useEffect(() => {
+    const target = resetTo + 1; // slot 0 = Back
+    if (!Object.is(lastResetKey.current, resetFocusOn)) {
+      lastResetKey.current = resetFocusOn;
+      const slot = Math.max(0, Math.min(target, count));
+      setFocusIndex(slot);
+      parkedAt.current = slot < target ? slot : null;
+      return;
+    }
+    if (parkedAt.current === null) return;
+    if (focusIndex !== parkedAt.current) parkedAt.current = null;
+    else if (count >= target) {
+      setFocusIndex(target);
+      parkedAt.current = null;
+    }
+  }, [resetFocusOn, resetTo, count, focusIndex, setFocusIndex]);
 
   return { backFocused: focusIndex === 0, itemIndex: focusIndex - 1 };
 }

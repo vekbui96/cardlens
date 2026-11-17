@@ -38,6 +38,9 @@ export function ResultsScreen({ query }: { query: string }) {
     onBack: pop,
     onLeft: () => setRarityIndex((i) => i - 1),
     onRight: () => setRarityIndex((i) => i + 1),
+    // A filter revisited from the query cache swaps the list without a loading
+    // state; start it at the first result rather than the old row number.
+    resetFocusOn: rarity.key,
     onSelect: (i) => {
       if (phase === "list") openDetails(cards[i].id, cards[i]);
       else if (phase === "error") void refetch();
