@@ -88,6 +88,16 @@ export function indexSetPrices(body: unknown): SetPriceIndex {
   return prices;
 }
 
+/** The upstream maximum. A page shorter than this is the last one. */
+const PRICES_PAGE_SIZE = 250;
+
+/**
+ * A guard, not a limit: an upstream that kept returning full pages would
+ * otherwise loop forever, and no real set is near 2,500 cards. Hitting it logs
+ * rather than truncating in silence — the failure paging exists to fix.
+ */
+const MAX_PRICE_PAGES = 10;
+
 /**
  * The catalog path that answers "prices for this set".
  *
@@ -95,11 +105,16 @@ export function indexSetPrices(body: unknown): SetPriceIndex {
  * dozen fields the card list asks for. Deliberately NOT the key the set
  * screen's card list uses — sharing it would mean either sending the set screen
  * a card with no name, or sending Home the images again.
+ *
+ * Paged, because 250 is the upstream maximum: one page priced Paldea Evolved
+ * (279 cards) from 250 of them, and the 29 left out were its secret rares.
+ * `orderBy` keeps the order stable across pages; upstream's default is not by
+ * number, and paging an unstable order can repeat or skip cards.
  */
-export function pricesPath(setId: string): string {
+export function pricesPath(setId: string, page = 1): string {
   return (
     `/cards?q=${encodeURIComponent(`set.id:${setId}`)}` +
-    `&pageSize=250&select=${encodeURIComponent("id,tcgplayer")}`
+    `&pageSize=${PRICES_PAGE_SIZE}&page=${page}&orderBy=number&select=${encodeURIComponent("id,tcgplayer")}`
   );
 }
 
@@ -182,8 +197,32 @@ export class CatalogPriceStore {
     }
   }
 
+  /**
+   * Every page of a set, until a short page says there are no more.
+   *
+   * One failed page fails the whole set — the caller then serves the stale
+   * copy or names the set in `missing`. Indexing the pages that did arrive
+   * would persist a truncated set for twelve hours, which is the bug paging
+   * exists to fix.
+   */
+  private async fetchAllPages(setId: string): Promise<{ data: unknown[] }> {
+    const data: unknown[] = [];
+    for (let page = 1; page <= MAX_PRICE_PAGES; page++) {
+      const body = (await this.fetchCatalog(pricesPath(setId, page))) as { data?: unknown } | null;
+      const batch = Array.isArray(body?.data) ? (body.data as unknown[]) : [];
+      data.push(...batch);
+      if (batch.length < PRICES_PAGE_SIZE) break;
+      if (page === MAX_PRICE_PAGES) {
+        console.warn(
+          `[cardlens] ${setId}: hit the ${MAX_PRICE_PAGES}-page price cap — the set may be truncated`,
+        );
+      }
+    }
+    return { data };
+  }
+
   private fetch(setId: string): Promise<SetPriceIndex> {
-    const promise = this.fetchCatalog(pricesPath(setId))
+    const promise = this.fetchAllPages(setId)
       .then((body) => {
         const prices = indexSetPrices(body);
         // An empty index is a legitimate answer — pokemontcg.io prices none of

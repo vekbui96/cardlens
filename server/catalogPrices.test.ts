@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,6 +76,14 @@ describe("pricesPath", () => {
     expect(path).toContain(`select=${encodeURIComponent("id,tcgplayer")}`);
     expect(path).toContain(encodeURIComponent("set.id:sv8pt5"));
     expect(path).not.toContain("images");
+  });
+
+  it("names the page and a stable order, so pages neither overlap nor skip", () => {
+    // 250 is the upstream maximum. Without `orderBy`, pokemontcg.io's order is
+    // not by number, and paging an unstable order can repeat or drop cards.
+    expect(pricesPath("sv2")).toContain("&page=1&");
+    expect(pricesPath("sv2", 2)).toContain("&page=2&");
+    expect(pricesPath("sv2", 2)).toContain("orderBy=number");
   });
 });
 
@@ -168,6 +176,53 @@ describe("CatalogPriceStore", () => {
       { status: "fulfilled", value: { "sv1-1|holofoil": 12.5 } },
       { status: "fulfilled", value: { "sv1-1|holofoil": 12.5 } },
     ]);
+  });
+
+  it("prices every page of a set larger than 250 cards", async () => {
+    // Measured live: Paldea Evolved (sv2) has 279 cards and page 2 holds 29 of
+    // them, its secret rares among them. One page priced the set from 250.
+    const page1 = Array.from({ length: 250 }, (_, i) => card(`sv2-${i + 1}`, { holofoil: { market: 1 } }));
+    const page2 = [
+      card("sv2-277", { holofoil: { market: 40 } }),
+      card("sv2-278", { holofoil: { market: 50 } }),
+      card("sv2-279", { holofoil: { market: 60 } }),
+    ];
+    const fetchCatalog = vi.fn((path: string) =>
+      Promise.resolve({ data: path.includes("&page=1&") ? page1 : path.includes("&page=2&") ? page2 : [] }),
+    );
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    const prices = await store.get("sv2");
+
+    expect(fetchCatalog.mock.calls.map(([path]) => path)).toEqual([
+      pricesPath("sv2", 1),
+      pricesPath("sv2", 2),
+    ]);
+    expect(Object.keys(prices)).toHaveLength(253);
+    expect(prices["sv2-1|holofoil"]).toBe(1);
+    expect(prices["sv2-279|holofoil"]).toBe(60);
+  });
+
+  it("never persists a set priced from only some of its pages", async () => {
+    // A page-1-only index written to disk would recreate the truncation for
+    // twelve hours. A failed page fails the set, and the stale copy stands.
+    const stale = {
+      at: Date.now() - CATALOG_PRICE_TTL_MS - 1,
+      v: CATALOG_PRICE_CACHE_VERSION,
+      prices: { "sv2-279|holofoil": 55 },
+    };
+    writeFileSync(join(dir, "sv2.json"), JSON.stringify(stale));
+    const page1 = Array.from({ length: 250 }, (_, i) => card(`sv2-${i + 1}`, { holofoil: { market: 1 } }));
+    const fetchCatalog = vi.fn((path: string) =>
+      path.includes("&page=1&")
+        ? Promise.resolve({ data: page1 })
+        : Promise.reject(new Error("upstream 500")),
+    );
+    const store = new CatalogPriceStore(dir, fetchCatalog);
+
+    expect(await store.get("sv2")).toEqual(stale.prices);
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(readFileSync(join(dir, "sv2.json"), "utf8"))).toEqual(stale);
   });
 
   it("throws when it has never had an answer to give", async () => {
