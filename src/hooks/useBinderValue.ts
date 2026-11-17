@@ -7,6 +7,7 @@ import type { Binder, BinderSlot } from "../models/binderLayout.ts";
 import { cardSlotsOf, lineTotal, summariseBinderValue } from "../models/binderValue.ts";
 import { setIdFromCardId } from "../utils/cardId.ts";
 import { printingsCache } from "../storage/caches.ts";
+import { printingsStaleTime } from "../models/printingsFreshness.ts";
 import { loadPrintings } from "./useSetPrintings.ts";
 import { useSets } from "./useSets.ts";
 
@@ -28,7 +29,9 @@ export function setPrintingsQuery(setId: string, setName: string | undefined) {
     // asking before the name is known would ask the wrong question — and cache
     // the wrong answer under the right key.
     enabled: Boolean(setName),
-    staleTime: 30 * 24 * 60 * 60_000,
+    // Same rule as useSetPrintings: an answer the server marked incomplete is
+    // trusted for an hour, not 30 days.
+    staleTime: printingsStaleTime,
     retry: 1,
     ...(cached ? { initialData: cached.value, initialDataUpdatedAt: cached.storedAt } : {}),
   };
