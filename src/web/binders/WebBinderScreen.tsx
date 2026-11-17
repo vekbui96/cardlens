@@ -471,12 +471,17 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                        every later card down a page. Both clear the selection,
                        because the page it was on has just changed number.
                        Remove is offered only on an EMPTY page — there is no
-                       undo, and a card must never go with it. */
+                       undo, and a card must never go with it.
+
+                       Named by their visible text only, with no aria-label:
+                       they sit inside the page's own "Page N" region, which
+                       says which page they act on, and a label mentioning
+                       "page 2" would also answer every lookup of the region
+                       by that label. */
                     <div className={styles.pageActions}>
                       <button
                         type="button"
                         className={styles.pageAction}
-                        aria-label={`Insert page before page ${i + 1}`}
                         title="Adds a blank page here. This page and every later one move back by one, so facing pages after it change."
                         onClick={() => {
                           commit(insertPageBefore(binder, i, Date.now()));
@@ -488,9 +493,6 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
                       <button
                         type="button"
                         className={styles.pageAction}
-                        // Never "Remove page N": the toolbar's "Remove page"
-                        // must stay the only control whose name starts that way.
-                        aria-label={`Remove this page (page ${i + 1})`}
                         title="Only an empty page can be removed."
                         disabled={!canRemovePage(binder, i)}
                         onClick={() => {
