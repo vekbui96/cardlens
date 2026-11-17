@@ -523,4 +523,71 @@ describe("WebSetCardsScreen sharing", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#/live/abc123")));
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  /*
+   * The link is minted before the share sheet is asked for, and on a phone the
+   * tap's permission to open it can expire in between. A refusal is not a
+   * cancel: it used to be swallowed as one, and the first tap did nothing.
+   */
+  describe("when the browser refuses the share sheet", () => {
+    const refused = () => Promise.reject(new DOMException("No user activation", "NotAllowedError"));
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, "share");
+    });
+
+    it("copies the live link instead", async () => {
+      const user = userEvent.setup();
+      const writeText = clipboardSpy();
+      Object.defineProperty(navigator, "share", { configurable: true, value: vi.fn(refused) });
+      connect();
+      serveShare(() => json({ id: "abc123" }));
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await findSlot("125", "Normal");
+      await user.click(screen.getByRole("button", { name: "Share" }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#/live/abc123")));
+      expect(await screen.findByRole("button", { name: "Live link copied" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("puts the link on screen when copying is refused too", async () => {
+      const user = userEvent.setup();
+      const writeText = vi.fn(refused);
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      Object.defineProperty(navigator, "share", { configurable: true, value: vi.fn(refused) });
+      connect();
+      serveShare(() => json({ id: "abc123" }));
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await findSlot("125", "Normal");
+      await user.click(screen.getByRole("button", { name: "Share" }));
+
+      const notice = await screen.findByRole("alert");
+      expect(notice).toHaveTextContent(/Your browser would not share or copy the link/);
+      const field = within(notice).getByRole("textbox", { name: "Set link" });
+      expect((field as HTMLInputElement).value).toContain("#/live/abc123");
+      expect(screen.queryByRole("button", { name: "Live link copied" })).toBeNull();
+      expect(within(notice).getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    });
+
+    it("says nothing when the sheet is merely cancelled", async () => {
+      const user = userEvent.setup();
+      const writeText = clipboardSpy();
+      const share = vi.fn(() => Promise.reject(new DOMException("Share canceled", "AbortError")));
+      Object.defineProperty(navigator, "share", { configurable: true, value: share });
+      connect();
+      serveShare(() => json({ id: "abc123" }));
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await findSlot("125", "Normal");
+      await user.click(screen.getByRole("button", { name: "Share" }));
+
+      await waitFor(() => expect(share).toHaveBeenCalled());
+      await screen.findByRole("button", { name: "Share" });
+      expect(writeText).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
 });

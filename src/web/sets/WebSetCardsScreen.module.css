@@ -194,8 +194,13 @@
   color: var(--cl-fg-muted);
 }
 
+.linkFallback {
+  margin: 0 var(--cl-gap);
+}
+
 @media (min-width: 1000px) {
-  .shareFallback {
+  .shareFallback,
+  .linkFallback {
     margin-left: var(--cl-gap-lg);
     margin-right: var(--cl-gap-lg);
   }
