@@ -7,7 +7,13 @@ import { aggregateMovement, type Movement } from "../models/movement.ts";
 import { valueCollection, type CollectionValue, type ValuableRow } from "../models/value.ts";
 import { printingsCache } from "../storage/caches.ts";
 import { companionBase } from "../services/companionApi.ts";
-import { fetchJson } from "../services/http.ts";
+import { fetchJsonWithHeaders } from "../services/http.ts";
+import {
+  isProvisionalCacheControl,
+  printingsStaleTime,
+  withProvisional,
+  type LoadedPrintings,
+} from "../models/printingsFreshness.ts";
 import { toSetPrintings } from "./useSetInformation.ts";
 
 /**
@@ -22,14 +28,22 @@ export function printingsQuery(setId: string, setName: string) {
     queryKey: ["printings-value", setId] as const,
     queryFn: ({ signal }: { signal?: AbortSignal }) => loadPrintings(setId, setName, signal),
     enabled: Boolean(setName),
-    staleTime: 30 * 24 * 60 * 60_000,
+    // 30 days, or an hour for an answer the server marked incomplete — Home
+    // values the whole collection from these, and a half-built set would
+    // otherwise stay half-priced for a month after the server healed.
+    staleTime: printingsStaleTime,
     retry: 1,
   };
 }
 
-async function loadPrintings(setId: string, setName: string, signal?: AbortSignal) {
+async function loadPrintings(
+  setId: string,
+  setName: string,
+  signal?: AbortSignal,
+): Promise<LoadedPrintings | null> {
   const url = `${companionBase()}/printings/${encodeURIComponent(setId)}?name=${encodeURIComponent(setName)}`;
-  return toSetPrintings(await fetchJson(url, { ...(signal ? { signal } : {}) }));
+  const { json, headers } = await fetchJsonWithHeaders(url, { ...(signal ? { signal } : {}) });
+  return withProvisional(toSetPrintings(json), isProvisionalCacheControl(headers?.get("cache-control")));
 }
 
 export interface CollectionValueResult extends CollectionValue {

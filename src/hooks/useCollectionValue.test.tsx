@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -28,6 +28,48 @@ function wrapper() {
 
 const ROWS: ValuableRow[] = [{ cardId: "base2-4", setId: "base2", finish: "holo" }];
 
+const HOUR = 60 * 60_000;
+
+/** Several hooks on ONE client, the way screens share a query cache. */
+function shared(client: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  };
+}
+
+/**
+ * `/api/printings` with a price for the one row, under the given Cache-Control.
+ * `max-age=3600` is how the server says TCGdex skipped cards during the build.
+ */
+function printingsServer(cacheControl: string) {
+  const body = {
+    tcgdexSetId: "base2",
+    byNumber: { "4": [{ type: "holo", price: 12.5 }] },
+  };
+  const fetchMock = vi.fn((_url: RequestInfo | URL) =>
+    Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": cacheControl },
+      }),
+    ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  // Only the clock: React Query and waitFor still need real timers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
+
 describe("useCollectionValue pricing status", () => {
   it("does not call a set pending when its name is unknown", async () => {
     // The set list has not loaded, so there is no name and no request.
@@ -50,6 +92,39 @@ describe("useCollectionValue pricing status", () => {
     await waitFor(() => {
       expect(result.current.unaskable).toBe(0);
     });
+  });
+
+  it("refetches a set the server marked incomplete once an hour has passed", async () => {
+    const fetchMock = printingsServer("public, max-age=3600");
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const first = renderHook(() => useCollectionValue(ROWS, { base2: "Base Set 2" }), {
+      wrapper: shared(client),
+    });
+    await waitFor(() => expect(first.result.current.priced).toBe(1));
+
+    vi.setSystemTime(Date.now() + HOUR + 60_000);
+    renderHook(() => useCollectionValue(ROWS, { base2: "Base Set 2" }), { wrapper: shared(client) });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps trusting a complete set after an hour", async () => {
+    const fetchMock = printingsServer("public, max-age=2592000");
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const first = renderHook(() => useCollectionValue(ROWS, { base2: "Base Set 2" }), {
+      wrapper: shared(client),
+    });
+    await waitFor(() => expect(first.result.current.priced).toBe(1));
+
+    vi.setSystemTime(Date.now() + HOUR + 60_000);
+    const second = renderHook(() => useCollectionValue(ROWS, { base2: "Base Set 2" }), {
+      wrapper: shared(client),
+    });
+    await waitFor(() => expect(second.result.current.priced).toBe(1));
+    // Give a (wrong) refetch the chance to start before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("reports nothing outstanding for an empty collection", async () => {

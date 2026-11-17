@@ -36,6 +36,18 @@ function withTimeout(
  * TanStack Query can cancel stale requests without surfacing an error state.
  */
 export async function fetchJson(url: string, options: FetchJsonOptions = {}): Promise<unknown> {
+  return (await fetchJsonWithHeaders(url, options)).json;
+}
+
+/**
+ * `fetchJson`, plus the response headers — for callers that need to know how
+ * long the server says the answer is good for (`/api/printings` shortens its
+ * `Cache-Control` when the answer is incomplete).
+ */
+export async function fetchJsonWithHeaders(
+  url: string,
+  options: FetchJsonOptions = {},
+): Promise<{ json: unknown; headers: Headers }> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const { signal, cancel } = withTimeout(options.signal, timeoutMs);
   try {
@@ -50,7 +62,7 @@ export async function fetchJson(url: string, options: FetchJsonOptions = {}): Pr
     if (res.status === 404) throw new ProviderError("Not found", "not-found", { status: 404 });
     if (res.status === 429) throw new ProviderError("Rate limited", "rate-limit", { status: 429 });
     if (!res.ok) throw new ProviderError(`Request failed (${res.status})`, "network", { status: res.status });
-    return (await res.json()) as unknown;
+    return { json: (await res.json()) as unknown, headers: res.headers };
   } catch (err) {
     if (err instanceof ProviderError) throw err;
     if (err instanceof DOMException && err.name === "AbortError") throw err; // caller cancelled
