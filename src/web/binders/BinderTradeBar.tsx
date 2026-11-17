@@ -47,9 +47,12 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
    * look like it created one, while the old link stays out there unrevoked.
    * A failure here is silent on purpose: not knowing whether a link exists is
    * not an error the user can act on, and the button still works.
+   *
+   * Asked whatever "For trade" says: the server keeps serving a link until it
+   * is revoked, so a binder taken off trade can still have one out there.
    */
   useEffect(() => {
-    if (!token || !binder.forTrade) {
+    if (!token) {
       setLink(null);
       return;
     }
@@ -62,7 +65,7 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
     return () => {
       cancelled = true;
     };
-  }, [token, binder.id, binder.forTrade]);
+  }, [token, binder.id]);
 
   const tradeUrl = (shareId: string) =>
     `${window.location.origin}${window.location.pathname}#${screenToPath({ name: "trade", shareId })}`;
@@ -154,6 +157,15 @@ export function BinderTradeBar({ binder, onSave }: { binder: Binder; onSave: (bi
                 Stop sharing
               </button>
             ) : null}
+          </>
+        ) : link ? (
+          // Switching "For trade" off does not revoke the link (see above), so
+          // say it is still out there and keep the one control that stops it.
+          <>
+            <span className={styles.settingNote}>Trade link still live</span>
+            <button type="button" className={styles.chip} disabled={busy} onClick={() => void stopSharing()}>
+              Stop sharing
+            </button>
           </>
         ) : null}
 
