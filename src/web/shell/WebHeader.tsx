@@ -7,6 +7,8 @@ import { useCombobox } from "../../hooks/useCombobox.ts";
 import { NameSuggestList } from "../../components/NameSuggestList.tsx";
 import type { Screen } from "../../app/navigation.ts";
 import { switchUiVersion } from "../../app/uiVersion.ts";
+import { useLayoutMode } from "../../app/contexts.tsx";
+import { usePrefetchProps, warmScreensWhenIdle, type ScreenName } from "../../app/screenLoaders.tsx";
 import styles from "./WebHeader.module.css";
 
 /**
@@ -43,8 +45,21 @@ const DESTINATIONS: Destination[] = [
   { label: "Popular", hint: "Commonly searched Pokémon", screen: { name: "popular" } },
 ];
 
+/**
+ * What to fetch once the page is idle, in the order someone is likely to want
+ * it: the menu's own order, then a set's card grid and a single binder — the
+ * screens one tap further in from Collection and Binders.
+ */
+const WARM_ON_IDLE: readonly ScreenName[] = [...DESTINATIONS.map((d) => d.screen.name), "set", "binder"];
+
 export function WebHeader() {
   const { push, home, screen } = useNavigation();
+  const mode = useLayoutMode();
+  const prefetchProps = usePrefetchProps();
+  // The header mounts with the web shell and stays for its whole life, so this
+  // runs once per page load. See screenLoaders.tsx for why, and for the
+  // Save-Data / 2G and glasses guards.
+  useEffect(() => warmScreensWhenIdle(WARM_ON_IDLE, mode), [mode]);
   const { collection, favorites, totalFinishesOwned } = useLibrary();
   const { run } = useSearchAction();
   const [open, setOpen] = useState(false);
@@ -204,6 +219,7 @@ export function WebHeader() {
                     role="menuitem"
                     className={`${styles.item} ${current ? styles.itemCurrent : ""}`}
                     {...(current ? { "aria-current": "page" as const } : {})}
+                    {...prefetchProps(d.screen.name)}
                     onClick={() => go(d)}
                   >
                     <span className={styles.itemLabel}>{d.label}</span>

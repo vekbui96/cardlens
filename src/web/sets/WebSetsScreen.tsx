@@ -5,6 +5,7 @@ import { LoadingState, ErrorState, EmptyState } from "../../components/States.ts
 import { useSets } from "../../hooks/useSets.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
+import { usePrefetchProps } from "../../app/screenLoaders.tsx";
 import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { useTextEntry } from "../../app/TextEntryProvider.tsx";
 import { syncLine } from "../../features/collection/syncLine.ts";
@@ -36,6 +37,7 @@ const ValuePanel = lazy(() =>
  */
 export function WebSetsScreen() {
   const { openSet, pop } = useNavigation();
+  const prefetchProps = usePrefetchProps();
   const { data, isLoading, isError, refetch } = useSets();
   const {
     ownedCountsBySet,
@@ -112,6 +114,7 @@ export function WebSetsScreen() {
         <button
           type="button"
           className={styles.row}
+          {...prefetchProps("set")}
           onClick={() => openSet(set.id, set.name)}
           aria-label={
             base
