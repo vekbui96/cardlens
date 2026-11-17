@@ -264,6 +264,58 @@ label.chip {
   outline-offset: 2px;
 }
 
+/* --- Page jump ------------------------------------------------------------ */
+
+/*
+ * One button per spread, above the pages.
+ *
+ * Wraps rather than scrolling sideways: a 16-page binder is nine spreads, which
+ * is two short rows at 390px, and a hidden button you have to swipe to find is
+ * the scrolling this row exists to save. Each button keeps the shell's 44px
+ * touch target.
+ */
+.pageJump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cl-gap-xs, 4px);
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.pageJumpLabel {
+  margin-right: 4px;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+}
+
+.pageJumpButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: var(--cl-border);
+  border-radius: 999px;
+  background: var(--cl-surface);
+  font: inherit;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-fg-muted);
+  cursor: pointer;
+}
+
+/* The spread on screen: weight, fill AND aria-current, never colour alone. */
+.pageJumpButton[aria-current] {
+  background: var(--cl-accent);
+  border-color: transparent;
+  color: var(--cl-on-accent);
+}
+
+.pageJumpButton:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
 /* --- Spreads ------------------------------------------------------------- */
 
 /*
