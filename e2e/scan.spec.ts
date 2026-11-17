@@ -263,6 +263,44 @@ test.describe("card scanner", () => {
     ).toHaveLength(0);
   });
 
+  test("says which scanned cards are already in the collection", async ({ page }) => {
+    // A pile being digitised overlaps what is held, and the review is the only
+    // place to see which of a 24-card burst is new. Seeded in every printing the
+    // finish chips could settle on, so the oracle's answer cannot move it.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "cardlens:v1:collection",
+        JSON.stringify(
+          ["normal", "holo", "reverse"].map((finish) => ({
+            cardId: "base1-4",
+            setId: "base1",
+            finish,
+            at: 1_700_000_000_000,
+          })),
+        ),
+      );
+    });
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    await page.getByTestId("pick-by-set").click();
+    const dialog = page.getByRole("dialog", { name: "Pick the card by set" });
+    await dialog.getByLabel("Set").selectOption("base1");
+    await dialog.getByLabel("Filter by number or name").fill("Charizard");
+    await dialog
+      .getByRole("button", { name: /Charizard/ })
+      .first()
+      .click();
+
+    const row = page.getByTestId("review-row").first();
+    await expect(row.getByTestId("owned-note")).toHaveText("Already in your collection");
+    await expect(page.getByTestId("owned-summary")).toHaveText("1 of 1 already in your collection");
+    // Still added exactly as before: knowing it is held decides nothing.
+    await expect(page.getByRole("button", { name: "Add 1 card" })).toBeEnabled();
+  });
+
   test("captures on its own once a card holds still", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
     await startCamera(page, { auto: true });

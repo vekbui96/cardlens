@@ -17,6 +17,8 @@ import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
 import { ScanFinishes } from "./ScanFinishes.tsx";
 import { ScanCardPicker } from "./ScanCardPicker.tsx";
+import { ScanOwnedNote } from "./ScanOwnedNote.tsx";
+import { alreadyOwnedSummary, scanOwnership } from "./scanOwned.ts";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
 
@@ -120,7 +122,7 @@ function isKept(c: Capture): boolean {
 
 export function ScanScreen() {
   const { pop, push } = useNavigation();
-  const { addManyOwned } = useLibrary();
+  const { addManyOwned, isOwned, isOwnedFinish } = useLibrary();
   const repo = useRepositories();
 
   const video = useRef<HTMLVideoElement>(null);
@@ -402,6 +404,13 @@ export function ScanScreen() {
 
   const unsure = queue.filter((c) => chosenOf(c) === null && !c.rejected).length;
   const keeping = queue.filter(isKept).length;
+  // Of the rows being added, how many the collection already holds in that
+  // printing. Informs only: adding one of them changes nothing.
+  const alreadyHeld = queue.filter((c) => {
+    const card = isKept(c) ? chosenOf(c)?.card : undefined;
+    return card ? scanOwnership(card.id, c.finish, { isOwned, isOwnedFinish }) === "this-printing" : false;
+  }).length;
+  const heldSummary = alreadyOwnedSummary(alreadyHeld, keeping);
 
   if (reviewing) {
     return (
@@ -514,6 +523,8 @@ export function ScanScreen() {
                       </>
                     )}
 
+                    {chosen ? <ScanOwnedNote cardId={chosen.card.id} finish={c.finish} /> : null}
+
                     {/*                      Which recogniser answered, per row and not just per
                       session. The engine can change mid-batch — one timeout                      falls this card back to the device and the next one goes
                       to the server again — so a single banner would describe
@@ -588,6 +599,11 @@ export function ScanScreen() {
           {unsure > 0 ? (
             <p className={styles.hint}>
               {unsure} still need{unsure === 1 ? "s" : ""} a choice — they will be skipped.
+            </p>
+          ) : null}
+          {heldSummary ? (
+            <p className={styles.hint} data-testid="owned-summary">
+              {heldSummary}
             </p>
           ) : null}
           <button type="button" className={styles.shutter} onClick={commit} disabled={keeping === 0}>
