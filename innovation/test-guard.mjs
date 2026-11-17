@@ -91,6 +91,28 @@ const allow = [
     tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/health", prompt: "x" },
   },
   { tool_name: "TodoWrite", tool_input: { todos: [] } },
+  // wait-ci.ps1: one blocking CI wait instead of polling turn by turn
+  ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(`${S}\\wait-ci.ps1 -Pr 40 -TimeoutMinutes 45`),
+  // specs: a loop:proposal that is also loop:spec; slices are plain proposals (the "Part of #N" line is in
+  // the body file), optionally marked size:small / test-only (the cheaper build model)
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Spec: collection value over time" --label loop:proposal --label loop:spec --body-file "${W}\\spec.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Value history: store daily totals" --label loop:proposal --label size:small --body-file "${W}\\s1.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Pin the merge rule" --label loop:proposal,test-only --body-file "${W}\\t.md"`,
+  ),
+  ps(`gh issue view 70 -R vekbui96/cardlens --json title,body,labels,comments`),
+  // usage metrics: the public counts-only summary, GET only
+  {
+    tool_name: "WebFetch",
+    tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=30", prompt: "x" },
+  },
+  ps(`Invoke-RestMethod "https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=30"`),
+  ps(`Invoke-RestMethod "http://127.0.0.1:8787/api/metrics/summary?days=7"`),
 ];
 const deny = [
   // comments are never edited by the session (only progress.ps1, marker-checked, edits its own comment)
@@ -269,6 +291,35 @@ const deny = [
   ps(
     `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label device-feedback --body-file "${W}\\p.md"`,
   ),
+  // specs: always a proposal too; never added, removed or approved by edit; no other labels on create
+  ps(`gh issue create -R vekbui96/cardlens --title "Spec: x" --label loop:spec --body-file "${W}\\spec.md"`),
+  ps(`gh issue edit 70 -R vekbui96/cardlens --add-label loop:spec`),
+  ps(`gh issue edit 70 -R vekbui96/cardlens --remove-label loop:spec`),
+  ps(`gh issue edit 70 -R vekbui96/cardlens --add-label size:small`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal,approved --body-file "${W}\\p.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label area:server --body-file "${W}\\p.md"`,
+  ),
+  ps(`gh issue edit 70 -R vekbui96/cardlens --body-file "${W}\\checklist.md"`),
+  ps(`gh api repos/vekbui96/cardlens/issues/comments/99 -X PATCH --input "${W}\\spec.json"`),
+  // sessions.json (models, caps) is Ve's, like FOCUS.md
+  { tool_name: "Write", tool_input: { file_path: `${S}\\sessions.json`, content: "{}" } },
+  {
+    tool_name: "Edit",
+    tool_input: { file_path: `${C}\\innovation\\sessions.json`, old_string: "a", new_string: "b" },
+  },
+  // wait-ci only from the pinned scripts dir; CI is never watched or re-run by hand
+  ps(`${C}\\innovation\\wait-ci.ps1 -Pr 40`),
+  ps(`gh pr checks 40 -R vekbui96/cardlens --watch`),
+  // metrics: GET the summary only; the ingest route is the device's (POST, behind the token)
+  ps(`Invoke-RestMethod -Method Post "https://server-pc.tail0e4194.ts.net:8443/api/metrics" -Body '{}'`),
+  ps(`Invoke-RestMethod "https://server-pc.tail0e4194.ts.net:8443/api/metrics"`),
+  {
+    tool_name: "WebFetch",
+    tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/metrics", prompt: "x" },
+  },
 ];
 
 // the weekly product review (MODE=PRODUCT_REVIEW): read-only research plus ONE review issue
@@ -307,7 +358,87 @@ const reviewDeny = [
   { tool_name: "Write", tool_input: { file_path: `${S}\\PRODUCT.md`, content: "x" } },
 ];
 
+// a build session (MODE=BUILD) builds its one issue; it opens no issues
+const buildEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "BUILD" };
+const buildAllow = [
+  ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
+  ps(`${S}\\test-gate.ps1 -Issue 12 -Step all -ExpectString "Open binder"`),
+  ps(`git -C "${C}" push -u origin loop/12-binder-hint`),
+  ps(`gh issue comment 12 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:in-progress`),
+];
+const buildDeny = [
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${W}\\p.md"`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label loop:spec --body-file "${W}\\s.md"`,
+  ),
+];
+// a proposal session (MODE=PROPOSE): read-only research, then proposals, slices and at most one spec
+const proposeEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "PROPOSE" };
+const proposeAllow = [
+  ps(`${S}\\check-approval.ps1 -Slots`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Spec: faster shop mode" --label loop:proposal --label loop:spec --body-file "${W}\\spec.md"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Shop mode: one-tap add" --label loop:proposal --label size:small --body-file "${W}\\s2.md"`,
+  ),
+  ps(
+    `gh issue list -R vekbui96/cardlens --label loop:proposal --state all --json number,title,state,labels --limit 200`,
+  ),
+  {
+    tool_name: "WebFetch",
+    tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=30", prompt: "x" },
+  },
+  {
+    tool_name: "Write",
+    tool_input: { file_path: `${W}\\spec.md`, content: "<!-- innovation-loop -->\n## Problem and evidence" },
+  },
+];
+const proposeDeny = [
+  ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(`${S}\\test-gate.ps1 -Issue 12 -Step all`),
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
+  ps(`${S}\\progress.ps1 -Issue 12 -Stage plan`),
+  ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
+  ps(`git -C "${C}" push -u origin loop/12-x`),
+  ps(`gh issue comment 70 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh issue edit 12 -R vekbui96/cardlens --add-label loop:in-progress`),
+  ps(`gh issue close 70 -R vekbui96/cardlens`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Product review" --label loop:product-review --body-file "${W}\\r.md"`,
+  ),
+];
+reviewAllow.push(
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Spec: scanner gap" --label loop:proposal --label loop:spec --body-file "${W}\\spec.md"`,
+  ),
+);
+reviewDeny.push(
+  ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:product-review --label loop:spec --body-file "${W}\\r.md"`,
+  ),
+);
+
 let failures = 0;
+for (const [name, e, list, want] of [
+  ["build", buildEnv, buildAllow, 0],
+  ["build", buildEnv, buildDeny, 2],
+  ["propose", proposeEnv, proposeAllow, 0],
+  ["propose", proposeEnv, proposeDeny, 2],
+]) {
+  for (const c of list) {
+    const r = run(c, e);
+    if (r.code !== want) {
+      failures++;
+      console.log(
+        `FAIL (${name} session, should ${want ? "deny" : "allow"}) ${JSON.stringify(c.tool_input).slice(0, 110)}\n   -> ${r.err}`,
+      );
+    }
+  }
+}
 function run(c, e = env) {
   const r = spawnSync(process.execPath, [path.join(here, "guard.mjs")], {
     input: JSON.stringify(c),
@@ -361,6 +492,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);

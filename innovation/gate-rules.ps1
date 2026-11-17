@@ -13,8 +13,14 @@
   Get-FlakyRerunVerdict  may a failed CI run get its one rerun of failed jobs (known-flaky e2e specs only)?
   Get-GapDecision     which protected paths between the live server and a PR / merge block it?
   Get-ProposalSlots   how many proposals await review, and how many may still be opened (the ONE cap rule)?
+  Get-SpecPlan        an approved spec's slices: opened, still to open, done? (Format-SpecProgress: its checklist)
   Get-RetryDecision   may an approved issue with loop:failed get its one automatic retry?
   Get-PrecheckDecision  does this run have anything to do at all, before claude is started?
+  Get-LoopMdSections / Get-SessionConfig / Get-SessionModel  one session per job: its prompt, model, caps
+  Get-NextBuildDecision  may the runner start another build session?
+  Get-BuildOutcome / Get-DeployCertainty  how did a build session end; did it leave the deploy state certain?
+  Get-RunResult       the run's LOOP-RESULT over all its sessions
+  Format-WaitCiLine / Get-CiLogTail  wait-ci.ps1's result line and log tail
 #>
 
 # CI is the e2e gate for every change (the loop runs no Playwright suite locally), so ALL of these must be
@@ -116,8 +122,10 @@ function Get-GapDecision {
 # dot-source anything from a user-writable checkout). A proposal holds a slot while it AWAITS REVIEW: open,
 # labelled loop:proposal, and neither `approved` (that is the owner's build queue, not discovery's) nor
 # `loop:failed` (listed as "failed, waiting on the owner" instead, see Get-RetryDecision).
-$script:ProposalCap = 5
+$script:ProposalCap = 3     # the approval watcher's $Loops entry for this loop carries the same Cap
 $script:MaxNewPerRun = 3
+$script:SpecLabel = 'loop:spec'
+$script:MaxOpenSpecs = 1    # unapproved specs open at the same time
 
 function Get-IssueLabelNames {
     param($Issue)
@@ -126,13 +134,306 @@ function Get-IssueLabelNames {
 
 # $Issues: open loop:proposal issues (gh issue list --json number,labels). Returns AwaitingReview (numbers),
 # Open, Cap, Free (slots left, never below 0) and NewThisRun (min(MaxNewPerRun, Free)).
+# A spec (loop:spec, which also carries loop:proposal) is ONE proposal: it holds one slot while it awaits
+# review, like any proposal, and none once approved (its slices then hold slots as they are opened).
+# SpecsAwaiting lists the unapproved open specs; MayOpenSpec says whether this run may open a new spec (at most
+# $MaxOpenSpecs unapproved specs at a time, and only with a free slot).
 function Get-ProposalSlots {
-    param([object[]]$Issues, [int]$Cap = $script:ProposalCap, [int]$MaxNew = $script:MaxNewPerRun)
+    param([object[]]$Issues, [int]$Cap = $script:ProposalCap, [int]$MaxNew = $script:MaxNewPerRun, [int]$MaxSpecs = $script:MaxOpenSpecs)
     $open = @($Issues | Where-Object { $_ -and (Get-IssueLabelNames $_) -contains 'loop:proposal' })
-    $awaiting = @($open | Where-Object { $n = Get-IssueLabelNames $_; -not ($n -contains 'approved' -or $n -contains 'loop:failed') } |
-            ForEach-Object { [int]$_.number } | Sort-Object)
+    $awaitingIssues = @($open | Where-Object { $n = Get-IssueLabelNames $_; -not ($n -contains 'approved' -or $n -contains 'loop:failed') })
+    $awaiting = @($awaitingIssues | ForEach-Object { [int]$_.number } | Sort-Object)
+    $specs = @($awaitingIssues | Where-Object { (Get-IssueLabelNames $_) -contains $script:SpecLabel } | ForEach-Object { [int]$_.number } | Sort-Object)
     $free = [math]::Max(0, $Cap - $awaiting.Count)
-    return [pscustomobject]@{ AwaitingReview = @($awaiting); Open = $open.Count; Cap = $Cap; Free = [int]$free; NewThisRun = [int][math]::Min($MaxNew, $free) }
+    $newThisRun = [int][math]::Min($MaxNew, $free)
+    return [pscustomobject]@{ AwaitingReview = @($awaiting); Open = $open.Count; Cap = $Cap; Free = [int]$free; NewThisRun = $newThisRun
+        SpecsAwaiting = @($specs); MayOpenSpec = ($newThisRun -gt 0 -and $specs.Count -lt $MaxSpecs) }
+}
+
+# ==================================================================================================
+# Specs (loop:spec + loop:proposal): a one-page spec for a feature too big for one proposal. It is never
+# built itself (check-approval.ps1 refuses it). Once the owner approves it, Phase B opens its slices, in
+# order, as normal loop:proposal issues whose body carries "Part of #<spec> (slice <k> of <m>)"; they take
+# proposal slots before any new idea. The runner keeps a "## Spec progress" checklist comment on the spec
+# and closes the spec once every slice has been opened and is closed (deployed, or closed by the owner).
+# ==================================================================================================
+$script:SliceLinkRx = '(?im)^[ \t>*_]*Part of #(\d+)[ \t]*\(slice[ \t]+(\d+)[ \t]+of[ \t]+(\d+)\)'
+$script:SpecProgressMarker = '<!-- innovation-loop:spec-progress -->'
+
+# One line of text made safe for a comment: no HTML comments (cannot forge a marker), no @mentions, no
+# newlines, bounded.
+function ConvertTo-SafeLine {
+    param([string]$Text, [int]$Max = 100)
+    $t = ("$Text" -replace '[\r\n\t]+', ' ').Trim()
+    $t = $t -replace '<!--', '&lt;!--' -replace '-->', '--&gt;' -replace '@', '&#64;'
+    if ($t.Length -gt $Max) { $t = $t.Substring(0, $Max - 3) + '...' }
+    return $t
+}
+
+# The planned slices of a spec body: the numbered items of its "## Slices" section ("1. **Title**: ..."), in
+# order. Returns K and Title; an item without bold text is titled by its text up to the first ': ' / ' - '.
+function Get-SpecSlices {
+    param([string]$Body)
+    $m = [regex]::Match("$Body", '(?ims)^##[ \t]+Slices\b[^\r\n]*\r?\n(.*?)(?=^##[ \t]|\z)')
+    if (-not $m.Success) { return @() }
+    $out = @(); $seen = @{}
+    foreach ($l in ($m.Groups[1].Value -split "`r?`n")) {
+        $x = [regex]::Match($l, '^ ?(\d+)[.)][ \t]+(.+)$')
+        if (-not $x.Success) { continue }
+        $k = [int]$x.Groups[1].Value
+        if ($seen.ContainsKey($k)) { continue }
+        $seen[$k] = $true
+        $t = $x.Groups[2].Value.Trim()
+        $b = [regex]::Match($t, '^\*\*(.+?)\*\*')
+        if ($b.Success) { $t = $b.Groups[1].Value } else { $t = ($t -split ':\s|\s-\s', 2)[0] }
+        $out += [pscustomobject]@{ K = $k; Title = (ConvertTo-SafeLine $t.Trim(' *_`') 100) }
+    }
+    return @($out | Sort-Object K)
+}
+
+# "Part of #<spec> (slice <k> of <m>)" in a proposal body, or $null.
+function Get-SliceLink {
+    param([string]$Body)
+    $m = [regex]::Match("$Body", $script:SliceLinkRx)
+    if (-not $m.Success) { return $null }
+    return [pscustomobject]@{ Spec = [int]$m.Groups[1].Value; K = [int]$m.Groups[2].Value; Of = [int]$m.Groups[3].Value }
+}
+
+function Get-SliceStatus {
+    param($Issue)
+    $l = Get-IssueLabelNames $Issue
+    if ("$($Issue.state)" -match '^(?i)closed$') { if ($l -contains 'loop:deployed') { return 'deployed' } else { return 'closed without building' } }
+    if ($l -contains 'loop:in-progress') { return 'being built' }
+    if ($l -contains 'loop:failed') { return 'failed, waiting on the owner' }
+    if ($l -contains 'approved') { return 'approved, waiting to be built' }
+    return 'awaiting review'
+}
+
+# The state of one spec. $Spec: the spec issue (number, body). $Issues: loop:proposal issues, open AND closed
+# (number, state, labels, body, author). Only issues opened by -Owner whose body carries the loop -Marker and
+# a slice link to this spec count as its slices. Returns Issue, Slices (K, Title, Issue, Status, Done),
+# ToOpen (planned slices with no issue yet, in order), Complete (every planned slice opened and closed),
+# Valid / Problem (a spec without a parsable "## Slices" list cannot be sliced) and Duplicates.
+function Get-SpecPlan {
+    param($Spec, [object[]]$Issues, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $n = [int]$Spec.number
+    $planned = @(Get-SpecSlices -Body "$($Spec.body)")
+    $linked = @()
+    foreach ($i in @($Issues | Where-Object { $_ })) {
+        if ([int]$i.number -eq $n) { continue }
+        if ((Get-IssueLabelNames $i) -contains $script:SpecLabel) { continue }
+        $author = ''; if ($i.author) { $author = "$($i.author.login)" } elseif ($i.user) { $author = "$($i.user.login)" }
+        if ($author -ne $Owner) { continue }
+        if (-not "$($i.body)".Contains($Marker)) { continue }
+        $lk = Get-SliceLink -Body "$($i.body)"
+        if ($lk -and $lk.Spec -eq $n) { $linked += [pscustomobject]@{ K = $lk.K; Issue = $i } }
+    }
+    $items = @(); $dups = @()
+    foreach ($p in $planned) {
+        $c = @($linked | Where-Object { $_.K -eq $p.K } | ForEach-Object { $_.Issue })
+        if ($c.Count -gt 1) { $dups += $p.K }
+        # an open issue for the slice wins (it is the live one); otherwise the newest closed one
+        $pick = @(@($c | Where-Object { "$($_.state)" -match '^(?i)open$' } | Sort-Object { [int]$_.number }) + @($c | Sort-Object { [int]$_.number } -Descending))
+        $iss = $null; if ($pick.Count -gt 0) { $iss = $pick[0] }
+        $status = 'not opened yet'; $num = 0; $done = $false
+        if ($iss) { $num = [int]$iss.number; $status = Get-SliceStatus $iss; $done = ("$($iss.state)" -match '^(?i)closed$') }
+        $items += [pscustomobject]@{ K = $p.K; Title = $p.Title; Issue = $num; Status = $status; Done = $done }
+    }
+    $problem = ''
+    if ($planned.Count -eq 0) { $problem = 'no numbered list under a "## Slices" heading, so there is nothing to open' }
+    $toOpen = @($items | Where-Object { $_.Issue -eq 0 })
+    $complete = ($planned.Count -gt 0 -and @($items | Where-Object { -not $_.Done }).Count -eq 0)
+    return [pscustomobject]@{ Issue = $n; Of = $planned.Count; Slices = @($items); ToOpen = @($toOpen); Complete = $complete; Valid = (-not $problem); Problem = $problem; Duplicates = @($dups) }
+}
+
+# The "## Spec progress" checklist comment the runner keeps on an approved spec (edited in place).
+function Format-SpecProgress {
+    param($Plan, [string]$RunId = '', [string]$Marker = '<!-- innovation-loop -->', [string]$Who = 'the owner')
+    $sb = New-Object Text.StringBuilder
+    [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:SpecProgressMarker)
+    [void]$sb.AppendLine('## Spec progress'); [void]$sb.AppendLine()
+    if (-not $Plan.Valid) { [void]$sb.AppendLine("Cannot slice this spec: $($Plan.Problem). Edit the spec and re-approve it (remove and re-add ``approved``).") }
+    foreach ($s in $Plan.Slices) {
+        $box = ' '; if ($s.Done) { $box = 'x' }
+        if ($s.Issue -gt 0) { $what = "#$($s.Issue) $($s.Status)" } else { $what = 'not opened yet (opened as a proposal when a slot is free; slices go before new ideas)' }
+        [void]$sb.AppendLine("- [$box] $($s.K). $(ConvertTo-SafeLine $s.Title 100): $what")
+    }
+    if ($Plan.Duplicates.Count -gt 0) { [void]$sb.AppendLine(); [void]$sb.AppendLine("Note: more than one issue claims slice $($Plan.Duplicates -join ', '); the open one (or the newest) is shown.") }
+    [void]$sb.AppendLine()
+    if ($Plan.Complete) { [void]$sb.AppendLine('**All slices are done (deployed or closed). The loop closes this spec.**') }
+    else { [void]$sb.AppendLine("Each slice is a normal proposal: $Who approves them one by one. The spec closes when every slice is deployed or closed.") }
+    $r = ''; if ($RunId) { $r = " after run ``$RunId``" }
+    [void]$sb.AppendLine(); [void]$sb.AppendLine("<sub>Updated by the runner$r; this comment is edited in place.</sub>")
+    return $sb.ToString()
+}
+
+# ==================================================================================================
+# One claude session per job (run-loop.ps1): which LOOP.md sections a session gets, which model and limits,
+# whether another build may start, whether a build left the deploy state uncertain, and the run's result.
+# ==================================================================================================
+
+# The intro (everything before the first "## <n>." heading) plus the listed numbered sections, in order.
+function Get-LoopMdSections {
+    param([string]$Text, [int[]]$Sections)
+    $ms = @([regex]::Matches("$Text", '(?m)^## (\d+)\.'))
+    if ($ms.Count -eq 0) { return "$Text" }
+    $sb = New-Object Text.StringBuilder
+    [void]$sb.Append($Text.Substring(0, $ms[0].Index))
+    for ($i = 0; $i -lt $ms.Count; $i++) {
+        $end = $Text.Length; if ($i + 1 -lt $ms.Count) { $end = $ms[$i + 1].Index }
+        if ($Sections -contains [int]$ms[$i].Groups[1].Value) { [void]$sb.Append($Text.Substring($ms[$i].Index, $end - $ms[$i].Index)) }
+    }
+    return $sb.ToString()
+}
+
+# Defaults for innovation\sessions.json (the owner's file: models, turn caps, per-session time limits).
+$script:SessionDefaults = [ordered]@{
+    build   = [ordered]@{ model = 'claude-opus-5-5'; smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only'); maxTurns = 150; timeoutMinutes = 150 }
+    propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15 }
+    review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60 }
+}
+
+# The session settings: $SessionDefaults overlaid with the parsed sessions.json ($Json, may be $null).
+# Unknown keys are ignored; empty values keep the default.
+function Get-SessionConfig {
+    param($Json)
+    $cfg = [ordered]@{}
+    foreach ($k in $script:SessionDefaults.Keys) {
+        $c = [ordered]@{}; foreach ($f in $script:SessionDefaults[$k].Keys) { $c[$f] = $script:SessionDefaults[$k][$f] }
+        if ($Json -and $Json.PSObject.Properties.Name -contains $k -and $Json.$k) {
+            foreach ($p in $Json.$k.PSObject.Properties) { if ($c.Contains($p.Name) -and $null -ne $p.Value -and "$($p.Value)" -ne '') { $c[$p.Name] = $p.Value } }
+        }
+        $cfg[$k] = $c
+    }
+    return $cfg
+}
+
+# The model for a session. -Override (run-loop -Model) wins. A build uses build.smallModel when the issue
+# carries one of build.smallLabels (size:small, test-only), else build.model.
+function Get-SessionModel {
+    param([string]$Kind, [string[]]$Labels = @(), $Config, [string]$Override = '')
+    if ($Override) { return $Override }
+    $c = $Config[$Kind]
+    if ($Kind -eq 'build' -and $c.smallModel -and @($Labels | Where-Object { @($c.smallLabels) -contains $_ }).Count -gt 0) { return "$($c.smallModel)" }
+    return "$($c.model)"
+}
+
+# May the runner start another build session? $Done: the build sessions so far ({Issue; Outcome}, Outcome
+# deployed | skipped | failed | rolled-back | unknown). A skipped build (the server rule, or the approval no
+# longer valid) does not count toward MaxBuilds; any outcome but deployed or skipped ends Phase A.
+function Get-NextBuildDecision {
+    param([int[]]$Buildable = @(), [object[]]$Done = @(), [int]$MaxBuilds = 2, [double]$RemainingMinutes = 0,
+        [int]$SecondBuildMinMinutes = 120, [int]$FirstBuildMinMinutes = 60, [int]$MaxSkips = 2)
+    $done = @($Done | Where-Object { $_ })
+    $stop = { param([string]$Why) [pscustomobject]@{ Start = $false; Issue = 0; Reason = $Why } }
+    $bad = @($done | Where-Object { $_.Outcome -notin @('deployed', 'skipped') })
+    if ($bad.Count -gt 0) { return (& $stop "#$($bad[0].Issue) ended $($bad[0].Outcome): no further build this run") }
+    $built = @($done | Where-Object { $_.Outcome -eq 'deployed' }).Count
+    $skips = @($done | Where-Object { $_.Outcome -eq 'skipped' }).Count
+    if ($built -ge $MaxBuilds) { return (& $stop "MaxBuilds ($MaxBuilds) reached") }
+    if ($skips -ge $MaxSkips) { return (& $stop "$skips issue(s) skipped this run (server rule or approval); not trying more") }
+    $tried = @($done | ForEach-Object { [int]$_.Issue })
+    $cand = @($Buildable | Where-Object { $tried -notcontains [int]$_ })
+    if ($cand.Count -eq 0) { if ($done.Count -eq 0) { return (& $stop 'nothing buildable') } else { return (& $stop 'nothing more buildable') } }
+    $need = $FirstBuildMinMinutes; if ($built -ge 1) { $need = $SecondBuildMinMinutes }
+    if ($RemainingMinutes -lt $need) { return (& $stop "$([int]$RemainingMinutes) min left before the deadline; a build needs $need") }
+    return [pscustomobject]@{ Start = $true; Issue = [int]$cand[0]; Reason = "build #$($cand[0]) ($($built + 1) of at most $MaxBuilds)" }
+}
+
+# How a build session left its issue, from the issue's labels afterwards and its LOOP-ISSUE-END word.
+# deployed | failed | rolled-back | skipped (no state label at all: left untouched) | unknown.
+function Get-BuildOutcome {
+    param([string[]]$Labels = @(), [string]$MarkerOutcome = '')
+    if ($Labels -contains 'loop:deployed') { return 'deployed' }
+    if ($Labels -contains 'loop:failed') { if ("$MarkerOutcome" -match '^rolled') { return 'rolled-back' } else { return 'failed' } }
+    if ($Labels -contains 'loop:in-progress') { return 'unknown' }
+    if ("$MarkerOutcome" -match '^(deployed|fail|rolled)') { return 'unknown' }   # it said so, but the labels disagree
+    return 'skipped'
+}
+
+# Did a build session leave production in a known state? $MergeRec (state\merge-<n>.json), $DeployRec
+# (state\deploy-<n>.json), $RollbackRec (state\rollback-<n>.json). Certain when nothing was merged in the
+# session, or the merge was deployed and verified (DEPLOY OK), or rolled back and verified (DEPLOY
+# ROLLED-BACK, ROLLBACK OK). Anything else after a merge (no deploy, a deploy killed half way, a precondition
+# failure without the revert, a failed rollback) is uncertain: the run stops there and waits for the owner.
+function Get-DeployCertainty {
+    param($SessionStart, $MergeRec, $DeployRec, $RollbackRec)
+    $mk = { param([bool]$Certain, [string]$State, [string]$Why, [string]$Sha = '') [pscustomobject]@{ Certain = $Certain; State = $State; Reason = $Why; MergeSha = $Sha } }
+    if (-not $MergeRec -or -not $MergeRec.mergedUtc) { return (& $mk $true 'none' 'nothing merged') }
+    $start = [datetime]::MinValue; if ($SessionStart) { $start = ([datetime]$SessionStart).ToUniversalTime() }
+    $merged = ([datetime]$MergeRec.mergedUtc).ToUniversalTime()
+    if ($merged -lt $start) { return (& $mk $true 'none' 'nothing merged in this session') }
+    $sha = "$($MergeRec.mergeSha)"; $s7 = $sha; if ($s7.Length -gt 7) { $s7 = $s7.Substring(0, 7) }
+    $rb = ''; if ($RollbackRec -and "$($RollbackRec.mergeSha)" -eq $sha) { $rb = "$($RollbackRec.status)" }
+    $dp = ''; if ($DeployRec -and "$($DeployRec.mergeSha)" -eq $sha) { $dp = "$($DeployRec.status)" }
+    if ($rb -match '^ROLLBACK OK') { return (& $mk $true 'rolled-back' "merged as $s7, then rolled back and verified" $sha) }
+    if ($dp -match '^DEPLOY OK') { return (& $mk $true 'deployed' "merged as $s7, deployed and verified" $sha) }
+    if ($dp -match '^DEPLOY ROLLED-BACK') { return (& $mk $true 'rolled-back' "merged as $s7, the deploy failed and was rolled back" $sha) }
+    $why = "merged as $s7 but the deploy was not verified"
+    if ($rb) { $why += " (rollback: $rb)" } elseif ($dp) { $why += " (deploy: $dp)" } else { $why += ' (no deploy record)' }
+    return (& $mk $false 'uncertain' $why $sha)
+}
+
+# The run's LOOP-RESULT from its sessions ({Kind; Issue; Status = OK | NOTHING-TO-DO | FAILED | ''; Reason;
+# Ok = claude exited 0 without is_error}) and the runner's own findings ($Problems). FAILED wins, then OK.
+function Get-RunResult {
+    param([object[]]$Sessions = @(), [string[]]$Problems = @())
+    $ss = @($Sessions | Where-Object { $_ })
+    $fails = @($Problems | Where-Object { $_ })
+    foreach ($s in $ss) {
+        $who = "$($s.Kind)"; if ($s.Issue) { $who += " #$($s.Issue)" }
+        if ("$($s.Status)" -eq 'FAILED') { $r = "$($s.Reason)".Trim(); if (-not $r) { $r = 'failed' }; $fails += "${who}: $r" }
+        elseif ("$($s.Status)" -notin @('OK', 'NOTHING-TO-DO')) { $fails += "${who}: no LOOP-RESULT (the session ended without its summary)" }
+        elseif (-not $s.Ok) { $fails += "${who}: claude exited with an error" }
+    }
+    if ($fails.Count -gt 0) { return [pscustomobject]@{ Status = 'FAILED'; Line = "LOOP-RESULT: FAILED $($fails -join '; ')" } }
+    if (@($ss | Where-Object { $_.Status -eq 'OK' }).Count -gt 0) { return [pscustomobject]@{ Status = 'OK'; Line = 'LOOP-RESULT: OK' } }
+    return [pscustomobject]@{ Status = 'NOTHING-TO-DO'; Line = 'LOOP-RESULT: NOTHING-TO-DO' }
+}
+
+# ==================================================================================================
+# wait-ci.ps1: one blocking wait for the required CI jobs on a PR head, one result line.
+# ==================================================================================================
+# The tail of `gh run view <id> --log-failed` for the session: drops the "<job>\t<step>\t<timestamp> " prefix
+# and ANSI codes, keeps the last -Lines lines of each failed job.
+function Get-CiLogTail {
+    param([string]$Log, [int]$Lines = 40)
+    $byJob = [ordered]@{}
+    foreach ($l in ("$Log" -split "`r?`n")) {
+        if (-not $l.Trim()) { continue }
+        $parts = $l -split "`t", 3
+        $job = 'log'; $text = $l
+        if ($parts.Count -eq 3) { $job = $parts[0]; $text = $parts[2] }
+        $text = $text -replace '\x1b\[[0-9;]*[A-Za-z]', '' -replace '^\d{4}-\d\d-\d\dT[\d:.]+Z ?', ''
+        if (-not $byJob.Contains($job)) { $byJob[$job] = New-Object System.Collections.ArrayList }
+        [void]$byJob[$job].Add($text)
+    }
+    $out = @()
+    foreach ($j in $byJob.Keys) {
+        $all = @($byJob[$j]); $tail = @($all | Select-Object -Last $Lines)
+        $out += "--- $j (last $($tail.Count) of $($all.Count) log lines) ---"
+        $out += $tail
+    }
+    return @($out)
+}
+
+# The last line wait-ci.ps1 prints, from a Get-CiVerdict result.
+function Format-WaitCiLine {
+    param($Verdict, [string]$Sha, [double]$WaitedMinutes = 0, [double]$TimeoutMinutes = 45)
+    $s7 = "$Sha"; if ($s7.Length -gt 7) { $s7 = $s7.Substring(0, 7) }
+    $w = "after $([int]$WaitedMinutes) min"
+    switch ($Verdict.State) {
+        'ok' { return "WAIT-CI PASS $s7 ${w}: $($Verdict.Summary)" }
+        'failed' {
+            $jobs = @($Verdict.Failed | ForEach-Object { ("$_" -split ': ', 2)[0] }) -join ', '
+            return "WAIT-CI FAIL $s7 $w; failed jobs: $jobs"
+        }
+        'refuse' { return "WAIT-CI REFUSED $s7 $w; $($Verdict.Refuse -join '; ') (not a test failure: a skipped, cancelled or missing job)" }
+        default {
+            if ($WaitedMinutes -ge $TimeoutMinutes) { return "WAIT-CI TIMEOUT $s7 still running $w (cap $([int]$TimeoutMinutes) min): $($Verdict.Summary)" }
+            return "WAIT-CI PENDING $s7 ${w}: $($Verdict.Summary) (call wait-ci.ps1 again)"
+        }
+    }
 }
 
 # Failure classes. The session writes the class of every build failure as a marker line in its final

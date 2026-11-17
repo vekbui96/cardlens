@@ -129,6 +129,54 @@ Check (-not $d4.HasResult -and $d4.Parts.Count -eq 0) 'missing transcript: empty
 # outcomes
 Check ((Get-RunDataOutcome 'rolled-back') -eq 'rolled back' -and (Get-RunDataOutcome 'Deployed') -eq 'deployed' -and (Get-RunDataOutcome 'skipped') -eq 'skipped' -and (Get-RunDataOutcome 'failed') -eq 'failed') 'outcome words normalised'
 
+# ---- one session per job: a build session's whole cost is its issue's; the run adds the sessions up ------
+function New-Result { param([int]$Turns, [int]$In, [int]$Cr, [int]$Cw, [int]$Out, [double]$Cost, [string]$Text, [string]$Model = 'claude-test-1')
+    return New-Line @{ type = 'result'; subtype = 'success'; is_error = $false; num_turns = $Turns; duration_ms = 600000; total_cost_usd = $Cost; result = $Text
+        usage = @{ input_tokens = $In; cache_read_input_tokens = $Cr; cache_creation_input_tokens = $Cw; output_tokens = $Out }
+        modelUsage = @{ $Model = @{ outputTokens = $Out; costUSD = $Cost } } } }
+$bLines = @(
+    (Msg 'b1' 'Reading CLAUDE.md before taking the issue.' 0 -Tool 'gh issue view 12 -R o/r' -ToolId 'bt1'), (Res 'bt1' '{}' 5),
+    (Msg 'b2' "LOOP-ISSUE-START 12" 10 -Tool 'C:\s\check-approval.ps1 -Issue 12' -ToolId 'bt2'), (Res 'bt2' 'ok' 20),
+    (Msg 'b3' "Deployed.`nLOOP-ISSUE-END 12 deployed" 900 -Tool 'gh issue close 12 -R o/r' -ToolId 'bt3'), (Res 'bt3' 'ok' 905),
+    (Msg 'b4' "Built #12.`nLOOP-RESULT: OK" 910),
+    (New-Result -Turns 4 -In 8 -Cr 4000 -Cw 400 -Out 5000 -Cost 3.0 -Text "Built #12.`nLOOP-RESULT: OK"))
+$pLines = @(
+    (Msg 'p1' 'Counting slots.' 1000 -Tool 'C:\s\check-approval.ps1 -Slots' -ToolId 'pt1'), (Res 'pt1' '{}' 1005),
+    (Msg 'p2' '' 1100 -Tool 'gh issue create -R o/r --title x --label loop:proposal --body-file C:\w\p.md' -ToolId 'pt2'), (Res 'pt2' 'https://github.com/o/r/issues/20' 1105),
+    (Msg 'p3' "Opened #20.`nLOOP-RESULT: OK" 1200),
+    (New-Result -Turns 3 -In 6 -Cr 3000 -Cw 300 -Out 1000 -Cost 0.5 -Text "Opened #20.`nLOOP-RESULT: OK" -Model 'claude-test-small'))
+$bPath = Join-Path $tmp 'run-S.build-12.jsonl'; [IO.File]::WriteAllLines($bPath, $bLines)
+$pPath = Join-Path $tmp 'run-S.propose.jsonl'; [IO.File]::WriteAllLines($pPath, @($pLines | ForEach-Object { $_ -replace '"model":"claude-test-1"', '"model":"claude-test-small"' }))
+$db = Read-LoopTranscript -Path $bPath -SessionIssue 12
+Check ($db.Parts.Count -eq 1 -and $db.Parts[0].Issue -eq 12 -and $db.Parts[0].Outcome -eq 'deployed') 'build session: one part, #12 deployed'
+Check ($db.Parts[0].Input -eq 8 -and $db.Overhead.Input -eq 0 -and $db.Overhead.Turns -eq 0) "build session: everything, its preflight reading included, is #12's (got #12 in $($db.Parts[0].Input), overhead in $($db.Overhead.Input))"
+Check ([math]::Abs($db.Parts[0].Cost - 3.0) -lt 0.0001 -and $db.Parts[0].Output -eq 5000) 'build session: #12 carries the session''s whole cost and output'
+Test-Sums $db 'build session'
+$dp = Read-LoopTranscript -Path $pPath
+Check ($dp.Parts.Count -eq 0 -and $dp.Overhead.Turns -eq 3 -and ($dp.CreatedIssues -contains 'o/r#20')) 'proposal session: all overhead, proposal o/r#20 found'
+$mg = Merge-LoopRunData -Sessions @([pscustomobject]@{ Kind = 'build'; Issue = 12; Model = 'claude-test-1'; Data = $db }, [pscustomobject]@{ Kind = 'propose'; Issue = 0; Model = 'claude-test-small'; Data = $dp }) -Status 'OK'
+Check ($mg.Parts.Count -eq 1 -and $mg.Sessions.Count -eq 2 -and $mg.Status -eq 'OK' -and $mg.HasResult) 'merged: one issue part, two sessions, the run''s status'
+Check ($mg.Totals.Turns -eq 7 -and $mg.Totals.Input -eq 14 -and $mg.Totals.CacheRead -eq 7000 -and $mg.Totals.Output -eq 6000 -and [math]::Abs($mg.Totals.Cost - 3.5) -lt 0.0001) "merged totals = the sum of the sessions (turns $($mg.Totals.Turns), cost $($mg.Totals.Cost))"
+Check ($mg.Parts[0].Turns -eq 4 -and [math]::Abs($mg.Parts[0].Cost - 3.0) -lt 0.0001 -and $mg.Overhead.Turns -eq 3 -and [math]::Abs($mg.Overhead.Cost - 0.5) -lt 0.0001) 'merged: the per-issue column is the build session, the rest is the proposal session'
+Check (($mg.Totals.Models -contains 'claude-test-1') -and ($mg.Totals.Models -contains 'claude-test-small')) "merged: both models listed ($($mg.Totals.Models -join ','))"
+Check ($mg.CreatedIssues -contains 'o/r#20') 'merged: created proposals kept'
+Test-Sums $mg 'merged sessions'
+$cm = Format-RunDataComment -Data $mg -Issue 12 -Part $mg.Parts[0] -RunId 'S' -Mode 'FULL' -Trigger 'x'
+Check ($cm -match 'Rest of run \(proposal / review session\)' -and $cm -match 'Sessions \(2, one per job\): build #12 \(claude-test-1, 4 turns, \$3\.00, OK\); proposals \(claude-test-small, 3 turns, \$0\.50, OK\)') "comment names every session ($cm)"
+$pf = Format-RunDataProposalComment -Data $mg -RunId 'S' -Mode 'FULL' -Trigger 'x'
+Check ($pf -match 'The proposal / review session, shared by every proposal it opened: 3 turns') "proposal footer: the proposal session's own figures ($pf)"
+$null = Publish-LoopRunData -Sessions @([pscustomobject]@{ Path = $bPath; Kind = 'build'; Issue = 12; Model = 'claude-test-1' }, [pscustomobject]@{ Path = $pPath; Kind = 'propose'; Issue = 0; Model = 'claude-test-small' }) -Status 'OK' `
+    -Repo 'o/r' -GhExe 'gh-not-called' -RunId 'S' -Mode 'FULL' -OutDir $tmp -NoPost
+Check ((Test-Path (Join-Path $tmp 'run-S.rundata-12.md')) -and (Test-Path (Join-Path $tmp 'run-S.rundata-20.md'))) 'publish -Sessions: bodies for #12 and proposal #20'
+$js = [IO.File]::ReadAllText((Join-Path $tmp 'run-S.rundata.json')) | ConvertFrom-Json
+Check (@($js.sessions).Count -eq 2 -and $js.status -eq 'OK' -and [math]::Abs([double]$js.totals.Cost - 3.5) -lt 0.0001) 'run-data json: sessions listed, run status and summed cost'
+# a killed build session: its cost is unknown, the run's output tokens are n/a, the note says so
+$kPath = Join-Path $tmp 'run-K.build-14.jsonl'; [IO.File]::WriteAllLines($kPath, @($bLines | Where-Object { $_ -notmatch '"type":"result"' } | ForEach-Object { $_ -replace 'LOOP-ISSUE-(START|END) 12', 'LOOP-ISSUE-$1 14' }))
+$dk = Read-LoopTranscript -Path $kPath -SessionIssue 14
+$mk2 = Merge-LoopRunData -Sessions @([pscustomobject]@{ Kind = 'build'; Issue = 14; Data = $dk }, [pscustomobject]@{ Kind = 'propose'; Data = $dp }) -Status 'FAILED'
+Check (-not $mk2.HasResult -and $mk2.Totals.Output -eq -1 -and [math]::Abs($mk2.Totals.Cost - 0.5) -lt 0.0001 -and (@($mk2.Notes | Where-Object { $_ -match 'no result message' }).Count -ge 1)) 'killed build session: output n/a, cost covers the sessions that reported, noted'
+Check ((Format-RunDataSessions $mk2) -match 'build #14 \(claude-test-1, \d+ turns, cost n/a, no result') "killed session shown as such ($(Format-RunDataSessions $mk2))"
+
 # ---- progress ---------------------------------------------------------------------------------
 $stages = @('approval', 'plan', 'branch', 'test', 'pr', 'ci', 'merge', 'deploy', 'verify', 'done')
 $st = New-ProgressState -Issue 11 -RunId '20261116-140000' -Repo 'o/r' -Stages $stages

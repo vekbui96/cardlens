@@ -59,6 +59,9 @@ try {
     if (-not (Invoke-FrontendRevert -MergeSha $MergeSha -AbsentString $AbsentString -ShotPath (Join-Path $art 'rollback.png'))) { $ok = $false }
 } catch { Write-Log "revert failed: $_" 'ERROR'; $ok = $false }
 
+# the runner reads this record (gate-rules.ps1 Get-DeployCertainty) to decide whether the next build may start
+$status = 'ROLLBACK OK'; if (-not $ok) { $status = 'ROLLBACK FAILED' }
+try { Save-State "rollback-$Issue" @{ issue = $Issue; mergeSha = $MergeSha; revertOnly = [bool]$RevertOnly; status = $status; utc = [DateTime]::UtcNow.ToString('o') } } catch { Write-Log "could not save the rollback record: $_" 'WARN' }
 if ($ok) { Write-Output 'ROLLBACK OK'; exit 0 }
 Write-Output "ROLLBACK FAILED (PRODUCTION NEEDS VE: see $($script:LogFile))"
 exit 3

@@ -15,15 +15,21 @@ not labelled `loop:proposal` (e.g. your #2-#4).
 
 ## How it works
 
-Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`, which starts a headless `claude -p`
-session (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs` PreToolUse hook) that follows
-[`LOOP.md`](LOOP.md). Each run:
+Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in
+PowerShell (lock, preflight, the elevated-task selftest, the queue precheck, the loop's clone), then starts
+**one headless `claude -p` session per job** (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs`
+PreToolUse hook), each with a prompt naming its one job and only the [`LOOP.md`](LOOP.md) sections it
+needs, its own model, turn cap and time limit ([`sessions.json`](sessions.json), below). A fresh session per
+job keeps each one's context small: on 2026-11-16 one long session doing two builds plus proposals re-read
+~6.8M cached tokens per issue and ~4.3M of run overhead. Each run:
 
-1. **Phase A (build), up to two issues, one after another.** Takes the oldest open `loop:proposal` +
-   `approved` issue whose approval really came from you (`check-approval.ps1`, against the issue's event history). Posts a plan,
+1. **Phase A (build), up to two issues, one session each, one after another.** Takes the oldest open
+   `loop:proposal` + `approved` issue whose approval really came from you (`check-approval.ps1`, against the issue's event history). Posts a plan,
    builds on `loop/<issue>-<slug>` in its own clone, runs the local gates (`test-gate.ps1`: `npm ci` +
    the Playwright browser, Prettier, `npm run verify`, a Pages-style build; Linux visual baselines via Docker
-   when UI changed), opens a PR, and merges it with `merge-pr.ps1` only when all three CI jobs
+   when UI changed), opens a PR, waits for CI with ONE `wait-ci.ps1` call (it blocks until CI is done and prints one PASS / FAIL
+   line with the failed jobs and their log tails, instead of the session polling turn by turn), and merges
+   it with `merge-pr.ps1` only when all three CI jobs
    (Typecheck/Lint/Unit/Build, Playwright E2E, v2 Visual Regression) are completed + success on the PR's
    exact head commit. **CI is the e2e gate for every change**: the loop does not run Playwright locally
    (on 2026-11-16 a local run took 2.6 to 15 minutes, plus reruns when a flaky Target spec failed, and it
@@ -31,23 +37,53 @@ session (`--permission-mode dontAsk`, explicit allowlist, `guard.mjs` PreToolUse
    pushes to the same branch and waits again, at most 3 rounds, then leaves the PR open with `loop:failed`;
    a failure only in the known-flaky specs (bulk-mark timing, Target) may get one `ci-rerun.ps1` rerun. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
    everything back on failure. Success: `loop:deployed`, closed. Failure: `loop:failed`, comment, left open.
-   After a success it may build a second approved issue with the same full cycle (`-MaxBuilds`, default
-   2), only if every build so far ended `loop:deployed` (a failure or rollback ends Phase A), at least
-   120 minutes of the 240-minute run budget remain (`-SecondBuildMinMinutes`: a cycle has taken ~60-75
-   min, up to ~110 with a CI fix round, and Phase B still has to run), and the turn budget allows it.
-   **At most one server deploy per run**: an issue that needs the server waits for the next run if one
-   already went out. A second build also will not merge with under 45 minutes left: it comments, marks
-   the issue `loop:failed` and leaves the PR open for you.
-2. **Phase B (propose).** If fewer than 5 proposals await your review, it reads [`FOCUS.md`](FOCUS.md)
-   (below), the docs (`handoff.md`, the plans), the code and the live site and opens up to 3 new
-   `loop:proposal` issues.
+   After a success the runner may start a second build session for the next approved issue
+   (`-MaxBuilds`, default 2), only if every build so far ended `loop:deployed` (a failure or rollback ends
+   Phase A; an issue skipped by the server rule does not count) and at least 120 minutes of the
+   240-minute run budget remain (`-SecondBuildMinMinutes`: a cycle has taken ~60-75 min, up to ~110 with a
+   CI fix round). **If a build session merged something whose deploy was neither verified nor rolled back
+   and verified** (the session was killed mid-deploy, a rollback failed), the runner stops the whole run
+   there: no next build, no proposals, `LOOP-RESULT: FAILED ... NEEDS VE`. **At most one server deploy per
+   run**: an issue that needs the server waits for the next run if one already went out. A build session
+   will not merge with under 45 minutes left of its own time limit: it comments, marks the issue
+   `loop:failed` (retried once) and leaves the PR open.
+2. **Phase B (propose), a separate session.** Only if a proposal slot is free (no session at all
+   otherwise). It reads [`FOCUS.md`](FOCUS.md) (below), PRODUCT.md, the docs, the code, the live site and
+   the usage metrics summary, opens the next slices of any spec you approved, then new `loop:proposal`
+   issues (or one spec), up to 3.
 
-**Proposal slots (one rule everywhere).** A proposal holds one of the 5 slots while it awaits your review:
-open, `loop:proposal`, and neither `approved` nor `loop:failed`. Approved work is your build queue and does
-not block new ideas; failed issues are listed instead (below). The loop (`check-approval.ps1 -Slots`,
-`gate-rules.ps1 Get-ProposalSlots`) and the approval watcher's refill trigger count the same way.
+**Proposal slots (one rule everywhere).** A proposal holds one of the **3** slots while it awaits your
+review: open, `loop:proposal`, and neither `approved` nor `loop:failed`. A spec awaiting review is one
+proposal (one slot); its slices take slots as they are opened, ahead of new ideas; at most one unapproved
+spec is open at a time. Approved work is your build queue and does not block new ideas; failed issues are
+listed instead (below). The loop (`check-approval.ps1 -Slots`, `gate-rules.ps1 Get-ProposalSlots`) and the
+approval watcher's refill trigger count the same way (the watcher's `$Loops` entry carries `Cap = 3`).
 
-**No-op runs cost nothing.** Before it starts claude, `run-loop.ps1` asks `check-approval.ps1 -List` for
+**Specs: big features in slices.** Some ideas are too big for one build (PRODUCT.md's bets: collection
+value over time with price alerts, faster shop mode, scanner gap measurement); before specs they could only
+appear as Manual / needs Ve and never shipped. Now the loop may open a `loop:spec` issue (also
+`loop:proposal`): a one-page spec with the problem and evidence, the user flow on the glasses (600x600,
+gestures only) and on the web, a success metric with a baseline and a target, risks and what is out of
+scope, and 3-5 independently shippable slices, each sized like a normal proposal. Approve it like any
+proposal. The loop never builds the spec itself (`check-approval.ps1` refuses it); its next proposal
+sessions open the slices, in order, as normal proposals starting `Part of #<spec> (slice <k> of <m>)`,
+and you approve those one by one. The runner keeps a "## Spec progress" checklist comment on the spec
+(edited in place) and closes the spec when every slice is deployed or closed. Editing the spec's body after
+approving it stops the slicing until you re-approve, as with any proposal.
+
+**Usage metrics.** Proposals, specs and the weekly review cite `GET /api/metrics/summary?days=N` (public,
+counts only; event names in `src/models/metricsEvents.ts`) as their baseline when the server has it; until
+it is deployed they say "not available yet". GET only: the guard refuses any other `/api/metrics` route.
+
+**Models and caps** ([`sessions.json`](sessions.json), yours). Build sessions run on Opus
+(`claude-opus-5-5`) by default and on Sonnet (`claude-sonnet-5-5`) when the issue carries `size:small` or
+`test-only` (the loop adds one when it opens a small or test-only proposal; add or remove it yourself
+before approving to choose). Proposal sessions and the weekly review run on Sonnet. Turn caps: 150 per
+build session, 80 for proposals, 120 for the review; time limits 150 / 45 / 60 minutes, each cut to what
+is left of the run's 240. `-Model` / `-MaxTurns` on run-loop.ps1 override every session for one run.
+Claude Code's own small background calls (Haiku) are unchanged.
+
+**No-op runs cost nothing.** Before it starts any session, `run-loop.ps1` asks `check-approval.ps1 -List` for
 the queue. When nothing approved is buildable (FULL mode) and no proposal slot is free, it logs `precheck:
 launch=False (...)`, writes a summary ending `LOOP-RESULT: NOTHING-TO-DO` and `run-<id>.rundata.json`
 (cost 0), and exits 0 without a session. If that check fails, the run starts claude as before.
@@ -123,13 +159,13 @@ as before. It steers proposals only; it never widens what the loop may build or 
 - **Final comment**: a plain-language **Synopsis** first (what changed, why it matters to you as a
   collector, what you will notice, how it was verified; or, on failure, what went wrong and the state left
   behind), then the technical **Details**.
-- **Run data**, posted by the runner after the session exits: start/end/duration, outcome, turns, tokens
-  (input, output, cache read, cache creation), API-equivalent cost and model for this issue, the run's
-  overhead (preflight + research) and the whole run, the mode and whether the daily schedule or an
+- **Run data**, posted by the runner after the sessions exit: start/end/duration, outcome, turns, tokens
+  (input, output, cache read, cache creation), API-equivalent cost and model for this issue (its whole build
+  session, preflight reading included), the rest of the run (the proposal / review session) and the whole
+  run summed over every session, one line per session (model, turns, cost, result), the mode and whether the daily schedule or an
   on-demand start (approval watcher or by hand) began it. Cost is the figure Claude Code reports at API
-  prices; on the Max subscription it is usage, not billing. Per-issue output tokens and cost are the run's
-  exact totals split by the session's `LOOP-ISSUE-START/END` marker lines (marked `~`); without markers the
-  comment says so and shows run totals only. If a session dies mid-build, the runner marks the progress
+  prices; on the Max subscription it is usage, not billing. A build session's figures are its own exact
+  totals; a killed session without a result message shows n/a and the note says so. If a session dies mid-build, the runner marks the progress
   comment "Run ended during: <stage>". New proposals get a one-line run-data footer.
 - All of these carry the hidden `<!-- innovation-loop -->` marker, so they never count as your adjustments.
   The session itself cannot edit comments: only `progress.ps1` edits, and only its own marker-checked
@@ -141,6 +177,9 @@ as before. It steers proposals only; it never widens what the loop may build or 
 | Label                 | Meaning                                      |
 | --------------------- | -------------------------------------------- |
 | `loop:proposal`       | an idea from the loop                        |
+| `loop:spec`           | a spec (also a proposal); never built itself |
+| `size:small`          | small: built with the cheaper model          |
+| `test-only`           | tests only: built with the cheaper model     |
 | `approved`            | you said go (you set this)                   |
 | `loop:in-progress`    | being built right now                        |
 | `loop:deployed`       | shipped, verified live, closed               |
@@ -173,8 +212,8 @@ Enable-ScheduledTask  -TaskName innovation-loop-cardlens-review
 powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -MaxBuilds 1   # one build per run (old behaviour)
 ```
 
-For the scheduled task, use `install-task.ps1 -ExtraArgs '-MaxBuilds 1'`. Turns default to
-150 + 150 x MaxBuilds (`-MaxTurns` overrides).
+For the scheduled task, use `install-task.ps1 -ExtraArgs '-MaxBuilds 1'`. Models, turn caps and time
+limits per session kind are in `sessions.json` (`-Model` / `-MaxTurns` override them for one run).
 
 | Task                              | Runs as                       | Trigger                          | Does                                                            |
 | --------------------------------- | ----------------------------- | -------------------------------- | --------------------------------------------------------------- |
@@ -249,14 +288,14 @@ so the server deploy runs in the separate elevated task, which takes no argument
 | Path                                                                     | What                                                                              |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `C:\Users\Ve Bui\.innovation-loop-cardlens\logs\run-<time>.log`          | runner log (start here)                                                           |
-| `...\logs\run-<time>.summary.txt`                                        | the session's final summary, ending in `LOOP-RESULT: ...`                         |
-| `...\logs\run-<time>.jsonl`                                              | full transcript (every tool call)                                                 |
+| `...\logs\run-<time>.summary.txt`                                        | the run summary (every session's), ending in the run's `LOOP-RESULT: ...`         |
+| `...\logs\run-<time>.<build-n\|propose\|review>.jsonl`, `.prompt.md`     | each session's full transcript and the prompt it got                              |
 | `...\logs\run-<time>.rundata.json`, `run-<time>.rundata-<issue>.md`      | run data per issue and the comment bodies the runner posted                       |
 | `...\logs\run-<time>.progress.log`, `...\state\progress\<time>-<n>.json` | progress.ps1 log; the progress comment id and stage times                         |
-| `...\logs\{test-gate,merge-pr,deploy,rollback,snapshots}-*.log`          | non-elevated script logs                                                          |
+| `...\logs\{test-gate,wait-ci,merge-pr,deploy,rollback,snapshots}-*.log`  | non-elevated script logs                                                          |
 | `...\clones\cardlens`                                                    | the loop's own clone (never `D:\projects\cardlens`, never `D:\services\cardlens`) |
 | `...\artifacts\<issue>\`                                                 | live / rolled-back screenshots                                                    |
-| `...\state\`                                                             | merge and deploy records                                                          |
+| `...\state\`                                                             | merge, deploy and rollback records; `spec\` checklist comment ids                 |
 | `C:\ProgramData\innovation-loop-cardlens\logs\`                          | elevated logs (`elevated-task`, `deploy-server`, `rollback-server`)               |
 | `C:\ProgramData\innovation-loop-cardlens\state\server-last-deploy.json`  | PREV / target of the last server deploy                                           |
 | `D:\services\backups\predeploy-*.zip`                                    | data snapshots taken before each server deploy                                    |
@@ -288,7 +327,10 @@ rolled back, `3` rollback failed (look now), `4` install failed (server rolled b
 ## Safety, in short
 
 - `dontAsk` + explicit allowlist: no npm/node/cmd/docker/schtasks/services for the session; installs,
-  builds and tests go through `test-gate.ps1`, merges through `merge-pr.ps1`, deploys through `deploy.ps1`.
+  builds and tests go through `test-gate.ps1`, CI waits through `wait-ci.ps1`, merges through `merge-pr.ps1`,
+  deploys through `deploy.ps1`. Proposal and review sessions get `check-approval.ps1` only, and the guard
+  (told the session kind) refuses builds, commits, pushes, PRs, comments and label edits in them; a build
+  session cannot open issues.
 - `guard.mjs` checks every tool call: only `vekbui96/cardlens`; no secrets, `.env`, env dumps, SSH keys,
   gh token, NSSM registry; nothing under `D:\services` (except reading `D:\services\logs\cardlens*`);
   GET-only HTTP to known hosts and never the write routes; one command per call; edits only in the loop's
