@@ -278,6 +278,31 @@ describe("a card you do not own", () => {
     expect(screen.getByRole("button", { name: /^Pocket 1, Jolteon, not owned/ })).toBeInTheDocument();
     expect(screen.getByText("Don’t own")).toBeInTheDocument();
   });
+
+  it("is counted in what is still to get, and drops out once that printing is owned", async () => {
+    // Counting shadowed pockets by eye across sixteen pages is the job this
+    // line takes over. Owning the printing is what takes a card off it.
+    let binder = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    binder = placeSlot(binder, 0, 0, cardSlot(0), Date.now());
+    save(binder);
+    const { unmount } = render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    await waitFor(() =>
+      expect(screen.getByTestId("binder-to-get")).toHaveTextContent(/^Still to get: 1 card\b/),
+    );
+    unmount();
+
+    new Repositories().addOwned(CARDS[0][0], "holo");
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    expect(screen.getByTestId("binder-to-get")).toHaveTextContent("You own every card in this binder");
+  });
+
+  it("says nothing about cards to get on a trade binder", () => {
+    let binder = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    binder = placeSlot(binder, 0, 0, cardSlot(0), Date.now());
+    save({ ...binder, forTrade: true });
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    expect(screen.queryByTestId("binder-to-get")).not.toBeInTheDocument();
+  });
 });
 
 describe("choosing a pocket", () => {

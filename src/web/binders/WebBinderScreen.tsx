@@ -9,6 +9,8 @@ import { CardImage } from "../../components/CardImage.tsx";
 import { BinderPageView } from "../../components/BinderPage.tsx";
 import { useSets } from "../../hooks/useSets.ts";
 import { useBinderValue } from "../../hooks/useBinderValue.ts";
+import { cardSlotsOf } from "../../models/binderValue.ts";
+import { stillToGet, stillToGetLine } from "../../models/binderToGet.ts";
 import { useSetView } from "../../hooks/useSetView.ts";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
@@ -227,6 +229,12 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
 
   const spec = specFor(binder.format);
   const counts = countBinder(binder);
+  // What is left to chase. Skipped on a trade binder (every card on offer is
+  // one you hold) and on a binder with no cards placed, where "you own every
+  // card" would be true of nothing and mean nothing.
+  const cardSlots = cardSlotsOf(binder);
+  const toGet =
+    binder.forTrade || cardSlots.length === 0 ? null : stillToGet(cardSlots, owns, value.priceFor);
   const spreads = pageGroups(binder.pages.length, binder.format);
 
   const jumpTo = (first: number) => {
@@ -813,6 +821,11 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
         {value.isLoading ? " · pricing…" : ` · ${formatUsd(value.total)}`}
         {!value.isLoading && value.unpriced > 0 ? ` (${value.unpriced} unpriced)` : ""}
       </p>
+      {toGet ? (
+        <p className={styles.footnote} data-testid="binder-to-get">
+          {stillToGetLine(toGet, value.isLoading)}
+        </p>
+      ) : null}
       {/*
        * The card under the pointer while it is being carried.
        *

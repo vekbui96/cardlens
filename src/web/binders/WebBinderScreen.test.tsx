@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -175,6 +175,30 @@ describe("WebBinderScreen search", () => {
 
     expect(new Repositories().isOwnedFinish("swsh7-215", "holo")).toBe(true);
     expect(placedCards()).toHaveLength(1);
+  });
+
+  it("says how many planned cards are still to get, and updates when one is marked owned", async () => {
+    // Counting shadowed pockets by eye across sixteen pages is the job this
+    // line takes over. It has to move the moment the answer does.
+    const user = userEvent.setup();
+    render(<WebBinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    // Nothing placed: "you own every card" would be true of no cards.
+    expect(screen.queryByTestId("binder-to-get")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
+    await user.type(screen.getByLabelText("Search every set"), "Umbreon");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: /Umbreon VMAX, 215/ }));
+    await user.click(await screen.findByRole("button", { name: "Holofoil" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("binder-to-get")).toHaveTextContent(/^Still to get: 1 card\b/),
+    );
+
+    await user.click(screen.getByRole("button", { name: /^Pocket 1, Umbreon VMAX/ }));
+    await user.click(await screen.findByRole("button", { name: "Own Holofoil" }));
+
+    expect(screen.getByTestId("binder-to-get")).toHaveTextContent("You own every card in this binder");
   });
 
   it("opens on a right-hand page, and pairs the rest facing each other", async () => {

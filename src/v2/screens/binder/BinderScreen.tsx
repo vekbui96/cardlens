@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { CardArt, Chip, Money, Panel, RailHost, Row, Sheet, Stack, cx } from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useBinderValue } from "../../../hooks/useBinderValue.ts";
+import { cardSlotsOf } from "../../../models/binderValue.ts";
+import { stillToGet, stillToGetLine } from "../../../models/binderToGet.ts";
 import {
   addPage,
   addressKey,
@@ -199,6 +201,12 @@ export function BinderScreen({ binderId }: { binderId: string }) {
 
   const spec = specFor(binder.format);
   const counts = countBinder(binder);
+  // What is left to chase — the same line, from the same helper, as the v1 web
+  // screen. Skipped on a trade binder (every card on offer is one you hold) and
+  // on a binder with no cards placed, where "you own every card" means nothing.
+  const cardSlots = cardSlotsOf(binder);
+  const toGet =
+    binder.forTrade || cardSlots.length === 0 ? null : stillToGet(cardSlots, owns, value.priceFor);
   const selectedSlot = selected ? slotAt(binder, selected) : null;
 
   /**
@@ -472,6 +480,11 @@ export function BinderScreen({ binderId }: { binderId: string }) {
         <Money value={value.total} loading={value.isLoading} absentLabel="Unpriced" />
         {!value.isLoading && value.unpriced > 0 ? ` (${value.unpriced} unpriced)` : ""}
       </p>
+      {toGet ? (
+        <p className={styles.footnote} data-testid="binder-to-get">
+          {stillToGetLine(toGet, value.isLoading)}
+        </p>
+      ) : null}
 
       {/*
        * The card under the pointer while it is being carried.
