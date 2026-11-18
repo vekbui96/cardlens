@@ -154,6 +154,32 @@ describe("TradeShareScreen", () => {
     expect(screen.queryByText("$0.00")).toBeNull();
   });
 
+  it("says when the owner last changed the binder", async () => {
+    // The first question a trade partner has: is this still what is on offer?
+    // It is the binder's own edit time, not the server's clock when it answered.
+    const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    serve({ kind: "binder", binder: { ...tradeBinder(), updatedAt: threeDaysAgo }, at: Date.now() });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    expect((await screen.findByTestId("trade-updated")).textContent).toBe("Updated 3d ago");
+  });
+
+  it("says a binder edited a minute ago was updated a minute ago", async () => {
+    serve({ kind: "binder", binder: { ...tradeBinder(), updatedAt: Date.now() - 60_000 }, at: Date.now() });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    expect((await screen.findByTestId("trade-updated")).textContent).toBe("Updated 1 min ago");
+  });
+
+  it("says nothing about freshness when the binder carries no edit time", async () => {
+    // Better no line than "Updated Jan 1, 1970".
+    serve({ kind: "binder", binder: { ...tradeBinder(), updatedAt: 2 }, at: Date.now() });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    await screen.findByText("Spares and dupes");
+    expect(screen.queryByTestId("trade-updated")).toBeNull();
+  });
+
   it("says a revoked link is gone, without saying it ever existed", async () => {
     serve(null, 404);
     render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
