@@ -17,6 +17,7 @@ import {
   type BinderSlot,
 } from "../../models/binderLayout.ts";
 import { BinderCover } from "./BinderCover.tsx";
+import { newBinderId } from "./newBinderId.ts";
 import styles from "./WebBindersScreen.module.css";
 
 /**
@@ -36,17 +37,6 @@ function BinderTotal({ summary, loading }: { summary?: BinderValueSummary; loadi
       {summary.unpriced > 0 ? <span className={styles.valueNote}> · {summary.unpriced} unpriced</span> : null}
     </span>
   );
-}
-
-/**
- * Ids must be unique across DEVICES, not just this one, because they are the
- * key binders converge on: two phones that both minted "b1" would merge into
- * one binder and the older arrangement would vanish. The clock alone is not
- * enough — two devices creating a binder in the same millisecond is unlikely
- * but the failure is silent and permanent — so it carries randomness too.
- */
-function newId(): string {
-  return `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -241,7 +231,7 @@ export function WebBindersScreen() {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    const binder = emptyBinder(newId(), trimmed, format, Date.now());
+    const binder = emptyBinder(newBinderId(), trimmed, format, Date.now());
     saveBinder(binder);
     setName("");
     push({ name: "binder", binderId: binder.id });

@@ -9,7 +9,7 @@ import {
   RepositoriesProvider,
   LayoutModeProvider,
 } from "../../app/contexts.tsx";
-import { NavigationProvider } from "../../app/NavigationProvider.tsx";
+import { NavigationProvider, useNavigation } from "../../app/NavigationProvider.tsx";
 import { LibraryProvider } from "../../app/LibraryProvider.tsx";
 import { MockInputAdapter } from "../../integrations/meta/MockInputAdapter.ts";
 import { MockPokemonProvider } from "../../integrations/pokemon/index.ts";
@@ -520,5 +520,47 @@ describe("WebBinderScreen settings", () => {
 
     expect(screen.queryByRole("button", { name: "✓ For trade" })).not.toBeInTheDocument();
     expect(screen.getByText("For trade")).toBeInTheDocument();
+  });
+
+  it("duplicates the binder, leaves the original alone, and opens the copy", async () => {
+    const user = userEvent.setup();
+    const placed: CardSlot = { kind: "card", cardId: "sv3-215", finish: "holo", name: "Charizard ex" };
+    // Newer than beforeEach's binder: saving is last-write-wins, so an older
+    // stamp would be ignored and the test would copy an empty binder.
+    new Repositories().saveBinder({
+      ...emptyBinder(BINDER_ID, "Favourites", "9", Date.now() + 1),
+      pages: [{ slots: { 4: placed } }, { slots: {} }],
+      forTrade: true,
+    });
+    const before = new Repositories().getBinders().find((b) => b.id === BINDER_ID);
+    expect(before?.forTrade).toBe(true);
+
+    /** Where navigation went: the screen itself is pinned to BINDER_ID by its prop. */
+    function Opened() {
+      const { screen: current } = useNavigation();
+      return (
+        <output data-testid="opened">{current.name === "binder" ? current.binderId : current.name}</output>
+      );
+    }
+    render(
+      <>
+        <WebBinderScreen binderId={BINDER_ID} />
+        <Opened />
+      </>,
+      { wrapper: harness() },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Duplicate binder" }));
+
+    const binders = new Repositories().getBinders();
+    expect(binders).toHaveLength(2);
+    expect(binders.find((b) => b.id === BINDER_ID)).toEqual(before);
+
+    const copy = binders.find((b) => b.id !== BINDER_ID);
+    expect(copy?.name).toBe("Favourites copy");
+    expect(copy?.pages).toEqual(before?.pages);
+    expect(copy?.forTrade).toBeUndefined();
+    expect(screen.getByTestId("opened")).toHaveTextContent(copy?.id ?? "no copy");
   });
 });
