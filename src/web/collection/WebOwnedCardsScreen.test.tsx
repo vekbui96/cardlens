@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { OwnedPrintingRow } from "../../models/ownedSort.ts";
 import { WebOwnedCardsScreen } from "./WebOwnedCardsScreen.tsx";
 
@@ -15,7 +15,13 @@ let stubbed: { rows: OwnedPrintingRow[]; pending: number; pricing: number };
 
 vi.mock("../../hooks/useOwnedCards.ts", () => ({ useOwnedCards: () => stubbed }));
 vi.mock("../../app/NavigationProvider.tsx", () => ({ useNavigation: () => ({ push: vi.fn() }) }));
-vi.mock("./CardShowcase.tsx", () => ({ CardShowcase: () => null }));
+let showcaseSpy: ((rows: OwnedPrintingRow[]) => void) | undefined;
+vi.mock("./CardShowcase.tsx", () => ({
+  CardShowcase: ({ rows }: { rows: OwnedPrintingRow[] }) => {
+    showcaseSpy?.(rows);
+    return null;
+  },
+}));
 
 const ROWS: OwnedPrintingRow[] = [
   {
@@ -41,6 +47,7 @@ const ROWS: OwnedPrintingRow[] = [
 
 beforeEach(() => {
   stubbed = { rows: ROWS, pending: 0, pricing: 0 };
+  showcaseSpy = undefined;
 });
 
 describe("WebOwnedCardsScreen summary", () => {
@@ -63,5 +70,42 @@ describe("WebOwnedCardsScreen summary", () => {
     render(<WebOwnedCardsScreen />);
     expect(screen.getByText(/1 unpriced/)).toBeInTheDocument();
     expect(screen.queryByText(/pricing/)).not.toBeInTheDocument();
+  });
+});
+
+describe("WebOwnedCardsScreen find box", () => {
+  it("narrows the list view and shows 'showing N of M'", () => {
+    render(<WebOwnedCardsScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByText("Floragato")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Find in my cards" }), {
+      target: { value: "  sprig " },
+    });
+    expect(screen.getByText("Sprigatito")).toBeInTheDocument();
+    expect(screen.queryByText("Floragato")).not.toBeInTheDocument();
+    expect(screen.getByText(/showing 1 of 2/)).toBeInTheDocument();
+  });
+
+  it("hands only the matching rows to the showcase", () => {
+    const seen: string[][] = [];
+    showcaseSpy = (rows) => seen.push(rows.map((r) => r.name));
+    render(<WebOwnedCardsScreen />);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Find in my cards" }), {
+      target: { value: "flora" },
+    });
+    expect(seen[seen.length - 1]).toEqual(["Floragato"]);
+  });
+
+  it("says nothing matches, and Clear restores the list", () => {
+    render(<WebOwnedCardsScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Find in my cards" }), {
+      target: { value: "xyz" },
+    });
+    expect(screen.getByText('No owned card matches "xyz"')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("Sprigatito")).toBeInTheDocument();
+    expect(screen.getByText("Floragato")).toBeInTheDocument();
+    expect(screen.queryByText(/showing/)).not.toBeInTheDocument();
   });
 });

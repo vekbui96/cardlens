@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortOwned, totalOf, type OwnedPrintingRow } from "./ownedSort.ts";
+import { filterOwned, sortOwned, totalOf, type OwnedPrintingRow } from "./ownedSort.ts";
 
 const row = (over: Partial<OwnedPrintingRow> = {}): OwnedPrintingRow => ({
   cardId: "me5-1",
@@ -83,5 +83,39 @@ describe("totalOf", () => {
 
   it("is empty-safe", () => {
     expect(totalOf([])).toEqual({ total: 0, unpriced: 0 });
+  });
+});
+
+describe("filterOwned", () => {
+  const rows = [
+    row({ cardId: "a", name: "Charizard ex", setName: "Obsidian Flames", collectorNumber: "125" }),
+    row({ cardId: "b", name: "Tropius", setName: "Pitch Black", collectorNumber: "1" }),
+    row({ cardId: "c", name: "Pikachu", setName: "Obsidian Flames", collectorNumber: "TG01" }),
+  ];
+  const names = (rs: OwnedPrintingRow[]) => rs.map((r) => r.cardId);
+
+  it("matches by card name, ignoring case", () => {
+    expect(names(filterOwned(rows, "CHARI"))).toEqual(["a"]);
+  });
+
+  it("matches by set name", () => {
+    expect(names(filterOwned(rows, "obsidian"))).toEqual(["a", "c"]);
+  });
+
+  it("matches by card number", () => {
+    expect(names(filterOwned(rows, "tg01"))).toEqual(["c"]);
+  });
+
+  it("trims whitespace around the query", () => {
+    expect(names(filterOwned(rows, "  tropius  "))).toEqual(["b"]);
+  });
+
+  it("returns the same rows for an empty or blank query", () => {
+    expect(filterOwned(rows, "")).toBe(rows);
+    expect(filterOwned(rows, "   ")).toBe(rows);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(filterOwned(rows, "zzz")).toEqual([]);
   });
 });
