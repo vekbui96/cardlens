@@ -7,6 +7,45 @@
   color: var(--cl-fg-muted);
 }
 
+.find {
+  padding: var(--cl-gap-sm) var(--cl-gap) 0;
+}
+
+.findInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+}
+
+.noMatch {
+  padding: var(--cl-gap) var(--cl-gap) 0;
+}
+
+.noMatchText {
+  margin: 0 0 var(--cl-gap-sm);
+  color: var(--cl-fg-muted);
+}
+
+.clear {
+  min-height: 44px;
+  padding: 0 var(--cl-gap-lg);
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .list {
   list-style: none;
   margin: 0;
@@ -122,6 +161,12 @@
      spend 16px a row on nothing. */
   .row {
     min-height: 60px;
+  }
+
+  .find,
+  .noMatch {
+    padding-left: var(--cl-gap-lg);
+    padding-right: var(--cl-gap-lg);
   }
 
   .group {
