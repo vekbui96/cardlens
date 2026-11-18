@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useOwnedCards } from "../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { csvFileName, ownedToCsv } from "../../models/ownedCsv.ts";
 import { filterOwned, OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../models/ownedSort.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { CardShowcase } from "./CardShowcase.tsx";
@@ -42,6 +43,18 @@ export function WebOwnedCardsScreen() {
   const sorted = useMemo(() => sortOwned(filtered, sort), [filtered, sort]);
   const filtering = query.trim() !== "";
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
+
+  const download = () => {
+    const blob = new Blob(["﻿" + ownedToCsv(sorted)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = csvFileName(new Date());
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <section className={styles.screen} aria-label="My cards">
@@ -101,6 +114,10 @@ export function WebOwnedCardsScreen() {
           autoCorrect="off"
           spellCheck={false}
         />
+        {/* Saves the rows as listed now: the Find box narrows it, the sort orders it. */}
+        <button type="button" className={styles.download} disabled={sorted.length === 0} onClick={download}>
+          Download CSV
+        </button>
       </div>
 
       <div className={styles.controls}>

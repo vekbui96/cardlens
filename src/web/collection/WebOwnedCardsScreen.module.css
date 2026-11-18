@@ -265,6 +265,25 @@
   cursor: pointer;
 }
 
+.download {
+  min-height: 44px;
+  margin-top: var(--cl-gap-xs);
+  padding: 0 var(--cl-gap-lg);
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.download:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 @media (min-width: 1000px) {
   .head,
   .find,
