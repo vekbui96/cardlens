@@ -16,6 +16,7 @@ import { companionBase } from "../../services/companionApi.ts";
 import { fetchJson } from "../../services/http.ts";
 import { ProviderError } from "../../integrations/providers.ts";
 import { CardSheet } from "./CardSheet.tsx";
+import { costToFinish, costToFinishLabel } from "./costToFinish.ts";
 import { SetSwitcher } from "./SetSwitcher.tsx";
 import { SetTierStatus } from "../../features/collection/SetTierStatus.tsx";
 import { setTiers } from "../../models/setCompletion.ts";
@@ -192,6 +193,13 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
   );
 
   type Slot = (typeof slots)[number];
+
+  /** Follows the rarity chips (slots come from the filtered cards), not the
+      Missing/By value toggles: it answers "what is left here", whatever the view. */
+  const finishLine = useMemo(
+    () => costToFinishLabel(costToFinish(slots, view.priceFor)),
+    [slots, view.priceFor],
+  );
 
   const excludedCount = useMemo(() => slots.filter((s) => s.excluded).length, [slots]);
 
@@ -478,6 +486,12 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
                 : "Share"}
         </button>
       </div>
+
+      {!view.isLoading && !view.isError && finishLine ? (
+        <p className={styles.summary} data-testid="cost-to-finish">
+          {finishLine}
+        </p>
+      ) : null}
 
       {/*
        * Outside the sticky filter bar on purpose: it is a message about what

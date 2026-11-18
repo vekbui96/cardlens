@@ -353,6 +353,47 @@ describe("WebSetCardsScreen", () => {
     expect(await screen.findByTestId("sheet-headline-price")).toHaveTextContent("$4.25");
   });
 
+  it("says what finishing the set would cost, leaving unpriced printings uncounted", async () => {
+    const cards: RawCard[] = ["401", "402", "403"].map((number) => ({
+      id: `sv3-${number}`,
+      name: `Card ${number}`,
+      number,
+      set: { id: SET_ID, name: SET_NAME },
+    }));
+    const printings = {
+      tcgdexSetId: "sv03",
+      byNumber: {
+        "401": [{ type: "normal", price: 1.5 }],
+        "402": [{ type: "normal", price: 2.25 }],
+        "403": [{ type: "normal" }],
+      } as Record<string, { type: string; foil?: string; price?: number }[]>,
+    };
+    serveCustom(cards, printings);
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    expect(await screen.findByTestId("cost-to-finish")).toHaveTextContent(
+      "To finish: 3 printings missing, 2 priced, about $3.75",
+    );
+  });
+
+  it("drops a printing from the cost once it is owned", async () => {
+    const user = userEvent.setup();
+    const card: RawCard = {
+      id: "sv3-410",
+      name: "Own Me",
+      number: "410",
+      set: { id: SET_ID, name: SET_NAME },
+    };
+    serveCustom([card], { tcgdexSetId: "sv03", byNumber: { "410": [{ type: "normal", price: 5 }] } });
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    expect(await screen.findByTestId("cost-to-finish")).toHaveTextContent(
+      "1 printing missing, 1 priced, about $5.00",
+    );
+    await user.click(await findSlot("410", "Normal"));
+    await waitFor(() => expect(screen.queryByTestId("cost-to-finish")).toBeNull());
+  });
+
   it("orders by value when asked, and returns to binder order", async () => {
     const user = userEvent.setup();
     const cards: RawCard[] = [
