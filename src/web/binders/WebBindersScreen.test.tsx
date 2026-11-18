@@ -156,6 +156,42 @@ describe("WebBindersScreen", () => {
     expect(art[0].closest("[aria-hidden='true']")).not.toBeNull();
   });
 
+  it("lists the most recently edited binder first, with an Edited line, and acts on the right one", async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+    new Repositories().mergeIncomingBinders([
+      {
+        id: "old",
+        name: "Oldest",
+        format: "9",
+        pages: [{ slots: {} }],
+        createdAt: 1000,
+        updatedAt: now - 5 * 86_400_000,
+      },
+      {
+        id: "new",
+        name: "Newest",
+        format: "9",
+        pages: [{ slots: {} }],
+        createdAt: 2000,
+        updatedAt: now - 60_000,
+      },
+    ]);
+
+    render(<WebBindersScreen />, { wrapper: harness() });
+    await screen.findByText("Newest");
+
+    const names = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(names[0]).toContain("Newest");
+    expect(names[1]).toContain("Oldest");
+    expect(screen.getByText("Edited 5d ago")).toBeInTheDocument();
+    expect(screen.getByText("Edited 1m ago")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete Oldest" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete Oldest" }));
+    expect(new Repositories().getBinders().map((b) => b.name)).toEqual(["Newest"]);
+  });
+
   it("lists a binder that arrived by merge alongside one made here", async () => {
     // Merging must not be a replace: a pull carrying another device's binder
     // has to land beside this device's own, not over it.

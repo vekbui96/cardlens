@@ -18,6 +18,7 @@ import {
 } from "../../models/binderLayout.ts";
 import { BinderCover } from "./BinderCover.tsx";
 import { newBinderId } from "./newBinderId.ts";
+import { formatEdited } from "./shelfOrder.ts";
 import styles from "./WebBindersScreen.module.css";
 
 /**
@@ -81,6 +82,7 @@ function BinderTile({
   const spec = specFor(binder.format);
   const filledPct = counts.pockets > 0 ? Math.round((counts.filled / counts.pockets) * 100) : 0;
   const complete = counts.pockets > 0 && counts.filled === counts.pockets;
+  const edited = formatEdited(binder.updatedAt);
 
   return (
     <li className={styles.tile}>
@@ -138,6 +140,11 @@ function BinderTile({
             market price, and a total that hid that would read as the whole
             answer. */}
         {binder.showValue ? <BinderTotal summary={summary} loading={valuesLoading} /> : null}
+
+        {/* When it was last changed, on any device. The shelf is already
+            newest-edit-first (liveBinders), and this says why a binder sits
+            where it does. */}
+        {edited ? <span className={styles.edited}>{edited}</span> : null}
       </button>
 
       {confirming ? (

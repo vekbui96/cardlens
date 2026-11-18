@@ -288,6 +288,14 @@
   color: var(--cl-fg-dim);
 }
 
+.edited {
+  display: block;
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  line-height: 1.35;
+}
+
 /* --- Deleting ------------------------------------------------------------ */
 
 /*
