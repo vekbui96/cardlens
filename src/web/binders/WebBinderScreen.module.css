@@ -932,6 +932,17 @@ label.chip {
   white-space: nowrap;
 }
 
+.copyList {
+  margin: 0 var(--cl-gap) var(--cl-gap);
+}
+
+.copyListBox {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+}
+
 .settingNote {
   margin: 0;
   font-size: var(--cl-fs-small);
