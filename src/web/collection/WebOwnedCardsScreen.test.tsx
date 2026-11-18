@@ -73,6 +73,19 @@ describe("WebOwnedCardsScreen summary", () => {
   });
 });
 
+describe("WebOwnedCardsScreen Download CSV", () => {
+  it("is disabled with no rows", () => {
+    stubbed = { rows: [], pending: 0, pricing: 0 };
+    render(<WebOwnedCardsScreen />);
+    expect(screen.getByRole("button", { name: "Download CSV" })).toBeDisabled();
+  });
+
+  it("is enabled when there are rows", () => {
+    render(<WebOwnedCardsScreen />);
+    expect(screen.getByRole("button", { name: "Download CSV" })).toBeEnabled();
+  });
+});
+
 describe("WebOwnedCardsScreen find box", () => {
   it("narrows the list view and shows 'showing N of M'", () => {
     render(<WebOwnedCardsScreen />);
