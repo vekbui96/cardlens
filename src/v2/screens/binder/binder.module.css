@@ -388,6 +388,20 @@ button.pocket:hover {
   font-size: var(--v2-fs-small);
 }
 
+/* Under the page controls after a fill. Buttons keep the 44px tap target. */
+.undoBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-2);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font-size: var(--v2-fs-small);
+}
+
 .footnote {
   margin: var(--v2-space-0);
   color: var(--v2-fg-muted);
