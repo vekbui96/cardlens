@@ -84,16 +84,6 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    */
   const [spread, setSpread] = useState(0);
 
-  /**
-   * The last "Fill with one of each", kept so it can be taken back.
-   *
-   * Fill replaces every page in one tap, and a binder is an evening of work.
-   * Both versions are held in MEMORY only — nothing here is persisted — and the
-   * bar is shown only while the stored binder is still the filled one (see
-   * `undoable`), so Undo can never overwrite newer work.
-   */
-  const [lastFill, setLastFill] = useState<{ before: Binder; after: Binder } | null>(null);
-
   // Priced per printing, ONE request per SET rather than per card. A binder
   // spans sets the way a set screen never does — the Riolu one touches thirty.
   const value = useBinderValue(binder);
@@ -230,19 +220,6 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    */
   const commit = (next: Binder) => saveBinder(next);
 
-  /**
-   * Still the binder the fill produced? Any other edit, or a sync that brought
-   * a newer version, changes `updatedAt`, which hides the bar.
-   */
-  const undoable =
-    lastFill !== null && lastFill.after.id === binder.id && lastFill.after.updatedAt === binder.updatedAt;
-  const undoFill = () => {
-    if (!lastFill || !undoable) return;
-    // Newer than the fill, so last-write-wins on other devices takes the restore.
-    commit({ ...lastFill.before, updatedAt: Math.max(Date.now(), lastFill.after.updatedAt + 1) });
-    setLastFill(null);
-  };
-
   const place = (slot: BinderSlot | null) => {
     const result = applyPlace(binder, selected, slot, Date.now());
     if (!result) return;
@@ -282,11 +259,7 @@ export function BinderScreen({ binderId }: { binderId: string }) {
       onPlace={place}
       onUpdate={update}
       onFill={(slots) => {
-        const after = fillSequential(binder, slots, Date.now());
-        commit(after);
-        // A fill that changed nothing has nothing to take back.
-        const changed = JSON.stringify(after.pages) !== JSON.stringify(binder.pages);
-        setLastFill(changed ? { before: binder, after } : null);
+        commit(fillSequential(binder, slots, Date.now()));
         setSelected(null);
       }}
       onDragNew={(event: ReactPointerEvent, slot: BinderSlot) => onPointerDown(event, { kind: "new" }, slot)}
@@ -468,21 +441,6 @@ export function BinderScreen({ binderId }: { binderId: string }) {
           </button>
         ) : null}
       </Row>
-
-      {undoable && lastFill ? (
-        <div className={styles.undoBar} role="status">
-          <span>
-            Filled with 1 of each ({countBinder(lastFill.after).filled} pocket
-            {countBinder(lastFill.after).filled === 1 ? "" : "s"}).
-          </span>
-          <button type="button" className={styles.button} onClick={undoFill}>
-            Undo
-          </button>
-          <button type="button" className={styles.button} onClick={() => setLastFill(null)}>
-            Dismiss
-          </button>
-        </div>
-      ) : null}
 
       <BinderSettings binder={binder} onSave={commit} />
 
