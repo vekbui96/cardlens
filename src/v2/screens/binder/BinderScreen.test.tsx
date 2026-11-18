@@ -376,6 +376,85 @@ describe("settings", () => {
   });
 });
 
+describe("undoing a fill", () => {
+  /** Open the picker on a pocket and press Fill, once the set's cards have loaded. */
+  async function fill(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /^Pocket 9, / }));
+    const button = await screen.findByRole("button", { name: "Fill with one of each" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+  }
+
+  function arranged(): Binder {
+    let binder = emptyBinder(BINDER_ID, "Jolteon", "9", 1000);
+    binder = placeSlot(binder, 0, 0, cardSlot(0), 1000);
+    binder = placeSlot(binder, 0, 3, cardSlot(1), 1000);
+    return save({ ...binder, pages: [...binder.pages, { slots: {} }], cover: cardSlot(2), updatedAt: 1000 });
+  }
+
+  it("puts the binder back exactly as it was, with an updatedAt newer than the fill", async () => {
+    const before = arranged();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await fill(user);
+    const bar = await screen.findByRole("status");
+    expect(bar).toHaveTextContent(/Filled with 1 of each \(\d+ pockets?\)/);
+    const filledAt = stored()!.updatedAt;
+    expect(stored()!.pages[0].slots[0]).not.toEqual(before.pages[0].slots[0]);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+
+    const restored = stored()!;
+    expect(restored.pages).toEqual(before.pages);
+    expect(restored.pages).toHaveLength(2);
+    expect(restored.cover).toEqual(before.cover);
+    expect(restored.updatedAt).toBeGreaterThan(filledAt);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("hides Undo once anything else has changed the binder", async () => {
+    arranged();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await fill(user);
+    await screen.findByRole("status");
+    await user.click(screen.getByRole("button", { name: "Add page" }));
+
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  });
+
+  it("goes away when dismissed, leaving the fill in place", async () => {
+    arranged();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await fill(user);
+    const filled = stored()!.pages;
+    await screen.findByRole("status");
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(stored()!.pages).toEqual(filled);
+  });
+
+  it("shows no bar for a fill that changed nothing", async () => {
+    // Fill an already-filled binder with the same cards: nothing to undo.
+    arranged();
+    const user = userEvent.setup();
+    const { unmount } = render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    await fill(user);
+    await screen.findByRole("status");
+    unmount();
+
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+    await fill(user);
+    await waitFor(() => expect(stored()!.pages).toBeTruthy());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
 describe("the request budget", () => {
   it("asks the printings oracle once per SET, not once per card", async () => {
     /*
