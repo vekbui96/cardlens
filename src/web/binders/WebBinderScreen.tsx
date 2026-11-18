@@ -42,6 +42,7 @@ import type { PokemonCardSummary } from "../../models/cards.ts";
 import { BinderSearchResults } from "./BinderSearchResults.tsx";
 import { BinderPocketSheet } from "./BinderPocketSheet.tsx";
 import { BinderSettings } from "./BinderSettings.tsx";
+import { BinderCopyList } from "./BinderCopyList.tsx";
 import { resizeToDataUrl } from "../../utils/imageResize.ts";
 import { imageSlotSrc, uploadBinderImage } from "../../services/sync/binderImages.ts";
 import { SyncAuthError, SyncDisabledError, SyncTooLargeError } from "../../services/sync/http.ts";
@@ -825,6 +826,9 @@ export function WebBinderScreen({ binderId }: { binderId: string }) {
         <p className={styles.footnote} data-testid="binder-to-get">
           {stillToGetLine(toGet, value.isLoading)}
         </p>
+      ) : null}
+      {cardSlots.length > 0 ? (
+        <BinderCopyList binder={binder} priceFor={value.priceFor} pricesReady={!value.isLoading} />
       ) : null}
       {/*
        * The card under the pointer while it is being carried.
