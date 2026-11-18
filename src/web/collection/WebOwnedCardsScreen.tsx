@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useOwnedCards } from "../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../models/finishes.ts";
-import { OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../models/ownedSort.ts";
+import { filterOwned, OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../models/ownedSort.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { CardShowcase } from "./CardShowcase.tsx";
 import styles from "./WebOwnedCardsScreen.module.css";
@@ -36,7 +36,11 @@ export function WebOwnedCardsScreen() {
   const [sort, setSort] = useState<OwnedSortKey>("price");
   const [view, setView] = useState<"showcase" | "list">("showcase");
 
-  const sorted = useMemo(() => sortOwned(rows, sort), [rows, sort]);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => filterOwned(rows, query), [rows, query]);
+  const sorted = useMemo(() => sortOwned(filtered, sort), [filtered, sort]);
+  const filtering = query.trim() !== "";
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
 
   return (
@@ -51,6 +55,12 @@ export function WebOwnedCardsScreen() {
         */}
         <p className={styles.summary}>
           <span className={styles.count}>{rows.length}</span> printings
+          {filtering ? (
+            <span className={styles.pending}>
+              {" "}
+              · showing {sorted.length} of {rows.length}
+            </span>
+          ) : null}
           {total > 0 ? (
             <>
               {" · "}
@@ -79,6 +89,20 @@ export function WebOwnedCardsScreen() {
         A row of buttons rather than a <select>: there are four options, they all
         fit, and the current one should be readable without opening anything.
       */}
+      <div className={styles.find}>
+        <input
+          type="search"
+          className={styles.findInput}
+          aria-label="Find in my cards"
+          placeholder="Find in my cards"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+      </div>
+
       <div className={styles.controls}>
         <div className={styles.views} role="group" aria-label="View">
           {VIEWS.map((v) => (
@@ -111,6 +135,13 @@ export function WebOwnedCardsScreen() {
 
       {rows.length === 0 ? (
         <p className={styles.empty}>Nothing marked owned yet. Open a set and tap the printings you have.</p>
+      ) : sorted.length === 0 ? (
+        <div className={styles.empty}>
+          <p className={styles.emptyText}>No owned card matches &quot;{query.trim()}&quot;</p>
+          <button type="button" className={styles.clear} onClick={() => setQuery("")}>
+            Clear
+          </button>
+        </div>
       ) : view === "showcase" ? (
         <CardShowcase rows={sorted} onOpen={(row) => push({ name: "details", cardId: row.cardId })} />
       ) : (

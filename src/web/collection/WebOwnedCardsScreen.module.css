@@ -231,8 +231,43 @@
   color: var(--cl-fg-muted);
 }
 
+.find {
+  padding: 0 var(--cl-gap) var(--cl-gap-xs);
+}
+
+.findInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border: var(--cl-border-strong);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+}
+
+.emptyText {
+  margin: 0 0 var(--cl-gap-sm);
+}
+
+.clear {
+  min-height: 44px;
+  padding: 0 var(--cl-gap-lg);
+  border: var(--cl-border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--cl-fg);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 @media (min-width: 1000px) {
   .head,
+  .find,
   .controls {
     padding-left: var(--cl-gap-lg);
     padding-right: var(--cl-gap-lg);

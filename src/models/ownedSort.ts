@@ -59,6 +59,23 @@ export function sortOwned(rows: OwnedPrintingRow[], key: OwnedSortKey): OwnedPri
   return [...rows].sort(compare[key]);
 }
 
+/**
+ * Narrow held printings to those whose card name, set name or collector number
+ * contains the query (case-insensitive, trimmed). A blank query returns the
+ * same array, so callers can skip the work and memoisation stays stable.
+ * Read-only: rows are never mutated.
+ */
+export function filterOwned(rows: OwnedPrintingRow[], query: string): OwnedPrintingRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(
+    (r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.setName.toLowerCase().includes(q) ||
+      r.collectorNumber.toLowerCase().includes(q),
+  );
+}
+
 /** Total of the priced rows, and how many had no price. */
 export function totalOf(rows: OwnedPrintingRow[]): { total: number; unpriced: number } {
   let total = 0;
