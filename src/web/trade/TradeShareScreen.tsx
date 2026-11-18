@@ -19,7 +19,7 @@ import {
 } from "../../models/binderLayout.ts";
 import { finishLabel } from "../../models/finishes.ts";
 import { parseTradeShare, tradeRows, type TradeRow, type TradeShare } from "../../models/tradeShare.ts";
-import { formatUsd } from "../../utils/format.ts";
+import { formatUpdated, formatUsd } from "../../utils/format.ts";
 import styles from "./TradeShareScreen.module.css";
 
 /**
@@ -48,6 +48,12 @@ import styles from "./TradeShareScreen.module.css";
  * is what actually makes it feel current.
  */
 const POLL_MS = 60_000;
+
+/**
+ * An edit time before this is not a real one — a zero or a fixture's tiny
+ * stamp would otherwise read "Updated Jan 1, 1970". No line beats a wrong one.
+ */
+const PLAUSIBLE_EDIT_MS = Date.UTC(2000, 0, 1);
 
 type SortKey = "value" | "pocket" | "name";
 
@@ -182,6 +188,17 @@ function TradeView({ share, onBrand }: { share: TradeShare; onBrand: () => void 
           {counts.cards === 1 ? "" : "s"} · {binder.pages.length} page
           {binder.pages.length === 1 ? "" : "s"} · {specFor(binder.format).label}
         </p>
+        {/*
+          How fresh the offer is — the first thing a trade partner wants to know
+          before asking for a card that may already be gone. The binder's own
+          edit time, not `share.at` (the server's clock when it answered). The
+          poll above re-renders it, so it stays current with no extra request.
+        */}
+        {binder.updatedAt >= PLAUSIBLE_EDIT_MS ? (
+          <p className={styles.meta} data-testid="trade-updated">
+            Updated {formatUpdated(new Date(binder.updatedAt).toISOString())}
+          </p>
+        ) : null}
 
         {/*
           The total, and immediately under it what it does not include. The two
