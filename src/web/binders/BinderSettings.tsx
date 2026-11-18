@@ -1,6 +1,9 @@
 import { useId, useState } from "react";
 import { BINDER_FORMATS, reformat, setShowValue, specFor, type Binder } from "../../models/binderLayout.ts";
+import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { BinderTradeBar } from "./BinderTradeBar.tsx";
+import { duplicateBinder } from "./duplicateBinder.ts";
+import { newBinderId } from "./newBinderId.ts";
 import styles from "./WebBinderScreen.module.css";
 
 /**
@@ -25,6 +28,7 @@ import styles from "./WebBinderScreen.module.css";
 export function BinderSettings({ binder, onSave }: { binder: Binder; onSave: (binder: Binder) => void }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const { replace } = useNavigation();
 
   return (
     <>
@@ -92,9 +96,34 @@ export function BinderSettings({ binder, onSave }: { binder: Binder; onSave: (bi
 
           <BinderTradeBar binder={binder} onSave={onSave} />
 
+          <div className={styles.settingRow}>
+            <span className={styles.settingLabel} id={`${panelId}-copy`}>
+              Copy
+            </span>
+            {/* Rearranging has no undo, and a binder is an evening of work. A
+                copy lets a new layout be tried and the loser deleted. Opened
+                with `replace`, so Back from the copy lands on the shelf, where
+                both now sit, rather than in the binder that was copied. */}
+            <div className={styles.settingControls} role="group" aria-labelledby={`${panelId}-copy`}>
+              <button
+                type="button"
+                className={styles.chip}
+                onClick={() => {
+                  const now = Date.now();
+                  const copy = duplicateBinder(binder, newBinderId(now), now);
+                  onSave(copy);
+                  replace({ name: "binder", binderId: copy.id });
+                }}
+              >
+                Duplicate binder
+              </button>
+            </div>
+          </div>
+
           <p className={styles.settingNote}>
             These stay with the binder and sync to your other devices. Adding and removing pages is up on the
-            toolbar, next to the binder itself.
+            toolbar, next to the binder itself. Duplicate opens a copy to rearrange; the original stays as it
+            is.
           </p>
         </div>
       ) : null}
