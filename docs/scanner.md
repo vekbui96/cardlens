@@ -96,3 +96,32 @@ Moved out of CLAUDE.md; read when touching `src/scan/`, `ScanScreen`, `/api/reco
   the set, so ten rows from one set cost one request. Falls back to
   Normal/Reverse while loading — a row with no finishes cannot be committed, so
   an absent server would make scanned cards silently unaddable.
+
+- **A photo can be uploaded instead of captured** ("Upload photo" on the web
+  scan screen; `src/scan/photoIdentify.ts`, `POST /api/cards/identify`,
+  `server/mault.ts`). A gallery or phone-camera photo is framed however it was
+  taken, which the phash index cannot match, so it goes to a second engine:
+  **Mault**, self-hosted on SERVER-PC (docker, loopback :3001), which
+  straightens the card and matches an image embedding. Each photo becomes an
+  ordinary review row (candidates, finish chips, Pick by set) with
+  `via: "mault"` and a `scan.via.mault` count. **There is no device fallback
+  for a photo**: offline or unconfigured shows an inline note on the row with
+  Retry, and Pick by set still works from the local index.
+  - **Ids are translated, never trusted.** Mault speaks TCGdex ids
+    (`sv03.5-006`), CardLens pokemontcg.io (`sv3pt5-6`). `server/tcgdexIds.ts`
+    only GENERATES candidates (unpadding, `.5` → `pt5` or `5`, a tiny alias
+    table); one counts only if it exists in `public/card-index/cards-*.json`.
+    Anything that resolves nowhere is dropped, not guessed.
+  - **The gate is conservative and server-side** (`judgeMault`): accept only
+    when the top match resolved, its name agrees with ours, confidence
+    `>= 0.95`, distance `<= 0.25`, and the raw runner-up is `>= 0.05` further
+    away AND under `0.5` confidence. Mault's `confidence` is per candidate, not
+    a softmax: **same-art reprints both score ~0.999** within ~0.003 distance,
+    which is why the runner-up test exists. Measured 2026-11-18 on 34 renders:
+    31/34 top-1 correct, 19 auto-accepted, **0 false accepts**; every miss
+    (bw11-52 → bw4-51, mcd12-6 → bw2-32, xyp-XY39 → xy5-108) and every
+    same-art pair lands as "Which one?" with both offered. Renders are not
+    photos: re-measure with real phone photos before loosening any of it.
+  - An unsettled photo row shows the whole photo (720px) in place of the
+    camera's number band — there is no guide, so no band to crop. Shown, never
+    read, same rule as the band.

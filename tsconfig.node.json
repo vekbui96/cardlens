@@ -39,6 +39,7 @@
     "src/models/games.ts",
     "src/models/sealed.ts",
     "src/models/metricsEvents.ts",
+    "src/models/identify.ts",
     "src/integrations/providers.ts",
     "src/integrations/pricing/normalize.ts",
     "src/integrations/pokemon/schema.ts",

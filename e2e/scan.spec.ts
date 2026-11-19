@@ -385,3 +385,107 @@ test.describe("the collector number on an unsettled row", () => {
     expect(natural).toBeGreaterThan(245);
   });
 });
+
+test.describe("uploading a photo", () => {
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone" && testInfo.project.name !== "desktop", "web shells only");
+  });
+
+  /** A real, decodable image: an 8x8 PNG. What it shows does not matter here. */
+  const PHOTO = {
+    name: "card.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAdElEQVR4nAXBMQHAIAwAsCpBSUVwc09ERXBzI6IicqNoSciQQ6ZcsuSRLV+YYQ4zzWWWecw2X/jCN3zpW77yHV/7XqhQQ6VaqtRRrV7YYQ877WWXfey2X7jhDjfd5ZZ73HZf6NBDp1669NGtXxAMkkVxaN4Pj3FswXFD4r4AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  };
+
+  async function connect(page: Page) {
+    await page.addInitScript((token) => {
+      localStorage.setItem(
+        "cardlens:v1:sync-settings",
+        JSON.stringify({ token, lastPushedAt: 0, lastPulledAt: 0, lastSyncAt: 0 }),
+      );
+    }, E2E_TOKEN);
+  }
+
+  test("offers an upload without starting the camera", async ({ page }) => {
+    await page.goto("/?ui=web#/scan");
+    await expect(page.getByTestId("upload-photo")).toBeVisible();
+    // accept="image/*" is what makes a phone offer its camera beside the gallery.
+    await expect(page.getByTestId("photo-input").first()).toHaveAttribute("accept", "image/*");
+  });
+
+  test("says the photo engine is offline on the row, with Retry and Pick by set", async ({ page }) => {
+    // The e2e server has a token but no Mault configured, so the route answers
+    // 503 mault_unavailable — the real offline path, end to end.
+    await connect(page);
+    const posted: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/api/cards/identify")) posted.push(r.url());
+    });
+    await page.goto("/?ui=web#/scan");
+    await page.getByTestId("photo-input").first().setInputFiles(PHOTO);
+
+    await expect(page.getByTestId("review-row")).toHaveCount(1);
+    await expect(page.getByTestId("row-note")).toContainText("photo recognition is offline");
+    await expect(page.getByTestId("pick-by-set")).toBeEnabled();
+    // The photo stays on screen so its number can be read for Pick by set.
+    await expect(page.getByTestId("number-band")).toBeVisible();
+
+    await page.getByTestId("retry-photo").click();
+    await expect(page.getByTestId("row-note")).toContainText("photo recognition is offline");
+    expect(posted).toHaveLength(2);
+  });
+
+  test("an ambiguous answer becomes a 'Which one?' row, marked as Mault", async ({ page }) => {
+    await connect(page);
+    await page.route("**/api/cards/identify", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "AMBIGUOUS",
+          recogniser: "mault",
+          processingTimeMs: 100,
+          reason: "Mault: another card looks almost the same — check the number",
+          candidates: [
+            {
+              cardId: "g1-56",
+              name: "Leafeon-EX",
+              setId: "g1",
+              setName: "Generations",
+              collectorNumber: "56",
+              distance: 0.003,
+              confidence: 0.999,
+            },
+            {
+              cardId: "xy8-117",
+              name: "Leafeon-EX",
+              setId: "xy8",
+              setName: "BREAKthrough",
+              collectorNumber: "117",
+              distance: 0.004,
+              confidence: 0.999,
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto("/?ui=web#/scan");
+    await page.getByTestId("photo-input").first().setInputFiles(PHOTO);
+
+    const row = page.getByTestId("review-row");
+    await expect(row.getByText("Which one?")).toBeVisible();
+    await expect(row.getByRole("button", { name: /Generations · 56 · 100% match/ })).toBeVisible();
+    await expect(row.getByRole("button", { name: /BREAKthrough · 117/ })).toBeVisible();
+    await expect(page.getByTestId("via")).toContainText("Photo · Mault");
+    // Never pre-chosen: same-art reprints must be settled by a person.
+    await expect(page.getByRole("button", { name: "Nothing to add" })).toBeDisabled();
+
+    await row.getByRole("button", { name: /BREAKthrough · 117/ }).click();
+    await expect(page.getByRole("button", { name: "Add 1 card" })).toBeEnabled();
+  });
+});

@@ -27,7 +27,12 @@ export interface CardIndex {
 
 export interface ScanResult extends Verdict {
   /** Candidates resolved to cards, nearest first. */
-  candidates: { card: IndexedCard; distance: number }[];
+  candidates: {
+    card: IndexedCard;
+    distance: number;
+    /** 0..1, set only by engines that score candidates (Mault); phash has bits only. */
+    confidence?: number;
+  }[];
 }
 
 function base(): string {

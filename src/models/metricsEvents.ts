@@ -47,6 +47,8 @@ export const METRIC_EVENTS = [
   /** Which recogniser answered that capture. */
   "scan.via.server",
   "scan.via.device",
+  /** An uploaded photo, answered by the photo engine (Mault) behind /api/cards/identify. */
+  "scan.via.mault",
   // --- Scanning. Resolution, counted when a batch is committed. -------------
   /** Batches committed ("Add N"). */
   "scan.batch",

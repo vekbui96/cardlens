@@ -14,6 +14,7 @@ import {
   type ScanResult,
 } from "../../scan/cardIndex.ts";
 import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
+import { PhotoAuthError, identifyPhoto, preparePhoto } from "../../scan/photoIdentify.ts";
 import { track } from "../../services/metrics.ts";
 import { scanBatchMetrics, scanOutcomeMetric } from "./scanMetrics.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
@@ -66,8 +67,11 @@ type Phase =
   | { at: "denied"; reason: string }
   | { at: "unsupported" };
 
-/** Which recogniser answered. `null` while the answer is still in flight. */
-type Via = "server" | "device" | null;
+/**
+ * Which recogniser answered. `null` while the answer is still in flight.
+ * `mault` is the photo engine behind /api/cards/identify (uploads only).
+ */
+type Via = "server" | "device" | "mault" | null;
 
 interface Capture {
   key: number;
@@ -107,6 +111,20 @@ interface Capture {
   manual: IndexedCard | null;
   finish: CollectFinish;
   rejected: boolean;
+  /** A camera capture, or a photo uploaded from the device. */
+  source: "camera" | "photo";
+  /**
+   * The uploaded photo, kept only while it may need sending again: a photo
+   * has no on-device fallback, so an offline server leaves a Retry button.
+   * Dropped once any answer arrives.
+   */
+  photo: Blob | null;
+}
+
+/** "97% match" for an engine that scores candidates; phash bits otherwise. */
+function scoreOf(cand: { distance: number | null; confidence?: number }): string {
+  if (cand.confidence !== undefined) return `${Math.round(cand.confidence * 100)}% match`;
+  return `${cand.distance} bits`;
 }
 
 /** What this row will file, however it was decided. */
@@ -162,6 +180,9 @@ export function ScanScreen() {
    * moment to look.
    */
   const [hasToken] = useState(() => repo.getSyncSettings().token !== "");
+  const fileInput = useRef<HTMLInputElement>(null);
+  /** Why the last picked file could not be opened, shown where the engine note goes. */
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
 
   // The index is 13KB and the permission prompt is far slower, so fetching it
   // now is free and fetching it on first capture is a stall.
@@ -294,7 +315,10 @@ export function ScanScreen() {
       // released here rather than held for the life of the batch.
       const settle = (result: ScanResult, via: Via, note: string | null) => {
         track(scanOutcomeMetric(result));
-        if (via) track(via === "server" ? "scan.via.server" : "scan.via.device");
+        if (via)
+          track(
+            via === "server" ? "scan.via.server" : via === "mault" ? "scan.via.mault" : "scan.via.device",
+          );
         apply({
           result,
           via,
@@ -357,10 +381,117 @@ export function ScanScreen() {
         manual: null,
         finish: "normal",
         rejected: false,
+        source: "camera",
+        photo: null,
       },
     ]);
     void resolve(key, framed.canvas, framed.hash);
   }, [hashFrame, resolve]);
+
+  /**
+   * Identify one uploaded photo through the server's photo engine.
+   *
+   * No device fallback: the on-device index matches a framed capture, not a
+   * photo taken however it was taken. So a failure is said once, on the row
+   * itself — never a toast per photo — with a Retry, and Pick by set still
+   * works because it reads the local index.
+   */
+  const resolvePhoto = useCallback(
+    async (key: number, photo: Blob) => {
+      const apply = (patch: Partial<Capture>) =>
+        setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+      apply({ note: null, photo });
+      try {
+        const result = await identifyPhoto(photo, repo.getSyncSettings().token, index);
+        track(scanOutcomeMetric(result));
+        track("scan.via.mault");
+        apply({
+          result,
+          via: "mault",
+          note: result.reason,
+          choice: result.confident ? 0 : null,
+          photo: null,
+          ...(result.confident ? { numberBand: null } : {}),
+        });
+      } catch (err) {
+        const why = err instanceof Error ? err.message : "the server did not answer";
+        // A refused token is not fixed by retrying; everything else might be.
+        const retry = !(err instanceof PhotoAuthError);
+        apply({
+          result: null,
+          via: null,
+          note: retry ? `Couldn't identify: ${why}. Retry, or Pick by set.` : `${why}. Pick by set instead.`,
+          photo: retry ? photo : null,
+        });
+      }
+    },
+    [index, repo],
+  );
+
+  const addPhotos = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      setUploadNote(null);
+      let added = 0;
+      for (const file of files) {
+        let prepared;
+        try {
+          prepared = await preparePhoto(file);
+        } catch (err) {
+          setUploadNote(err instanceof Error ? err.message : "that file could not be opened");
+          continue;
+        }
+        const key = nextKey.current++;
+        added += 1;
+        setQueue((prev) => [
+          ...prev,
+          {
+            key,
+            thumb: prepared.thumb,
+            // The whole photo, at a size the collector number can be read
+            // from: where the card sits in it is unknown, so there is no band
+            // to crop. Shown only while the row is unsettled, never read.
+            numberBand: prepared.preview,
+            result: null,
+            via: null,
+            note: null,
+            choice: null,
+            manual: null,
+            finish: "normal",
+            rejected: false,
+            source: "photo",
+            photo: prepared.upload,
+          },
+        ]);
+        void resolvePhoto(key, prepared.upload);
+      }
+      // A photo is reviewed straight away: there is no camera stack to keep
+      // feeding, and the answer lands on the row as it arrives.
+      if (added > 0) setReviewing(true);
+    },
+    [resolvePhoto],
+  );
+
+  /**
+   * One hidden picker shared by the scan and review screens. `accept="image/*"`
+   * is what makes a phone offer "Take photo" beside the gallery.
+   */
+  const photoPicker = (
+    <input
+      ref={fileInput}
+      type="file"
+      accept="image/*"
+      multiple
+      hidden
+      data-testid="photo-input"
+      onChange={(e) => {
+        const files = Array.from(e.currentTarget.files ?? []);
+        // Reset so picking the same file again still fires a change.
+        e.currentTarget.value = "";
+        void addPhotos(files);
+      }}
+    />
+  );
 
   const live = phase.at === "live";
 
@@ -478,9 +609,13 @@ export function ScanScreen() {
                */
               const numberBand = c.numberBand ? (
                 <img
-                  className={styles.numberBand}
+                  className={c.source === "photo" ? styles.photoPreview : styles.numberBand}
                   src={c.numberBand}
-                  alt="The bottom of the scanned card, where its collector number is printed"
+                  alt={
+                    c.source === "photo"
+                      ? "The uploaded photo, to read the card's collector number from"
+                      : "The bottom of the scanned card, where its collector number is printed"
+                  }
                   data-testid="number-band"
                 />
               ) : null;
@@ -500,7 +635,13 @@ export function ScanScreen() {
                         </span>
                       </>
                     ) : !c.result ? (
-                      <span className={styles.sub}>{c.note ?? "Recognising…"}</span>
+                      <>
+                        <span className={styles.sub} data-testid="row-note">
+                          {c.note ?? (c.source === "photo" ? "Identifying photo…" : "Recognising…")}
+                        </span>
+                        {/* A failed photo still needs its number read to Pick by set. */}
+                        {c.source === "photo" && c.note ? numberBand : null}
+                      </>
                     ) : c.result.candidates.length === 0 ? (
                       <>
                         <span className={styles.sub}>No match found</span>
@@ -510,8 +651,12 @@ export function ScanScreen() {
                       <>
                         <span className={styles.name}>{chosen.card.name}</span>
                         <span className={styles.sub}>
-                          {chosen.card.setName} · {chosen.card.number} · {chosen.distance} bits
-                          {c.result.runnerUp && chosen.distance !== null
+                          {chosen.card.setName} · {chosen.card.number} ·{" "}
+                          {scoreOf({
+                            distance: chosen.distance,
+                            confidence: c.result.candidates[0]?.confidence,
+                          })}
+                          {c.via !== "mault" && c.result.runnerUp && chosen.distance !== null
                             ? `, ${c.result.runnerUp.distance - chosen.distance} clear`
                             : ""}
                         </span>
@@ -532,7 +677,7 @@ export function ScanScreen() {
                             >
                               {cand.card.name}
                               <span className={styles.optionSub}>
-                                {cand.card.setName} · {cand.card.number} · {cand.distance} bits
+                                {cand.card.setName} · {cand.card.number} · {scoreOf(cand)}
                               </span>
                             </button>
                           ))}
@@ -549,7 +694,7 @@ export function ScanScreen() {
                     */}
                     {c.via ? (
                       <span className={styles.via} data-testid="via">
-                        {c.via === "server" ? "Server" : "On device"}
+                        {c.via === "server" ? "Server" : c.via === "mault" ? "Photo · Mault" : "On device"}
                         {c.note ? ` · ${c.note}` : ""}
                       </span>
                     ) : null}
@@ -575,6 +720,16 @@ export function ScanScreen() {
                       >
                         {c.rejected ? "Rejected" : "Reject"}
                       </button>
+                      {c.photo && !c.result && c.note ? (
+                        <button
+                          type="button"
+                          className={styles.chip}
+                          onClick={() => c.photo && void resolvePhoto(c.key, c.photo)}
+                          data-testid="retry-photo"
+                        >
+                          Retry
+                        </button>
+                      ) : null}
                       {/*
                         The way out when the right card is not among the three
                         offered — which is the whole of the 8.6% the gate refuses,
@@ -629,6 +784,11 @@ export function ScanScreen() {
           <button type="button" className={styles.dismiss} onClick={() => setReviewing(false)}>
             Keep scanning
           </button>
+          <button type="button" className={styles.dismiss} onClick={() => fileInput.current?.click()}>
+            Upload another photo
+          </button>
+          {uploadNote ? <p className={styles.hint}>{uploadNote}</p> : null}
+          {photoPicker}
         </div>
       </Screen>
     );
@@ -783,6 +943,27 @@ export function ScanScreen() {
         >
           {queue.length > 0 ? `Done — review ${queue.length}${unsure ? ` (${unsure} unsure)` : ""}` : "Done"}
         </button>
+      </div>
+
+      {/*
+        A photo instead of the live camera: from the gallery, or the phone's own
+        camera app through the picker. Works without starting the camera, and
+        without the guide — the server straightens the card itself.
+      */}
+      <div className={styles.uploadRow}>
+        <button
+          type="button"
+          className={styles.uploadButton}
+          onClick={() => fileInput.current?.click()}
+          data-testid="upload-photo"
+        >
+          Upload photo
+        </button>
+        <span className={styles.autoNote}>
+          {uploadNote ??
+            (hasToken ? "Identified by your server" : "Connect this device in Settings to identify photos")}
+        </span>
+        {photoPicker}
       </div>
     </Screen>
   );

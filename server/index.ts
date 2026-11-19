@@ -18,6 +18,8 @@ import { isLiveBinder } from "../src/storage/binders.ts";
 import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderImages.ts";
 import { callRecogniser, recogniserHealth, MAX_IMAGE_BYTES as MAX_RECOGNITION_BYTES } from "./recognition.ts";
 import { MetricsStore, metricsRouter } from "./metricsStore.ts";
+import { MaultClient } from "./mault.ts";
+import { CardIndexLookup } from "./cardIndexLookup.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SESSION_TTL_MS = Number(process.env.COMPANION_SESSION_TTL_SECONDS ?? 300) * 1000;
@@ -117,6 +119,7 @@ export function createApp(
   binders: BinderStore = new BinderStore(BINDERS_FILE),
   binderImages: BinderImageStore = new BinderImageStore(BINDER_IMAGES_DIR),
   metrics: MetricsStore = new MetricsStore(METRICS_FILE),
+  mault: MaultClient = new MaultClient(new CardIndexLookup()),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -447,6 +450,43 @@ export function createApp(
     },
   );
 
+  // --- Photo identification (Mault) -----------------------------------------
+  /**
+   * "What card is in this photo?" — a free-form phone photo, not a framed
+   * capture. Proxied to Mault on loopback (server/mault.ts); answers in the
+   * shared `IdentifyReply` shape with pokemontcg.io ids already validated
+   * against the card index.
+   *
+   * The body is the raw image bytes with an `image/*` content type, not
+   * multipart: the server builds Mault's form itself (adding the collection
+   * id), so there is no envelope to preserve and nothing to parse.
+   *
+   * Behind COLLECTION_TOKEN for the same reason as `/api/recognize`. Its own
+   * limiter, far lower than the camera scanner's 300/min: a person picking
+   * photos from a gallery is not a burst, and each call is an embedding on a
+   * shared CPU rather than a 20ms hash.
+   */
+  const identifyLimiter = rateLimiter(60, 60_000);
+
+  app.post(
+    "/api/cards/identify",
+    identifyLimiter,
+    requireToken,
+    express.raw({ type: () => true, limit: MAX_RECOGNITION_BYTES }),
+    async (req, res) => {
+      const contentType = (req.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+      if (!contentType.startsWith("image/") || contentType === "image/svg+xml") {
+        res.status(400).json({ error: "expected_image" });
+        return;
+      }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: "empty_body" });
+        return;
+      }
+      const reply = await mault.identify(req.body, contentType);
+      res.status(reply.status).json(reply.body);
+    },
+  );
   // --- Target stock bot ------------------------------------------------------
   /**
    * Read and drive the restock watchlist. Same shared token as collection sync,

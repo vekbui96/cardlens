@@ -111,3 +111,32 @@ fine, and server-first scanning looks like a recognition regression. Check
 - Published via Tailscale Funnel: `https://server-pc.tail0e4194.ts.net` (:8080) and `:8443` (:8787).
 - **NordVPN on the laptop blocks Tailscale**, which makes `ts.net` names resolve to the tailnet IP and time out. Test external reachability with `curl --resolve <host>:<port>:199.38.181.54`.
 - PowerShell 5.1: native stderr under `$ErrorActionPreference='Stop'` becomes a terminating `NativeCommandError`; `Start-Process -PassThru` leaves `ExitCode` null until `WaitForExit()`.
+
+## Mault (photo identification)
+
+`POST /api/cards/identify` (behind `COLLECTION_TOKEN`, 60/min, raw `image/*`
+body up to 16MB) proxies to **Mault**, a self-hosted card-recognition stack at
+`D:\services\mault` (docker compose: `postgres` + `server` only; the `web`
+image does not build and is not needed). API on `127.0.0.1:3001`, **loopback
+only — keep it that way**; cardlens fronts it, as with the recogniser.
+
+- **Env on the `cardlens` service** (in `D:\services\cardlens\.env`, applied to
+  NSSM `AppEnvironmentExtra`): `MAULT_URL` (default `http://127.0.0.1:3001`),
+  `MAULT_EMAIL`, `MAULT_PASSWORD`, `MAULT_ORG_ID`, `MAULT_COLLECTION_GUID`
+  (default: the "CardLens trial" collection). The values come from the
+  `TRIAL_*` lines in `D:\services\mault\.env`. Missing any of email / password
+  / org → the route answers 503 `mault_unavailable` (fail closed, no call).
+- The adapter signs in via `POST /local-auth/sign-in`, caches the session token
+  in memory, and signs in again once on a 401. A second 401 means the
+  credentials are wrong: 503, logged without the secret.
+- Mault down → 503 `mault_unavailable`; wedged (>20s) → 503 `mault_timeout`;
+  undecodable photo → 200 `UNKNOWN`. The web row shows the reason with Retry.
+- **Restart it:** `cd D:\services\mault; docker compose up -d postgres server`
+  (logs: `docker compose logs server --tail 50`). Both services carry
+  `restart: unless-stopped` (postgres via `docker-compose.override.yml`, our
+  local file, not upstream), so they come back with Docker Desktop — which
+  must itself start at login for Mault to survive a reboot.
+- Smoke test: `node` script posting one of
+  `D:\services\mault-trial\synthetic\src\*.png` to
+  `http://127.0.0.1:8787/api/cards/identify` with the bearer token; expect a
+  pokemontcg.io id in `candidates[0].cardId`.
