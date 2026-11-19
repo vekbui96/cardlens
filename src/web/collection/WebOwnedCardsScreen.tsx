@@ -39,9 +39,18 @@ export function WebOwnedCardsScreen() {
 
   const [query, setQuery] = useState("");
 
-  const filtered = useMemo(() => filterOwned(rows, query), [rows, query]);
+  const [unpricedOnly, setUnpricedOnly] = useState(false);
+  // Until prices and names have all landed, "unpriced" only means "not priced
+  // yet", so the toggle is off-limits and its state is ignored.
+  const loading = pricing > 0 || pending > 0;
+  const onlyUnpriced = unpricedOnly && !loading;
+
+  const filtered = useMemo(() => {
+    const found = filterOwned(rows, query);
+    return onlyUnpriced ? found.filter((r) => r.price === undefined) : found;
+  }, [rows, query, onlyUnpriced]);
   const sorted = useMemo(() => sortOwned(filtered, sort), [filtered, sort]);
-  const filtering = query.trim() !== "";
+  const filtering = query.trim() !== "" || onlyUnpriced;
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
 
   const download = () => {
@@ -114,10 +123,21 @@ export function WebOwnedCardsScreen() {
           autoCorrect="off"
           spellCheck={false}
         />
-        {/* Saves the rows as listed now: the Find box narrows it, the sort orders it. */}
-        <button type="button" className={styles.download} disabled={sorted.length === 0} onClick={download}>
-          Download CSV
-        </button>
+        <div className={styles.findActions}>
+          <button
+            type="button"
+            className={`${styles.download} ${onlyUnpriced ? styles.downloadOn : ""}`}
+            aria-pressed={onlyUnpriced}
+            disabled={loading}
+            onClick={() => setUnpricedOnly((on) => !on)}
+          >
+            Unpriced only
+          </button>
+          {/* Saves the rows as listed now: the Find box narrows it, the sort orders it. */}
+          <button type="button" className={styles.download} disabled={sorted.length === 0} onClick={download}>
+            Download CSV
+          </button>
+        </div>
       </div>
 
       <div className={styles.controls}>
@@ -152,6 +172,13 @@ export function WebOwnedCardsScreen() {
 
       {rows.length === 0 ? (
         <p className={styles.empty}>Nothing marked owned yet. Open a set and tap the printings you have.</p>
+      ) : sorted.length === 0 && query.trim() === "" ? (
+        <div className={styles.empty}>
+          <p className={styles.emptyText}>Every owned printing has a price</p>
+          <button type="button" className={styles.clear} onClick={() => setUnpricedOnly(false)}>
+            Show all
+          </button>
+        </div>
       ) : sorted.length === 0 ? (
         <div className={styles.empty}>
           <p className={styles.emptyText}>No owned card matches &quot;{query.trim()}&quot;</p>

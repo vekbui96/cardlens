@@ -73,6 +73,39 @@ describe("WebOwnedCardsScreen summary", () => {
   });
 });
 
+describe("WebOwnedCardsScreen Unpriced only", () => {
+  it("narrows list and showcase to unpriced rows and keeps the header total", () => {
+    const seen: string[][] = [];
+    showcaseSpy = (rows) => seen.push(rows.map((r) => r.name));
+    render(<WebOwnedCardsScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Unpriced only" }));
+    expect(screen.getByRole("button", { name: "Unpriced only" })).toHaveAttribute("aria-pressed", "true");
+    expect(seen[seen.length - 1]).toEqual(["Floragato"]);
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByText("Floragato")).toBeInTheDocument();
+    expect(screen.queryByText("Sprigatito")).not.toBeInTheDocument();
+    expect(screen.getByText("$2.50")).toBeInTheDocument();
+    expect(screen.getByText(/1 unpriced/)).toBeInTheDocument();
+  });
+
+  it("is disabled while prices or sets are still loading", () => {
+    stubbed = { rows: ROWS, pending: 0, pricing: 1 };
+    const { unmount } = render(<WebOwnedCardsScreen />);
+    expect(screen.getByRole("button", { name: "Unpriced only" })).toBeDisabled();
+    unmount();
+    stubbed = { rows: ROWS, pending: 1, pricing: 0 };
+    render(<WebOwnedCardsScreen />);
+    expect(screen.getByRole("button", { name: "Unpriced only" })).toBeDisabled();
+  });
+
+  it("says every printing has a price when nothing is unpriced", () => {
+    stubbed = { rows: [ROWS[0]!], pending: 0, pricing: 0 };
+    render(<WebOwnedCardsScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Unpriced only" }));
+    expect(screen.getByText("Every owned printing has a price")).toBeInTheDocument();
+  });
+});
+
 describe("WebOwnedCardsScreen Download CSV", () => {
   it("is disabled with no rows", () => {
     stubbed = { rows: [], pending: 0, pricing: 0 };

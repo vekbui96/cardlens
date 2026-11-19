@@ -279,6 +279,17 @@
   cursor: pointer;
 }
 
+.findActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-xs);
+}
+
+.downloadOn {
+  background: var(--cl-fg);
+  color: var(--cl-bg);
+}
+
 .download:disabled {
   opacity: 0.5;
   cursor: default;
