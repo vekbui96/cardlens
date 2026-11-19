@@ -11,7 +11,13 @@ import { formatPct } from "../../models/movement.ts";
 import { formatUsd } from "../../utils/format.ts";
 import { tierLabel } from "../../features/collection/completionTier.ts";
 import { SetTierFigures } from "../../features/collection/SetTierFigures.tsx";
+import { useOwnedCards } from "../../hooks/useOwnedCards.ts";
+import { topByValue } from "../../models/ownedSort.ts";
+import { MostValuable } from "./MostValuable.tsx";
 import styles from "./WebHomeScreen.module.css";
+
+/** How many printings the Most valuable strip shows. */
+const MOST_VALUABLE = 5;
 
 /**
  * Home, for a browser.
@@ -41,6 +47,17 @@ export function WebHomeScreen() {
   const { typeSearch } = useSearchAction();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
+  /*
+   * The same rows My cards lists. Prices ride on the query keys the total above
+   * already fetched, so nothing is priced twice; names and art are the one
+   * batched names request My cards makes, on the same key. Read-only here.
+   */
+  const owned = useOwnedCards({ backfill: false });
+  // Shown only once every set has priced and been named: a top five taken
+  // mid-load would reshuffle in front of the user, and could crown a card only
+  // because the dearer ones had not answered yet.
+  const mostValuable =
+    owned.pricing === 0 && owned.pending === 0 ? topByValue(owned.rows, MOST_VALUABLE) : [];
 
   const resume = continueTarget(
     collection,
@@ -125,6 +142,9 @@ export function WebHomeScreen() {
                 : `${value.priced} of ${value.printings} printings priced`}
             </span>
           </button>
+
+          {/* What that number is made of: the dearest few, one tap from their details. */}
+          <MostValuable rows={mostValuable} onOpen={(row) => push({ name: "details", cardId: row.cardId })} />
 
           {/*
             The value card is the number; this is its shape. Printings rather

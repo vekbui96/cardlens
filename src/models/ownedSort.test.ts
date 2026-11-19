@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterOwned, sortOwned, totalOf, type OwnedPrintingRow } from "./ownedSort.ts";
+import { filterOwned, sortOwned, topByValue, totalOf, type OwnedPrintingRow } from "./ownedSort.ts";
 
 const row = (over: Partial<OwnedPrintingRow> = {}): OwnedPrintingRow => ({
   cardId: "me5-1",
@@ -83,6 +83,53 @@ describe("totalOf", () => {
 
   it("is empty-safe", () => {
     expect(totalOf([])).toEqual({ total: 0, unpriced: 0 });
+  });
+});
+
+describe("topByValue", () => {
+  it("keeps the n dearest priced printings, dearest first", () => {
+    const rows = [
+      row({ collectorNumber: "1", price: 2 }),
+      row({ collectorNumber: "2", price: 50 }),
+      row({ collectorNumber: "3", price: 0.1 }),
+      row({ collectorNumber: "4", price: 12 }),
+      row({ collectorNumber: "5", price: 7 }),
+      row({ collectorNumber: "6", price: 30 }),
+      row({ collectorNumber: "7", price: 1 }),
+    ];
+    expect(ids(topByValue(rows, 5))).toEqual(["2:normal", "6:normal", "4:normal", "5:normal", "1:normal"]);
+  });
+
+  it("never lists an unpriced printing, nor one priced at zero", () => {
+    // Unknown is not worthless, and it is not valuable either: the strip is
+    // "what carries the total", and these contribute nothing to it.
+    const rows = [
+      row({ collectorNumber: "1" }),
+      row({ collectorNumber: "2", price: 0 }),
+      row({ collectorNumber: "3", price: 4 }),
+    ];
+    expect(ids(topByValue(rows, 5))).toEqual(["3:normal"]);
+  });
+
+  it("returns fewer than n when fewer are priced, and nothing when none are", () => {
+    expect(topByValue([row({ price: 3 }), row({ collectorNumber: "2", price: 1 })], 5)).toHaveLength(2);
+    expect(topByValue([row({}), row({ collectorNumber: "2" })], 5)).toEqual([]);
+    expect(topByValue([], 5)).toEqual([]);
+  });
+
+  it("breaks price ties the way the price sort does, so the strip never reshuffles", () => {
+    const rows = [
+      row({ collectorNumber: "9", price: 5 }),
+      row({ collectorNumber: "3", price: 5, finish: "reverse" }),
+      row({ collectorNumber: "3", price: 5 }),
+    ];
+    expect(ids(topByValue(rows, 2))).toEqual(["3:normal", "3:reverse"]);
+  });
+
+  it("does not reorder the caller's rows", () => {
+    const rows = [row({ collectorNumber: "1", price: 1 }), row({ collectorNumber: "2", price: 9 })];
+    topByValue(rows, 5);
+    expect(ids(rows)).toEqual(["1:normal", "2:normal"]);
   });
 });
 

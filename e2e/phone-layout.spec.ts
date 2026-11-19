@@ -134,4 +134,51 @@ test.describe("web shell at phone size", () => {
       expect(rowBox.height, `printing row ${i} height`).toBeGreaterThanOrEqual(44);
     }
   });
+
+  test("Home's Most valuable strip fits a 360px phone and opens the card tapped", async ({ page }) => {
+    // The narrowest phone the strip is meant for, not the project's default.
+    await page.setViewportSize({ width: 360, height: 780 });
+    // An empty TCGdex answer, so every price comes from the mock catalog
+    // (src/integrations/pokemon/fixtures.ts) and the request cannot hang on
+    // upstream: base1-4 holofoil $289.99, sv3-223 $58.42, sv3-125 $8.11.
+    await page.route("**/api/printings/**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ tcgdexSetId: "", byNumber: {} }),
+      });
+    });
+    await page.addInitScript(
+      (rows) => {
+        localStorage.setItem("cardlens:v1:collection", JSON.stringify(rows));
+      },
+      [
+        { cardId: "sv3-125", setId: "sv3", finish: "holo", at: 1_700_000_000_000 },
+        { cardId: "base1-4", setId: "base1", finish: "holo", at: 1_700_000_001_000 },
+        { cardId: "sv3-223", setId: "sv3", finish: "holo", at: 1_700_000_002_000 },
+      ],
+    );
+
+    await page.goto("/?ui=web#/");
+
+    const strip = page.getByRole("region", { name: "Most valuable" });
+    const cards = strip.getByRole("button");
+    await expect(cards).toHaveCount(3);
+    // Dearest first, whatever order the collection stored them in.
+    await expect(cards.first()).toContainText("$289.99");
+    await expect(cards.nth(1)).toContainText("$58.42");
+
+    for (let i = 0; i < 3; i++) {
+      const box = await cards.nth(i).boundingBox();
+      expect(box, `card ${i} has no box`).not.toBeNull();
+      expect(box!.height, `card ${i} height`).toBeGreaterThanOrEqual(44);
+      expect(box!.width, `card ${i} width`).toBeGreaterThanOrEqual(44);
+    }
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    await cards.first().click();
+    await expect(page).toHaveURL(/#\/card\/base1-4$/);
+  });
 });
