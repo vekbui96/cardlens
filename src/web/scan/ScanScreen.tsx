@@ -14,7 +14,10 @@ import {
   type ScanResult,
 } from "../../scan/cardIndex.ts";
 import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
-import { PhotoAuthError, identifyPhoto, preparePhoto } from "../../scan/photoIdentify.ts";
+import { PhotoAuthError, cropPhoto, identifyPhoto, preparePhoto } from "../../scan/photoIdentify.ts";
+import { boxFromOutline, defaultBox, type CropBox } from "../../scan/cropBox.ts";
+import type { CardOutline } from "../../models/identify.ts";
+import { PhotoCrop } from "./PhotoCrop.tsx";
 import { track } from "../../services/metrics.ts";
 import { scanBatchMetrics, scanOutcomeMetric } from "./scanMetrics.ts";
 import { autoHint, decide, initialAutoState, type AutoState, type Decision } from "../../scan/autoCapture.ts";
@@ -119,10 +122,30 @@ interface Capture {
    * Dropped once any answer arrives.
    */
   photo: Blob | null;
+  /**
+   * Photo rows only: the uploaded photo as first picked, kept for the row's
+   * life so it can be cropped by hand (`photo` above is whatever was sent last,
+   * possibly a crop, and is dropped once answered).
+   */
+  original: Blob | null;
+  /** Photo rows only: the preview the crop box is dragged over. */
+  preview: string | null;
+  /** Photo rows only: the photo's width / height. */
+  aspect: number | null;
+  /** Where the server found the card in the ORIGINAL photo, if it did. */
+  outline: CardOutline | null;
+  /** The last hand crop, so reopening the crop starts from it. */
+  crop: CropBox | null;
+  /** The crop box is open on this row. */
+  cropping: boolean;
+  /** Why it opened by itself (no outline found), or null when tapped open. */
+  cropPrompt: string | null;
 }
 
 /** "97% match" for an engine that scores candidates; phash bits otherwise. */
-function scoreOf(cand: { distance: number | null; confidence?: number }): string {
+function scoreOf(cand: { distance: number | null; confidence?: number | null }): string {
+  // Mault's unsure answer names cards without scoring them.
+  if (cand.confidence === null) return "best guess";
   if (cand.confidence !== undefined) return `${Math.round(cand.confidence * 100)}% match`;
   return `${cand.distance} bits`;
 }
@@ -383,6 +406,13 @@ export function ScanScreen() {
         rejected: false,
         source: "camera",
         photo: null,
+        original: null,
+        preview: null,
+        aspect: null,
+        outline: null,
+        crop: null,
+        cropping: false,
+        cropPrompt: null,
       },
     ]);
     void resolve(key, framed.canvas, framed.hash);
@@ -397,22 +427,36 @@ export function ScanScreen() {
    * works because it reads the local index.
    */
   const resolvePhoto = useCallback(
-    async (key: number, photo: Blob) => {
-      const apply = (patch: Partial<Capture>) =>
-        setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
-      apply({ note: null, photo });
+    async (key: number, photo: Blob, cropped = false) => {
+      const apply = (patch: Partial<Capture> | ((c: Capture) => Partial<Capture>)) =>
+        setQueue((prev) =>
+          prev.map((c) =>
+            c.key === key ? { ...c, ...(typeof patch === "function" ? patch(c) : patch) } : c,
+          ),
+        );
+      // A re-identify (Retry, or a crop) clears the old answer, so the row says
+      // "Identifying…" rather than showing candidates for the previous picture.
+      apply({ note: null, photo, result: null, via: null, choice: null, cropping: false, cropPrompt: null });
       try {
         const result = await identifyPhoto(photo, repo.getSyncSettings().token, index);
         track(scanOutcomeMetric(result));
         track("scan.via.mault");
-        apply({
+        apply((c) => ({
           result,
           via: "mault",
-          note: result.reason,
+          note: cropped ? `Cropped · ${result.reason}` : result.reason,
           choice: result.confident ? 0 : null,
           photo: null,
-          ...(result.confident ? { numberBand: null } : {}),
-        });
+          // The outline is in the coordinates of what was sent; only the
+          // original photo's one can seed a crop box over that photo.
+          ...(cropped ? {} : { outline: result.outline }),
+          // No outline found and nothing sure: the engine searched the whole
+          // picture, which is when a hand crop helps. Opened once, by itself;
+          // after the person has cropped, Crop is theirs to tap again.
+          ...(result.outlineFound === false && !result.confident && !cropped && !c.crop
+            ? { cropping: true, cropPrompt: "Couldn't find the card's edges — drag the box around the card." }
+            : {}),
+        }));
       } catch (err) {
         const why = err instanceof Error ? err.message : "the server did not answer";
         // A refused token is not fixed by retrying; everything else might be.
@@ -461,6 +505,13 @@ export function ScanScreen() {
             rejected: false,
             source: "photo",
             photo: prepared.upload,
+            original: prepared.upload,
+            preview: prepared.preview,
+            aspect: prepared.aspect,
+            outline: null,
+            crop: null,
+            cropping: false,
+            cropPrompt: null,
           },
         ]);
         void resolvePhoto(key, prepared.upload);
@@ -468,6 +519,24 @@ export function ScanScreen() {
       // A photo is reviewed straight away: there is no camera stack to keep
       // feeding, and the answer lands on the row as it arrives.
       if (added > 0) setReviewing(true);
+    },
+    [resolvePhoto],
+  );
+
+  /** Cut the hand-drawn box out of the original photo and identify that. */
+  const identifyCrop = useCallback(
+    async (key: number, original: Blob, box: CropBox) => {
+      const apply = (patch: Partial<Capture>) =>
+        setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+      apply({ crop: box, cropping: false, cropPrompt: null });
+      let cropped: Blob;
+      try {
+        cropped = await cropPhoto(original, box);
+      } catch {
+        apply({ cropping: true, cropPrompt: "That crop could not be cut out — try again." });
+        return;
+      }
+      await resolvePhoto(key, cropped, true);
     },
     [resolvePhoto],
   );
@@ -607,18 +676,20 @@ export function ScanScreen() {
                * the wrong card — which is the failure OCR would introduce and
                * the reason this stops short of it.
                */
-              const numberBand = c.numberBand ? (
-                <img
-                  className={c.source === "photo" ? styles.photoPreview : styles.numberBand}
-                  src={c.numberBand}
-                  alt={
-                    c.source === "photo"
-                      ? "The uploaded photo, to read the card's collector number from"
-                      : "The bottom of the scanned card, where its collector number is printed"
-                  }
-                  data-testid="number-band"
-                />
-              ) : null;
+              // While cropping, the crop box shows the photo; once is enough.
+              const numberBand =
+                c.numberBand && !c.cropping ? (
+                  <img
+                    className={c.source === "photo" ? styles.photoPreview : styles.numberBand}
+                    src={c.numberBand}
+                    alt={
+                      c.source === "photo"
+                        ? "The uploaded photo, to read the card's collector number from"
+                        : "The bottom of the scanned card, where its collector number is printed"
+                    }
+                    data-testid="number-band"
+                  />
+                ) : null;
               return (
                 <li
                   key={c.key}
@@ -627,6 +698,18 @@ export function ScanScreen() {
                 >
                   <img className={styles.thumb} src={c.thumb} alt="" />
                   <div className={styles.rowBody}>
+                    {c.cropping && c.preview && c.original ? (
+                      <PhotoCrop
+                        key={`${c.key}-${c.crop ? "again" : "first"}`}
+                        src={c.preview}
+                        prompt={c.cropPrompt ?? "Drag the box around the card, then identify it."}
+                        initial={
+                          c.crop ?? (c.outline ? boxFromOutline(c.outline) : defaultBox(c.aspect ?? 3 / 4))
+                        }
+                        onCancel={() => update(c.key, { cropping: false, cropPrompt: null })}
+                        onConfirm={(box) => c.original && void identifyCrop(c.key, c.original, box)}
+                      />
+                    ) : null}
                     {c.manual ? (
                       <>
                         <span className={styles.name}>{c.manual.name}</span>
@@ -724,10 +807,20 @@ export function ScanScreen() {
                         <button
                           type="button"
                           className={styles.chip}
-                          onClick={() => c.photo && void resolvePhoto(c.key, c.photo)}
+                          onClick={() => c.photo && void resolvePhoto(c.key, c.photo, c.crop !== null)}
                           data-testid="retry-photo"
                         >
                           Retry
+                        </button>
+                      ) : null}
+                      {c.source === "photo" && c.original && c.preview && !c.cropping && !c.photo ? (
+                        <button
+                          type="button"
+                          className={styles.chip}
+                          onClick={() => update(c.key, { cropping: true, cropPrompt: null })}
+                          data-testid="crop-photo"
+                        >
+                          Crop
                         </button>
                       ) : null}
                       {/*

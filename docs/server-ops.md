@@ -136,7 +136,34 @@ only — keep it that way**; cardlens fronts it, as with the recogniser.
   `restart: unless-stopped` (postgres via `docker-compose.override.yml`, our
   local file, not upstream), so they come back with Docker Desktop — which
   must itself start at login for Mault to survive a reboot.
+- **Local Mault patch: `POST /cards/photo`.** Upstream `/cards` cannot find a
+  card inside a photo, so this box's Mault runs local branch `server-pc` (one
+  commit on upstream, never pushed: Mault is GPLv3 and none of its code goes
+  into CardLens, which only talks HTTP). Same fields and auth as `/cards`; it
+  runs the corner detector (`lib/straighten-scan.ts`), dewarps like
+  `lib/pi-scan/session.ts`, matches both the straightened card and the whole
+  image, and adds `{ detected, corners, detectionScore, orientation }`. The
+  patch, a README and a no-pull rebuild Dockerfile live in
+  `D:\services\mault\patches-local\`. **After an upstream update:**
+  `git fetch origin; git switch server-pc; git rebase origin/master` (or
+  `git am patches-local\0001-cards-photo-route.patch` on a fresh branch), rebuild
+  the server image, re-run `D:\services\mault-trial\eval-photo.mts`. Without
+  the patch CardLens still works (it falls back to `/cards` on a 404), but
+  photos stop matching.
+- **Rebuilding Mault's server image:** `docker compose build server`, then
+  `docker compose up -d postgres server`. From a non-interactive session
+  (Claude Code, scheduled tasks) every pull fails with `error getting
+credentials ... A specified logon session does not exist` (Docker Desktop's
+  credential store). If no dependency changed, build on top of the current
+  image instead: `docker build -f patches-local/Dockerfile.server-rebuild -t
+mault-server .`, then `docker compose up -d --no-build postgres server` with
+  `DOCKER_CONFIG` pointing at a dir whose `config.json` is `{"auths":{}}`. The
+  pre-patch image is tagged `mault-server:upstream-3bd042b7` for rollback. The
+  corner-detector model downloads from Hugging Face on the first
+  `/cards/photo` after a rebuild (a few seconds, once).
 - Smoke test: `node` script posting one of
   `D:\services\mault-trial\synthetic\src\*.png` to
   `http://127.0.0.1:8787/api/cards/identify` with the bearer token; expect a
-  pokemontcg.io id in `candidates[0].cardId`.
+  pokemontcg.io id in `candidates[0].cardId`. For a photo
+  (`D:\services\mault-trial\photo-like\sv1-1.jpg`) also expect
+  `outlineFound: true`.

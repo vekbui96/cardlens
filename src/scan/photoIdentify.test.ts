@@ -104,4 +104,29 @@ describe("toPhotoScanResult", () => {
   it("is never confident with nothing to offer", () => {
     expect(toPhotoScanResult({ ...MATCHED, candidates: [] }).confident).toBe(false);
   });
+
+  it("passes on whether the server found the card's outline, and says so when it cannot tell", () => {
+    const outline = {
+      topLeft: { x: 0.2, y: 0.1 },
+      topRight: { x: 0.8, y: 0.1 },
+      bottomRight: { x: 0.8, y: 0.9 },
+      bottomLeft: { x: 0.2, y: 0.9 },
+    };
+    expect(toPhotoScanResult({ ...MATCHED, outlineFound: true, outline })).toMatchObject({
+      outlineFound: true,
+      outline,
+    });
+    expect(toPhotoScanResult({ ...AMBIGUOUS, outlineFound: false, outline: null }).outlineFound).toBe(false);
+    // An older server says nothing: that is "cannot tell", not "no outline".
+    expect(toPhotoScanResult(AMBIGUOUS)).toMatchObject({ outlineFound: null, outline: null });
+  });
+
+  it("keeps an unscored guess unscored rather than calling it 0%", () => {
+    const result = toPhotoScanResult({
+      ...AMBIGUOUS,
+      candidates: [{ ...AMBIGUOUS.candidates[0], confidence: null }],
+    });
+    expect(result.candidates[0].confidence).toBeNull();
+    expect(result.confident).toBe(false);
+  });
 });

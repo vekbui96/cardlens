@@ -488,4 +488,147 @@ test.describe("uploading a photo", () => {
     await row.getByRole("button", { name: /BREAKthrough · 117/ }).click();
     await expect(page.getByRole("button", { name: "Add 1 card" })).toBeEnabled();
   });
+  /** A 600x800 picture, big enough on screen to drag a crop box over. */
+  async function bigPhoto(page: Page) {
+    const dataUrl = await page.evaluate(() => {
+      const c = document.createElement("canvas");
+      c.width = 600;
+      c.height = 800;
+      const g = c.getContext("2d")!;
+      g.fillStyle = "#6b4f2a";
+      g.fillRect(0, 0, 600, 800);
+      g.fillStyle = "#e8d44d";
+      g.fillRect(150, 200, 300, 420);
+      return c.toDataURL("image/png");
+    });
+    return { name: "table.png", mimeType: "image/png", buffer: Buffer.from(dataUrl.split(",")[1], "base64") };
+  }
+
+  const PINECO = {
+    cardId: "sv1-1",
+    name: "Pineco",
+    setId: "sv1",
+    setName: "Scarlet & Violet",
+    collectorNumber: "1",
+    distance: 0.08,
+    confidence: 0.995,
+  };
+
+  test("no card outline found: a crop box opens, and the cropped picture is identified on the same row", async ({
+    page,
+  }) => {
+    await connect(page);
+    const bodies: number[] = [];
+    await page.route("**/api/cards/identify", async (route) => {
+      bodies.push(route.request().postDataBuffer()?.length ?? 0);
+      const first = bodies.length === 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          first
+            ? {
+                status: "AMBIGUOUS",
+                recogniser: "mault",
+                processingTimeMs: 100,
+                reason: "Mault isn't sure — pick the right card",
+                outlineFound: false,
+                outline: null,
+                candidates: [
+                  { ...PINECO, cardId: "sv2-1", name: "Sprigatito", setId: "sv2", confidence: null },
+                ],
+              }
+            : {
+                status: "MATCHED",
+                recogniser: "mault",
+                processingTimeMs: 100,
+                reason: "Mault 100% sure",
+                outlineFound: true,
+                outline: null,
+                candidates: [PINECO],
+              },
+        ),
+      });
+    });
+    await page.goto("/?ui=web#/scan");
+    await page
+      .getByTestId("photo-input")
+      .first()
+      .setInputFiles(await bigPhoto(page));
+
+    const crop = page.getByTestId("photo-crop");
+    await expect(crop).toBeVisible();
+    await expect(crop).toContainText("Couldn't find the card's edges");
+    // The unscored guess is offered as a guess, never as "0%".
+    await expect(page.getByTestId("review-row")).toContainText("best guess");
+    await expect(page.getByTestId("review-row")).not.toContainText("0% match");
+
+    // Drag the bottom-right corner in: the box shrinks.
+    const box = page.getByTestId("crop-box");
+    const before = (await box.boundingBox())!;
+    const handle = (await page.getByTestId("crop-handle-se").boundingBox())!;
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 - 40, handle.y + handle.height / 2 - 40, { steps: 5 });
+    await page.mouse.up();
+    const after = (await box.boundingBox())!;
+    expect(after.width).toBeLessThan(before.width - 20);
+    expect(after.height).toBeLessThan(before.height - 20);
+    // Every handle is a 44px touch target.
+    expect(handle.width).toBeGreaterThanOrEqual(44);
+
+    await page.getByTestId("crop-identify").click();
+    await expect(crop).toBeHidden();
+    const row = page.getByTestId("review-row");
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("Pineco");
+    await expect(page.getByTestId("via")).toContainText("Cropped");
+    expect(bodies).toHaveLength(2);
+    // What went the second time is the crop, not the photo again.
+    expect(bodies[1]).not.toBe(bodies[0]);
+    await expect(page.getByRole("button", { name: "Add 1 card" })).toBeEnabled();
+  });
+
+  test("Crop on a photo row opens the box over that photo, and Cancel closes it untouched", async ({
+    page,
+  }) => {
+    await connect(page);
+    let posts = 0;
+    await page.route("**/api/cards/identify", (route) => {
+      posts += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "MATCHED",
+          recogniser: "mault",
+          processingTimeMs: 100,
+          reason: "Mault 100% sure",
+          outlineFound: true,
+          outline: {
+            topLeft: { x: 0.25, y: 0.25 },
+            topRight: { x: 0.75, y: 0.25 },
+            bottomRight: { x: 0.75, y: 0.775 },
+            bottomLeft: { x: 0.25, y: 0.775 },
+          },
+          candidates: [PINECO],
+        }),
+      });
+    });
+    await page.goto("/?ui=web#/scan");
+    await page
+      .getByTestId("photo-input")
+      .first()
+      .setInputFiles(await bigPhoto(page));
+
+    await expect(page.getByTestId("review-row")).toContainText("Pineco");
+    // Found the card: no crop box forced on the person.
+    await expect(page.getByTestId("photo-crop")).toHaveCount(0);
+    await page.getByTestId("crop-photo").click();
+    await expect(page.getByTestId("photo-crop")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("photo-crop")).toHaveCount(0);
+    await expect(page.getByTestId("review-row")).toContainText("Pineco");
+    expect(posts).toBe(1);
+  });
 });

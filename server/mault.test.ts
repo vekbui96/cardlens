@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { judgeMault, MaultClient, type MaultConfig, type MaultMatch } from "./mault.ts";
+import { judgeMault, MaultClient, outlineOf, type MaultConfig, type MaultMatch } from "./mault.ts";
 import type { CardIndexLookup, IndexCard } from "./cardIndexLookup.ts";
 import type { IdentifyReply } from "../src/models/identify.ts";
 
@@ -113,6 +113,20 @@ describe("judgeMault", () => {
     );
     expect(reply.candidates.map((c) => c.cardId)).toEqual(["sv2-169", "sv4pt5-75", "g1-56"]);
   });
+
+  it('says Mault is unsure, not "0% sure", for its unscored diagnostic list', () => {
+    const reply = judgeMault(
+      [
+        { cardId: "sv01-001", distance: 0.53 },
+        { cardId: "bw11-52", distance: 0.55 },
+      ],
+      CARDS,
+    );
+    expect(reply.status).toBe("AMBIGUOUS");
+    expect(reply.reason).toBe("Mault isn't sure — pick the right card");
+    expect(reply.reason).not.toMatch(/%/);
+    expect(reply.candidates.map((c) => c.confidence)).toEqual([null, null]);
+  });
 });
 
 const CONFIG: MaultConfig = {
@@ -151,7 +165,7 @@ describe("MaultClient", () => {
     expect(reply.status).toBe(200);
     expect((reply.body as IdentifyReply).candidates[0].cardId).toBe("sv1-1");
     const [url, init] = fetchMock.mock.calls[1];
-    expect(url).toBe("http://mault.test/cards");
+    expect(url).toBe("http://mault.test/cards/photo");
     expect(init.headers).toEqual({ Authorization: "Bearer t1", "X-Org-Id": "org" });
     const form = init.body as FormData;
     expect(form.get("collectionGuid")).toBe("guid");
@@ -286,5 +300,89 @@ describe("MaultClient", () => {
     vi.stubGlobal("fetch", fetchMock);
     const reply = await new MaultClient(lookup, CONFIG).identify(Buffer.from("a"), "image/png");
     expect(reply).toEqual({ status: 502, body: { error: "mault_bad_response" } });
+  });
+  it("falls back to /cards for good when Mault has no /cards/photo (un-patched)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signIn("t1"))
+      .mockResolvedValueOnce(json(404, { message: "Not Found" }))
+      .mockResolvedValueOnce(found())
+      .mockResolvedValueOnce(found());
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new MaultClient(lookup, CONFIG);
+    const first = await client.identify(Buffer.from("a"), "image/jpeg");
+    const second = await client.identify(Buffer.from("b"), "image/jpeg");
+    expect(first.status).toBe(200);
+    expect((second.body as IdentifyReply).candidates[0].cardId).toBe("sv1-1");
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "http://mault.test/local-auth/sign-in",
+      "http://mault.test/cards/photo",
+      "http://mault.test/cards",
+      "http://mault.test/cards",
+    ]);
+    // Plain /cards cannot say whether it found an outline, so the reply does not claim either way.
+    expect((first.body as IdentifyReply).outlineFound).toBeUndefined();
+  });
+
+  it("passes on the card outline /cards/photo found", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signIn("t1"))
+      .mockResolvedValueOnce(
+        json(200, {
+          success: true,
+          data: [m("sv01-001", 0.995, 0.08, "Pineco")],
+          detected: true,
+          corners: {
+            topLeft: { x: 0.2, y: 0.1 },
+            topRight: { x: 0.8, y: 0.12 },
+            bottomRight: { x: 0.82, y: 0.9 },
+            bottomLeft: { x: 0.18, y: 0.88 },
+          },
+          detectionScore: 0.05,
+          orientation: "upright",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const body = (await new MaultClient(lookup, CONFIG).identify(Buffer.from("a"), "image/jpeg"))
+      .body as IdentifyReply;
+    expect(body.status).toBe("MATCHED");
+    expect(body.outlineFound).toBe(true);
+    expect(body.outline).toEqual({
+      topLeft: { x: 0.2, y: 0.1 },
+      topRight: { x: 0.8, y: 0.12 },
+      bottomRight: { x: 0.82, y: 0.9 },
+      bottomLeft: { x: 0.18, y: 0.88 },
+    });
+  });
+});
+
+describe("outlineOf", () => {
+  it("says no outline was found, so the app can offer a crop", () => {
+    expect(outlineOf({ detected: false, corners: null, orientation: "whole" })).toEqual({
+      outlineFound: false,
+      outline: null,
+    });
+  });
+
+  it("keeps the outline only when the straightened card is what matched", () => {
+    const corners = {
+      topLeft: { x: 0.2, y: 0.1 },
+      topRight: { x: 0.8, y: 0.12 },
+      bottomRight: { x: 0.82, y: 0.9 },
+      bottomLeft: { x: 0.18, y: 0.88 },
+    };
+    expect(outlineOf({ detected: true, corners, orientation: "whole" }).outline).toBeNull();
+    expect(outlineOf({ detected: true, corners, orientation: "rotated" }).outline).toEqual(corners);
+  });
+
+  it("drops a malformed outline rather than forwarding it", () => {
+    expect(
+      outlineOf({ detected: true, corners: { topLeft: { x: "a", y: 0 } }, orientation: "upright" }),
+    ).toEqual({
+      outlineFound: true,
+      outline: null,
+    });
+    expect(outlineOf({})).toEqual({});
   });
 });

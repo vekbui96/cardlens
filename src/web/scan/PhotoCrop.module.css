@@ -1,0 +1,121 @@
+.crop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+  margin: var(--cl-gap-xs) 0 var(--cl-gap-sm);
+}
+
+.prompt {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg);
+}
+
+/*
+  Shrinks to the picture exactly, so the box's percentages are percentages of
+  the photo and not of whatever space is left beside it.
+*/
+.frame {
+  position: relative;
+  display: inline-block;
+  align-self: flex-start;
+  max-width: 100%;
+  /* The finger drags the box, not the page. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.photo {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-surface-raised);
+  pointer-events: none;
+}
+
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--cl-accent);
+  /* Dims everything outside the box. */
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45);
+  cursor: move;
+  touch-action: none;
+}
+
+.box:focus-visible {
+  outline: 3px solid var(--cl-fg);
+  outline-offset: 2px;
+}
+
+/* 44px touch targets centred on each corner; only the inner dot is drawn. */
+.handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  touch-action: none;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  border-radius: 50%;
+  background: var(--cl-accent);
+  border: 2px solid var(--cl-on-accent);
+}
+
+.nw {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+
+.ne {
+  left: 100%;
+  top: 0;
+  cursor: nesw-resize;
+}
+
+.se {
+  left: 100%;
+  top: 100%;
+  cursor: nwse-resize;
+}
+
+.sw {
+  left: 0;
+  top: 100%;
+  cursor: nesw-resize;
+}
+
+.actions {
+  display: flex;
+  gap: var(--cl-gap-sm);
+}
+
+.primary,
+.secondary {
+  min-height: 44px;
+  padding: 0 var(--cl-gap);
+  border-radius: var(--cl-radius-sm);
+  font-family: inherit;
+  font-size: var(--cl-fs-small);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+}
+
+.secondary {
+  border: var(--cl-border-strong);
+  background: none;
+  color: var(--cl-fg-muted);
+}

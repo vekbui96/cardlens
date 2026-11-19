@@ -102,7 +102,7 @@ Moved out of CLAUDE.md; read when touching `src/scan/`, `ScanScreen`, `/api/reco
   `server/mault.ts`). A gallery or phone-camera photo is framed however it was
   taken, which the phash index cannot match, so it goes to a second engine:
   **Mault**, self-hosted on SERVER-PC (docker, loopback :3001), which
-  straightens the card and matches an image embedding. Each photo becomes an
+  finds the card in the photo, straightens it and matches an image embedding. Each photo becomes an
   ordinary review row (candidates, finish chips, Pick by set) with
   `via: "mault"` and a `scan.via.mault` count. **There is no device fallback
   for a photo**: offline or unconfigured shows an inline note on the row with
@@ -122,6 +122,48 @@ Moved out of CLAUDE.md; read when touching `src/scan/`, `ScanScreen`, `/api/reco
     (bw11-52 → bw4-51, mcd12-6 → bw2-32, xyp-XY39 → xy5-108) and every
     same-art pair lands as "Which one?" with both offered. Renders are not
     photos: re-measure with real phone photos before loosening any of it.
+  - **Finding the card is Mault's job, through a local patch.** Upstream
+    `POST /cards` embeds the WHOLE upload (its own apps detect and crop on the
+    client), so a casually framed photo never matched. Our Mault carries
+    `POST /cards/photo` (`D:\services\mault\patches-local\`, details in
+    `docs/server-ops.md`): the Pi host's corner detector, a perspective dewarp,
+    then the same match on both the straightened card and the whole image (a
+    tight crop or scan is already the card); the nearer answer wins.
+    `MaultClient` asks `/cards/photo` and falls back to `/cards` for the life of
+    the process on a 404, so an un-patched Mault still answers (badly).
+    Measured 2026-11-19 through CardLens's own gate, 34 cards each
+    (`D:\services\mault-trial\eval-photo.mts`):
+
+    | set                        | route          | top-1     | gate-accepted | false accepts | outline found |
+    | -------------------------- | -------------- | --------- | ------------- | ------------- | ------------- |
+    | photo-like                 | `/cards`       | 2/34      | 0             | 0             | —             |
+    | photo-like                 | `/cards/photo` | **27/34** | **16**        | **0**         | 33/34         |
+    | clean renders (full frame) | `/cards`       | 31/34     | 19            | 0             | —             |
+    | clean renders (full frame) | `/cards/photo` | 31/34     | 19            | 0             | 31/34         |
+
+    Photo-like = each render tilted ±15°, mild perspective, card 40–70% of the
+    frame height, plain/gradient/textured backgrounds, uneven light and noise,
+    1600px long edge, JPEG ~85 (`D:\services\mault-trial\make-photo-like.py`,
+    seeded). Same-art pairs stayed "Which one?" on both sets. Photo-like
+    misses: the three Mault always misses (above), plus bw4-51 → bwp-BW38,
+    gym2-132 and dp1-120 (outline found, wrong card) and smp-SM60 (no outline).
+    Still synthetic: re-measure on real photos before loosening the gate.
+
+  - **No outline found → crop by hand** (`src/web/scan/PhotoCrop.tsx`,
+    `src/scan/cropBox.ts`, web layout only). The reply carries `outlineFound`
+    (absent from an un-patched Mault, meaning "cannot say", never "no") and
+    the `outline` it used. `false` with nothing confident opens a crop box on
+    the row by itself, once; every photo row also has a **Crop** chip. The box
+    is dragged, or resized by 44px corner handles (arrows / Shift+arrows on a
+    keyboard), seeded from the outline, the last crop, or a card-shaped box in
+    the middle. The crop is cut from the ORIGINAL upload and identified again
+    on the same row (candidates, finish chips, Pick by set reused; the note
+    starts "Cropped"). Mault straightens the crop too, so a loose box around a
+    tilted card is fine.
+  - Mault's unsure answer (`data: null`, `diagnostics.candidates`) has no
+    confidence at all: those candidates carry `confidence: null`, show as "best
+    guess", and the reason reads "Mault isn't sure — pick the right card", not
+    "only 0% sure".
   - An unsettled photo row shows the whole photo (720px) in place of the
     camera's number band — there is no guide, so no band to crop. Shown, never
     read, same rule as the band.

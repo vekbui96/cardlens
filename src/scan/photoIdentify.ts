@@ -1,5 +1,6 @@
 import type { CardIndex, IndexedCard, ScanResult } from "./cardIndex.ts";
-import type { IdentifyReply } from "../models/identify.ts";
+import type { CardOutline, IdentifyReply } from "../models/identify.ts";
+import { toPixels, type CropBox } from "./cropBox.ts";
 import { apiBaseUrl } from "../services/sync/http.ts";
 
 /**
@@ -50,6 +51,8 @@ export interface PreparedPhoto {
   thumb: string;
   /** Data URL large enough to read the collector number from. */
   preview: string;
+  /** Width / height, as decoded (EXIF orientation applied). */
+  aspect: number;
 }
 
 function drawScaled(source: CanvasImageSource, w: number, h: number, edge: number): HTMLCanvasElement {
@@ -110,7 +113,7 @@ export async function preparePhoto(file: Blob): Promise<PreparedPhoto> {
       "image/jpeg",
       0.6,
     );
-    return { upload, thumb, preview };
+    return { upload, thumb, preview, aspect: w / h };
   } finally {
     done();
   }
@@ -119,6 +122,32 @@ export async function preparePhoto(file: Blob): Promise<PreparedPhoto> {
 /** A photo's answer, in the shape the review row already draws. */
 export interface PhotoScanResult extends ScanResult {
   reason: string;
+  /**
+   * Whether the server found the card's outline in the photo. `false` is the
+   * cue to offer a hand crop; null when the server cannot say (older Mault).
+   */
+  outlineFound: boolean | null;
+  /** The outline it straightened, as fractions of the photo, when it used one. */
+  outline: CardOutline | null;
+}
+
+/**
+ * Cut `box` (fractions of the photo) out of `photo` at full resolution, as a
+ * JPEG to send for identification again. The server's own straightening still
+ * runs on it, so a loose box around a tilted card is fine.
+ */
+export async function cropPhoto(photo: Blob, box: CropBox): Promise<Blob> {
+  const { source, w, h, done } = await decode(photo);
+  try {
+    const { sx, sy, sw, sh } = toPixels(box, w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = sw;
+    canvas.height = sh;
+    canvas.getContext("2d")?.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+    return await toBlob(canvas, 0.92);
+  } finally {
+    done();
+  }
 }
 
 /** Ask the server what card is in this photo. */
@@ -207,5 +236,7 @@ export function toPhotoScanResult(reply: IdentifyReply, index: CardIndex | null 
     confident: reply.status === "MATCHED" && candidates.length > 0,
     candidates,
     reason: reply.reason ?? "",
+    outlineFound: typeof reply.outlineFound === "boolean" ? reply.outlineFound : null,
+    outline: reply.outline ?? null,
   };
 }

@@ -30,8 +30,11 @@ export interface ScanResult extends Verdict {
   candidates: {
     card: IndexedCard;
     distance: number;
-    /** 0..1, set only by engines that score candidates (Mault); phash has bits only. */
-    confidence?: number;
+    /**
+     * 0..1, set only by engines that score candidates (Mault); phash has bits
+     * only. Null when the engine offered the card as a guess without a score.
+     */
+    confidence?: number | null;
   }[];
 }
 

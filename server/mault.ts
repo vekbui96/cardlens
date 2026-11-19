@@ -22,8 +22,16 @@
  * Answers are translated from TCGdex ids to CardLens's pokemontcg.io ids and
  * validated against the card index (server/tcgdexIds.ts), then judged by a
  * deliberately conservative gate (`judgeMault`, below).
+ *
+ * **Which Mault route.** Upstream `POST /cards` embeds the whole upload, so it
+ * only matches when the picture IS the card; a casually framed phone photo got
+ * 2/34 top-1 on the photo-like eval set. This box's Mault carries a local patch
+ * (`D:\services\mault\patches-local\`) adding `POST /cards/photo`, which finds
+ * the card's corners, straightens it, and then runs the same match: 27/34. The
+ * client asks that route first and falls back to `/cards` for good on a 404, so
+ * an un-patched Mault (after an upstream update) still answers, just worse.
  */
-import type { IdentifyCandidate, IdentifyReply } from "../src/models/identify.ts";
+import type { CardOutline, IdentifyCandidate, IdentifyReply, OutlinePoint } from "../src/models/identify.ts";
 import type { CardIndexLookup, IndexCard } from "./cardIndexLookup.ts";
 import { toPokemonTcgId } from "./tcgdexIds.ts";
 
@@ -94,6 +102,13 @@ export interface MaultMatch {
   card?: { name?: string; collectorNumber?: string };
 }
 
+/** The extras `/cards/photo` adds to `/cards`' answer. */
+export interface MaultPhotoExtras {
+  detected?: unknown;
+  corners?: unknown;
+  orientation?: unknown;
+}
+
 export interface MaultReply {
   status: number;
   body: IdentifyReply | { error: string };
@@ -151,7 +166,7 @@ export function judgeMault(
       setName: card.setName,
       collectorNumber: card.number,
       distance: num(m.distance, 1),
-      confidence: num(m.confidence, 0),
+      confidence: typeof m.confidence === "number" && Number.isFinite(m.confidence) ? m.confidence : null,
     });
   });
 
@@ -175,6 +190,12 @@ export function judgeMault(
   const runner = matches[1];
   const gap = runner ? num(runner.distance, 1) - topDistance : Infinity;
   const runnerConfidence = runner ? num(runner.confidence, 0) : 0;
+
+  // Mault's unsure answer names its nearest cards with no score at all. Saying
+  // "only 0% sure" about that reads as a measurement; it is not one.
+  if (typeof top.confidence !== "number") {
+    return { ...base, status: "AMBIGUOUS", reason: "Mault isn't sure — pick the right card" };
+  }
 
   const why: string[] = [];
   if (!topResolved) why.push("its best match is not in CardLens");
@@ -229,11 +250,28 @@ export class MaultClient {
     }
   }
 
-  private post(image: Buffer, contentType: string, token: string): Promise<Response> {
+  /**
+   * `/cards/photo` until this Mault has said it does not have it (404), then
+   * `/cards` for the life of the process. A restart re-checks, which is when a
+   * re-patched Mault would be picked up anyway.
+   */
+  private photoRoute = true;
+
+  private async post(image: Buffer, contentType: string, token: string): Promise<Response> {
+    if (this.photoRoute) {
+      const res = await this.send("/cards/photo", image, contentType, token);
+      if (res.status !== 404) return res;
+      this.photoRoute = false;
+      console.warn("[cardlens] mault has no /cards/photo (un-patched?); using /cards");
+    }
+    return this.send("/cards", image, contentType, token);
+  }
+
+  private send(route: string, image: Buffer, contentType: string, token: string): Promise<Response> {
     const form = new FormData();
     form.append("image", new Blob([new Uint8Array(image)], { type: contentType }), "photo");
     form.append("collectionGuid", this.config.collectionGuid);
-    return fetch(`${this.config.url}/cards`, {
+    return fetch(`${this.config.url}${route}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "X-Org-Id": this.config.orgId },
       body: form,
@@ -266,7 +304,7 @@ export class MaultClient {
       }
       if (!res.ok) return { status: 503, body: { error: "mault_unavailable" } };
 
-      let parsed: { data?: unknown; diagnostics?: { candidates?: unknown } };
+      let parsed: { data?: unknown; diagnostics?: { candidates?: unknown } } & MaultPhotoExtras;
       try {
         parsed = (await res.json()) as typeof parsed;
       } catch {
@@ -276,7 +314,10 @@ export class MaultClient {
       if (!matches) return { status: 502, body: { error: "mault_bad_response" } };
 
       const cards = await this.index.load();
-      return { status: 200, body: judgeMault(matches, cards, Date.now() - started) };
+      return {
+        status: 200,
+        body: { ...judgeMault(matches, cards, Date.now() - started), ...outlineOf(parsed) },
+      };
     } catch (err) {
       const timedOut = err instanceof Error && err.name === "TimeoutError";
       if (!timedOut)
@@ -305,6 +346,43 @@ export function maultMatchesOf(parsed: {
     if (parsed?.data === null) return [];
   }
   return null;
+}
+
+function point(v: unknown): OutlinePoint | null {
+  const p = v as { x?: unknown; y?: unknown } | null;
+  const ok = (n: unknown): n is number =>
+    typeof n === "number" && Number.isFinite(n) && n >= -0.05 && n <= 1.05;
+  return p && ok(p.x) && ok(p.y)
+    ? { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) }
+    : null;
+}
+
+/**
+ * What `/cards/photo` says about the card's outline, validated. Nothing at all
+ * from plain `/cards` (no `detected` field), so the client can tell "found no
+ * outline" from "cannot say". The outline is only passed on when the
+ * straightened card is what matched: when the whole photo won, the photo
+ * already was the card and the detector had outlined something inside it.
+ */
+export function outlineOf(parsed: MaultPhotoExtras): Pick<IdentifyReply, "outlineFound" | "outline"> {
+  if (typeof parsed?.detected !== "boolean") return {};
+  const c = parsed.corners as Record<string, unknown> | null | undefined;
+  const corners = c
+    ? {
+        topLeft: point(c.topLeft),
+        topRight: point(c.topRight),
+        bottomRight: point(c.bottomRight),
+        bottomLeft: point(c.bottomLeft),
+      }
+    : null;
+  const complete =
+    corners && corners.topLeft && corners.topRight && corners.bottomRight && corners.bottomLeft
+      ? (corners as CardOutline)
+      : null;
+  return {
+    outlineFound: parsed.detected,
+    outline: parsed.detected && parsed.orientation !== "whole" ? complete : null,
+  };
 }
 
 async function isUndecodable(res: Response): Promise<boolean> {
