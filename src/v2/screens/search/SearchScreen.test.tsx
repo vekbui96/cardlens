@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CatalogProvider, RepositoriesProvider } from "../../../app/contexts.tsx";
 import { NavigationProvider, useNavigation } from "../../../app/NavigationProvider.tsx";
-import { LibraryProvider } from "../../../app/LibraryProvider.tsx";
+import { LibraryProvider, useLibrary } from "../../../app/LibraryProvider.tsx";
 import { MockPokemonProvider } from "../../../integrations/pokemon/index.ts";
 import { ProviderError, type SearchOpts } from "../../../integrations/providers.ts";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
@@ -138,6 +138,51 @@ describe("results", () => {
     });
 
     expect(await screen.findByRole("heading", { name: /nothing matched/i })).toBeInTheDocument();
+  });
+});
+
+describe("owned cards in results", () => {
+  /** Puts one card in the collection before the grid reads it. */
+  function Seed({ ids }: { ids: string[] }) {
+    const { addOwned } = useLibrary();
+    useEffect(() => {
+      for (const id of ids) addOwned(id, "normal", id.split("-")[0] ?? "");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return null;
+  }
+
+  it("tags owned tiles, counts them in the heading, and Hide owned removes them", async () => {
+    render(
+      <>
+        <Seed ids={["sv3-223"]} />
+        <SearchScreen query="charizard" />
+      </>,
+      { wrapper: harness(new MockPokemonProvider()) },
+    );
+
+    const heading = await screen.findByRole("heading", { name: /cards for “charizard” · 1 owned/i });
+    const total = Number(/^(\d+)/.exec(heading.textContent ?? "")?.[1]);
+    expect(total).toBeGreaterThan(1);
+
+    const owned = screen.getByRole("link", { name: /obsidian flames.*#223/i });
+    expect(owned).toHaveTextContent("Owned");
+    expect(screen.getByRole("link", { name: /obsidian flames.*#125/i })).not.toHaveTextContent("Owned");
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide owned" }));
+    expect(screen.queryByRole("link", { name: /obsidian flames.*#223/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /obsidian flames.*#125/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: `${total - 1} of ${total} cards (1 owned hidden)` }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows neither the tag nor the chip when nothing is owned", async () => {
+    render(<SearchScreen query="charizard" />, { wrapper: harness(new MockPokemonProvider()) });
+
+    await screen.findAllByRole("link", { name: /charizard/i });
+    expect(screen.queryByText("Owned")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hide owned" })).not.toBeInTheDocument();
   });
 });
 

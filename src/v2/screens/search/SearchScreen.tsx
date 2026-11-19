@@ -311,19 +311,37 @@ function Results({
   cards: PokemonCardSummary[];
   onOpen: (cardId: string, summary?: PokemonCardSummary) => void;
 }) {
+  const { isOwned } = useLibrary();
+  const [hideOwned, setHideOwned] = useState(false);
+  const ownedCount = cards.reduce((n, c) => (isOwned(c.id) ? n + 1 : n), 0);
+  // The chip is only offered while something is owned, so a stale "on" must not hide anything.
+  const hiding = hideOwned && ownedCount > 0;
+  const shown = hiding ? cards.filter((c) => !isOwned(c.id)) : cards;
+
   return (
     <Stack gap={3}>
       <h2 className={styles.heading}>
-        {cards.length} {cards.length === 1 ? "card" : "cards"} for “{query}”
+        {hiding
+          ? `${shown.length} of ${cards.length} cards (${ownedCount} owned hidden)`
+          : `${cards.length} ${cards.length === 1 ? "card" : "cards"} for “${query}”${
+              ownedCount > 0 ? ` · ${ownedCount} owned` : ""
+            }`}
       </h2>
+      {ownedCount > 0 ? (
+        <Row gap={2}>
+          <Chip onPress={() => setHideOwned((v) => !v)} pressed={hiding}>
+            Hide owned
+          </Chip>
+        </Row>
+      ) : null}
       {cards.length >= FULL_SEARCH_LIMIT ? (
         // A full page back is indistinguishable from a complete answer, so say
         // which one this is rather than implying the catalog stops there.
         <p className={styles.hint}>That is the first page — add a word to narrow it.</p>
       ) : null}
       <Grid min="pocket" gap={3}>
-        {cards.map((card) => (
-          <ResultTile key={card.id} card={card} onOpen={onOpen} />
+        {shown.map((card) => (
+          <ResultTile key={card.id} card={card} owned={isOwned(card.id)} onOpen={onOpen} />
         ))}
       </Grid>
     </Stack>
@@ -332,9 +350,11 @@ function Results({
 
 function ResultTile({
   card,
+  owned,
   onOpen,
 }: {
   card: PokemonCardSummary;
+  owned: boolean;
   onOpen: (cardId: string, summary?: PokemonCardSummary) => void;
 }) {
   return (
@@ -363,6 +383,7 @@ function ResultTile({
       <span className={styles.set}>{card.setName}</span>
       <span className={styles.meta}>
         <span className={styles.number}>#{formatCollector(card.collectorNumber)}</span>
+        {owned ? <span className={styles.owned}>Owned</span> : null}
         <Money value={card.marketPrice} absentLabel="n/a" />
       </span>
     </Card>
