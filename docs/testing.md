@@ -15,4 +15,20 @@ CL_E2E_API_PORT=8887`. The default API port is 8787 — the LIVE `cardlens`
 - **A hanging request is not an aborted one.** An abort settles the query and lets error/empty states through; a hang pins `isLoading` forever. The Collection screen bug (permanent "Loading sets…" on the glasses) only reproduces with a promise that never resolves.
 - **Verify a regression test actually fails without the fix.** Two attempts at the above passed against the bug before one reproduced it.
 - **`e2e/bulk-mark.spec.ts` races a real 1200ms window, and local parallelism starves it.** The triple-pinch is three `press()` calls, each a CDP round-trip, that must all land inside the burst window the product genuinely enforces. Measured 2026-08-28: **4/4 pass at `--workers=1`, roughly 3 failures in 5 full-suite runs at the default worker count.** The product is correct in both cases — the harness simply loses the race. CI was always covered (`workers: 1`, `retries: 2`); the block now carries `test.describe.configure({ retries: 2 })` so a local full run stops crying wolf. **Do not "fix" it by dispatching synthetic `KeyboardEvent`s in the page** — they never reach `KeyboardBackedInputAdapter`, so the test passes having exercised nothing. Tried, measured as consistently failing, reverted.
+- **Running checks: use the `cardlens-test-runner` agent** (Haiku). It runs
+  `npm run verify` and, only when screens changed, e2e on the isolated ports, then
+  returns a summary that labels failures KNOWN (on the list below) or NEW.
 - Tombstone tests need plausible epoch timestamps — `deletedAt: 300` is 1970 and gets pruned as ancient before any assertion sees it.
+
+## Known failures on SERVER-PC
+
+Failures that happen on this box for reasons unrelated to the change being
+tested. The `cardlens-test-runner` agent labels a failure KNOWN only if it
+matches an entry here (spec file and test title). Remove an entry once it's fixed.
+
+- `e2e/scan.spec.ts` "routes to the server when connected, and falls back when it cannot"
+  (phone and desktop): the test expects no recogniser behind the e2e server, but
+  the live `recognition` service on :8200 answers. Passes in CI.
+- `npm run e2e:visual` (v2 `@visual` screenshot tests): the baselines are Linux
+  (CI), so they don't match on Windows. Not part of `npm run e2e`. A local run
+  writes `*-win32.png` snapshots: never commit them.

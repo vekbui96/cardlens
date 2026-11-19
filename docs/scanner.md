@@ -56,7 +56,7 @@ Moved out of CLAUDE.md; read when touching `src/scan/`, `ScanScreen`, `/api/reco
   SERVER-PC. Scanning is server-first and the client trusts the server's
   verdict, so **these must always move together**; a change to one alone is
   either inert or a silent parity break. The Python is not in this repo and not
-  under git — see `docs/handoff.md`.
+  under git — see "The scanner's accept gate leaked" in `docs/handoff-archive.md`.
   - A blanket `MIN_MARGIN = 8` produced **2 false accepts** at 20,205 cards
     (`ex3-86` filed as `pop3-11`, `bw2-32` as `mcd12-6`), both at distance 4
     under crop error. It was clean at 1,709 cards: **a gate measured against a

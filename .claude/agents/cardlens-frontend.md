@@ -78,5 +78,11 @@ the shared model files listed in `tsconfig.node.json` (`src/models/binderLayout.
 those are compiled by the server too, and changing one means a server deploy.
 If the work needs any of that, stop and say so.
 
-Do not commit, push, or deploy unless explicitly told to. Report what you changed,
-what you measured, and what you deliberately left alone.
+Run checks through the **`cardlens-test-runner`** agent (Haiku: verify, plus e2e
+when screens changed). Read its summary instead of raw output; it labels
+failures KNOWN or NEW, and NEW ones are yours to fix.
+
+Commit and push only when your brief says the change ships (Ve's direct requests
+do, per the workspace `CLAUDE.md`). Deploying stays with the `ship` skill or
+`cardlens-backend`. Report what you changed, what you measured, and what you
+deliberately left alone.

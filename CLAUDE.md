@@ -21,6 +21,12 @@ Most of this was learned the hard way; the numbers and incident stories live in 
 ## Commands
 
 - `npm run verify` — format:check + typecheck + lint + test. Run before every commit (CI runs the same set).
+- **Mechanical jobs go to the Haiku agents**, which report and never fix:
+  - `cardlens-test-runner`: verify, plus e2e only when screens changed; labels failures KNOWN or NEW.
+  - `cardlens-live-check`: after a deploy.
+  - `cardlens-triage`: facts when something is broken.
+- **End long sessions with `/reflect`**: it proposes the smallest doc/skill/agent edit for each thing that went wrong, then applies what Ve approves.
+
 - `npm run test` / `npx vitest run <file>` — unit tests (jsdom); `npx playwright test` — e2e; `npm run dev:all` — Vite + server.
 - **Prettier is enforced by CI.** Run `npm run format` after any scripted/bulk edit.
 - **e2e on SERVER-PC must use isolated ports:** `CL_E2E_PORT=5273 CL_E2E_API_PORT=8887`. Default API port 8787 is the LIVE `cardlens` service and `reuseExistingServer` would reuse it, writing into the live collection.

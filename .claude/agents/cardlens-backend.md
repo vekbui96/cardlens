@@ -55,6 +55,10 @@ ssh server-pc "powershell -NoProfile -Command \"git -C D:\services\cardlens fetc
   a devDependency.
 - **NSSM bakes environment variables in at install.** `Restart-Service` does NOT
   pick up `.env` changes — re-run `04-install-services.ps1`.
+- **Mault is a fourth dependency**: Docker on this box, loopback :3001, a private
+  `/cards/photo` patch, GPLv3 (never copy its code here). Before touching it, read
+  the Mault section of `docs/server-ops.md`: re-applying the patch, Docker can't
+  pull images unattended, rollback image.
 - **The recogniser is a THIRD target.** `D:\services\recognition\` is Python, is
   **not in this repo and not under git at all**, caches its index in a module
   global, and needs its own `Restart-Service recognition`.
@@ -81,5 +85,16 @@ Take a backup before editing anything that is not under version control. Prefer
 an exact-match patch script that fails loudly over a blind `sed`. Run that
 component's own test suite where it has one — the Python recogniser has pytest.
 
-Do not commit, push, or deploy unless explicitly told to. Report what you changed,
+**Hand mechanical work to the Haiku agents** and read their summaries instead of
+raw output:
+
+- `cardlens-test-runner`: verify, plus e2e when screens changed;
+- `cardlens-live-check`: after a deploy;
+- `cardlens-triage`: collecting facts when something is broken.
+
+They report; you decide.
+
+Commit, push and deploy only when your brief says the change ships. Ve's direct
+requests do ship end to end (workspace `CLAUDE.md`), and then follow the `ship`
+skill. Otherwise, stop before committing. Either way, report what you changed,
 what you verified and how, and what still needs deploying.

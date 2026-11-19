@@ -7,15 +7,23 @@ description: Verify, commit, and deploy CardLens to GitHub Pages and the self-ho
 
 Two independent deploy targets. Skipping the second is the mistake that has actually happened: the server ran stale validation that rejected finishes the client could produce, and rows were silently dropped on sync.
 
+**On SERVER-PC itself** (`hostname` is `Server-pc`), every `ssh server-pc "…"`
+below runs locally: run the inner PowerShell command directly. The `--resolve`
+NordVPN workaround is only needed on the laptop.
+
 ## 1. Verify
 
-```bash
-npm run verify   # format:check + typecheck + lint + test
-npx playwright test
-npm run build
-```
+Hand this to the **`cardlens-test-runner`** agent (Haiku) rather than running it
+inline. It runs `npm run verify`, runs e2e on the isolated ports **only when
+screens changed** (paths under `src/`, `e2e/`, `public/`, `index.html`, Vite or
+Playwright config), and returns a summary with each failure labelled KNOWN or
+NEW. CI still runs the full e2e and visual suites on push.
 
-If `format:check` fails, run `npm run format` — script-applied edits (python/sed) never respect Prettier, and CI enforces it.
+- Any **NEW** failure blocks the ship. Fix it, or prove it fails on clean `main`
+  too and add it to "Known failures on SERVER-PC" in `docs/testing.md`.
+- If `format:check` failed, run `npm run format`: script-applied edits
+  (python/sed) never respect Prettier, and CI enforces it.
+- `npm run build` only if the change touches build config.
 
 ## 2. Decide what needs deploying
 
@@ -28,6 +36,16 @@ Anything there means **the server needs deploying too**, not just Pages. Those f
 ## 3. Commit and push
 
 Explain _why_ in the message, including any measurement that drove the change. Then push to `main`.
+
+In Windows PowerShell 5.1, write the message to a file and run
+`git commit -F <file>`:
+
+- an inline `-m` containing double quotes is split into pathspecs, and the commit
+  fails;
+- `Set-Content -Encoding utf8` / `Out-File` prepend a BOM that ends up at the
+  start of the subject.
+
+Use `[IO.File]::WriteAllText($path, $text)`, which writes UTF-8 without a BOM.
 
 ## 4. Deploy the frontend
 
@@ -78,6 +96,20 @@ missing module. `Restart-Service` reports it as a `ServiceCommandException`,
 which reads like a permissions problem and is not.
 
 ## 6. Verify it live
+
+Hand this to the **`cardlens-live-check`** agent (Haiku). Give it the commit you
+just deployed and a string from the feature (e.g. a new button label). It returns
+a PASS/FAIL table covering:
+
+- the live checkout's commit, the service, and health (locally and via the Funnel);
+- the Pages run and the feature string in the deployed chunks;
+- Mault and the recogniser.
+
+A FAIL means stop and investigate; use `cardlens-triage` for the facts. A
+passing table still doesn't prove a screen renders: for UI changes, load the page
+and look at it.
+
+The manual commands, for reference or when working from the laptop:
 
 The server, from outside the LAN. `--resolve` is required on the laptop because NordVPN blocks Tailscale, so `ts.net` names otherwise resolve to an unreachable tailnet IP:
 
