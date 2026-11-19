@@ -143,6 +143,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.owned {
+  color: var(--v2-accent-strong);
+  font-weight: 600;
+}
+
 /* --- Skeleton ------------------------------------------------------------- */
 
 .skeleton {
