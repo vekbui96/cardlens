@@ -76,6 +76,20 @@ export function filterOwned(rows: OwnedPrintingRow[], query: string): OwnedPrint
   );
 }
 
+/**
+ * The `n` dearest priced printings, dearest first: what is carrying the total.
+ *
+ * The same price order as `sortOwned`, ties included, so Home's short list
+ * and the top of My cards sorted by price never disagree about which printing
+ * comes first. Unpriced printings are left out rather than listed last: this
+ * answers "what is the total made of", and an unknown price contributes
+ * nothing to it. A zero is left out for the same reason `totalOf` skips it.
+ */
+export function topByValue(rows: OwnedPrintingRow[], n: number): OwnedPrintingRow[] {
+  const priced = rows.filter((r) => typeof r.price === "number" && r.price > 0);
+  return sortOwned(priced, "price").slice(0, n);
+}
+
 /** Total of the priced rows, and how many had no price. */
 export function totalOf(rows: OwnedPrintingRow[]): { total: number; unpriced: number } {
   let total = 0;

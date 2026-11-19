@@ -1,0 +1,119 @@
+/*
+ * A row of five small cards that scrolls on its own. Horizontal so the strip
+ * costs one card's height under the total rather than five rows, which would
+ * push "Pick up where you left off" off a phone screen. Only the list scrolls:
+ * the page itself must never move sideways (e2e/phone-layout.spec.ts).
+ */
+.strip {
+  min-width: 0;
+  margin: 0 0 var(--cl-gap);
+}
+
+.heading {
+  margin: 0 var(--cl-gap) var(--cl-gap-sm);
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cl-fg-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--cl-gap) 2px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 112px;
+  gap: var(--cl-gap-sm);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 var(--cl-gap);
+}
+
+.list > li {
+  scroll-snap-align: start;
+  min-width: 0;
+}
+
+.card {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--cl-gap-sm);
+  border: var(--cl-border);
+  border-radius: var(--cl-radius);
+  background: var(--cl-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    background: var(--cl-surface-raised);
+  }
+}
+
+/* Card proportions (245x342), held whether or not the image arrives. */
+.art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 245 / 342;
+  margin-bottom: 4px;
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-surface-raised);
+  overflow: hidden;
+}
+
+.art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.name {
+  font-size: var(--cl-fs-small);
+  font-weight: 600;
+  color: var(--cl-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Gold for money, as everywhere else on Home. */
+.price {
+  font-family: var(--cl-font-data);
+  font-size: var(--cl-fs-small);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--cl-gold);
+}
+
+@media (min-width: 1000px) {
+  .heading {
+    margin-left: var(--cl-gap-lg);
+    margin-right: var(--cl-gap-lg);
+  }
+
+  .list {
+    /* Capped, so five cards on a 1180px shell stay thumbnails, not posters. */
+    grid-template-columns: repeat(5, minmax(0, 150px));
+    grid-auto-flow: row;
+    overflow-x: visible;
+    padding: 0 var(--cl-gap-lg) 2px;
+  }
+}

@@ -31,7 +31,16 @@ import { setCardsCache } from "../storage/caches.ts";
  * screen that read "pricing" off the names alone called the total final — and
  * cards "unpriced" — while prices were still loading.
  */
-export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pricing: number } {
+export function useOwnedCards({
+  backfill = true,
+}: {
+  /**
+   * Whether to teach stored rows their collector numbers (below). Home reads
+   * these rows only to show its few most valuable printings, and opening Home
+   * must not start writing to the collection; My cards keeps the migration.
+   */
+  backfill?: boolean;
+} = {}): { rows: OwnedPrintingRow[]; pending: number; pricing: number } {
   const { collection, backfillNumbers } = useLibrary();
   const { provider, sourceKey } = useCatalog();
   const { data: sets } = useSets();
@@ -122,6 +131,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pr
   const namesSettledAt = names.dataUpdatedAt;
 
   useEffect(() => {
+    if (!backfill) return;
     const known: { id: string; collectorNumber: string }[] = [];
     for (const [id, card] of names.data?.cards ?? []) {
       if (card.number) known.push({ id, collectorNumber: card.number });
@@ -131,7 +141,7 @@ export function useOwnedCards(): { rows: OwnedPrintingRow[]; pending: number; pr
     }
     if (known.length > 0) backfillNumbers(known);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the query array is new each render; cardsSettledAt / namesSettledAt are when their data actually changed
-  }, [backfillNumbers, cardsSettledAt, namesSettledAt]);
+  }, [backfill, backfillNumbers, cardsSettledAt, namesSettledAt]);
 
   return useMemo(() => {
     const cardsBySet = new Map<

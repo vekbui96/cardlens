@@ -116,6 +116,20 @@ describe("useOwnedCards names", () => {
     );
   });
 
+  it("leaves the collection alone when the caller opts out of the backfill (Home)", async () => {
+    namesServer({
+      cards: { ...named("sv1-1", "Sprigatito"), ...named("sv2-1", "Iono"), ...named("sv3-1", "Charizard") },
+      missing: [],
+    });
+
+    const { result } = renderHook(() => useOwnedCards({ backfill: false }), { wrapper: wrapper() });
+
+    await waitFor(() =>
+      expect(result.current.rows.map((r) => r.name)).toEqual(["Sprigatito", "Iono", "Charizard"]),
+    );
+    expect(backfillNumbers).not.toHaveBeenCalled();
+  });
+
   it("asks set by set only for a set the server could not name", async () => {
     namesServer({
       cards: { ...named("sv1-1", "Sprigatito"), ...named("sv3-1", "Charizard") },
