@@ -266,16 +266,17 @@ export class MaultClient {
       }
       if (!res.ok) return { status: 503, body: { error: "mault_unavailable" } };
 
-      let parsed: { data?: unknown };
+      let parsed: { data?: unknown; diagnostics?: { candidates?: unknown } };
       try {
-        parsed = (await res.json()) as { data?: unknown };
+        parsed = (await res.json()) as typeof parsed;
       } catch {
         return { status: 502, body: { error: "mault_bad_response" } };
       }
-      if (!Array.isArray(parsed?.data)) return { status: 502, body: { error: "mault_bad_response" } };
+      const matches = maultMatchesOf(parsed);
+      if (!matches) return { status: 502, body: { error: "mault_bad_response" } };
 
       const cards = await this.index.load();
-      return { status: 200, body: judgeMault(parsed.data as MaultMatch[], cards, Date.now() - started) };
+      return { status: 200, body: judgeMault(matches, cards, Date.now() - started) };
     } catch (err) {
       const timedOut = err instanceof Error && err.name === "TimeoutError";
       if (!timedOut)
@@ -283,6 +284,27 @@ export class MaultClient {
       return { status: 503, body: { error: timedOut ? "mault_timeout" : "mault_unavailable" } };
     }
   }
+}
+
+/**
+ * Mault's match list. When it is not sure — a real phone photo, almost always —
+ * it answers `success: true` with `data: null` and puts its nearest cards in
+ * `diagnostics.candidates` (cardId + distance, no confidence). Those are still
+ * worth showing a human, and a missing confidence reads as 0 so the gate can
+ * never pre-choose one. Null only when neither list is there: a reply we do not
+ * understand. (Found 2026-11-19: every phone upload came back as "offline".)
+ */
+export function maultMatchesOf(parsed: {
+  data?: unknown;
+  diagnostics?: { candidates?: unknown };
+}): MaultMatch[] | null {
+  if (Array.isArray(parsed?.data)) return parsed.data as MaultMatch[];
+  if (parsed?.data === null || parsed?.data === undefined) {
+    const fallback = parsed?.diagnostics?.candidates;
+    if (Array.isArray(fallback)) return fallback as MaultMatch[];
+    if (parsed?.data === null) return [];
+  }
+  return null;
 }
 
 async function isUndecodable(res: Response): Promise<boolean> {

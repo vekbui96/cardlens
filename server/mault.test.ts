@@ -239,6 +239,45 @@ describe("MaultClient", () => {
     expect(reply).toEqual({ status: 503, body: { error: "mault_unavailable" } });
   });
 
+  it("offers Mault's diagnostic candidates when it is unsure (data: null), never pre-chosen", async () => {
+    // The real shape of an unsure answer — what every phone photo got on
+    // 2026-11-19, and which used to surface as "offline on the server".
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signIn("t1"))
+      .mockResolvedValueOnce(
+        json(200, {
+          success: true,
+          data: null,
+          nearestDistance: 0.534,
+          diagnostics: {
+            reason: "ambiguous",
+            candidates: [
+              { cardId: "sv01-001", name: "Pineco", setCode: "sv01", distance: 0.534 },
+              { cardId: "bw11-52", name: "Kyurem", setCode: "bw11", distance: 0.553 },
+            ],
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = await new MaultClient(lookup, CONFIG).identify(Buffer.from("a"), "image/jpeg");
+    expect(reply.status).toBe(200);
+    const body = reply.body as IdentifyReply;
+    expect(body.status).toBe("AMBIGUOUS");
+    expect(body.candidates.map((c) => c.cardId)).toEqual(["sv1-1", "bw11-52"]);
+  });
+
+  it("answers UNKNOWN when Mault is unsure and names nothing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signIn("t1"))
+      .mockResolvedValueOnce(json(200, { success: true, data: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = await new MaultClient(lookup, CONFIG).identify(Buffer.from("a"), "image/jpeg");
+    expect(reply.status).toBe(200);
+    expect((reply.body as IdentifyReply).status).toBe("UNKNOWN");
+  });
+
   it("refuses a malformed answer instead of forwarding it", async () => {
     const fetchMock = vi
       .fn()
