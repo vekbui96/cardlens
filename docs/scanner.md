@@ -167,3 +167,69 @@ Moved out of CLAUDE.md; read when touching `src/scan/`, `ScanScreen`, `/api/reco
   - An unsettled photo row shows the whole photo (720px) in place of the
     camera's number band — there is no guide, so no band to crop. Shown, never
     read, same rule as the band.
+
+- **The camera asks Mault too — but only to CONFIRM, and never on a reprint**
+  (2026-11-19; `src/scan/cameraMault.ts`, `ScanScreen` `secondOpinion`).
+  phash stays first: a confident phash answer settles the row and Mault is
+  never called, so the captures that settle on artwork pay no extra latency.
+  Otherwise the row shows phash's "Which one?" at once ("· asking Mault…") and
+  the client sends a native-resolution crop of the guide — taken from the
+  video in the same frame as the hash, long edge capped at 1200, JPEG 0.9,
+  only encoded if phash was unsure, dropped when the answer lands — to the
+  ordinary `/api/cards/identify` (no server change; `/cards/photo` finds the
+  card or matches the whole crop). Timeout is `RECOGNISE_TIMEOUT_MS` (6s).
+  Offline, slow, 429 or refused → the row stays exactly as phash left it, no
+  note, no toast. The row auto-accepts only when ALL hold:
+  1. Mault's own gate (`judgeMault`) says MATCHED;
+  2. Mault's card is one of phash's candidates;
+  3. no other card on the row (phash's or Mault's) shares its name;
+  4. the card has no same-name look-alike within `LOOKALIKE_BITS = 12` in the
+     loaded index (no index → no confirmation).
+     Anything else stays "Which one?" with a merged, de-duplicated list (max 5;
+     Mault's order first when it is confident). Rows record `server+mault` /
+     `device+mault` ("Server + Mault"); counts `scan.via.camera_mault` and
+     `scan.camera_mault.confirmed` sit beside `scan.via.server/device`, and the
+     outcome (`scan.accepted/ambiguous/unknown`) is counted once, after Mault. A
+     choice made in review before Mault answers is never overwritten. Web only:
+     the glasses route `scan` to Collection, and the v2 scan screen has its own
+     capture code and is untouched.
+  - **Why 3 and 4 exist: 1+2 alone filed the wrong card twice.**
+    `cel25c-93_A` as `ex15-93` and `tk2a-5` as `ex8-40`: same-art reprints
+    where Mault's collection lacks one twin, so its runner-up test sees no
+    rival and it is "99% sure" of the twin it knows. Mault alone (its gate,
+    up to conf >= 0.98 / dist <= 0.15) leaked on the same pairs. At
+    conf >= 0.99 / dist <= 0.12 it happened not to leak on 444 captures,
+    but the mechanism (a twin missing from Mault) is untouched by any
+    threshold and a zero on a sample proves nothing, so "Mault alone with a
+    stricter bar" was rejected.
+  - **Measured on a simulated guide crop** (`D:\services\mault-trial\guide\`,
+    not in git: `make-guide-crops.py` → `collect.mts` → `verify-shipped.mts`).
+    222 cards — the 34 trial renders, plus a seeded sample of 142 of the
+    1,842 cards a perfect capture leaves AMBIGUOUS at index 62723f91 (drawn
+    with their nearest twin) and 46 random others, as pokemontcg.io hires
+    art — each placed in a 1080x1920 frame on the guide (886x1237) in two
+    variants: _aligned_ (scale ±3%, offset ±1.5%, ±1.5°,
+    blur ≤0.6px) and _sloppy_ (scale −8/+6%, offset ±4%, ±4°, blur ≤1.5px),
+    with backgrounds, uneven light and noise; phash on the 245x342 PNG via
+    `:8200`, Mault on the native crop via `/cards/photo`.
+
+    | captures              | n   | phash auto / false | Mault alone auto / false | combined auto / false |
+    | --------------------- | --- | ------------------ | ------------------------ | --------------------- |
+    | aligned               | 222 | 24 / 0             | 62 / **2**               | **55 / 0**            |
+    | sloppy                | 222 | 1 / 0              | 53 / **1**               | **27 / 0**            |
+    | the 34 renders (both) | 68  | 7 / 0              | 33 / 0                   | 22 / 0                |
+    | same-art twins (both) | 304 | 0 / 0              | 16 / **3**               | 2 / 0                 |
+    | other cards (both)    | 140 | 25 / 0             | 99 / 0                   | 80 / 0                |
+    | all                   | 444 | 25 / 0             | 115 / 3                  | **82 / 0**            |
+
+    So the gain is on captures phash is unsure of because of the CAPTURE
+    (blur, tilt, misalignment): of the 115 such non-twin captures, 55 now
+    settle, with zero false accepts. **It does not shrink the reprint gap**:
+    2 of 304 twin captures settle (both different-name near neighbours), and
+    that is deliberate — the collector number is still the only safe
+    separator there. The simulation is harsher than real use (phash accepted
+    only 25/444; on real cards it settles far more), so read the columns
+    against each other, not as field rates. Mault on the 245x342 PNG instead
+    of the native crop scored about the same here (top-1 335 vs 339 of 444)
+    because the renders are only 734px; a real camera frame has more detail
+    than either, and the crop is sent only for unsure captures.

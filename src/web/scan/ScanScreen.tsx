@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
@@ -13,7 +13,8 @@ import {
   type IndexedCard,
   type ScanResult,
 } from "../../scan/cardIndex.ts";
-import { RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
+import { RECOGNISE_TIMEOUT_MS, RecogniserAuthError, recogniseRemote } from "../../scan/remoteRecognize.ts";
+import { combineWithMault, lookalikesIn } from "../../scan/cameraMault.ts";
 import { PhotoAuthError, cropPhoto, identifyPhoto, preparePhoto } from "../../scan/photoIdentify.ts";
 import { boxFromOutline, defaultBox, type CropBox } from "../../scan/cropBox.ts";
 import type { CardOutline } from "../../models/identify.ts";
@@ -72,9 +73,53 @@ type Phase =
 
 /**
  * Which recogniser answered. `null` while the answer is still in flight.
- * `mault` is the photo engine behind /api/cards/identify (uploads only).
+ * `mault` is the photo engine behind /api/cards/identify (an uploaded photo);
+ * `server+mault` / `device+mault` is a camera capture phash could not settle
+ * and Mault was asked about too (see cameraMault.ts).
  */
-type Via = "server" | "device" | "mault" | null;
+type Via = "server" | "device" | "mault" | "server+mault" | "device+mault" | null;
+
+/** A Mault score (% match) rather than phash bits sits on this row's candidates. */
+const scoredByMault = (via: Via) => via === "mault" || via === "server+mault" || via === "device+mault";
+
+const VIA_LABEL: Record<NonNullable<Via>, string> = {
+  server: "Server",
+  device: "On device",
+  mault: "Photo · Mault",
+  "server+mault": "Server + Mault",
+  "device+mault": "On device + Mault",
+};
+
+/**
+ * Long edge of the guide crop sent to Mault. The guide at camera resolution
+ * is ~886x1237 on a 1080p phone; the embedding gains nothing past this and the
+ * upload stays ~150-250KB through the tunnel.
+ */
+const MAULT_CROP_EDGE = 1200;
+
+/** The guide region of the current video frame at (near) native resolution. */
+function guideCrop(el: HTMLVideoElement): HTMLCanvasElement | null {
+  if (!el.videoWidth) return null;
+  const guide = guideRect(el.videoWidth, el.videoHeight);
+  const scale = Math.min(1, MAULT_CROP_EDGE / Math.max(guide.w, guide.h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(guide.w * scale);
+  canvas.height = Math.round(guide.h * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(el, guide.x, guide.y, guide.w, guide.h, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function jpeg(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("the crop could not be encoded"))),
+      "image/jpeg",
+      0.9,
+    ),
+  );
+}
 
 interface Capture {
   key: number;
@@ -320,6 +365,9 @@ export function ScanScreen() {
     };
   }, []);
 
+  /** Same-art reprint lookup over the loaded index, built once per index. */
+  const lookalikes = useMemo(() => (index ? lookalikesIn(index) : null), [index]);
+
   /**
    * Answer one capture, server first, device if the server cannot.
    *
@@ -329,32 +377,71 @@ export function ScanScreen() {
    * died looks exactly like one that is working.
    */
   const resolve = useCallback(
-    async (key: number, canvas: HTMLCanvasElement, hash: Uint32Array) => {
+    async (key: number, canvas: HTMLCanvasElement, hash: Uint32Array, crop: HTMLCanvasElement | null) => {
       const apply = (patch: Partial<Capture>) =>
         setQueue((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+      const token = repo.getSyncSettings().token;
+      /*
+       * phash could not settle it: ask Mault about the native-resolution guide
+       * crop before counting the outcome. The phash answer is on the row
+       * meanwhile, so nothing waits on screen; a confident phash answer never
+       * gets here, so the 91% that settle on artwork pay no extra latency.
+       *
+       * Mault can only CONFIRM one of phash's candidates (cameraMault.ts).
+       * Offline, slow or refused is silent: the row stays as phash left it.
+       */
+      const secondOpinion = async (result: ScanResult, via: "server" | "device", note: string | null) => {
+        // No index, no confirmation: the reprint check reads it (cameraMault.ts).
+        if (result.confident || !crop || !token || !lookalikes) return settle(result, via, note);
+        apply({ result, via, note: note ? `${note} · asking Mault…` : "Asking Mault…", choice: null });
+        let combined;
+        try {
+          const photo = await identifyPhoto(await jpeg(crop), token, index, RECOGNISE_TIMEOUT_MS);
+          combined = combineWithMault(
+            result,
+            { confident: photo.confident, candidates: photo.candidates, reason: photo.reason },
+            lookalikes,
+          );
+        } catch {
+          return settle(result, via, note);
+        }
+        track("scan.via.camera_mault");
+        if (combined.confirmed) track("scan.camera_mault.confirmed");
+        settle(combined.result, via, combined.reason, `${via}+mault`);
+      };
       // A confident match needs no decision; an unsure one must not be
       // pre-answered, or the review turns into rubber-stamping.
       // A confident row will never show its number band, so the crop is
       // released here rather than held for the life of the batch.
-      const settle = (result: ScanResult, via: Via, note: string | null) => {
+      const settle = (result: ScanResult, via: Via, note: string | null, shown: Via = via) => {
         track(scanOutcomeMetric(result));
         if (via)
           track(
             via === "server" ? "scan.via.server" : via === "mault" ? "scan.via.mault" : "scan.via.device",
           );
-        apply({
-          result,
-          via,
-          note,
-          choice: result.confident ? 0 : null,
-          ...(result.confident ? { numberBand: null } : {}),
-        });
+        setQueue((prev) =>
+          prev.map((c) => {
+            if (c.key !== key) return c;
+            // Mault answers after phash, and someone may already have picked a
+            // candidate or named the card by hand in review. Their choice wins:
+            // reordering the candidates under it would change what it points at.
+            if (c.result && (c.choice !== null || c.manual)) return { ...c, via: shown, note };
+            return {
+              ...c,
+              result,
+              via: shown,
+              note,
+              choice: result.confident ? 0 : null,
+              ...(result.confident ? { numberBand: null } : {}),
+            };
+          }),
+        );
       };
       if (engine === "server") {
         try {
           const result = await recogniseRemote(canvas, repo.getSyncSettings().token, index);
           setEngineNote(null);
-          settle(result, "server", result.reason);
+          await secondOpinion(result, "server", result.reason);
           return;
         } catch (err) {
           const why = err instanceof Error ? err.message : "the server did not answer";
@@ -371,9 +458,9 @@ export function ScanScreen() {
         apply({ result: null, via: null, note: "No server and no index — nothing could identify this." });
         return;
       }
-      settle(identify(index, hash, 3), "device", null);
+      await secondOpinion(identify(index, hash, 3), "device", null);
     },
-    [engine, index, repo],
+    [engine, index, repo, lookalikes],
   );
 
   const capture = useCallback(() => {
@@ -387,6 +474,11 @@ export function ScanScreen() {
     thumb.width = THUMB_WIDTH;
     thumb.height = Math.round((THUMB_WIDTH * CAPTURE_HEIGHT) / CAPTURE_WIDTH);
     thumb.getContext("2d")?.drawImage(framed.canvas, 0, 0, thumb.width, thumb.height);
+
+    // Taken now, in the same frame as the hash: by the time phash has
+    // answered, the next card is already in the guide. Only encoded (and only
+    // sent) if phash turns out unsure; otherwise dropped with this closure.
+    const crop = hasToken && video.current ? guideCrop(video.current) : null;
 
     const key = nextKey.current++;
     setQueue((prev) => [
@@ -415,8 +507,8 @@ export function ScanScreen() {
         cropPrompt: null,
       },
     ]);
-    void resolve(key, framed.canvas, framed.hash);
-  }, [hashFrame, resolve]);
+    void resolve(key, framed.canvas, framed.hash, crop);
+  }, [hashFrame, resolve, hasToken]);
 
   /**
    * Identify one uploaded photo through the server's photo engine.
@@ -739,7 +831,7 @@ export function ScanScreen() {
                             distance: chosen.distance,
                             confidence: c.result.candidates[0]?.confidence,
                           })}
-                          {c.via !== "mault" && c.result.runnerUp && chosen.distance !== null
+                          {!scoredByMault(c.via) && c.result.runnerUp && chosen.distance !== null
                             ? `, ${c.result.runnerUp.distance - chosen.distance} clear`
                             : ""}
                         </span>
@@ -777,7 +869,7 @@ export function ScanScreen() {
                     */}
                     {c.via ? (
                       <span className={styles.via} data-testid="via">
-                        {c.via === "server" ? "Server" : c.via === "mault" ? "Photo · Mault" : "On device"}
+                        {VIA_LABEL[c.via]}
                         {c.note ? ` · ${c.note}` : ""}
                       </span>
                     ) : null}

@@ -632,3 +632,200 @@ test.describe("uploading a photo", () => {
     expect(posts).toBe(1);
   });
 });
+
+test.describe("camera capture, second opinion from Mault", () => {
+  // eslint-disable-next-line no-empty-pattern
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== "phone" && testInfo.project.name !== "desktop", "web shells only");
+  });
+
+  const dodrio = (cardId: string, setId: string, setName: string, collectorNumber: string) => ({
+    cardId,
+    name: "Dodrio",
+    setId,
+    setName,
+    collectorNumber,
+  });
+  // A same-art reprint pair (identical hash), and two unrelated cards a
+  // blurred capture could leave phash unsure between.
+  const G1 = dodrio("g1-56", "g1", "Generations", "56");
+  const XY8 = dodrio("xy8-117", "xy8", "BREAKthrough", "117");
+  const PINECO = {
+    cardId: "sv1-1",
+    name: "Pineco",
+    setId: "sv1",
+    setName: "Scarlet & Violet",
+    collectorNumber: "1",
+  };
+  const MORELULL = {
+    cardId: "sm3-97",
+    name: "Morelull",
+    setId: "sm3",
+    setName: "Burning Shadows",
+    collectorNumber: "97",
+  };
+  type Candidate = typeof PINECO;
+
+  /** phash's verdict, as /api/recognize sends it. */
+  function recognizeReply(status: "MATCHED" | "AMBIGUOUS", candidates: Candidate[] = [G1, XY8]) {
+    return {
+      status,
+      card: status === "MATCHED" ? { ...candidates[0], distance: 0, artworkScore: 1 } : null,
+      confidence: 0,
+      margin: status === "MATCHED" ? 20 : 0,
+      reason: status === "MATCHED" ? "clear match" : "two cards share this artwork",
+      candidates: candidates.map((c, i) => ({ ...c, distance: 6 + i * 2, artworkScore: 0.9 })),
+      indexVersion: "test",
+      processingTimeMs: 5,
+    };
+  }
+
+  async function connectAndRecognise(page: Page, status: "MATCHED" | "AMBIGUOUS", candidates?: Candidate[]) {
+    await page.addInitScript((token) => {
+      localStorage.setItem(
+        "cardlens:v1:sync-settings",
+        JSON.stringify({ token, lastPushedAt: 0, lastPulledAt: 0, lastSyncAt: 0 }),
+      );
+    }, E2E_TOKEN);
+    await page.route("**/api/recognize", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recognizeReply(status, candidates)),
+      }),
+    );
+  }
+
+  test("settles a 'Which one?' when Mault confirms one of phash's candidates", async ({ page }) => {
+    await connectAndRecognise(page, "AMBIGUOUS", [PINECO, MORELULL]);
+    const sent: { type: string; bytes: number }[] = [];
+    await page.route("**/api/cards/identify", (route) => {
+      const req = route.request();
+      sent.push({ type: req.headers()["content-type"] ?? "", bytes: req.postDataBuffer()?.length ?? 0 });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "MATCHED",
+          recogniser: "mault",
+          processingTimeMs: 100,
+          reason: "Mault 99% sure, next 0.20 away",
+          candidates: [{ ...MORELULL, distance: 0.08, confidence: 0.99 }],
+        }),
+      });
+    });
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const row = page.getByTestId("review-row");
+    await expect(row.getByTestId("via")).toContainText("Server + Mault");
+    await expect(row).toContainText("Burning Shadows · 97");
+    await expect(row).not.toContainText("Which one?");
+    // The native-resolution guide crop, as a JPEG — not the 245x342 PNG.
+    expect(sent).toHaveLength(1);
+    expect(sent[0].type).toBe("image/jpeg");
+  });
+
+  test("a same-art reprint pair stays 'Which one?' however sure Mault is", async ({ page }) => {
+    // The shape that leaked in the eval: Mault's collection lacks one twin, so
+    // it is "99% sure" of the other. Only the printed number can tell them apart.
+    await connectAndRecognise(page, "AMBIGUOUS", [G1, XY8]);
+    await page.route("**/api/cards/identify", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "MATCHED",
+          recogniser: "mault",
+          processingTimeMs: 100,
+          reason: "Mault 99% sure",
+          candidates: [{ ...XY8, distance: 0.08, confidence: 0.99 }],
+        }),
+      }),
+    );
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const row = page.getByTestId("review-row");
+    await expect(row.getByTestId("via")).toContainText("same art");
+    await expect(row).toContainText("Which one?");
+    await expect(row.getByTestId("number-band")).toBeVisible();
+  });
+
+  test("never asks Mault about a capture phash already settled", async ({ page }) => {
+    await connectAndRecognise(page, "MATCHED");
+    let asked = 0;
+    await page.route("**/api/cards/identify", (route) => {
+      asked += 1;
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: '{"error":"mault_unavailable"}',
+      });
+    });
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    await expect(page.getByTestId("via")).toHaveText(/^Server/);
+    await expect(page.getByTestId("review-row")).toContainText("Generations · 56");
+    expect(asked).toBe(0);
+  });
+
+  test("Mault offline leaves the row exactly as phash left it, without a word", async ({ page }) => {
+    await connectAndRecognise(page, "AMBIGUOUS");
+    await page.route("**/api/cards/identify", (route) =>
+      route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"mault_unavailable"}' }),
+    );
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const row = page.getByTestId("review-row");
+    await expect(row.getByTestId("via")).toHaveText("Server · two cards share this artwork");
+    await expect(row).toContainText("Which one?");
+    await expect(row.getByRole("button", { name: /Dodrio/ })).toHaveCount(2);
+  });
+
+  test("a confident Mault that disagrees with phash only adds an option", async ({ page }) => {
+    await connectAndRecognise(page, "AMBIGUOUS");
+    await page.route("**/api/cards/identify", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "MATCHED",
+          recogniser: "mault",
+          processingTimeMs: 100,
+          reason: "Mault 99% sure",
+          candidates: [
+            {
+              cardId: "sv1-1",
+              name: "Pineco",
+              setId: "sv1",
+              setName: "Scarlet & Violet",
+              collectorNumber: "1",
+              distance: 0.08,
+              confidence: 0.99,
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    const row = page.getByTestId("review-row");
+    await expect(row.getByTestId("via")).toContainText("Server + Mault");
+    await expect(row).toContainText("Which one?");
+    await expect(row.getByRole("group", { name: "Pick the card" }).getByRole("button")).toHaveCount(3);
+  });
+});

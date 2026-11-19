@@ -64,6 +64,7 @@ Most of this was learned the hard way; the numbers and incident stories live in 
 - Scanning is server-first, device-always; the fallback is not optional. Captures are PNG, 245×342. OCR needs a native-resolution crop from the client (a Pages deploy); the server never has the pixels.
 - Re-run `node scripts/measure-detail.mjs` before touching `MIN_DETAIL = 16`.
 - Unsettled rows SHOW the collector number and never read it.
+- The camera asks Mault (`/api/cards/identify`) only when phash is unsure, and Mault may only CONFIRM one of phash's candidates, never a card with a same-name look-alike (`src/scan/cameraMault.ts`). Mault alone leaked reprints on the eval; do not loosen to "Mault alone".
 
 ## Metrics and caching
 

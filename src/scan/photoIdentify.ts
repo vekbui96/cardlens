@@ -155,11 +155,12 @@ export async function identifyPhoto(
   photo: Blob,
   token: string,
   index: CardIndex | null = null,
+  timeoutMs = IDENTIFY_TIMEOUT_MS,
 ): Promise<PhotoScanResult> {
   if (!token) throw new PhotoAuthError("connect this device in Settings to identify photos");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), IDENTIFY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(`${apiBaseUrl()}/cards/identify`, {

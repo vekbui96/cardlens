@@ -49,6 +49,13 @@ export const METRIC_EVENTS = [
   "scan.via.device",
   /** An uploaded photo, answered by the photo engine (Mault) behind /api/cards/identify. */
   "scan.via.mault",
+  /**
+   * A camera capture phash could not settle, answered by Mault too (its
+   * native-resolution guide crop). Counted beside scan.via.server/device.
+   */
+  "scan.via.camera_mault",
+  /** ...and Mault confirmed one of phash's candidates, settling the row. */
+  "scan.camera_mault.confirmed",
   // --- Scanning. Resolution, counted when a batch is committed. -------------
   /** Batches committed ("Add N"). */
   "scan.batch",
