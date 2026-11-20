@@ -187,10 +187,10 @@ async function seedMovers(page: Page): Promise<void> {
     number,
     at: 1_700_000_000_000 + i * 1000,
   }));
-  await page.addInitScript(
-    ([key, owned]) => localStorage.setItem(key as string, JSON.stringify(owned)),
-    [COLLECTION_KEY, rows] as const,
-  );
+  await page.addInitScript(([key, owned]) => localStorage.setItem(key as string, JSON.stringify(owned)), [
+    COLLECTION_KEY,
+    rows,
+  ] as const);
   await page.route("**/api/printings/**", (route) => {
     const setId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
     const byNumber: Record<string, unknown[]> = {};
@@ -205,6 +205,20 @@ async function seedMovers(page: Page): Promise<void> {
     });
   });
 }
+
+test.describe("biggest movers", () => {
+  test("lists risers and fallers by percent, and skips rounding noise", async ({ page }) => {
+    await seedMovers(page);
+    await openV2(page, "/");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("heading", { name: "Biggest movers", level: 2 })).toBeVisible();
+    await expect(main).toContainText("+23.0% 7d");
+    await expect(main).toContainText("−20.0% 7d");
+    await expect(main).not.toContainText("€");
+    // Six cards qualify. swsh3-20 is EUR 0.03 -> 0.05: +66% on paper, never shown.
+    await expect(main.getByRole("link", { name: /7d$/ })).toHaveCount(6);
+  });
+});
 
 test.describe("home @visual", () => {
   test("movers: owned cards with Cardmarket averages", async ({ page }) => {
