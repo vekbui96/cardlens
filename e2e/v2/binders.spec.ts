@@ -269,4 +269,12 @@ test.describe("binders @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("shelf.png", { fullPage: true });
   });
+
+  test("the shelf just after a delete", async ({ page }) => {
+    await openShelf(page);
+    await page.getByRole("button", { name: "Delete Showcase", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm delete Showcase", exact: true }).click();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("shelf-after-delete.png", { fullPage: true });
+  });
 });
