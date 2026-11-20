@@ -191,7 +191,10 @@ test.describe("home @visual", () => {
         { id: "pop3", name: "POP Series 3", total: 17, printedTotal: 17 },
         { id: "base2", name: "Jungle", total: 64, printedTotal: 64 },
       ];
-      localStorage.setItem("cardlens:v1:cache:sets:v3", JSON.stringify({ all: { value: sets, storedAt: now } }));
+      localStorage.setItem(
+        "cardlens:v1:cache:sets:v3",
+        JSON.stringify({ all: { value: sets, storedAt: now } }),
+      );
       const byNumber = (count: number) =>
         Object.fromEntries(
           Array.from({ length: count }, (_, i) => [
@@ -207,8 +210,9 @@ test.describe("home @visual", () => {
         }),
       );
     });
-    await openV2(page, "/", { seed: "collection" });
+    await openV2(page, "/", { seed: "numbered" });
     await expect(page.getByRole("heading", { name: "Closest to complete" })).toBeVisible();
+    await expect(page.getByRole("main")).toContainText("to go");
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-progress.png", { fullPage: true });
   });

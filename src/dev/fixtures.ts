@@ -48,11 +48,11 @@ function cardSlot(i: number): CardSlot {
   };
 }
 
-function ownFirst(count: number) {
+function ownFirst(count: number, withNumbers = false) {
   const repo = repos();
   const now = Date.now();
-  for (const [cardId, finish, set] of CARDS.slice(0, count)) {
-    repo.addOwned(cardId, finish, set, now);
+  for (const [cardId, finish, set, n] of CARDS.slice(0, count)) {
+    repo.addOwned(cardId, finish, set, now, withNumbers ? String(n) : undefined);
   }
 }
 
@@ -67,6 +67,9 @@ export const FIXTURES: Record<string, () => void> = {
 
   /** A collection with some printings held, and no binders. */
   collection: () => ownFirst(5),
+
+  /** The same five, with their collector numbers recorded (rows marked on a set screen). */
+  numbered: () => ownFirst(5, true),
 
   /** Binders worth looking at: a full one, a sparse one, and an empty one. */
   binders: () => {

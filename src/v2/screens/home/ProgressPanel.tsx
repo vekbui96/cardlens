@@ -12,6 +12,8 @@ export interface ProgressRow {
   cards: number;
   total: number;
   tiers: SetTiers;
+  /** What is left, e.g. "9 cards to go, about $12.40"; absent when nothing is. */
+  finishLine?: string | null;
 }
 
 function setHref(setId: string, setName: string): string {
@@ -116,29 +118,32 @@ function SetRow({ row }: { row: ProgressRow }) {
   return (
     <Card
       href={setHref(row.setId, row.setName)}
-      label={`${row.setName}, ${figure.text}${word ? `, ${word} complete` : ""}`}
+      label={`${row.setName}, ${figure.text}${word ? `, ${word} complete` : ""}${row.finishLine ? `, ${row.finishLine}` : ""}`}
       className={styles.tile}
     >
-      <Meter
-        value={figure.ratio}
-        label={row.setName}
-        detail={
-          <>
-            {figure.text}
-            {word ? (
-              <span
-                className={cx(
-                  styles.tierWord,
-                  row.tiers.tier === "master" ? styles.tierMaster : styles.tierBase,
-                )}
-              >
-                {" "}
-                {word}
-              </span>
-            ) : null}
-          </>
-        }
-      />
+      <Stack gap={1}>
+        <Meter
+          value={figure.ratio}
+          label={row.setName}
+          detail={
+            <>
+              {figure.text}
+              {word ? (
+                <span
+                  className={cx(
+                    styles.tierWord,
+                    row.tiers.tier === "master" ? styles.tierMaster : styles.tierBase,
+                  )}
+                >
+                  {" "}
+                  {word}
+                </span>
+              ) : null}
+            </>
+          }
+        />
+        {row.finishLine ? <span className={styles.resumeMeta}>{row.finishLine}</span> : null}
+      </Stack>
     </Card>
   );
 }
