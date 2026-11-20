@@ -15,8 +15,8 @@
      elevated request mode=deploy -> deploy-server.ps1 (data snapshot, reset, npm ci if needed, restart,
      repeated health checks, auto-rollback)
   3. front end: wait for the deploy-pages run of THIS sha (cancelling an older run stuck in `waiting` for
-     30+ min), then the served index.html must reference a /cardlens/assets/index-*.js, every chunk it
-     names must load, -ExpectString must be in one of them, and headless Edge must render #root
+     30+ min), then the served index.html must reference a /cardlens/assets/index-*.js, every chunk reachable
+     from it (any depth, live-check.ps1) must load, -ExpectString must be in one of them, and headless Edge must render #root
   4. on any failure: server rollback (elevated, if the server was deployed) + git revert of the merge on
      main (Pages then redeploys the old build) + verify the string is gone and the page renders
 
@@ -33,6 +33,7 @@ param(
     [string]$ExpectString = ''
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\live-check.ps1"   # Test-LiveSite (whole chunk graph); replaces the lib.ps1 copy
 . "$PSScriptRoot\gate-rules.ps1"
 Start-ScriptLog "deploy-$Issue"
 Add-GhToPath
