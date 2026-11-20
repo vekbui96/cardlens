@@ -1,6 +1,6 @@
 import type { PokemonSet } from "../../../models/cards.ts";
 import { setTiers, type SetTiers } from "../../../models/setCompletion.ts";
-import { compareCompletion, ownedIn } from "../../../features/collection/completionTier.ts";
+import { compareCompletion, ownedIn, shownRatio } from "../../../features/collection/completionTier.ts";
 
 /**
  * How the set list is grouped and ordered.
@@ -37,6 +37,44 @@ export interface SetGroups {
   hiddenByFilter: number;
 }
 
+export type SetSortKey = "recent" | "complete" | "missing" | "az";
+
+export const SET_SORTS: readonly { key: SetSortKey; label: string }[] = [
+  { key: "recent", label: "Recent" },
+  { key: "complete", label: "Most complete" },
+  { key: "missing", label: "Fewest missing" },
+  { key: "az", label: "A to Z" },
+];
+
+/** Cards still missing on the tier the row draws; undefined when the size is unknown. */
+function missingOf({ tiers }: SetRowModel): number | undefined {
+  return tiers.baseTotal !== undefined
+    ? tiers.baseTotal - tiers.baseOwned
+    : tiers.masterTotal !== undefined
+      ? tiers.masterTotal - tiers.masterOwned
+      : undefined;
+}
+
+/**
+ * Re-order the rows of one group. `recent` is today's order, untouched. The
+ * others are stable (ties keep the incoming order) and a set whose size is
+ * unknown goes last — never counted as 0% or as finished.
+ */
+export function sortRows(rows: SetRowModel[], sort: SetSortKey): SetRowModel[] {
+  if (sort === "recent") return rows;
+  const indexed = rows.map((row, i) => ({ row, i }));
+  const byKnown = (va: number | undefined, vb: number | undefined, dir: 1 | -1): number =>
+    va === undefined ? (vb === undefined ? 0 : 1) : vb === undefined ? -1 : dir * (va - vb);
+  indexed.sort((x, y) => {
+    let c = 0;
+    if (sort === "complete") c = byKnown(shownRatio(x.row.tiers), shownRatio(y.row.tiers), -1);
+    else if (sort === "missing") c = byKnown(missingOf(x.row), missingOf(y.row), 1);
+    else c = x.row.set.name.localeCompare(y.row.set.name, undefined, { sensitivity: "base" });
+    return c || x.i - y.i;
+  });
+  return indexed.map((e) => e.row);
+}
+
 /**
  * Does this set match what was typed?
  *
@@ -64,6 +102,7 @@ export function groupSets(
   ownedCountsBySet: Record<string, number>,
   ownedNumbersBySet: Record<string, string[]>,
   query = "",
+  sort: SetSortKey = "recent",
 ): SetGroups {
   const all = sets.filter((s) => matchesQuery(s, query));
   const hiddenByFilter = sets.length - all.length;
@@ -83,12 +122,21 @@ export function groupSets(
     .sort(compareCompletion);
 
   return {
-    inProgress: started.filter((s) => s.tiers.tier === "none"),
-    complete: started.filter((s) => s.tiers.tier !== "none"),
+    inProgress: sortRows(
+      started.filter((s) => s.tiers.tier === "none"),
+      sort,
+    ),
+    complete: sortRows(
+      started.filter((s) => s.tiers.tier !== "none"),
+      sort,
+    ),
     started,
-    rest: all
-      .filter((s) => (ownedCountsBySet[s.id] ?? 0) === 0)
-      .map((set) => ({ set, tiers: tiersFor(set), owned: 0 })),
+    rest: sortRows(
+      all
+        .filter((s) => (ownedCountsBySet[s.id] ?? 0) === 0)
+        .map((set) => ({ set, tiers: tiersFor(set), owned: 0 })),
+      sort,
+    ),
     hiddenByFilter,
   };
 }

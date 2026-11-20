@@ -9,7 +9,7 @@ import { Row, Stack, cx } from "../../primitives/index.ts";
 import { OwnedView } from "./OwnedView.tsx";
 import { SetsView } from "./SetsView.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
-import { groupSets, summaryLine } from "./setGroups.ts";
+import { groupSets, summaryLine, type SetSortKey } from "./setGroups.ts";
 import styles from "./collection.module.css";
 
 /**
@@ -56,12 +56,13 @@ export function CollectionScreen() {
   const { provider: textProvider } = useTextEntry();
   const { data, isLoading, isError, refetch } = useSets();
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SetSortKey>("recent");
 
   const mode = screen.name === "owned" ? "owned" : "sets";
 
   const groups = useMemo(
-    () => groupSets(data ?? [], ownedCountsBySet, ownedNumbersBySet, query),
-    [data, ownedCountsBySet, ownedNumbersBySet, query],
+    () => groupSets(data ?? [], ownedCountsBySet, ownedNumbersBySet, query, sort),
+    [data, ownedCountsBySet, ownedNumbersBySet, query, sort],
   );
 
   /**
@@ -147,6 +148,8 @@ export function CollectionScreen() {
           onRetry={() => void refetch()}
           query={query}
           onQuery={setQuery}
+          sort={sort}
+          onSort={setSort}
           hasCollection={collection.length > 0}
         />
       )}

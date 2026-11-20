@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import type { SetTiers } from "../../../models/setCompletion.ts";
-import { Card, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
-import { rowLabel, type SetGroups, type SetRowModel } from "./setGroups.ts";
+import { Card, Chip, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import { SET_SORTS, rowLabel, type SetGroups, type SetRowModel, type SetSortKey } from "./setGroups.ts";
 import styles from "./collection.module.css";
 
 interface SetsViewProps {
@@ -16,6 +16,9 @@ interface SetsViewProps {
   onQuery: (next: string) => void;
   /** True once the collection holds anything, for the empty-state line. */
   hasCollection: boolean;
+  /** Order within each group; lasts for the visit only. */
+  sort: SetSortKey;
+  onSort: (next: SetSortKey) => void;
 }
 
 /**
@@ -35,6 +38,8 @@ export function SetsView({
   query,
   onQuery,
   hasCollection,
+  sort,
+  onSort,
 }: SetsViewProps) {
   const shown = groups.inProgress.length + groups.complete.length + groups.rest.length;
   const filteredToNothing = shown === 0 && query.trim().length > 0 && !isLoading && !isError;
@@ -56,6 +61,16 @@ export function SetsView({
           </span>
         ) : null}
       </Row>
+
+      <div role="group" aria-label="Sort sets by">
+        <Row gap={2} wrap>
+          {SET_SORTS.map((s) => (
+            <Chip key={s.key} onPress={() => onSort(s.key)} pressed={s.key === sort}>
+              {s.label}
+            </Chip>
+          ))}
+        </Row>
+      </div>
 
       {isError ? (
         <Panel title="Sets could not be loaded" headingLevel={2} tone="raised">
