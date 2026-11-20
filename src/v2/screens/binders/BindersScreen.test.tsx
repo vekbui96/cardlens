@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
-import { liveBinders, mergeBinders } from "../../../storage/binders.ts";
+import { beforeEach, describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -143,80 +142,6 @@ describe("deleting a binder", () => {
 
     expect(screen.getByRole("group", { name: "Delete Showcase?" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Delete Jolteon?" })).not.toBeInTheDocument();
-  });
-});
-
-describe("undoing a delete", () => {
-  async function deleteIt(user: ReturnType<typeof userEvent.setup>, name: string) {
-    await user.click(screen.getByRole("button", { name: `Delete ${name}` }));
-    await user.click(screen.getByRole("button", { name: `Confirm delete ${name}` }));
-  }
-
-  it("offers an Undo on the shelf after the second press", async () => {
-    const user = userEvent.setup();
-    seed(fullBinder({ name: "Oops" }));
-    render(<BindersScreen />, { wrapper: harness() });
-
-    await deleteIt(user, "Oops");
-
-    expect(screen.getByRole("status")).toHaveTextContent("Deleted “Oops”");
-    expect(screen.getByRole("button", { name: "Undo delete of Oops" })).toBeInTheDocument();
-  });
-
-  it("brings the binder back whole: id, name, pages and trade flag", async () => {
-    const user = userEvent.setup();
-    const original = fullBinder({ name: "Oops", forTrade: true });
-    seed(original);
-    render(<BindersScreen />, { wrapper: harness() });
-
-    await deleteIt(user, "Oops");
-    await user.click(screen.getByRole("button", { name: "Undo delete of Oops" }));
-
-    expect(await screen.findByText("Oops")).toBeInTheDocument();
-    const [back] = new Repositories().getBinders();
-    expect(back.id).toBe(original.id);
-    expect(back.name).toBe("Oops");
-    expect(back.pages).toEqual(original.pages);
-    expect(back.forTrade).toBe(true);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  });
-
-  it("wins against the tombstone when merged, even in the same millisecond", async () => {
-    const user = userEvent.setup();
-    seed(fullBinder({ name: "Oops" }));
-    render(<BindersScreen />, { wrapper: harness() });
-
-    await deleteIt(user, "Oops");
-    const tombstones = new Repositories().getBinderRecords();
-    await user.click(screen.getByRole("button", { name: "Undo delete of Oops" }));
-
-    const records = new Repositories().getBinderRecords();
-    const merged = mergeBinders(tombstones, records);
-    expect(liveBinders(merged)).toHaveLength(1);
-    expect(mergeBinders(records, tombstones)).toEqual(expect.arrayContaining([records[0]]));
-    expect(liveBinders(mergeBinders(records, tombstones))).toHaveLength(1);
-  });
-
-  it("goes away after ten seconds and the delete stands", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      seed(fullBinder({ name: "Oops" }));
-      render(<BindersScreen />, { wrapper: harness() });
-
-      await deleteIt(user, "Oops");
-      expect(screen.getByRole("status")).toBeInTheDocument();
-
-      act(() => {
-        vi.advanceTimersByTime(10_500);
-      });
-
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
-      expect(new Repositories().getBinders()).toHaveLength(0);
-      expect(new Repositories().getBinderRecords()[0].deletedAt).toBeGreaterThan(0);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

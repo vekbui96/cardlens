@@ -1,21 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { useBindersValue } from "../../../hooks/useBindersValue.ts";
-import {
-  emptyBinder,
-  type Binder,
-  type BinderFormat,
-  type BinderSlot,
-} from "../../../models/binderLayout.ts";
+import { emptyBinder, type BinderFormat, type BinderSlot } from "../../../models/binderLayout.ts";
 import { Grid, Stack } from "../../primitives/index.ts";
 import { BinderTile } from "./BinderTile.tsx";
 import { CreateBinderTile } from "./CreateBinderTile.tsx";
 import { newBinderId, shelfSummary } from "./shelf.ts";
 import styles from "./binders.module.css";
-
-/** How long "Undo" stays on the shelf after a delete. */
-const UNDO_WINDOW_MS = 10_000;
 
 /**
  * Your binders — a shelf.
@@ -64,38 +56,6 @@ export function BindersScreen() {
     [push, saveBinder],
   );
 
-  /**
-   * The binder just deleted, held for a few seconds so it can come back.
-   *
-   * The tombstone drops the pages, so the only copy of the arrangement is this
-   * one. Undo saves it again through the ordinary `saveBinder`, stamped after the
-   * tombstone so last-write-wins picks it on every device; nothing new is stored
-   * and the merge rule is untouched. Navigating away drops it: the delete stands.
-   */
-  const [undo, setUndo] = useState<{ binder: Binder; deletedAt: number } | null>(null);
-
-  useEffect(() => {
-    if (!undo) return;
-    const timer = setTimeout(() => setUndo(null), UNDO_WINDOW_MS);
-    return () => clearTimeout(timer);
-  }, [undo]);
-
-  const remove = useCallback(
-    (binder: Binder) => {
-      deleteBinder(binder.id);
-      // Taken after the delete, so it is never earlier than the tombstone's own stamp.
-      setUndo({ binder, deletedAt: Date.now() });
-    },
-    [deleteBinder],
-  );
-
-  const restore = useCallback(() => {
-    if (!undo) return;
-    // One past the tombstone, so a same-millisecond tie (which goes to the tombstone) cannot happen.
-    saveBinder({ ...undo.binder, updatedAt: Math.max(Date.now(), undo.deletedAt + 1) });
-    setUndo(null);
-  }, [saveBinder, undo]);
-
   return (
     <Stack gap={5}>
       <Stack gap={1} as="header">
@@ -105,20 +65,6 @@ export function BindersScreen() {
             tile below already says the shelf is empty. */}
         {binders.length > 0 ? <p className={styles.summary}>{shelfSummary(binders)}</p> : null}
       </Stack>
-
-      {undo ? (
-        <div role="status" className={styles.undo}>
-          <span className={styles.undoText}>Deleted “{undo.binder.name}”.</span>
-          <button
-            type="button"
-            className={styles.undoButton}
-            onClick={restore}
-            aria-label={`Undo delete of ${undo.binder.name}`}
-          >
-            Undo
-          </button>
-        </div>
-      ) : null}
 
       {/*
        * `auto-fill` at a fixed minimum, which is only safe because a cover is a
@@ -135,7 +81,7 @@ export function BindersScreen() {
             summary={values.byId.get(binder.id)}
             valuesLoading={values.isLoading}
             onOpen={() => push({ name: "binder", binderId: binder.id })}
-            onDelete={() => remove(binder)}
+            onDelete={() => deleteBinder(binder.id)}
           />
         ))}
 

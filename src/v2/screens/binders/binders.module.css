@@ -274,40 +274,6 @@
   font-weight: var(--v2-fw-bold);
 }
 
-/* --- Undo after a delete --------------------------------------------------- */
-
-.undo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--v2-space-3);
-  padding: var(--v2-space-2) var(--v2-space-4);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  border-radius: var(--v2-radius-sm);
-  font-size: var(--v2-fs-small);
-}
-
-.undoText {
-  overflow-wrap: anywhere;
-}
-
-.undoButton {
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-0) var(--v2-space-4);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  border-radius: var(--v2-radius-sm);
-  background: transparent;
-  color: var(--v2-fg);
-  font: inherit;
-  font-weight: var(--v2-fw-bold);
-  cursor: pointer;
-}
-
-.undoButton:focus-visible {
-  outline: var(--v2-focus-ring);
-  outline-offset: var(--v2-focus-offset);
-}
-
 /* --- Making one ----------------------------------------------------------- */
 
 /*
