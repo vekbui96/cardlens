@@ -186,7 +186,41 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
   behind (live site and server unchanged or not, main reverted or not, the PR left open or not, what Ve
   needs to do, if anything). Then `## Details` with the technical record (files, PR, merge sha, local gate
   and CI evidence incl. fix rounds and any flaky rerun, the `MERGE-PR GAP` commits if any, deploy/verify
-  lines, log excerpts, screenshot paths). The runner adds "## Run data" after you exit.
+  lines, log excerpts, and, for any change a person can see, the before and after screenshots as images
+  (see "Screenshots" below; local paths under ARTIFACTS alone do not count, Ve cannot open them). The
+  runner adds "## Run data" after you exit.
+- **Screenshots** (required for any change a person can see). For any change a person can see, attach
+  before and after screenshots to the PR body (390px phone width, plus 1440px if the desktop layout
+  changed), taken from the v2 and/or v1 screen the change touches, and repeat them in the final comment's
+  Details. A UI change without them fails the plan. How, with the tools you have (you cannot upload
+  images or run Playwright yourself, and `gh pr edit` is blocked):
+  - **The images are the v2 visual baselines.** Every `@visual` case in a spec under `e2e/v2/` runs at
+    390x844 (`v2-phone`) and 1440x900 (`v2-desktop`) by itself, and `update-snapshots.ps1` writes them as
+    `e2e/v2/<spec>.ts-snapshots/<name>-v2-phone-linux.png` and `...-v2-desktop-linux.png` (only the
+    `-linux.png` files; ignore `-win32.png`). Before = that file on main, after = the regenerated file you
+    commit on the branch. Nothing extra is stored: the baselines are committed anyway, and merges keep
+    every branch commit (`--merge`), so the links stay valid.
+  - **No baseline shows the change yet** (a screen or state without a visual case, or a v1 screen): add
+    an `@visual` case for it to that screen's spec under `e2e/v2/` (a v1 screen is opened with `?v=1`
+    instead of through `openV2`; never edit `playwright.config.ts`, rule 8), with a fixture/seed that
+    actually shows the change. Commit it in TWO steps so a "before" exists: first the new case plus its
+    baselines taken from the unchanged UI (run `update-snapshots.ps1` before touching the UI, commit
+    with a message saying it records the current look), then your change plus the regenerated baselines.
+    "Before" is then that first commit.
+  - **Links** render as images in a PR body or comment because the repo is public:
+    `![before, 390px](https://raw.githubusercontent.com/vekbui96/cardlens/<sha>/<path to the png>)`,
+    with full 40-character shas from `git -C "<CLONE>" rev-parse <ref>` (never a branch name: it moves
+    or is deleted). PR body: before = `git -C "<CLONE>" merge-base HEAD origin/main` (or the first
+    commit above), after = the pushed head. Final comment: before = `<mergeSha>^1` (main before the
+    merge; or the first commit above), after = `<mergeSha>`. Lay them out as a small table per screen:
+    rows phone (and desktop when it changed), columns Before / After.
+  - **A CI fix round that changes those baselines:** the PR body cannot be edited, so post the new images
+    with `gh pr comment <pr#> -R vekbui96/cardlens --body-file <file>` ("Screenshots updated in fix round
+    <k>") after pushing.
+  - If the change cannot be shown in a fixture-backed screenshot at all, say why in the plan comment
+    (step 5); that fails the plan: refuse it as in step 3 (class `scope`, outcome `skipped`). Changes
+    nobody can see (server-only, data, tests, tooling) need no screenshots; say "no visible change" in the
+    PR body.
 
 1. **Take the issue:** print `LOOP-ISSUE-START <ISSUE>`. If the header says `retry: yes`, this is the ONE
    automatic retry of a build that failed for a reason outside the change (`check-approval.ps1 -Issue <n>`
@@ -221,7 +255,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    only, or Pages + server, naming the server-relevant files); a change-specific string that only the new
    front-end build will contain (new UI copy is best; it is how the deploy is verified in the served
    chunks); data risk (does any stored shape, whitelist or merge rule change? if yes, stop: rule 8);
-   rollback plan. Then progress `plan` ok.
+   screenshots (for a visible change: which screen(s), which existing `@visual` baselines will show it at
+   390px and, if the desktop layout changes, 1440px, or which new case you will add first; see
+   "Screenshots" above; "no visible change" otherwise); rollback plan. Then progress `plan` ok.
 6. **Build** in CLONE (reset to origin/main by the runner) on `loop/<n>-<short-slug>` (lowercase, digits,
    dashes): `git -C "<CLONE>" fetch origin`, `git -C "<CLONE>" checkout -b loop/<n>-<slug> origin/main`,
    then `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step install` (node_modules for the clone, plus the Playwright
@@ -253,10 +289,17 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      changed. **Read every changed PNG** and confirm the change is the one you intended and nothing else
      moved; commit those files with your change BEFORE opening the PR (CI compares against them). A
      baseline that changed for a screen you did not touch means something is wrong: stop and investigate.
+     These regenerated baselines are your "after" screenshots (and a new case's first commit your
+     "before"; see "Screenshots" above). A visible change whose baselines did not change means no visual
+     case shows it yet: add one before opening the PR.
 8. **PR.** Stage explicit paths, commit with `-F`, `git -C "<CLONE>" push -u origin loop/<n>-<slug>`, then
    `gh pr create -R vekbui96/cardlens --base main --head loop/<n>-<slug> --title "<title>" --body-file <file>`.
    The body links `#<n>`, summarises the change, the failing-first test and the test evidence, says
-   whether the server will be deployed, and ends with `Generated by the innovation loop (Claude Code)`.
+   whether the server will be deployed, has a `## Screenshots` section (for any change a person can see,
+   before and after images at 390px, plus 1440px if the desktop layout changed, linked by commit sha as in
+   "Screenshots" above; otherwise "No visible change."), and ends with
+   `Generated by the innovation loop (Claude Code)`. A visible change without the images is not ready
+   for a PR: go back and produce them.
    Progress `test` ok (the gate results) before it, `pr` ok (detail "PR #<pr#>") after it, and post one
    short NEW comment on the issue: "PR opened: <link>".
 9. **CI, then merge (= front-end deploy).** Check the time first (before every wait-ci and merge-pr call):
@@ -323,7 +366,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 11. **Success:** `progress.ps1 -Issue <n> -Stage done -Outcome deployed -Detail "<one line>"`, then the
     final comment: `## Synopsis`, then `## Details` (what changed, PR link, merge sha, local gate, CI
     including fix rounds and any flaky rerun, gap commits, whether the server was deployed, the
-    verification lines from the deploy output, screenshot paths under ARTIFACTS). Then
+    verification lines from the deploy output, the before/after screenshot table again with links pinned to
+    `<mergeSha>^1` / `<mergeSha>` (see "Screenshots" above; the deploy's own `live.png` under ARTIFACTS
+    may be listed as a path, but does not replace them)). Then
     `gh issue edit <n> -R vekbui96/cardlens --add-label loop:deployed --remove-label loop:in-progress` and
     `gh issue close <n> -R vekbui96/cardlens`, and print `LOOP-ISSUE-END <n> deployed`. End the session
     (section 6): the runner decides whether another build session starts.
@@ -368,6 +413,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 
 - Local: `test-gate.ps1 -Step all` PASS (install + browser, format, verify, Pages-style build with the
   string in the chunks); visual baselines regenerated and read when UI changed. No local e2e.
+- Screenshots: any change a person can see has before/after images (390px, plus 1440px when the desktop
+  layout changed) from the v2 visual baselines in the PR body and the final comment; without them the
+  plan fails.
 - CI (the e2e gate for every change): Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression
   all completed + success on the PR's exact head, waited for with ONE `wait-ci.ps1` call per head; at most
   3 fix rounds; one rerun only for known-flaky specs via `ci-rerun.ps1`.
