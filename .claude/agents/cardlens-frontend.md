@@ -80,7 +80,9 @@ If the work needs any of that, stop and say so.
 
 Run checks through the **`cardlens-test-runner`** agent (Haiku: verify, plus e2e
 when screens changed). Read its summary instead of raw output; it labels
-failures KNOWN or NEW, and NEW ones are yours to fix.
+failures KNOWN or NEW, and NEW ones are yours to fix. (Interactive sessions only:
+the innovation loop can't call agents. It uses its own `test-gate.ps1` and CI, so
+skip this there.)
 
 Commit and push only when your brief says the change ships (Ve's direct requests
 do, per the workspace `CLAUDE.md`). Deploying stays with the `ship` skill or

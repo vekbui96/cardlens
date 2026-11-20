@@ -92,7 +92,8 @@ raw output:
 - `cardlens-live-check`: after a deploy;
 - `cardlens-triage`: collecting facts when something is broken.
 
-They report; you decide.
+They report; you decide. (Interactive sessions only: the innovation loop can't call
+agents. It uses its own `test-gate.ps1`, CI and `deploy.ps1`, so skip this there.)
 
 Commit, push and deploy only when your brief says the change ships. Ve's direct
 requests do ship end to end (workspace `CLAUDE.md`), and then follow the `ship`
