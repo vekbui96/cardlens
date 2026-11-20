@@ -15,7 +15,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
  */
 
 /** Fixtures, matching `src/dev/fixtures.ts`. */
-export type Fixture = "empty" | "collection" | "binders" | "trade" | "scan";
+export type Fixture = "empty" | "collection" | "numbered" | "binders" | "trade" | "scan";
 
 export interface OpenOptions {
   /** Named starting state. Applied before React mounts. */
