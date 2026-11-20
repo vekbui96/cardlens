@@ -263,4 +263,15 @@ test.describe("set cards @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("set-cards.png");
   });
+
+  test("the v1 web set screen filter bar", async ({ page }) => {
+    // The v1 web shell (`?v=1&ui=web`), which v2's screen does not cover: its
+    // filter bar (rarity chips, Missing only, By value, Share) is what this shows.
+    await installSet(page, 12);
+    await page.goto(`/?v=1&ui=web#${ROUTE}`);
+    await expect(page.getByRole("button", { name: "Missing only" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Share" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("set-cards-web.png");
+  });
 });

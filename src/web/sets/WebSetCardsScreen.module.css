@@ -198,6 +198,13 @@
   margin: 0 var(--cl-gap);
 }
 
+.listBox {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: var(--cl-fs-small);
+}
+
 @media (min-width: 1000px) {
   .shareFallback,
   .linkFallback {

@@ -26,6 +26,8 @@ import { formatUsd } from "../../utils/format.ts";
 import { screenToPath } from "../../app/screenUrl.ts";
 import { handOverLink } from "../handOverLink.ts";
 import { LinkFallback } from "../LinkFallback.tsx";
+import { copyLink } from "../handOverLink.ts";
+import { missingListText } from "./missingListText.ts";
 import { track } from "../../services/metrics.ts";
 import styles from "./WebSetCardsScreen.module.css";
 
@@ -202,6 +204,23 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     () => costToFinishLabel(costToFinish(slots, view.priceFor)),
     [slots, view.priceFor],
   );
+
+  /** Where the last "Copy missing list" got to; "failed" puts the text on screen. */
+  const [listState, setListState] = useState<"idle" | "copied" | "failed" | "none">("idle");
+  const [listText, setListText] = useState("");
+
+  /** Built from the same slots as the cost line, so it follows the rarity chips. */
+  const copyMissingList = async () => {
+    const { text, count } = missingListText(slots, view.priceFor, setName);
+    if (count === 0) {
+      setListState("none");
+      return;
+    }
+    setListText(text);
+    const ok = await copyLink(text);
+    setListState(ok ? "copied" : "failed");
+    if (ok) setTimeout(() => setListState("idle"), 2500);
+  };
 
   const excludedCount = useMemo(() => slots.filter((s) => s.excluded).length, [slots]);
 
@@ -454,6 +473,14 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
         </button>
         <button
           type="button"
+          className={styles.chip}
+          onClick={() => void copyMissingList()}
+          disabled={view.isLoading || view.cards.length === 0}
+        >
+          {listState === "copied" ? "Missing list copied" : "Copy missing list"}
+        </button>
+        <button
+          type="button"
           className={`${styles.chip} ${byValue ? styles.chipOn : ""}`}
           aria-pressed={byValue}
           onClick={() => setByValue((on) => !on)}
@@ -510,6 +537,25 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
           <button type="button" className={styles.chip} disabled={sharing} onClick={() => void share()}>
             Try live link
           </button>
+        </div>
+      ) : null}
+
+      {listState === "none" ? (
+        <p className={styles.summary} role="status">
+          Nothing missing: no list to copy.
+        </p>
+      ) : null}
+      {listState === "failed" ? (
+        <div className={styles.linkFallback} role="alert">
+          <p className={styles.summary}>Copy failed: select and copy the list below.</p>
+          <textarea
+            className={styles.listBox}
+            readOnly
+            rows={8}
+            value={listText}
+            aria-label="Missing list"
+            onFocus={(e) => e.currentTarget.select()}
+          />
         </div>
       ) : null}
 
