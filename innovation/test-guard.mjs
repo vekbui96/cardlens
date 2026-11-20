@@ -50,6 +50,11 @@ const allow = [
     `gh pr create -R vekbui96/cardlens --base main --head loop/12-binder-hint --title "x" --body-file "${W}\\pr.md"`,
   ),
   ps(`gh run view 123 -R vekbui96/cardlens --log-failed`),
+  // before/after screenshots (LOOP.md "Screenshots"): pin raw links to full shas, re-post after a fix round
+  ps(`git -C "${C}" merge-base HEAD origin/main`),
+  ps(`git -C "${C}" rev-parse HEAD`),
+  ps(`git -C "${C}" rev-parse 0123456789abcdef0123456789abcdef01234567^1`),
+  ps(`gh pr comment 40 -R vekbui96/cardlens --body-file "${W}\\shots.md"`),
   // CI is the e2e gate: read-only run/check commands on this repo, the wait helper, the flaky-rerun helper
   ps(`gh run list -R vekbui96/cardlens --branch loop/12-binder-hint --json databaseId,status,conclusion`),
   ps(`gh run view 123 -R vekbui96/cardlens --json jobs`),
