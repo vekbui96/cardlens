@@ -44,6 +44,45 @@ const SIT = set({
 /** `n` numbered cards, "1".."n" — all inside any printed run at least that big. */
 const numbers = (n: number): string[] => Array.from({ length: n }, (_, i) => String(i + 1));
 
+describe("groupSets sort", () => {
+  const A = set({ id: "a", name: "Alpha", total: 100, printedTotal: 100 });
+  const B = set({ id: "b", name: "bravo", total: 50, printedTotal: 50 });
+  const C = set({ id: "c", name: "Charlie", total: 200, printedTotal: 200 });
+  /** Size unknown: no total at all. */
+  const U = set({ id: "u", name: "Unknown" });
+  // a 10/100 (90 missing), b 10/50 (40 missing), c 100/200 (100 missing, 50%), u 5 (unknown)
+  const counts = { a: 10, b: 10, c: 100, u: 5 };
+  const nums = { a: numbers(10), b: numbers(10), c: numbers(100), u: numbers(5) };
+  const ids = (s: "recent" | "complete" | "missing" | "az") =>
+    groupSets([A, B, C, U], counts, nums, "", s).inProgress.map((r) => r.set.id);
+
+  it("recent keeps today's order", () => {
+    expect(ids("recent")).toEqual(["c", "b", "a", "u"]);
+  });
+
+  it("most complete puts the highest ratio first and unknown totals last", () => {
+    expect(ids("complete")).toEqual(["c", "b", "a", "u"]);
+  });
+
+  it("fewest missing puts the smallest gap first and unknown totals last", () => {
+    expect(ids("missing")).toEqual(["b", "a", "c", "u"]);
+  });
+
+  it("A to Z ignores case", () => {
+    expect(ids("az")).toEqual(["a", "b", "c", "u"]);
+  });
+
+  it("keeps catalog order on ties among untouched sets", () => {
+    const rest = groupSets([OBF, BASE, SIT], {}, {}, "", "complete").rest;
+    expect(rest.map((r) => r.set.id)).toEqual(["sv3", "base1", "swsh12"]);
+  });
+
+  it("sorts untouched sets A to Z too", () => {
+    const rest = groupSets([OBF, BASE, SIT], {}, {}, "", "az").rest;
+    expect(rest.map((r) => r.set.name)).toEqual(["Base", "Obsidian Flames", "Silver Tempest"]);
+  });
+});
+
 describe("groupSets", () => {
   it("puts a started, unfinished set in progress and leaves untouched sets out of it", () => {
     const groups = groupSets([OBF, BASE], { sv3: 3 }, { sv3: ["1", "2", "3"] });
