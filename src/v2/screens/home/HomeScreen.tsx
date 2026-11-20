@@ -3,15 +3,21 @@ import { screenToPath } from "../../../app/screenUrl.ts";
 import { continueTarget, topProgress } from "../../../features/home/continueSet.ts";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
+import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
+import { topMovers, type TopMovers } from "../../../models/movement.ts";
+import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { countBinder, type Binder } from "../../../models/binderLayout.ts";
 import { Card, Panel, Stack } from "../../primitives/index.ts";
 import { EmptyHome } from "./EmptyHome.tsx";
 import { GrowthChart } from "./GrowthChart.tsx";
+import { MoversPanel } from "./MoversPanel.tsx";
 import { ProgressPanel } from "./ProgressPanel.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
 import { syncNotice } from "./homeSummary.ts";
 import styles from "./Home.module.css";
+
+const NO_MOVERS: TopMovers<OwnedPrintingRow> = { risers: [], fallers: [] };
 
 /**
  * Home: what is my collection, and what is it worth, right now.
@@ -61,6 +67,13 @@ export function HomeScreen() {
   const { data: sets } = useSets();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
+  /*
+   * The rows My cards lists, on query keys the total above already fetches, so
+   * no request is added. Movers are drawn only once names and prices have
+   * settled: a list taken mid-load would reshuffle in front of the reader.
+   */
+  const owned = useOwnedCards({ backfill: false });
+  const movers = owned.pricing === 0 && owned.pending === 0 ? topMovers(owned.rows) : NO_MOVERS;
 
   const notice = syncNotice(syncStatus);
 
@@ -120,6 +133,9 @@ export function HomeScreen() {
       </div>
 
       <ProgressPanel resume={resume} rows={rows} loading={sets === undefined} />
+
+      {/* Below Sets in progress, so it appearing never moves what is above it. */}
+      <MoversPanel movers={movers} />
 
       {/*
         The one destination Home repeats from the nav, and only because it can

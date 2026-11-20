@@ -1,5 +1,6 @@
 import { byCollectorNumber } from "../integrations/pokemon/sort.ts";
 import { compareFinishes } from "./finishes.ts";
+import type { EurAverages } from "./movement.ts";
 
 /** One printing you hold, flattened out of the collection for listing. */
 export interface OwnedPrintingRow {
@@ -11,6 +12,8 @@ export interface OwnedPrintingRow {
   finish: string;
   /** USD, when the printing has a price. Absent is not zero. */
   price?: number;
+  /** Cardmarket averages in EUR. Only ever turned into a percentage; see topMovers. */
+  eur?: EurAverages;
   imageSmall?: string;
   /** Hi-res art. The showcase stage is far larger than a 245px thumbnail. */
   imageLarge?: string;

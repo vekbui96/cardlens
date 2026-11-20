@@ -69,6 +69,59 @@ export function aggregateMovement(series: (EurAverages | undefined)[]): Movement
   };
 }
 
+/**
+ * A card must average at least this many EUR, both over the last day and over
+ * the last week, before its own percentage is shown.
+ *
+ * `MIN_HOLDINGS` above explains why a single cheap card has no honest figure:
+ * one cent on EUR 0.03 reads as ±33%. At EUR 1.00 one cent is at most 1%, so
+ * what is left is a real move. A judgement, not a measurement.
+ */
+export const MOVER_FLOOR_EUR = 1;
+/** Rows shown on each side of the Biggest movers strip. */
+export const MOVERS_PER_SIDE = 3;
+/** A side with fewer qualifying cards than this shows nothing. */
+export const MIN_MOVERS_PER_SIDE = 2;
+
+export interface Mover<T> {
+  row: T;
+  /** Week-on-week change in percent (avg1 against avg7). Never an amount. */
+  pct: number;
+}
+
+export interface TopMovers<T> {
+  risers: Mover<T>[];
+  fallers: Mover<T>[];
+}
+
+/**
+ * The owned printings that moved most this week, as percentages.
+ *
+ * The per-card counterpart `aggregateMovement` deliberately lacks, made safe by
+ * a floor instead of an aggregate: only printings whose avg1 and avg7 are both
+ * at least `MOVER_FLOOR_EUR` qualify, so a rounding step cannot rank. EUR values
+ * are read here and never returned, so they cannot reach the screen or be added
+ * to the USD total. Ties keep the input order.
+ */
+export function topMovers<T extends { eur?: EurAverages }>(rows: T[]): TopMovers<T> {
+  const ranked: Mover<T>[] = [];
+  for (const row of rows) {
+    const eur = row.eur;
+    if (!eur) continue;
+    if (!(eur.avg1 >= MOVER_FLOOR_EUR) || !(eur.avg7 >= MOVER_FLOOR_EUR)) continue;
+    const change = pct(eur.avg1, eur.avg7);
+    if (change === undefined) continue;
+    ranked.push({ row, pct: change });
+  }
+  const side = (movers: Mover<T>[]) =>
+    movers.length < MIN_MOVERS_PER_SIDE ? [] : movers.slice(0, MOVERS_PER_SIDE);
+  return {
+    // 0.05 is where formatPct stops printing a sign: a "+0.0%" is not a mover.
+    risers: side(ranked.filter((m) => m.pct >= 0.05).sort((a, b) => b.pct - a.pct)),
+    fallers: side(ranked.filter((m) => m.pct <= -0.05).sort((a, b) => a.pct - b.pct)),
+  };
+}
+
 /** "+3.2%" / "−1.8%" / "0.0%". Uses a real minus sign, not a hyphen. */
 export function formatPct(value: number): string {
   const rounded = Math.abs(value) < 0.05 ? 0 : value;
