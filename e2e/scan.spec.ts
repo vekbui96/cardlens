@@ -301,6 +301,32 @@ test.describe("card scanner", () => {
     await expect(page.getByRole("button", { name: "Add 1 card" })).toBeEnabled();
   });
 
+  test("says what the batch is worth and how much of it is priced", async ({ page }) => {
+    // "What is this pile worth" is the question at a shop. The footer always
+    // says how many cards its figure stands for, whether or not the mock
+    // printings carry a price, so this pins the line rather than a number.
+    await page.goto("/?ui=web#/scan");
+    await startCamera(page);
+    await page.getByTestId("capture").click();
+    await page.getByRole("button", { name: /review 1/i }).click();
+
+    await page.getByTestId("pick-by-set").click();
+    const dialog = page.getByRole("dialog", { name: "Pick the card by set" });
+    await dialog.getByLabel("Set").selectOption("base1");
+    await dialog.getByLabel("Filter by number or name").fill("Charizard");
+    await dialog
+      .getByRole("button", { name: /Charizard/ })
+      .first()
+      .click();
+
+    await expect(page.getByTestId("batch-worth")).toContainText("Batch worth");
+    await expect(page.getByTestId("batch-worth")).toContainText("of 1 priced");
+
+    // Rejecting the only card leaves nothing to value, so the line goes.
+    await page.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByTestId("batch-worth")).toHaveCount(0);
+  });
+
   test("captures on its own once a card holds still", async ({ page }) => {
     await page.goto("/?ui=web#/scan");
     await startCamera(page, { auto: true });

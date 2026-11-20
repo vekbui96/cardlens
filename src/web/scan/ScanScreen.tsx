@@ -26,6 +26,8 @@ import { ScanFinishes } from "./ScanFinishes.tsx";
 import { ScanCardPicker } from "./ScanCardPicker.tsx";
 import { ScanOwnedNote } from "./ScanOwnedNote.tsx";
 import { alreadyOwnedSummary, scanOwnership } from "./scanOwned.ts";
+import { batchValue, batchValueSummary, rowPriceNote } from "./scanValue.ts";
+import { useScanPrices, type ScanPriceRow } from "./useScanPrices.ts";
 import type { CollectFinish } from "../../models/cards.ts";
 import styles from "./ScanScreen.module.css";
 
@@ -721,6 +723,31 @@ export function ScanScreen() {
   }).length;
   const heldSummary = alreadyOwnedSummary(alreadyHeld, keeping);
 
+  /*
+   * Prices for every identified row, asked only while reviewing: during the
+   * burst itself nothing shows them, and the finish chips ask for the same sets
+   * under the same key once review opens. Rejected rows still show their price
+   * (it may be why they were rejected) but never count toward the batch.
+   */
+  const priceRows = useMemo<ScanPriceRow[]>(
+    () =>
+      reviewing
+        ? queue.flatMap((c) => {
+            const card = chosenOf(c)?.card;
+            return card ? [{ key: c.key, card, finish: c.finish }] : [];
+          })
+        : [],
+    [reviewing, queue],
+  );
+  const prices = useScanPrices(priceRows);
+  const worthSummary = batchValueSummary(
+    batchValue(
+      queue.filter(isKept).map((c) => c.key),
+      prices.priceOf,
+    ),
+    prices.loading,
+  );
+
   if (reviewing) {
     return (
       <Screen
@@ -750,6 +777,7 @@ export function ScanScreen() {
           <ul className={styles.review}>
             {queue.map((c) => {
               const chosen = chosenOf(c);
+              const priceNote = chosen ? rowPriceNote(prices.priceOf(c.key)) : null;
 
               /*
                * The card's own number, for a row the scanner could not settle.
@@ -860,6 +888,13 @@ export function ScanScreen() {
                       </>
                     )}
 
+                    {/* The picked printing's price; an unpriced one says nothing. */}
+                    {priceNote ? (
+                      <span className={styles.sub} data-testid="scan-price">
+                        {priceNote}
+                      </span>
+                    ) : null}
+
                     {chosen ? <ScanOwnedNote cardId={chosen.card.id} finish={c.finish} /> : null}
 
                     {/*                      Which recogniser answered, per row and not just per
@@ -961,6 +996,11 @@ export function ScanScreen() {
           {heldSummary ? (
             <p className={styles.hint} data-testid="owned-summary">
               {heldSummary}
+            </p>
+          ) : null}
+          {worthSummary ? (
+            <p className={styles.hint} data-testid="batch-worth">
+              {worthSummary}
             </p>
           ) : null}
           <button type="button" className={styles.shutter} onClick={commit} disabled={keeping === 0}>
