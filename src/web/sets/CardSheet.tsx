@@ -1,9 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CardImage } from "../../components/CardImage.tsx";
 import { useDialogFocus } from "../useDialogFocus.ts";
 import { finishLabel } from "../../models/finishes.ts";
+import { countBinder } from "../../models/binderLayout.ts";
+import type { Binder } from "../../models/binderLayout.ts";
 import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
 import { formatUsd } from "../../utils/format.ts";
+import { describePocket, putInBinder } from "./putInBinder.ts";
 import styles from "./CardSheet.module.css";
 
 /**
@@ -79,6 +82,127 @@ function PrintingRow({
   );
 }
 
+/**
+ * "Put in a binder": one printing of this card into a binder's next empty pocket.
+ *
+ * Without it a card reaches a binder only from inside that binder — leave the
+ * set, open the binder, tap a pocket, search for the card again by name. The
+ * printing is chosen here, where its finish and price are on screen, so there
+ * is no second search and no chance of picking the wrong reprint.
+ *
+ * Every outcome says something: placed (and where), a full binder, a printing
+ * already there. A tap that does nothing and says nothing is this codebase's
+ * house bug.
+ */
+function PutInBinder({
+  card,
+  printings,
+  defaultFinish,
+  binders,
+  onSaveBinder,
+}: {
+  card: PokemonCardSummary;
+  printings: CollectFinish[];
+  defaultFinish: CollectFinish;
+  binders: Binder[];
+  onSaveBinder: (binder: Binder) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [finish, setFinish] = useState<CollectFinish>(defaultFinish);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // The library already lists live binders newest-edit first; sorted again here
+  // so the picker's order does not depend on a caller remembering that.
+  const sorted = useMemo(
+    () => binders.filter((b) => !b.deletedAt).sort((a, b) => b.updatedAt - a.updatedAt),
+    [binders],
+  );
+  const chosen = printings.includes(finish) ? finish : defaultFinish;
+
+  const place = (binder: Binder) => {
+    const result = putInBinder(
+      binder,
+      {
+        kind: "card",
+        cardId: card.id,
+        finish: chosen,
+        // Denormalised so the page renders offline and before the catalog
+        // answers — the same slot the binder's own search writes.
+        name: card.name,
+        imageSmall: card.imageSmall,
+        collectorNumber: card.collectorNumber,
+      },
+      Date.now(),
+    );
+    if (result.ok) {
+      onSaveBinder(result.binder);
+      setNotice({ ok: true, text: `Placed in ${binder.name}, ${describePocket(result.at)}` });
+    } else if (result.reason === "full") {
+      setNotice({ ok: false, text: `No empty pocket in ${binder.name}` });
+    } else {
+      const where = result.at ? ` (${describePocket(result.at)})` : "";
+      setNotice({ ok: false, text: `${finishLabel(chosen)} is already in ${binder.name}${where}` });
+    }
+  };
+
+  if (!open) {
+    return (
+      <button type="button" className={styles.putToggle} aria-expanded={false} onClick={() => setOpen(true)}>
+        Put in a binder
+      </button>
+    );
+  }
+
+  return (
+    <section className={styles.put} aria-label="Put in a binder">
+      <h3 className={styles.putTitle}>Put in a binder</h3>
+      {printings.length > 1 ? (
+        <div className={styles.putFinishes} role="group" aria-label="Printing to place">
+          {printings.map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={styles.putFinish}
+              aria-pressed={f === chosen}
+              aria-label={`Place the ${finishLabel(f)}`}
+              onClick={() => {
+                setFinish(f);
+                setNotice(null);
+              }}
+            >
+              {finishLabel(f)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {sorted.length === 0 ? (
+        <p className={styles.putEmpty}>No binders yet. Make one on the Binders screen.</p>
+      ) : (
+        <ul className={styles.putBinders}>
+          {sorted.map((binder) => {
+            const counts = countBinder(binder);
+            return (
+              <li key={binder.id}>
+                <button type="button" className={styles.putBinder} onClick={() => place(binder)}>
+                  <span className={styles.putBinderName}>{binder.name}</span>
+                  <span className={styles.putBinderCount}>
+                    {counts.filled} of {counts.pockets} pockets used
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {notice ? (
+        <p className={notice.ok ? styles.putPlaced : styles.putRefused} role="status">
+          {notice.text}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function CardSheet({
   card,
   finishes,
@@ -91,7 +215,12 @@ export function CardSheet({
   onRemoveAll,
   onClose,
   storageDegraded = false,
+  binders,
+  onSaveBinder,
 }: {
+  /** The user's binders, for "Put in a binder". Both this and onSaveBinder, or neither. */
+  binders?: Binder[];
+  onSaveBinder?: (binder: Binder) => void;
   card: PokemonCardSummary;
   finishes: CollectFinish[];
   owned: CollectFinish[];
@@ -125,6 +254,8 @@ export function CardSheet({
 
   /** A hand-marked finish the set data does not list — must stay visible and removable. */
   const extras = useMemo(() => owned.filter((f) => !finishes.includes(f)), [owned, finishes]);
+  /** Every printing that can go in a binder: the listed ones, then any hand-marked extra. */
+  const printings = useMemo(() => [...finishes, ...extras], [finishes, extras]);
 
   return (
     <div className={styles.backdrop} onClick={onClose} role="presentation">
@@ -207,6 +338,18 @@ export function CardSheet({
                 />
               ))}
             </ul>
+          ) : null}
+          {binders && onSaveBinder && printings.length > 0 ? (
+            <PutInBinder
+              // Remounted per card: a notice about the last card must not
+              // carry over to the next one opened.
+              key={card.id}
+              card={card}
+              printings={printings}
+              defaultFinish={owned[0] ?? printings[0]}
+              binders={binders}
+              onSaveBinder={onSaveBinder}
+            />
           ) : null}
           {/* Clearing a card one printing at a time is the common case done the
               slow way — a wrongly-scanned card can hold four. This removes them

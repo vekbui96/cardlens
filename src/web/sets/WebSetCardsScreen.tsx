@@ -107,6 +107,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
     ownedFinishCountsBySet,
     ownedNumbersBySet,
     storageDegraded,
+    binders,
+    saveBinder,
   } = useLibrary();
   const { data: sets } = useSets();
   const set = sets?.find((s) => s.id === setId);
@@ -586,6 +588,8 @@ export function WebSetCardsScreen({ setId, setName }: { setId: string; setName: 
             setOpenCardId(null);
           }}
           storageDegraded={storageDegraded}
+          binders={binders}
+          onSaveBinder={saveBinder}
           onClose={() => setOpenCardId(null)}
         />
       ) : null}

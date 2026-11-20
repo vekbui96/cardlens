@@ -254,6 +254,128 @@
   outline-offset: 2px;
 }
 
+/* --- Put in a binder ------------------------------------------------------ */
+
+/* Outlined, not filled: Done is the sheet's one primary action. */
+.putToggle {
+  width: 100%;
+  min-height: 44px;
+  border-radius: var(--cl-radius-sm);
+  border: var(--cl-border);
+  background: none;
+  color: var(--cl-fg);
+  font: inherit;
+  font-size: var(--cl-fs-body);
+  cursor: pointer;
+}
+
+.put {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-sm);
+  padding: var(--cl-gap-sm) 0;
+  border-top: var(--cl-border);
+}
+
+.putTitle {
+  margin: 0;
+  font-size: var(--cl-fs-body);
+  color: var(--cl-fg);
+}
+
+.putFinishes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cl-gap-xs);
+}
+
+.putFinish {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: var(--cl-border);
+  background: none;
+  color: var(--cl-fg-muted);
+  font: inherit;
+  font-size: var(--cl-fs-small);
+  cursor: pointer;
+}
+
+.putFinish[aria-pressed="true"] {
+  border-color: var(--cl-accent);
+  background: color-mix(in srgb, var(--cl-accent) 12%, transparent);
+  color: var(--cl-fg);
+}
+
+.putBinders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cl-gap-xs);
+}
+
+.putBinder {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-gap);
+  padding: 0 var(--cl-gap);
+  border-radius: var(--cl-radius-sm);
+  border: var(--cl-border);
+  background: var(--cl-surface-raised);
+  color: var(--cl-fg);
+  font: inherit;
+  font-size: var(--cl-fs-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.putBinderName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.putBinderCount {
+  margin-left: auto;
+  padding-left: 0.75rem;
+  font-size: var(--cl-fs-small);
+  color: var(--cl-fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.putToggle:focus-visible,
+.putFinish:focus-visible,
+.putBinder:focus-visible {
+  outline: var(--cl-focus-ring);
+  outline-offset: 2px;
+}
+
+.putEmpty,
+.putPlaced,
+.putRefused {
+  margin: 0;
+  font-size: var(--cl-fs-small);
+  line-height: 1.35;
+}
+
+.putEmpty {
+  color: var(--cl-fg-muted);
+}
+
+.putPlaced {
+  color: var(--cl-accent-strong);
+}
+
+.putRefused {
+  color: var(--cl-warn);
+}
+
 /* --- Excluding a printing from the set ----------------------------------- */
 
 .printingRow {

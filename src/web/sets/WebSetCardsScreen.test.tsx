@@ -247,6 +247,37 @@ describe("WebSetCardsScreen", () => {
     expect(slot("125", "Reverse Holo")).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("puts a card in a binder from the sheet, saved where the binder screen reads it", async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+    new Repositories().saveBinder({
+      id: "b-fire",
+      name: "Fire",
+      format: "9",
+      pages: [{ slots: { 0: { kind: "card", cardId: "sv3-1", finish: "normal" } } }],
+      createdAt: now,
+      updatedAt: now,
+    });
+    render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+    await findSlot("125", "Normal");
+    await user.click(details("125", "Normal"));
+    const sheet = screen.getByRole("dialog");
+    await user.click(within(sheet).getByRole("button", { name: "Put in a binder" }));
+    await user.click(within(sheet).getByRole("button", { name: /^Fire/ }));
+
+    expect(within(sheet).getByRole("status")).toHaveTextContent("Placed in Fire, page 1, pocket 2");
+    // The count on the picker follows the save, so a second tap reads as a refusal.
+    expect(within(sheet).getByRole("button", { name: /^Fire/ })).toHaveTextContent("2 of 9 pockets used");
+    const stored = new Repositories().getBinders().find((b) => b.id === "b-fire");
+    expect(stored?.pages[0].slots[1]).toMatchObject({
+      kind: "card",
+      finish: "normal",
+      collectorNumber: "125",
+    });
+    expect(stored?.pages[0].slots[0]).toEqual({ kind: "card", cardId: "sv3-1", finish: "normal" });
+  });
+
   it("offers no remove action on a card with nothing held", async () => {
     const user = userEvent.setup();
     render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });

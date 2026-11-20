@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { CardSheet } from "./CardSheet.tsx";
 import type { CollectFinish, PokemonCardSummary } from "../../models/cards.ts";
+import type { Binder, CardSlot } from "../../models/binderLayout.ts";
 
 const card = {
   id: "me5-007",
@@ -116,6 +117,118 @@ describe("CardSheet focus", () => {
     expect(document.activeElement).toBe(opener);
     expect(dialog).toHaveAttribute("data-returns-focus");
     opener.remove();
+  });
+});
+
+describe("CardSheet put in a binder", () => {
+  const NOW = 1_763_000_000_000;
+  const placedCard = (cardId: string): CardSlot => ({ kind: "card", cardId, finish: "holo" });
+
+  function makeBinder(id: string, name: string, slots: Record<number, CardSlot>, updatedAt: number): Binder {
+    return { id, name, format: "4", pages: [{ slots }], createdAt: NOW - 1000, updatedAt };
+  }
+
+  const older = makeBinder("b-old", "Older", {}, NOW - 500);
+  const pikachu = makeBinder("b-pika", "Pikachu", { 0: placedCard("x-1"), 1: placedCard("x-2") }, NOW - 100);
+  const full = makeBinder(
+    "b-full",
+    "Full one",
+    { 0: placedCard("x-1"), 1: placedCard("x-2"), 2: placedCard("x-3"), 3: placedCard("x-4") },
+    NOW - 300,
+  );
+
+  it("lists binders newest edited first, with pockets used", () => {
+    renderSheet({ binders: [older, full, pikachu], onSaveBinder: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+
+    const names = within(screen.getByRole("region", { name: "Put in a binder" }))
+      .getAllByRole("button", { name: /pockets used$/ })
+      .map((b) => b.textContent);
+    expect(names).toEqual([
+      "Pikachu2 of 4 pockets used",
+      "Full one4 of 4 pockets used",
+      "Older0 of 4 pockets used",
+    ]);
+  });
+
+  it("places the chosen printing in the next empty pocket and says where", () => {
+    const onSaveBinder = vi.fn();
+    renderSheet({ owned: ["reverse"], binders: [pikachu], onSaveBinder });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+    // Defaults to the printing held.
+    expect(screen.getByRole("button", { name: "Place the Reverse Holo" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Pikachu/ }));
+
+    expect(onSaveBinder).toHaveBeenCalledTimes(1);
+    const saved = onSaveBinder.mock.calls[0][0] as Binder;
+    expect(saved.pages[0].slots[2]).toEqual({
+      kind: "card",
+      cardId: "me5-007",
+      finish: "reverse",
+      name: "Test Card",
+      imageSmall: "",
+      collectorNumber: "007",
+    });
+    expect(saved.pages[0].slots[0]).toEqual(pikachu.pages[0].slots[0]);
+    expect(screen.getByRole("status")).toHaveTextContent("Placed in Pikachu, page 1, pocket 3");
+  });
+
+  it("places another printing once it is picked", () => {
+    const onSaveBinder = vi.fn();
+    renderSheet({ owned: ["reverse"], binders: [older], onSaveBinder });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Place the Normal" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Older/ }));
+
+    expect((onSaveBinder.mock.calls[0][0] as Binder).pages[0].slots[0]).toMatchObject({ finish: "normal" });
+  });
+
+  it("says a full binder has no empty pocket and saves nothing", () => {
+    const onSaveBinder = vi.fn();
+    renderSheet({ binders: [full], onSaveBinder });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Full one/ }));
+
+    expect(onSaveBinder).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("No empty pocket in Full one");
+  });
+
+  it("refuses a printing already in that binder", () => {
+    const onSaveBinder = vi.fn();
+    const has = makeBinder(
+      "b-has",
+      "Has it",
+      { 3: { kind: "card", cardId: "me5-007", finish: "normal" } },
+      NOW,
+    );
+    renderSheet({ binders: [has], onSaveBinder });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Has it/ }));
+
+    expect(onSaveBinder).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Normal is already in Has it (page 1, pocket 4)");
+  });
+
+  it("says so when there are no binders", () => {
+    renderSheet({ binders: [], onSaveBinder: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: "Put in a binder" }));
+
+    expect(screen.getByText(/No binders yet/)).toBeInTheDocument();
+  });
+
+  it("is absent when the caller offers no binders", () => {
+    renderSheet();
+
+    expect(screen.queryByRole("button", { name: "Put in a binder" })).not.toBeInTheDocument();
   });
 });
 
