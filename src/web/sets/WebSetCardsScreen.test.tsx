@@ -425,6 +425,67 @@ describe("WebSetCardsScreen", () => {
     await waitFor(() => expect(screen.queryByTestId("cost-to-finish")).toBeNull());
   });
 
+  describe("copy missing list", () => {
+    const cards: RawCard[] = ["501", "502", "503"].map((number) => ({
+      id: `sv3-${number}`,
+      name: `Card ${number}`,
+      number,
+      set: { id: SET_ID, name: SET_NAME },
+    }));
+    const printings = {
+      tcgdexSetId: "sv03",
+      byNumber: {
+        "501": [{ type: "normal", price: 1.5 }],
+        "502": [{ type: "normal" }],
+        "503": [{ type: "normal", price: 4 }],
+      } as Record<string, { type: string; foil?: string; price?: number }[]>,
+    };
+
+    it("copies the cards still missing, without the ones you own", async () => {
+      const user = userEvent.setup();
+      const writeText = clipboardSpy();
+      serveCustom(cards, printings);
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await user.click(await findSlot("503", "Normal"));
+      await user.click(screen.getByRole("button", { name: "Copy missing list" }));
+
+      expect(writeText).toHaveBeenCalledWith(
+        [`${SET_NAME}: missing 2 of 3`, "Card 501 #501 - $1.50", "Card 502 #502 - unpriced"].join("\n"),
+      );
+      expect(await screen.findByRole("button", { name: "Missing list copied" })).toBeInTheDocument();
+    });
+
+    it("shows the list to copy by hand when the clipboard refuses", async () => {
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.reject(new DOMException("denied", "NotAllowedError")) },
+      });
+      serveCustom(cards, printings);
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await findSlot("501", "Normal");
+      await user.click(screen.getByRole("button", { name: "Copy missing list" }));
+
+      expect(await screen.findByText(/Copy failed: select and copy/)).toBeInTheDocument();
+      expect((screen.getByLabelText("Missing list") as HTMLTextAreaElement).value).toContain("Card 501 #501");
+    });
+
+    it("says nothing is missing instead of copying an empty list", async () => {
+      const user = userEvent.setup();
+      const writeText = clipboardSpy();
+      serveCustom([cards[0]!], { tcgdexSetId: "sv03", byNumber: { "501": [{ type: "normal" }] } });
+      render(<WebSetCardsScreen setId={SET_ID} setName={SET_NAME} />, { wrapper: harness() });
+
+      await user.click(await findSlot("501", "Normal"));
+      await user.click(screen.getByRole("button", { name: "Copy missing list" }));
+
+      expect(await screen.findByText("Nothing missing: no list to copy.")).toBeInTheDocument();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+  });
+
   it("orders by value when asked, and returns to binder order", async () => {
     const user = userEvent.setup();
     const cards: RawCard[] = [
