@@ -25,6 +25,7 @@ param(
     [switch]$RevertOnly
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\live-check.ps1"   # Test-LiveSite (whole chunk graph); replaces the lib.ps1 copy
 Start-ScriptLog "rollback-$Issue"
 Add-GhToPath
 $null = Clear-SecretEnv

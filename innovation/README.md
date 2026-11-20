@@ -260,8 +260,9 @@ so the server deploy runs in the separate elevated task, which takes no argument
 
 - **Front end** = merging to main (`deploy-pages.yml`). `deploy.ps1` waits for the Pages run of THIS sha
   (and cancels an older run stuck in `waiting` for 30+ min, which otherwise blocks the `pages` group), then
-  checks the served `index.html` -> `/cardlens/assets/index-*.js` -> every chunk for a change-specific
-  string, and renders the page in headless Edge (a blank SPA returns 200). Rollback: `git revert` of the
+  checks the served `index.html` -> `/cardlens/assets/index-*.js` -> every chunk reachable from it at any
+  depth (`live-check.ps1` Find-InChunkGraph: Vite nests lazy chunks, e.g. entry -> V2App -> the v2 Home
+  chunk; capped at 400 files, every one must load) for a change-specific string, and renders the page in headless Edge (a blank SPA returns 200). Rollback: `git revert` of the
   merge on main + push, then the same checks for the string being gone.
 - **Server**, only when `server/`, a `tsconfig.node.json` shared file, `package.json` or the lockfile
   changed between the live HEAD and the merge: snapshot all of `D:\services\data` to
