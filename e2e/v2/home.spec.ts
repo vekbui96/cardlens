@@ -159,7 +159,64 @@ test.describe("the request budget", () => {
   });
 });
 
+/** The collection's storage key — `cardlens:v{STORAGE_VERSION}:collection`. */
+const COLLECTION_KEY = "cardlens:v1:collection";
+
+/**
+ * Cards from sets the mock catalog DOES have, each with the one printing the
+ * stubbed `/api/printings` answers for: [cardId, setId, number, finish, avg7, avg1].
+ * avg30 is not read by the movers strip. EUR figures; the screen shows percent only.
+ */
+const MOVERS: Array<[string, string, string, string, number, number]> = [
+  ["sv3-223", "sv3", "223", "holo", 40, 49.2], // +23.0%
+  ["base1-4", "base1", "4", "holo", 120, 138], // +15.0%
+  ["swsh7-215", "swsh7", "215", "holo", 80, 85], // +6.3%
+  ["sv3-125", "sv3", "125", "normal", 3, 2.4], // -20.0%
+  ["swsh1-25", "swsh1", "25", "normal", 5, 4.1], // -18.0%
+  ["base1-58", "base1", "58", "normal", 1.2, 1.0], // -16.7%
+  // Rounding noise: +66% on paper, EUR 0.05. Must never be ranked.
+  ["swsh3-20", "swsh3", "20", "normal", 0.03, 0.05],
+];
+
+/** Seed a collection of the cards above and answer printings with EUR averages. */
+async function seedMovers(page: Page): Promise<void> {
+  const rows = MOVERS.map(([cardId, setId, number, finish], i) => ({
+    cardId,
+    setId,
+    finish,
+    number,
+    at: 1_700_000_000_000 + i * 1000,
+  }));
+  await page.addInitScript(
+    ([key, owned]) => localStorage.setItem(key as string, JSON.stringify(owned)),
+    [COLLECTION_KEY, rows] as const,
+  );
+  await page.route("**/api/printings/**", (route) => {
+    const setId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+    const byNumber: Record<string, unknown[]> = {};
+    for (const [, set, number, finish, avg7, avg1] of MOVERS) {
+      if (set !== setId) continue;
+      byNumber[number] = [{ type: finish, price: 10, eur: { avg1, avg7, avg30: avg7 } }];
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ tcgdexSetId: setId, byNumber }),
+    });
+  });
+}
+
 test.describe("home @visual", () => {
+  test("movers: owned cards with Cardmarket averages", async ({ page }) => {
+    await seedMovers(page);
+    await openV2(page, "/");
+    await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Collection value" })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-movers.png", { fullPage: true });
+  });
+
   /**
    * The whole page, not the `main` element.
    *
