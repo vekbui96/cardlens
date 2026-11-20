@@ -5,7 +5,7 @@ import { useCatalog } from "../app/contexts.tsx";
 import { useLibrary } from "../app/LibraryProvider.tsx";
 import { useSets } from "./useSets.ts";
 import { printingsQuery } from "./useCollectionValue.ts";
-import { buildPrintingIndex, printingEur } from "../models/printingIndex.ts";
+import { buildPrintingIndex } from "../models/printingIndex.ts";
 import { collectorNumberFromCardId, marketPrice } from "../models/marketPrice.ts";
 import { useCatalogPrices } from "./useCatalogPrices.ts";
 import { useCatalogNames } from "./useCatalogNames.ts";
@@ -191,7 +191,6 @@ export function useOwnedCards({
         // TCGdex first, pokemontcg.io second — the one rule, shared with
         // Home's total rather than restated here. See models/marketPrice.ts.
         const price = marketPrice(pricesBySet.get(setId), catalogPrices, card.id, number, finish);
-        const eur = printingEur(pricesBySet.get(setId), number, finish);
         rows.push({
           cardId: card.id,
           setId,
@@ -202,7 +201,6 @@ export function useOwnedCards({
           ...(info?.image ? { imageSmall: info.image } : {}),
           ...(info?.large ? { imageLarge: info.large } : {}),
           ...(price !== undefined ? { price } : {}),
-          ...(eur ? { eur } : {}),
           at: card.at ?? 0,
         });
       }

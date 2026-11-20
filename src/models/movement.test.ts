@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateMovement, formatPct, MIN_HOLDINGS, topMovers, type EurAverages } from "./movement.ts";
+import { aggregateMovement, formatPct, MIN_HOLDINGS, type EurAverages } from "./movement.ts";
 
 const s = (avg1: number, avg7: number, avg30 = avg7): EurAverages => ({ avg1, avg7, avg30 });
 const many = (n: number, one: EurAverages) => Array.from({ length: n }, () => one);
@@ -69,71 +69,5 @@ describe("formatPct", () => {
     expect(formatPct(0)).toBe("0.0%");
     expect(formatPct(0.01)).toBe("0.0%");
     expect(formatPct(-0.02)).toBe("0.0%");
-  });
-});
-
-describe("topMovers", () => {
-  const row = (id: string, avg7: number, avg1: number, withEur = true) => ({
-    id,
-    ...(withEur ? { eur: s(avg1, avg7) } : {}),
-  });
-  const ids = (m: { row: { id: string } }[]) => m.map((x) => x.row.id);
-
-  it("never ranks rounding noise: EUR 0.03 -> 0.05 is below the floor", () => {
-    const m = topMovers([
-      row("noise", 0.03, 0.05),
-      row("a", 2, 3),
-      row("b", 2, 2.5),
-      row("c", 2, 1.5),
-      row("d", 2, 1.2),
-    ]);
-    expect(ids(m.risers)).toEqual(["a", "b"]);
-    expect(ids(m.fallers)).toEqual(["d", "c"]);
-  });
-
-  it("requires BOTH averages at the floor", () => {
-    const m = topMovers([
-      row("low1", 5, 0.9),
-      row("low7", 0.9, 5),
-      row("edge", 1, 1.2),
-      row("up", 2, 3),
-      row("dn1", 4, 2),
-      row("dn2", 4, 3),
-    ]);
-    expect(ids(m.risers)).toEqual(["up", "edge"]);
-    expect(ids(m.fallers)).toEqual(["dn1", "dn2"]);
-  });
-
-  it("orders by size of move and keeps input order on a tie", () => {
-    const m = topMovers([row("t1", 10, 11), row("big", 10, 15), row("t2", 10, 11), row("small", 10, 10.5)]);
-    expect(ids(m.risers)).toEqual(["big", "t1", "t2"]);
-    expect(m.fallers).toEqual([]);
-  });
-
-  it("shows at most three per side, biggest falls first", () => {
-    const rows = [1, 2, 3, 4, 5].map((n) => row(`f${n}`, 10, 10 - n));
-    expect(ids(topMovers(rows).fallers)).toEqual(["f5", "f4", "f3"]);
-  });
-
-  it("shows no side with fewer than two qualifying cards", () => {
-    const m = topMovers([row("only", 5, 6), row("d1", 5, 4), row("d2", 5, 3)]);
-    expect(m.risers).toEqual([]);
-    expect(ids(m.fallers)).toEqual(["d2", "d1"]);
-  });
-
-  it("skips cards without averages, flat cards and an avg7 of 0", () => {
-    const m = topMovers([
-      row("none", 0, 0, false),
-      row("zero", 0, 5),
-      row("flat", 5, 5),
-      row("tiny", 5, 5.001),
-    ]);
-    expect(m).toEqual({ risers: [], fallers: [] });
-  });
-
-  it("returns percentages only, never an EUR amount", () => {
-    const m = topMovers([row("a", 10, 12), row("b", 10, 11)]);
-    expect(m.risers.map((x) => x.pct)).toEqual([20, 10].map((p) => expect.closeTo(p, 5)));
-    expect(Object.keys(m.risers[0] as object).sort()).toEqual(["pct", "row"]);
   });
 });
