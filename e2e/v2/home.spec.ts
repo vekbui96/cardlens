@@ -176,4 +176,40 @@ test.describe("home @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home.png", { fullPage: true });
   });
+
+  /**
+   * "Closest to complete" rows. The mock catalog knows none of the seeded sets'
+   * sizes, so the sets list and two sets' printings go in through the app's own
+   * cache keys: ex2 and pop3 have printings (a price on the line), base2 has
+   * none (the count alone).
+   */
+  test("shows what each set still needs", async ({ page }) => {
+    await page.addInitScript(() => {
+      const now = Date.now();
+      const sets = [
+        { id: "ex2", name: "Sandstorm", total: 8, printedTotal: 8 },
+        { id: "pop3", name: "POP Series 3", total: 17, printedTotal: 17 },
+        { id: "base2", name: "Jungle", total: 64, printedTotal: 64 },
+      ];
+      localStorage.setItem("cardlens:v1:cache:sets:v3", JSON.stringify({ all: { value: sets, storedAt: now } }));
+      const byNumber = (count: number) =>
+        Object.fromEntries(
+          Array.from({ length: count }, (_, i) => [
+            String(i + 1),
+            [{ type: "normal", ...(i % 3 === 2 ? {} : { price: (i + 1) * 0.35 }) }],
+          ]),
+        );
+      localStorage.setItem(
+        "cardlens:v1:cache:printings:v4",
+        JSON.stringify({
+          ex2: { value: { tcgdexSetId: "ex2", byNumber: byNumber(8) }, storedAt: now },
+          pop3: { value: { tcgdexSetId: "pop3", byNumber: byNumber(6) }, storedAt: now },
+        }),
+      );
+    });
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Closest to complete" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-progress.png", { fullPage: true });
+  });
 });
