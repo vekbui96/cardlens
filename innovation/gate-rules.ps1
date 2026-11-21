@@ -16,6 +16,8 @@
   Get-SpecPlan        an approved spec's slices: opened, still to open, done? (Format-SpecProgress: its checklist)
   Get-RetryDecision   may an approved issue with loop:failed get its one automatic retry?
   Get-PrecheckDecision  does this run have anything to do at all, before claude is started?
+  Get-PlanBudgetVerdict / Test-BudgetAllowsModel / Split-BuildableByBudget  the ops hub's plan-budget
+                      verdict (normal | no-opus | hold; fails open) and which sessions it lets start
   Get-LoopMdSections / Get-SessionConfig / Get-SessionModel  one session per job: its prompt, model, caps
   Get-NextBuildDecision  may the runner start another build session?
   Get-BuildOutcome / Get-DeployCertainty  how did a build session end; did it leave the deploy state certain?
@@ -512,21 +514,102 @@ function Get-RetryDecision {
     return (& $mk $true "${class}: $(Get-FailureDescription $class); retried once automatically")
 }
 
+# ---- plan budget -------------------------------------------------------------------------------------
+# The ops hub writes D:\hub\state\plan-budget.json every 15 min (schema 1): verdict normal | no-opus | hold
+# from the Max plan's 5-hour and weekly utilization, which the loop shares with Ve's interactive use. The
+# runner (never claude) reads it before every session. It FAILS OPEN: the hub is optional and the plan's own
+# limits are the backstop, so a missing, unreadable, unknown-schema, unknown-verdict or stale file means
+# normal (with Warn = $true, logged as a WARN).
+$script:PlanBudgetPath = 'D:\hub\state\plan-budget.json'
+$script:PlanBudgetVerdicts = @('normal', 'no-opus', 'hold')
+
+# $Text: the file's content ($null / '' when the file is missing); $ReadError: why it could not be read.
+# Returns Verdict (normal | no-opus | hold), Reason (one line for the log and summary), Warn (fell open).
+function Get-PlanBudgetVerdict {
+    param([AllowNull()][AllowEmptyString()][string]$Text, [datetime]$NowUtc = [datetime]::UtcNow, [switch]$Ignore, [string]$ReadError = '')
+    $mk = { param([string]$V, [string]$Why, [bool]$Warn) [pscustomobject]@{ Verdict = $V; Reason = $Why; Warn = $Warn } }
+    $open = { param([string]$Why) & $mk 'normal' "plan budget $($Why): treated as normal (fail open)" $true }
+    if ($Ignore) { return (& $mk 'normal' 'plan budget not consulted (-IgnoreBudget)' $false) }
+    if ($ReadError) { return (& $open "file unreadable ($(ConvertTo-SafeLine $ReadError 120))") }
+    if ([string]::IsNullOrWhiteSpace($Text)) { return (& $open 'file missing or empty') }
+    try { $j = $Text | ConvertFrom-Json } catch { return (& $open 'file is not valid JSON') }
+    if ($null -eq $j -or -not ($j.PSObject.Properties.Name -contains 'schema') -or "$($j.schema)" -ne '1') { return (& $open "schema is not 1 (got '$(ConvertTo-SafeLine "$($j.schema)" 20)')") }
+    $v = "$($j.verdict)".Trim().ToLowerInvariant()
+    if ($script:PlanBudgetVerdicts -notcontains $v) { return (& $open "verdict '$(ConvertTo-SafeLine $v 20)' is unknown") }
+    $gen = $null
+    if ($j.generatedAt -is [datetime]) { $gen = $j.generatedAt.ToUniversalTime() }
+    else {
+        $p = [datetime]::MinValue
+        $st = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+        if ([datetime]::TryParse("$($j.generatedAt)", [Globalization.CultureInfo]::InvariantCulture, $st, [ref]$p)) { $gen = $p }
+    }
+    if ($null -eq $gen) { return (& $open 'generatedAt is missing or not a date') }
+    $staleMin = 30; $sv = 0
+    if ([int]::TryParse("$($j.staleAfterMinutes)", [ref]$sv) -and $sv -gt 0) { $staleMin = $sv }
+    $age = ($NowUtc.ToUniversalTime() - $gen).TotalMinutes
+    if ($age -gt $staleMin) { return (& $open "is stale (generated $([int]$age) min ago, stale after $staleMin)") }
+    $use = @()
+    foreach ($w in @(@('fiveHour', '5h'), @('weekly', 'week'))) {
+        $o = $j.($w[0]); if ($o -and $null -ne $o.pct -and "$($o.pct)" -ne '') { $use += "$($w[1]) $($o.pct)%" }
+    }
+    $why = "plan budget $v (generated $([int][math]::Max(0, $age)) min ago$(if ($use.Count) { '; ' + ($use -join ', ') })"
+    $rs = @($j.reasons | Where-Object { "$_".Trim() } | ForEach-Object { ConvertTo-SafeLine "$_" 120 })
+    if ($rs.Count -gt 0) { $why += ': ' + ($rs -join '; ') }
+    return (& $mk $v ($why + ')') $false)
+}
+
+# May a session on $Model start under $Verdict? hold: nothing; no-opus: anything that is not an Opus model
+# (an empty model, i.e. claude's own default, counts as Opus); normal: everything.
+function Test-BudgetAllowsModel {
+    param([string]$Verdict = 'normal', [string]$Model = '')
+    if ($Verdict -eq 'hold') { return $false }
+    if ($Verdict -eq 'no-opus') { return ($Model.Trim() -ne '' -and $Model -notmatch 'opus') }
+    return $true
+}
+
+# Phase A under the plan budget: which buildable issues may start now (Allowed, in queue order) and which wait
+# (Deferred: {Issue; Model}). A deferred issue stays approved and untouched: no label, no comment, no failure;
+# it is simply picked up by the first run whose verdict allows its model. $LabelsOf: issue number -> labels.
+function Split-BuildableByBudget {
+    param([int[]]$Buildable = @(), [hashtable]$LabelsOf = @{}, $Config, [string]$Override = '', [string]$Verdict = 'normal')
+    $allowed = @(); $deferred = @()
+    foreach ($n in @($Buildable | Where-Object { $null -ne $_ })) {
+        $l = @(); if ($LabelsOf.ContainsKey([int]$n)) { $l = @($LabelsOf[[int]$n]) }
+        $m = Get-SessionModel -Kind 'build' -Labels $l -Config $Config -Override $Override
+        if (Test-BudgetAllowsModel -Verdict $Verdict -Model $m) { $allowed += [int]$n } else { $deferred += [pscustomobject]@{ Issue = [int]$n; Model = $m } }
+    }
+    return [pscustomobject]@{ Allowed = @($allowed); Deferred = @($deferred) }
+}
+
 # The check run-loop.ps1 makes before starting claude (costs nothing). $Queue: the parsed check-approval.ps1
 # -List output, or $null when that failed (then claude is launched as before). Launch = $false only when
 # neither phase has anything to do.
+# Plan budget: $Budget is Get-PlanBudgetVerdict's result ($null = normal). hold -> Launch = $false, Hold = $true,
+# whatever the queue says. $Deferred: buildable issues whose build model the budget does not allow now
+# (Split-BuildableByBudget); they do not count as buildable. $PhaseBAllowed: may the proposal / review
+# session's model run under the budget (Test-BudgetAllowsModel)?
 function Get-PrecheckDecision {
-    param($Queue, [string]$Mode = 'FULL')
-    if ($Mode -eq 'PRODUCT_REVIEW') { return [pscustomobject]@{ Launch = $true; Reason = 'product review: always runs' } }
-    if ($null -eq $Queue -or $null -eq $Queue.slots) { return [pscustomobject]@{ Launch = $true; Reason = 'queue check failed: launching claude as usual' } }
-    $b = @($Queue.buildable | Where-Object { $null -ne $_ }).Count
+    param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true)
+    $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
+    if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
+    if ($Mode -eq 'PRODUCT_REVIEW') {
+        if (-not $PhaseBAllowed) { return (& $mk $false "product review: its model is not allowed by the $($Budget.Reason)") }
+        return (& $mk $true 'product review: always runs')
+    }
+    if ($null -eq $Queue -or $null -eq $Queue.slots) { return (& $mk $true 'queue check failed: launching claude as usual') }
+    $def = @($Deferred | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
+    $b = @($Queue.buildable | Where-Object { $null -ne $_ -and $def -notcontains [int]$_ }).Count
     $free = [int]$Queue.slots.free
     $aw = @($Queue.slots.awaitingReview | Where-Object { $null -ne $_ }).Count
     $why = @()
-    if ($Mode -eq 'FULL') { $why += "$b buildable approved issue(s)" } else { $why += "$Mode (no Phase A)" }
+    if ($Mode -eq 'FULL') {
+        $why += "$b buildable approved issue(s)"
+        if ($def.Count -gt 0) { $why += "$($def.Count) deferred by the plan budget ($(@($def | ForEach-Object { "#$_" }) -join ' '))" }
+    } else { $why += "$Mode (no Phase A)" }
     $why += "$free free proposal slot(s) ($aw awaiting review, cap $($Queue.slots.cap))"
-    $launch = (($Mode -eq 'FULL' -and $b -gt 0) -or $free -gt 0)
-    return [pscustomobject]@{ Launch = $launch; Reason = ($why -join ', ') }
+    if ($free -gt 0 -and -not $PhaseBAllowed) { $why += 'the proposal model is not allowed by the plan budget' }
+    $launch = (($Mode -eq 'FULL' -and $b -gt 0) -or ($free -gt 0 -and $PhaseBAllowed))
+    return (& $mk $launch ($why -join ', '))
 }
 
 # "Failed, waiting on <owner>" for the run summary and the run-data comments: one line, '' when none.
