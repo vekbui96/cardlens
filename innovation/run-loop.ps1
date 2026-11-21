@@ -57,6 +57,13 @@
   left of it.
 .PARAMETER Model
   Overrides every session's model (sessions.json). Empty = use sessions.json.
+.PARAMETER IgnoreBudget
+  Do not consult the ops hub's plan budget (D:\hub\state\plan-budget.json) this run: for Ve's supervised
+  runs. Without it the runner reads the verdict before every session: normal = as always; no-opus = no
+  session on an Opus model (Opus builds wait, approved and untouched, for a later run); hold = no session at
+  all (NOTHING-TO-DO, like the precheck). A missing, unreadable, unknown or stale file counts as normal (WARN).
+.PARAMETER BudgetFile
+  Where the plan budget is read from (default gate-rules.ps1 $PlanBudgetPath); for dry runs and tests.
 
   FOCUS.md (next to this script, Ve's steering for Phase B) is optional: missing, empty or only headings and
   comments means the header says FOCUS: none and the loop proposes as it always has.
@@ -83,6 +90,9 @@ param(
     [string]$Model = '',
     # with -DryRun only: plan from this saved check-approval.ps1 -List output instead of GitHub's live queue
     [string]$QueueFile = '',
+    # the ops hub's plan budget (gate-rules.ps1 Get-PlanBudgetVerdict): -IgnoreBudget for supervised runs
+    [switch]$IgnoreBudget,
+    [string]$BudgetFile = '',
     [string]$ClaudeExe = (Join-Path $env:USERPROFILE '.local\bin\claude.exe')
 )
 . "$PSScriptRoot\lib.ps1"
@@ -182,6 +192,30 @@ function Get-QueueLabels {
     $p = $Q.labels.PSObject.Properties | Where-Object { $_.Name -eq "$Issue" } | Select-Object -First 1
     if ($p) { return @($p.Value) }
     return @()
+}
+
+# The ops hub's plan-budget verdict, read now (the runner reads it, never claude; before every session, so a
+# verdict that changes mid-run is respected). Fails open: see gate-rules.ps1 Get-PlanBudgetVerdict.
+function Get-PlanBudget {
+    $path = $BudgetFile; if (-not $path) { $path = $script:PlanBudgetPath }
+    $text = $null; $err = ''
+    if (-not $IgnoreBudget) {
+        try { if (Test-Path -LiteralPath $path -PathType Leaf) { $text = [IO.File]::ReadAllText($path) } } catch { $err = "$($_.Exception.Message)" }
+    }
+    $b = Get-PlanBudgetVerdict -Text $text -ReadError $err -Ignore:$IgnoreBudget
+    if ($b.Warn) { Write-Log "budget: $($b.Reason) [$path]" 'WARN' } else { Write-Log "budget: $($b.Reason)" }
+    return $b
+}
+# Phase A's buildable issues split by the budget verdict (Allowed / Deferred), from a queue.
+function Split-QueueByBudget {
+    param($Q, [string]$Verdict)
+    $b = @($Q.buildable | Where-Object { $null -ne $_ })
+    $lo = @{}; foreach ($n in $b) { $lo[[int]$n] = @(Get-QueueLabels $Q ([int]$n)) }
+    return (Split-BuildableByBudget -Buildable $b -LabelsOf $lo -Config $Cfg -Override $Model -Verdict $Verdict)
+}
+function Format-Deferred {
+    param([object[]]$Deferred, [string]$Verdict)
+    return "plan budget ${Verdict}: deferred $(@($Deferred | ForEach-Object { "#$($_.Issue) ($($_.Model))" }) -join ', '); still approved, built by a later run once the verdict allows"
 }
 
 # After a build session: an issue it took that still carries loop:in-progress was left mid-build (the
@@ -371,16 +405,32 @@ try {
 
     # ---- precheck: anything to do at all? (no session, so it costs nothing) -----------------------
     $queue = Get-LoopQueue
-    $pre = Get-PrecheckDecision -Queue $queue -Mode $mode
+    # plan budget (the ops hub): which sessions may start at all
+    $budget = Get-PlanBudget
+    $deferred = @()
+    if ($mode -eq 'FULL' -and $null -ne $queue -and $budget.Verdict -ne 'hold') { $deferred = @((Split-QueueByBudget $queue $budget.Verdict).Deferred) }
+    $pbKind = 'propose'; if ($ProductReview) { $pbKind = 'review' }
+    $pbOk = Test-BudgetAllowsModel -Verdict $budget.Verdict -Model (Get-SessionModel -Kind $pbKind -Config $Cfg -Override $Model)
+    $pre = Get-PrecheckDecision -Queue $queue -Mode $mode -Budget $budget -Deferred @($deferred | ForEach-Object { $_.Issue }) -PhaseBAllowed $pbOk
     Write-Log "queue: $(Format-QueueLine $queue)"
+    if ($deferred.Count -gt 0) { Write-Log "Phase A: $(Format-Deferred $deferred $budget.Verdict)"; [void]$runNotes.Add("Phase A: $(Format-Deferred $deferred $budget.Verdict)") }
     Write-Log "precheck: launch=$($pre.Launch) ($($pre.Reason))"
     if (-not $pre.Launch) {
         $waitLine = Format-WaitingOnOwner -Waiting @($queue.waitingOnVe) -Who 'Ve'
-        $sumLines = @("Precheck (no claude session started): nothing to do.",
-            "- Phase A: $(if ($mode -eq 'FULL') { 'no buildable approved issue' } else { "not run ($mode)" }).",
-            "- Phase B: no free proposal slot ($(@($queue.slots.awaitingReview).Count) proposals awaiting review, cap $($queue.slots.cap); approved and failed proposals do not count).")
+        if ($pre.Hold) {
+            $sumLines = @("Precheck (no claude session started): plan budget hold.",
+                "- $($budget.Reason). Approved issues stay approved and proposals are not refilled until the verdict is normal or no-opus again.",
+                "- Queue: $(Format-QueueLine $queue).")
+        } else {
+            $sumLines = @("Precheck (no claude session started): nothing to do.",
+                "- Phase A: $(if ($mode -ne 'FULL') { "not run ($mode)" } elseif ($deferred.Count -gt 0) { Format-Deferred $deferred $budget.Verdict } else { 'no buildable approved issue' }).",
+                "- Phase B: $(if (-not $pbOk) { "the $pbKind model is not allowed by the $($budget.Reason)" } else { "no free proposal slot ($(@($queue.slots.awaitingReview).Count) proposals awaiting review, cap $($queue.slots.cap); approved and failed proposals do not count)" }).")
+        }
         if ($waitLine) { $sumLines += "- $waitLine" }
-        $sumLines += 'LOOP-RESULT: NOTHING-TO-DO'
+        $resLine = 'LOOP-RESULT: NOTHING-TO-DO'
+        if ($pre.Hold) { $resLine += ' plan budget hold (no claude session)' }
+        elseif ($deferred.Count -gt 0 -or -not $pbOk) { $resLine += " plan budget $($budget.Verdict) (Opus sessions deferred)" }
+        $sumLines += $resLine
         if ($DryRun) {
             Write-Log 'precheck: a real run would end here with NOTHING-TO-DO and no claude session (dry run: carrying on to show the plan)'
         } else {
@@ -388,10 +438,11 @@ try {
             [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.summary.txt"), ($sumLines -join "`r`n"), $utf8)
             $rd = [ordered]@{ runId = $RunId; mode = $mode; trigger = (Get-LoopRunTrigger -TaskName 'innovation-loop-cardlens' -RunStart $RunStart); status = 'NOTHING-TO-DO'
                 precheck = $pre.Reason; claudeStarted = $false; totals = [ordered]@{ Turns = 0; Requests = 0; Input = 0; Output = 0; CacheRead = 0; CacheWrite = 0; Cost = 0; Models = @() }
-                issues = @(); createdIssues = @(); sessions = @(); waitingOnVe = $waitLine }
+                issues = @(); createdIssues = @(); sessions = @(); waitingOnVe = $waitLine
+                budget = [ordered]@{ verdict = $budget.Verdict; reason = $budget.Reason; failedOpen = $budget.Warn; deferred = @($deferred | ForEach-Object { $_.Issue }) } }
             [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.rundata.json"), ($rd | ConvertTo-Json -Depth 5), $utf8)
             Write-Log 'result: subtype=precheck is_error=False turns=0 cost=0 (no claude session)'
-            Write-Log 'LOOP-RESULT: NOTHING-TO-DO'
+            Write-Log $resLine
             $exitCode = 0
             return
         }
@@ -492,7 +543,15 @@ try {
         while ($true) {
             if ($built.Count -gt 0 -and -not $DryRun) { $q = Get-LoopQueue }
             if ($null -eq $q) { Write-Log 'Phase A: the queue check failed; no build session' 'WARN'; [void]$runNotes.Add('Phase A: queue check failed, nothing built'); break }
-            $dec = Get-NextBuildDecision -Buildable @($q.buildable | Where-Object { $null -ne $_ }) -Done $built -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
+            # the plan budget, re-read before every build session (a verdict that changes mid-run counts)
+            if ($built.Count -gt 0) { $budget = Get-PlanBudget }
+            if ($budget.Verdict -eq 'hold') { Write-Log "Phase A: stop: $($budget.Reason)"; [void]$runNotes.Add("Phase A stopped: $($budget.Reason)"); break }
+            $split = Split-QueueByBudget $q $budget.Verdict
+            if (@($split.Deferred).Count -gt 0) {
+                $dl = "Phase A: $(Format-Deferred @($split.Deferred) $budget.Verdict)"
+                if ($runNotes -notcontains $dl) { Write-Log $dl; [void]$runNotes.Add($dl) }
+            }
+            $dec = Get-NextBuildDecision -Buildable @($split.Allowed) -Done $built -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
             Write-Log "Phase A: $(if ($dec.Start) { 'starting' } else { 'stop:' }) $($dec.Reason)"
             if (-not $dec.Start) { [void]$runNotes.Add("Phase A stopped: $($dec.Reason)"); break }
             $n = $dec.Issue
@@ -542,9 +601,14 @@ try {
         $builtLine = @($built | ForEach-Object { "#$($_.Issue) $($_.Outcome)" }) -join ', '
         $left = & $minutesLeft
         $why = ''
+        if ($built.Count -gt 0) { $budget = Get-PlanBudget }   # re-read: a build may have moved the verdict
         if ($kind -eq 'propose') {
             if ($null -ne $qb -and [int]$qb.slots.newThisRun -le 0) { $why = "no free proposal slot ($(@($qb.slots.awaitingReview).Count) awaiting review, cap $($qb.slots.cap))" }
             elseif ($left -lt [double]$Cfg.propose.minMinutes) { $why = "$([int]$left) min left before the deadline (a proposal session needs $($Cfg.propose.minMinutes))" }
+        }
+        if (-not $why) {
+            $pm = Get-SessionModel -Kind $kind -Config $Cfg -Override $Model
+            if (-not (Test-BudgetAllowsModel -Verdict $budget.Verdict -Model $pm)) { $why = "$($budget.Reason) does not allow a $kind session on $pm" }
         }
         if ($why) {
             Write-Log "Phase B: no proposal session: $why"; [void]$runNotes.Add("Phase B: no proposal session ($why)")

@@ -88,6 +88,23 @@ the queue. When nothing approved is buildable (FULL mode) and no proposal slot i
 launch=False (...)`, writes a summary ending `LOOP-RESULT: NOTHING-TO-DO` and `run-<id>.rundata.json`
 (cost 0), and exits 0 without a session. If that check fails, the run starts claude as before.
 
+**Plan budget (the ops hub).** The loop shares your Max plan's 5-hour and weekly limits with your own use, so
+before every session the runner (never claude) reads `D:\hub\state\plan-budget.json` (written by the ops hub
+every 15 min) and logs `budget: ...`:
+- `normal`: as always.
+- `no-opus`: no session on an Opus model (by `sessions.json`: a build without `size:small` / `test-only`).
+  Those builds are deferred, not failed: they stay approved with no label or comment change and are built
+  by the first run whose verdict allows it (the daily run, a refill run, or a new approval). Sonnet builds,
+  proposals and the review still run.
+- `hold`: no session at all; the run exits 0 like the precheck, with `LOOP-RESULT: NOTHING-TO-DO plan budget
+  hold (no claude session)`.
+- Missing, unreadable, schema not 1, unknown verdict, or older than its `staleAfterMinutes`: treated as
+  `normal` with a WARN (fail open: the hub is optional, the plan's own limits are the backstop).
+- `run-loop.ps1 -IgnoreBudget` skips it for a supervised run (`-BudgetFile <path>` reads another file, for
+  dry runs). The rules are `Get-PlanBudgetVerdict` / `Split-BuildableByBudget` in `gate-rules.ps1`, tested in
+  `test-gate-rules.ps1`. The approval watcher does not read the budget: a run it starts under `no-opus` /
+  `hold` ends in the $0 precheck.
+
 **Failed builds: one automatic retry, and never silent.** Every failure comment carries a hidden failure
 marker with a class (LOOP.md section 3, "Failure classes"). When the cause was outside the change (CI
 infrastructure, CI timeout, the live-server gap refusal, the elevated task or its lock unavailable, running

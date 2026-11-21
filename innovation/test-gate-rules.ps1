@@ -2,7 +2,8 @@
 .SYNOPSIS
   Unit tests for gate-rules.ps1: the CI verdict merge-pr.ps1 merges on (and wait-ci.ps1 reports), the
   one-rerun rule for known-flaky e2e specs, the live-server gap rule, and whether a build session left the
-  deploy state certain. The queue and session rules are in test-queue-rules.ps1. No network, no git.
+  deploy state certain, and the plan-budget gate (verdict x session kind x model, stale / missing file,
+  -IgnoreBudget, the precheck under it). The queue and session rules are in test-queue-rules.ps1. No network, no git.
   powershell -ExecutionPolicy Bypass -File innovation\test-gate-rules.ps1
 #>
 $ErrorActionPreference = 'Stop'
@@ -151,6 +152,80 @@ Check (-not $c.Certain -and $c.Reason -match 'rollback: ROLLBACK FAILED') 'rollb
 $c = Get-DeployCertainty -SessionStart $t0 -MergeRec $m -DeployRec ([pscustomobject]@{ mergeSha = 'ffffffffffffffffffffffffffffffffffffffff'; status = 'DEPLOY OK' })
 Check (-not $c.Certain) 'a DEPLOY OK for another merge does not count'
 
+# ---- plan budget (the ops hub's D:\hub\state\plan-budget.json; fails open) ------------------------------
+$now = [datetime]::Parse('2026-11-20T18:00:00Z', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]'AssumeUniversal,AdjustToUniversal')
+function Bj { param([string]$V = 'normal', [string]$Gen = '2026-11-20T17:50:00Z', $Schema = 1, $Stale = 30, [string[]]$Reasons = @('5h 91% >= 85'))
+    ([ordered]@{ schema = $Schema; generatedAt = $Gen; verdict = $V; reasons = @($Reasons); fiveHour = [ordered]@{ pct = 91; resetsAt = '2026-11-20T20:00:00Z'; observedAt = $Gen }; weekly = $null; thresholds = @{}; staleAfterMinutes = $Stale } | ConvertTo-Json -Depth 5) }
+foreach ($v in 'normal', 'no-opus', 'hold') {
+    $b = Get-PlanBudgetVerdict -Text (Bj $v) -NowUtc $now
+    Check ($b.Verdict -eq $v -and -not $b.Warn -and $b.Reason -match "plan budget $v" -and $b.Reason -match '5h 91%' -and $b.Reason -match '10 min ago') "fresh $v -> $v ($($b.Reason))"
+}
+$b = Get-PlanBudgetVerdict -Text (Bj 'NO-OPUS ') -NowUtc $now
+Check ($b.Verdict -eq 'no-opus') 'verdict is case/space tolerant'
+foreach ($c in @(
+        @{ T = $null; W = 'missing' }, @{ T = ''; W = 'missing' }, @{ T = '{not json'; W = 'not valid JSON' },
+        @{ T = (Bj 'hold' -Schema 2); W = 'schema' }, @{ T = '{"verdict":"hold","generatedAt":"2026-11-20T17:59:00Z"}'; W = 'schema' },
+        @{ T = (Bj 'pause'); W = 'unknown' }, @{ T = (Bj 'hold' -Gen 'yesterday'); W = 'generatedAt' },
+        @{ T = (Bj 'hold' -Gen '2026-11-20T17:29:00Z'); W = 'stale' })) {
+    $b = Get-PlanBudgetVerdict -Text $c.T -NowUtc $now
+    Check ($b.Verdict -eq 'normal' -and $b.Warn -and $b.Reason -match $c.W -and $b.Reason -match 'fail open') "fails open: $($c.W) -> normal + WARN ($($b.Reason))"
+}
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold' -Gen '2026-11-20T17:31:00Z') -NowUtc $now
+Check ($b.Verdict -eq 'hold') '29 min old with staleAfterMinutes 30 -> still used'
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold' -Gen '2026-11-20T17:00:00Z' -Stale 90) -NowUtc $now
+Check ($b.Verdict -eq 'hold') 'staleAfterMinutes from the file is honoured (60 min old, stale after 90)'
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold' -Gen '2026-11-20T17:20:00Z' -Stale 0) -NowUtc $now
+Check ($b.Verdict -eq 'normal' -and $b.Warn) 'staleAfterMinutes missing/0 -> default 30 (40 min old is stale)'
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold' -Gen '2026-11-20T10:50:00-07:00') -NowUtc $now
+Check ($b.Verdict -eq 'hold') 'generatedAt with an offset is converted to UTC'
+$b = Get-PlanBudgetVerdict -Text $null -ReadError 'access denied' -NowUtc $now
+Check ($b.Verdict -eq 'normal' -and $b.Warn -and $b.Reason -match 'unreadable') 'unreadable -> normal + WARN'
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold') -NowUtc $now -Ignore
+Check ($b.Verdict -eq 'normal' -and -not $b.Warn -and $b.Reason -match 'IgnoreBudget') '-IgnoreBudget -> normal, no warning, even on hold'
+$b = Get-PlanBudgetVerdict -Text (Bj 'hold' -Reasons @('x <!-- innovation-loop --> @vekbui96')) -NowUtc $now
+Check ($b.Reason -notmatch '<!--' -and $b.Reason -notmatch '@') 'reasons are made safe (no markers, no mentions)'
+
+# verdict x model
+$opus = 'claude-opus-5-5'; $son = 'claude-sonnet-5-5'
+Check ((Test-BudgetAllowsModel 'normal' $opus) -and (Test-BudgetAllowsModel 'normal' $son)) 'normal: every model'
+Check (-not (Test-BudgetAllowsModel 'no-opus' $opus) -and (Test-BudgetAllowsModel 'no-opus' $son)) 'no-opus: Sonnet yes, Opus no'
+Check (-not (Test-BudgetAllowsModel 'no-opus' 'opus') -and -not (Test-BudgetAllowsModel 'no-opus' 'claude-opus-5-5[1m]')) 'no-opus: aliases and suffixes still count as Opus'
+Check (-not (Test-BudgetAllowsModel 'no-opus' '')) 'no-opus: an empty model (claude default) counts as Opus'
+Check (-not (Test-BudgetAllowsModel 'hold' $son) -and -not (Test-BudgetAllowsModel 'hold' $opus)) 'hold: nothing'
+
+# verdict x session kind (sessions.json shape: builds Opus unless size:small / test-only; propose + review Sonnet)
+$cfg = Get-SessionConfig $null
+$lo = @{ 12 = @('loop:proposal', 'approved'); 13 = @('loop:proposal', 'approved', 'size:small'); 14 = @('approved', 'test-only') }
+$sp = Split-BuildableByBudget -Buildable @(12, 13, 14) -LabelsOf $lo -Config $cfg -Verdict 'normal'
+Check ((@($sp.Allowed) -join ',') -eq '12,13,14' -and @($sp.Deferred).Count -eq 0) 'normal: every build allowed'
+$sp = Split-BuildableByBudget -Buildable @(12, 13, 14) -LabelsOf $lo -Config $cfg -Verdict 'no-opus'
+Check ((@($sp.Allowed) -join ',') -eq '13,14' -and (@($sp.Deferred | ForEach-Object { $_.Issue }) -join ',') -eq '12' -and $sp.Deferred[0].Model -eq $opus) 'no-opus: the Opus build is deferred, small/test-only builds run'
+$sp = Split-BuildableByBudget -Buildable @(12, 13) -LabelsOf $lo -Config $cfg -Verdict 'no-opus' -Override $son
+Check (@($sp.Deferred).Count -eq 0) 'no-opus + run-loop -Model sonnet: every build runs on Sonnet, nothing deferred'
+$sp = Split-BuildableByBudget -Buildable @(13) -LabelsOf $lo -Config $cfg -Verdict 'no-opus' -Override $opus
+Check (@($sp.Allowed).Count -eq 0) 'no-opus + run-loop -Model opus: even a small build is deferred'
+$sp = Split-BuildableByBudget -Buildable @(12, 13) -LabelsOf $lo -Config $cfg -Verdict 'hold'
+Check (@($sp.Allowed).Count -eq 0 -and @($sp.Deferred).Count -eq 2) 'hold: no build'
+Check ((Test-BudgetAllowsModel 'no-opus' (Get-SessionModel -Kind 'propose' -Config $cfg)) -and (Test-BudgetAllowsModel 'no-opus' (Get-SessionModel -Kind 'review' -Config $cfg))) 'no-opus: proposal and review sessions (Sonnet) may run'
+
+# the precheck under the budget
+function Qb { param([int[]]$B, [int]$Free) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 3; awaitingReview = @() }; waitingOnVe = @() } }
+$hold = [pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold (5h 97%)'; Warn = $false }
+$noop = [pscustomobject]@{ Verdict = 'no-opus'; Reason = 'plan budget no-opus (5h 88%)'; Warn = $false }
+$p = Get-PrecheckDecision -Queue (Qb @(12) 3) -Mode 'FULL' -Budget $hold
+Check (-not $p.Launch -and $p.Hold -and $p.Reason -match 'hold') "hold: no launch even with work queued ($($p.Reason))"
+Check (-not (Get-PrecheckDecision -Queue $null -Mode 'FULL' -Budget $hold).Launch) 'hold: no launch even when the queue check failed'
+Check (-not (Get-PrecheckDecision -Queue (Qb @() 0) -Mode 'PRODUCT_REVIEW' -Budget $hold).Launch) 'hold: not even the product review'
+$p = Get-PrecheckDecision -Queue (Qb @(12) 0) -Mode 'FULL' -Budget $noop -Deferred @(12)
+Check (-not $p.Launch -and -not $p.Hold -and $p.Reason -match '0 buildable' -and $p.Reason -match 'deferred by the plan budget \(#12\)') "no-opus, only an Opus build, no slot -> no launch ($($p.Reason))"
+Check ((Get-PrecheckDecision -Queue (Qb @(12, 13) 0) -Mode 'FULL' -Budget $noop -Deferred @(12)).Launch) 'no-opus + a small build -> launch'
+Check ((Get-PrecheckDecision -Queue (Qb @(12) 2) -Mode 'FULL' -Budget $noop -Deferred @(12)).Launch) 'no-opus + a free slot -> launch for proposals'
+Check (-not (Get-PrecheckDecision -Queue (Qb @() 2) -Mode 'FULL' -Budget $noop -PhaseBAllowed $false).Launch) 'no-opus + proposals configured on Opus -> no launch'
+Check (-not (Get-PrecheckDecision -Queue (Qb @() 0) -Mode 'PRODUCT_REVIEW' -Budget $noop -PhaseBAllowed $false).Launch) 'no-opus + review on Opus -> no launch'
+$p = Get-PrecheckDecision -Queue (Qb @(12) 0) -Mode 'FULL'
+Check ($p.Launch -and -not $p.Hold) 'no budget given -> behaves as before'
+$fo = Get-PlanBudgetVerdict -Text $null -NowUtc $now
+Check ((Get-PrecheckDecision -Queue (Qb @(12) 0) -Mode 'FULL' -Budget $fo).Launch) 'missing file -> normal -> launch as before'
 if ($script:fail -gt 0) { Write-Host "TEST-GATE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-GATE-RULES PASS ($script:pass checks)"
 exit 0

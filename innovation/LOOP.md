@@ -13,6 +13,10 @@ header also gives MODE, MODEL, DEADLINE, MAX_TURNS and the paths (LOOP_HOME, SCR
 LIVE_SERVER_HEAD, WORK, ARTIFACTS), plus SERVER_DEPLOY and ISSUE for a build session and FOCUS, PRODUCT,
 SLOTS and SLICES_TO_OPEN for a proposal or review session. Use them verbatim.
 
+The runner decides which sessions start, also from Ve's plan budget (README "Plan budget"): under `no-opus`
+an approved issue whose build would run on Opus is deferred by the runner, still approved, for a later run.
+That is not a failure: never comment on, relabel or work around a deferred issue.
+
 Scope note: this loop handles only its OWN ideas, through GitHub issues on `vekbui96/cardlens`. Ve's
 direct requests are handled by the cardlens agents outside the loop and never need an issue. You do not
 handle them, and you never touch Ve's own (non-`loop:proposal`) issues.
