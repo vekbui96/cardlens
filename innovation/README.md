@@ -91,13 +91,14 @@ launch=False (...)`, writes a summary ending `LOOP-RESULT: NOTHING-TO-DO` and `r
 **Plan budget (the ops hub).** The loop shares your Max plan's 5-hour and weekly limits with your own use, so
 before every session the runner (never claude) reads `D:\hub\state\plan-budget.json` (written by the ops hub
 every 15 min) and logs `budget: ...`:
+
 - `normal`: as always.
 - `no-opus`: no session on an Opus model (by `sessions.json`: a build without `size:small` / `test-only`).
   Those builds are deferred, not failed: they stay approved with no label or comment change and are built
   by the first run whose verdict allows it (the daily run, a refill run, or a new approval). Sonnet builds,
   proposals and the review still run.
 - `hold`: no session at all; the run exits 0 like the precheck, with `LOOP-RESULT: NOTHING-TO-DO plan budget
-  hold (no claude session)`.
+hold (no claude session)`.
 - Missing, unreadable, schema not 1, unknown verdict, or older than its `staleAfterMinutes`: treated as
   `normal` with a WARN (fail open: the hub is optional, the plan's own limits are the backstop).
 - `run-loop.ps1 -IgnoreBudget` skips it for a supervised run (`-BudgetFile <path>` reads another file, for
