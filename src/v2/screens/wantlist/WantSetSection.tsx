@@ -68,8 +68,8 @@ export function WantSetSection({
     return {
       ...found,
       cards: found.cards.map((c) => {
-        const rarity = cardsByNumber.get(unpadded(c.collectorNumber))?.rarity;
-        return rarity ? { ...c, rarity } : c;
+        const card = cardsByNumber.get(unpadded(c.collectorNumber));
+        return card ? { ...c, ...(card.rarity ? { rarity: card.rarity } : {}), name: card.name } : c;
       }),
     };
   }, [ownedNumbers, view.printings, cardsByNumber]);

@@ -112,6 +112,13 @@ export function CollectionScreen() {
           >
             Everything owned
           </Tab>
+          <Tab
+            href={`#${screenToPath({ name: "wantlist" })}`}
+            current={false}
+            onGo={() => push({ name: "wantlist" })}
+          >
+            Want list
+          </Tab>
         </nav>
 
         {/*
