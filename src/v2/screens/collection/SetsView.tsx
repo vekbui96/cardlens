@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { screenToPath } from "../../../app/screenUrl.ts";
+import { EmptyStart } from "../home/EmptyStart.tsx";
 import type { SetTiers } from "../../../models/setCompletion.ts";
 import { Card, Chip, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import {
@@ -53,6 +53,12 @@ export function SetsView({
 
   return (
     <Stack gap={5}>
+      {/*
+        A fresh device: the same empty state as Home and Everything owned
+        (#165), first, with every set still listed below it.
+      */}
+      {hasCollection ? null : <EmptyStart headingLevel={2} />}
+
       <Row gap={3} align="center" wrap>
         <Field
           type="search"
@@ -121,18 +127,7 @@ export function SetsView({
       */}
       {groups.complete.length > 0 ? <Group title="Completed" rows={groups.complete} /> : null}
       {groups.rest.length > 0 ? (
-        <Group
-          title={groups.started.length > 0 ? "All sets" : "Sets"}
-          rows={groups.rest}
-          intro={
-            hasCollection ? undefined : (
-              <p className={styles.muted}>
-                Nothing marked owned yet. Open a set and tap the printings you have — the ones you start
-                appear above this list, ordered by how close they are to finished.
-              </p>
-            )
-          }
-        />
+        <Group title={groups.started.length > 0 ? "All sets" : "Sets"} rows={groups.rest} />
       ) : null}
 
       {!isLoading && !isError && shown === 0 && !filteredToNothing ? (
@@ -149,7 +144,7 @@ export function SetsView({
   );
 }
 
-function Group({ title, rows, intro }: { title: string; rows: SetRowModel[]; intro?: ReactNode }) {
+function Group({ title, rows }: { title: string; rows: SetRowModel[] }) {
   return (
     <Panel
       title={title}
@@ -158,7 +153,6 @@ function Group({ title, rows, intro }: { title: string; rows: SetRowModel[]; int
       aside={<span className={styles.muted}>{rows.length}</span>}
     >
       <Stack gap={3}>
-        {intro}
         {/*
           `data-testid` because the layout itself is the requirement here — at
           1440 this must be at least three columns and no row wider than 500px,

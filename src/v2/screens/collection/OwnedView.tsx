@@ -14,6 +14,7 @@ import {
   type OwnedSortKey,
 } from "../../../models/ownedSort.ts";
 import { Card, CardArt, Chip, Money, Panel, Row, Stack, UNPRICED } from "../../primitives/index.ts";
+import { EmptyStart } from "../home/EmptyStart.tsx";
 import { Showcase } from "./Showcase.tsx";
 import styles from "./collection.module.css";
 
@@ -65,23 +66,8 @@ export function OwnedView() {
   const sorted = useMemo(() => sortOwned(rows, sort), [rows, sort]);
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
 
-  if (rows.length === 0) {
-    return (
-      <Panel title="Everything owned" headingLevel={2}>
-        <Stack gap={3}>
-          <p className={styles.muted}>
-            Nothing marked owned yet. Open a set and tap the printings you have — each one appears here, with
-            its own price.
-          </p>
-          <p>
-            <a className={styles.button} href="#/collection">
-              Browse the sets
-            </a>
-          </p>
-        </Stack>
-      </Panel>
-    );
-  }
+  // The same empty state as Home and the set list (#165), with the same two ways in.
+  if (rows.length === 0) return <EmptyStart headingLevel={2} />;
 
   return (
     <Panel
