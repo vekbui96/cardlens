@@ -15,6 +15,8 @@ const SCREENS: Screen[] = [
   // v2's component gallery. It round-trips like any other screen so that a
   // link to it survives a reload and a version switch.
   { name: "workshop" },
+  // v2's Want list, reached from Home's progress panel.
+  { name: "wantlist" },
 ];
 
 describe("screen <-> path", () => {

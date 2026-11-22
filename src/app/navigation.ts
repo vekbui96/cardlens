@@ -44,6 +44,11 @@ export type Screen =
    */
   | { name: "trade"; shareId: string }
   /**
+   * v2 only: every card missing from the sets you have started, grouped by set
+   * and priced. v1's router has no case for it and falls through to Home.
+   */
+  | { name: "wantlist" }
+  /**
    * v2 and development only: every primitive, in every state, against
    * fixtures. It is a screen rather than a separate entry point so that it
    * renders inside the real shell — a component gallery that mounts outside
