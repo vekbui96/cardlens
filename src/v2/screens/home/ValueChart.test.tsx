@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ValueRow } from "../../../models/valueHistory.ts";
 import { ValueChart } from "./ValueChart.tsx";
+import { VALUE_RANGE_KEY } from "./valueRange.ts";
 
 const TODAY = "2026-11-21";
 
@@ -10,7 +11,22 @@ function row(day: string, total: number, priced = 400, printings = 480): ValueRo
 }
 
 describe("ValueChart", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.localStorage.removeItem(VALUE_RANGE_KEY);
+  });
+
+  it("opens on the range that was last chosen", () => {
+    const state = { status: "ready" as const, rows: [row("2026-11-01", 100)] };
+    const first = render(<ValueChart state={state} today={TODAY} />);
+    expect(screen.getByRole("button", { name: "30 days" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "90 days" }));
+    first.unmount();
+
+    render(<ValueChart state={state} today={TODAY} />);
+    expect(screen.getByRole("button", { name: "90 days" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "30 days" }).getAttribute("aria-pressed")).toBe("false");
+  });
 
   it("says tracking has started when the server has no rows yet", () => {
     render(<ValueChart state={{ status: "ready", rows: [] }} today={TODAY} />);
