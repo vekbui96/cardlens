@@ -3,6 +3,7 @@ import { screenToPath } from "../../../app/screenUrl.ts";
 import { tierLabel } from "../../../features/collection/completionTier.ts";
 import type { ContinueTarget } from "../../../features/home/continueSet.ts";
 import type { SetTiers } from "../../../models/setCompletion.ts";
+import { sumFinishLines, type FinishParts } from "./finishLine.ts";
 import { completionFigure } from "./homeSummary.ts";
 import styles from "./Home.module.css";
 
@@ -14,6 +15,8 @@ export interface ProgressRow {
   tiers: SetTiers;
   /** What is left, e.g. "9 cards to go, about $12.40"; absent when nothing is. */
   finishLine?: string | null;
+  /** The numbers behind `finishLine`, added up under the list. */
+  finish?: FinishParts | null;
 }
 
 function setHref(setId: string, setName: string): string {
@@ -38,6 +41,7 @@ export function ProgressPanel({
   /** The set list has not arrived, so completion cannot be drawn yet. */
   loading: boolean;
 }) {
+  const total = sumFinishLines(rows.map((row) => row.finish));
   return (
     <Panel title="Sets in progress" headingLevel={2}>
       <Stack gap={4}>
@@ -59,6 +63,7 @@ export function ProgressPanel({
                 </li>
               ))}
             </ul>
+            {total ? <p className={styles.resumeMeta}>{total}</p> : null}
           </Stack>
         ) : (
           <p className={styles.note}>
