@@ -237,6 +237,35 @@
   gap: var(--v2-space-2);
 }
 
+/* --- Movers --------------------------------------------------------------- */
+
+.mover {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v2-space-3);
+  min-height: var(--v2-tap);
+}
+
+.moverText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.moverName {
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moverPct {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--v2-fw-bold);
+  white-space: nowrap;
+}
+
 /* --- Empty ---------------------------------------------------------------- */
 
 .emptyTitle {
