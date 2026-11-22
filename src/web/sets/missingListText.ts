@@ -9,6 +9,18 @@ export interface MissingListSlot {
   card: { name: string };
 }
 
+/** One line of a pasted list: "Name #12 (Reverse Holo) - $1.50", or "unpriced". USD only. */
+export function missingLine(
+  name: string,
+  collectorNumber: string,
+  finish: string,
+  price: number | null | undefined,
+): string {
+  const priced = typeof price === "number" && Number.isFinite(price) && price > 0;
+  const finishText = finish === "normal" ? "" : ` (${finishLabel(finish)})`;
+  return `${name} #${collectorNumber}${finishText} - ${priced ? formatUsd(price) : "unpriced"}`;
+}
+
 /**
  * The set's want list as plain text, for pasting into a chat.
  *
@@ -24,12 +36,9 @@ export function missingListText(
   const wanted = slots.filter((s) => !s.excluded);
   const missing = wanted.filter((s) => !s.held);
   if (missing.length === 0) return { text: "", count: 0 };
-  const lines = missing.map((s) => {
-    const price = priceFor(s.collectorNumber, s.finish);
-    const priced = typeof price === "number" && Number.isFinite(price) && price > 0;
-    const finish = s.finish === "normal" ? "" : ` (${finishLabel(s.finish)})`;
-    return `${s.card.name} #${s.collectorNumber}${finish} - ${priced ? formatUsd(price) : "unpriced"}`;
-  });
+  const lines = missing.map((s) =>
+    missingLine(s.card.name, s.collectorNumber, s.finish, priceFor(s.collectorNumber, s.finish)),
+  );
   return {
     text: [`${setName}: missing ${missing.length} of ${wanted.length}`, ...lines].join("\n"),
     count: missing.length,

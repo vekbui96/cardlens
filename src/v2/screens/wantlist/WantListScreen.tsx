@@ -3,6 +3,7 @@ import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useSets } from "../../../hooks/useSets.ts";
 import { printingsCache } from "../../../storage/caches.ts";
 import { Chip, Panel, Stack } from "../../primitives/index.ts";
+import { CopyWantList } from "./CopyWantList.tsx";
 import { SetSkeleton, WantSetSection, type SectionKind } from "./WantSetSection.tsx";
 import {
   WANT_SORT_LABELS,
@@ -119,6 +120,13 @@ export function WantListScreen() {
         : null;
     }),
   );
+  // What is on screen, for "Copy want list": the same filters and sort, per set.
+  const copySections = started.flatMap((s) => {
+    const want = states[s.setId]?.want;
+    return want && (filters.setId === null || filters.setId === s.setId)
+      ? [{ setName: s.setName, want: applyWantFilters(want, filters) }]
+      : [];
+  });
   const loading = sets === undefined ? null : started.length - settled;
   const failed = started.filter((s) => states[s.setId]?.kind === "error").length;
   const knownSets = Object.keys(ownedCountsBySet).filter((id) => (ownedCountsBySet[id] ?? 0) > 0).length;
@@ -213,6 +221,7 @@ export function WantListScreen() {
             {filtering ? (
               <Chip onPress={() => update({ ...filters, setId: null, rarities: [] })}>Clear filters</Chip>
             ) : null}
+            <CopyWantList sections={copySections} notLoaded={failed} ready={loading === 0} />
           </div>
         </Stack>
       ) : null}

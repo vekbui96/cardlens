@@ -12,6 +12,8 @@ export interface WantCard {
   price: number | null;
   /** Filled in by the screen from the catalog card, when it knows it. */
   rarity?: string;
+  /** Likewise: the catalog card's name, for the copied list. */
+  name?: string;
 }
 
 /** What one started set still needs. */
@@ -95,7 +97,7 @@ export function sumWant(sets: readonly (WantSet | null | undefined)[]): WantTota
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 /** "N missing, about $X, N unpriced": the price part of a line, never a guess. */
-function pricePart(priced: number, unpriced: number, total: number): string {
+export function pricePart(priced: number, unpriced: number, total: number): string {
   if (priced === 0) return "none priced";
   return `${priced} priced, about ${formatUsd(total)}${unpriced > 0 ? `, ${unpriced} unpriced` : ""}`;
 }
