@@ -1,4 +1,5 @@
-import { lazy, Suspense, useRef } from "react";
+import { Suspense, useRef } from "react";
+import { lazyWithReload } from "../../app/staleChunk.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { FocusList } from "../../components/FocusList.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
@@ -14,7 +15,7 @@ import { ToggleRow } from "../../components/ToggleRow.tsx";
 import { useTextEntry } from "../../app/TextEntryProvider.tsx";
 import { syncLine } from "./syncLine.ts";
 
-const ValuePanel = lazy(() =>
+const ValuePanel = lazyWithReload(() =>
   import("../../web/collection/ValuePanel.tsx").then((m) => ({ default: m.ValuePanel })),
 );
 

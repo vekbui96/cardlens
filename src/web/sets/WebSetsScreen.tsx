@@ -1,4 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { lazyWithReload } from "../../app/staleChunk.ts";
 import { Screen } from "../../components/Screen.tsx";
 import { BackRow } from "../../components/BackRow.tsx";
 import { LoadingState, ErrorState, EmptyState } from "../../components/States.tsx";
@@ -16,7 +17,7 @@ import { compareCompletion, ownedIn, tierLabel } from "../../features/collection
 import { SetTierFigures } from "../../features/collection/SetTierFigures.tsx";
 import styles from "./WebSetsScreen.module.css";
 
-const ValuePanel = lazy(() =>
+const ValuePanel = lazyWithReload(() =>
   import("../collection/ValuePanel.tsx").then((m) => ({ default: m.ValuePanel })),
 );
 
