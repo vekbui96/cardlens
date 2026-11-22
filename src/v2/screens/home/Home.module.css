@@ -52,7 +52,11 @@
   flex: 1 1 calc(var(--v2-pocket) * 2);
 }
 
-.top > :last-child {
+/*
+ * Every chart after the value panel: the growth chart and, beneath them on a
+ * laptop, the value-over-time chart (#117), which wraps onto its own row.
+ */
+.top > :not(:first-child) {
   flex: 2 1 calc(var(--v2-pocket) * 3);
 }
 
@@ -180,6 +184,93 @@
 
 .axis > :nth-child(3) {
   text-align: end;
+}
+
+/* --- Value over time (#117) ----------------------------------------------- */
+
+/* The plot box is the positioning parent for the tappable points over the SVG. */
+.valuePlot {
+  position: relative;
+}
+
+.valuePoints {
+  position: absolute;
+  inset: 0;
+}
+
+/* A full tap target centred on the day, with the visible dot inside it. */
+.valuePoint {
+  position: absolute;
+  width: var(--v2-tap);
+  height: var(--v2-tap);
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.valuePoint:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.valueDot {
+  width: var(--v2-space-2);
+  height: var(--v2-space-2);
+  border-radius: 50%;
+  background: var(--v2-accent);
+  opacity: 0;
+}
+
+/* Shown for a day standing alone (no line to carry it) and for the picked day. */
+.valuePointShown .valueDot {
+  opacity: 1;
+}
+
+.valuePoint[aria-pressed="true"] .valueDot {
+  outline: var(--v2-border-w) solid var(--v2-fg);
+  outline-offset: var(--v2-border-w);
+}
+
+.plotSkeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: homeShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+.plotMessage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-3);
+  text-align: center;
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.valueReadout {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.valueAmount {
+  color: var(--v2-fg);
+  font-weight: var(--v2-fw-medium);
 }
 
 /* --- Tiles ---------------------------------------------------------------- */
