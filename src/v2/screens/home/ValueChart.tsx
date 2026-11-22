@@ -12,6 +12,7 @@ import {
 import { useValueHistory, type ValueHistoryState } from "../../../hooks/useValueHistory.ts";
 import { formatUsd } from "../../../utils/format.ts";
 import { CHART_BOX } from "./chart.ts";
+import { readValueRange, storeValueRange } from "./valueRange.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -36,8 +37,12 @@ export function ValueHistoryPanel() {
  * half the collection is never mistaken for the whole of it.
  */
 export function ValueChart({ state, today }: { state: ValueHistoryState; today?: string }) {
-  const [range, setRange] = useState<ValueRange>("30d");
+  const [range, setRange] = useState<ValueRange>(readValueRange);
   const [picked, setPicked] = useState<string | null>(null);
+  const chooseRange = (next: ValueRange) => {
+    setRange(next);
+    storeValueRange(next);
+  };
 
   const day = today ?? localToday();
   const rows = state.status === "ready" ? state.rows : null;
@@ -66,7 +71,7 @@ export function ValueChart({ state, today }: { state: ValueHistoryState; today?:
         <div role="group" aria-label="Value range">
           <Row gap={2} wrap>
             {VALUE_RANGES.map((r) => (
-              <Chip key={r.key} onPress={() => setRange(r.key)} pressed={r.key === range}>
+              <Chip key={r.key} onPress={() => chooseRange(r.key)} pressed={r.key === range}>
                 {r.label}
               </Chip>
             ))}
