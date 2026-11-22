@@ -5,8 +5,6 @@ import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
 import { useSinceLastLooked } from "../../../hooks/useSinceLastLooked.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
-import { topMovers, type TopMovers } from "../../../models/movement.ts";
-import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { countBinder, type Binder } from "../../../models/binderLayout.ts";
 import { printingsCache } from "../../../storage/caches.ts";
@@ -19,8 +17,6 @@ import { ProgressPanel } from "./ProgressPanel.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
 import { syncNotice } from "./homeSummary.ts";
 import styles from "./Home.module.css";
-
-const NO_MOVERS: TopMovers<OwnedPrintingRow> = { risers: [], fallers: [] };
 
 /**
  * Home: what is my collection, and what is it worth, right now.
@@ -84,7 +80,7 @@ export function HomeScreen() {
    * settled: a list taken mid-load would reshuffle in front of the reader.
    */
   const owned = useOwnedCards({ backfill: false });
-  const movers = owned.pricing === 0 && owned.pending === 0 ? topMovers(owned.rows) : NO_MOVERS;
+  const moverRows = owned.pricing === 0 && owned.pending === 0 ? owned.rows : null;
 
   const notice = syncNotice(syncStatus);
 
@@ -160,7 +156,7 @@ export function HomeScreen() {
       <ProgressPanel resume={resume} rows={rows} loading={sets === undefined} />
 
       {/* Below Sets in progress, so it appearing never moves what is above it. */}
-      <MoversPanel movers={movers} />
+      <MoversPanel rows={moverRows} />
 
       {/*
         The one destination Home repeats from the nav, and only because it can

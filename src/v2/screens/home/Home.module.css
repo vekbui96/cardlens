@@ -253,6 +253,30 @@
   min-height: var(--v2-tap);
 }
 
+.moverToggle {
+  display: flex;
+  gap: var(--v2-space-2);
+}
+
+.moverToggleButton {
+  flex: 1;
+  min-height: var(--v2-tap);
+  min-width: var(--v2-tap);
+  padding: var(--v2-space-0) var(--v2-space-3);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: transparent;
+  color: var(--v2-fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.moverToggleButton[aria-pressed="true"] {
+  color: var(--v2-fg);
+  font-weight: var(--v2-fw-bold);
+  border-color: var(--v2-fg);
+}
+
 .moverText {
   display: flex;
   flex-direction: column;

@@ -83,6 +83,9 @@ export const MOVERS_PER_SIDE = 3;
 /** A side with fewer qualifying cards than this shows nothing. */
 export const MIN_MOVERS_PER_SIDE = 2;
 
+/** Days the Biggest movers strip compares avg1 against: avg7 or avg30. */
+export type MoverWindow = 7 | 30;
+
 export interface Mover<T> {
   row: T;
   /** Week-on-week change in percent (avg1 against avg7). Never an amount. */
@@ -103,13 +106,14 @@ export interface TopMovers<T> {
  * are read here and never returned, so they cannot reach the screen or be added
  * to the USD total. Ties keep the input order.
  */
-export function topMovers<T extends { eur?: EurAverages }>(rows: T[]): TopMovers<T> {
+export function topMovers<T extends { eur?: EurAverages }>(rows: T[], window: MoverWindow = 7): TopMovers<T> {
   const ranked: Mover<T>[] = [];
   for (const row of rows) {
     const eur = row.eur;
     if (!eur) continue;
-    if (!(eur.avg1 >= MOVER_FLOOR_EUR) || !(eur.avg7 >= MOVER_FLOOR_EUR)) continue;
-    const change = pct(eur.avg1, eur.avg7);
+    const reference = window === 30 ? eur.avg30 : eur.avg7;
+    if (!(eur.avg1 >= MOVER_FLOOR_EUR) || !(reference >= MOVER_FLOOR_EUR)) continue;
+    const change = pct(eur.avg1, reference);
     if (change === undefined) continue;
     ranked.push({ row, pct: change });
   }
