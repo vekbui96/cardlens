@@ -17,7 +17,12 @@ vi.mock("../app/LibraryProvider.tsx", () => ({
 }));
 vi.mock("./useSets.ts", () => ({ useSets: () => ({ data: [{ id: "sv1", name: "Scarlet & Violet" }] }) }));
 vi.mock("./useCatalogPrices.ts", () => ({
-  useCatalogPrices: () => ({ prices: PRICES, pricesLoading: CATALOG_LOADING }),
+  useCatalogPrices: () => ({
+    prices: PRICES,
+    pricesLoading: CATALOG_LOADING,
+    pricesRateLimited: 0,
+    pricesRetrying: 0,
+  }),
 }));
 const useCollectionValue = vi.fn((..._args: unknown[]) => ({
   total: 0,
@@ -27,6 +32,8 @@ const useCollectionValue = vi.fn((..._args: unknown[]) => ({
   pending: 0,
   failed: 0,
   unaskable: 0,
+  rateLimited: 0,
+  retrying: 0,
   movement: null,
 }));
 vi.mock("./useCollectionValue.ts", () => ({ useCollectionValue }));

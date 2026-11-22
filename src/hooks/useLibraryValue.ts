@@ -49,12 +49,25 @@ export function useLibraryValue(): LibraryValue {
   // and the queries behind it share keys with the set screens, so this is a
   // cache read rather than a fetch once a set has been opened.
   const setIds = useMemo(() => [...new Set(rows.map((r) => r.setId))].sort(), [rows]);
-  const { prices: catalogPrices, pricesLoading } = useCatalogPrices(setIds);
+  const {
+    prices: catalogPrices,
+    pricesLoading,
+    pricesRateLimited,
+    pricesRetrying,
+  } = useCatalogPrices(setIds);
 
   const value = useCollectionValue(rows, setNames, catalogPrices);
 
   // The market-price batch counts as one more thing still pricing: for promos
   // and older cards it is the only price, so until it answers the total is a
   // lower bound and "unpriced" is not yet true.
-  return { ...value, pending: value.pending + (pricesLoading ? 1 : 0), setNames, holdings: rows.length };
+  return {
+    ...value,
+    pending: value.pending + (pricesLoading ? 1 : 0),
+    // Either oracle being rate limited is the same news to the reader (#161).
+    rateLimited: value.rateLimited + pricesRateLimited,
+    retrying: value.retrying + pricesRetrying,
+    setNames,
+    holdings: rows.length,
+  };
 }

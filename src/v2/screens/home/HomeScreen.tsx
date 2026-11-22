@@ -180,6 +180,8 @@ export function HomeScreen() {
             priced: value.priced,
             pending: value.pending,
             failed: value.failed,
+            rateLimited: value.rateLimited,
+            retrying: value.retrying,
             bySet: value.bySet,
             setNames: value.setNames,
             setsLoaded: sets !== undefined,

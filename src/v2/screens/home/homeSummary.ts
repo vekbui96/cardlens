@@ -32,6 +32,10 @@ export interface PricingInput {
    * is a set we have not been told about yet, not a set that cannot be priced.
    */
   setsLoaded: boolean;
+  /** Price requests whose latest failure was a 429 (absent = none). */
+  rateLimited?: number;
+  /** Of those, how many are still being tried again. */
+  retrying?: number;
 }
 
 export interface PricingSummary {
@@ -94,6 +98,16 @@ export function pricingSummary(input: PricingInput): PricingSummary {
   const loading = priced === 0 && waiting > 0;
   const retryable = cannotPrice.length > 0 || failed > 0;
 
+  // A 429 burst reads as progress, not as a hole: the reader is told how far
+  // along it is rather than left looking at prices that never arrive.
+  const slow =
+    (input.rateLimited ?? 0) > 0
+      ? rateLimitLine({ priced, printings, retrying: (input.retrying ?? 0) > 0 })
+      : null;
+  if (slow) {
+    return { loading, line: slow, warn: true, waiting, cannotPrice, retryable };
+  }
+
   if (waiting > 0) {
     const tail = `${waiting} ${plural(waiting, "set", "sets")} still pricing`;
     return {
@@ -131,6 +145,26 @@ export function pricingSummary(input: PricingInput): PricingSummary {
     cannotPrice,
     retryable,
   };
+}
+
+/**
+ * What Home says while a price request is being rate limited.
+ *
+ * The counts are the real ones — unpriced stays unpriced, nothing is estimated
+ * — and "retrying" is only said while a retry is actually still out. Null once
+ * everything is priced: a burst that no longer costs anything needs no notice.
+ */
+export function rateLimitLine({
+  priced,
+  printings,
+  retrying,
+}: {
+  priced: number;
+  printings: number;
+  retrying: boolean;
+}): string | null {
+  if (priced >= printings) return null;
+  return `Prices are slow right now: ${priced} of ${printings} priced${retrying ? ", retrying" : ""}`;
 }
 
 /**

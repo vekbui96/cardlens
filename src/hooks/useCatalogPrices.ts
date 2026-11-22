@@ -1,4 +1,5 @@
 import { settledKey } from "./settledKey.ts";
+import { countRateLimited } from "./rateLimit.ts";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useCatalog } from "../app/contexts.tsx";
@@ -16,6 +17,10 @@ export interface CatalogPrices {
    * only `fetchStatus !== "idle"` counts — otherwise "pricing…" never ends.
    */
   pricesLoading: boolean;
+  /** Market-price requests (the batch or a per-set fallback) whose latest failure was a 429. */
+  pricesRateLimited: number;
+  /** Of those, how many are still being retried. */
+  pricesRetrying: number;
 }
 
 /** One `/api/catalog/prices` answer: what it priced, and the sets it could not. */
@@ -154,7 +159,13 @@ export function useCatalogPrices(setIds: string[]): CatalogPrices {
     [batch.data, followUp.data, fallbackStamp],
   );
 
-  return useMemo(() => ({ prices, pricesLoading }), [prices, pricesLoading]);
+  // Read-only: says a 429 burst is happening, changes nothing about the retries.
+  const { limited: pricesRateLimited, retrying: pricesRetrying } = countRateLimited([batch, ...queries]);
+
+  return useMemo(
+    () => ({ prices, pricesLoading, pricesRateLimited, pricesRetrying }),
+    [prices, pricesLoading, pricesRateLimited, pricesRetrying],
+  );
 }
 
 /**

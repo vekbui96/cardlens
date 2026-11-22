@@ -4,7 +4,13 @@ import { buildHistory } from "../../../models/history.ts";
 import { setTiers } from "../../../models/setCompletion.ts";
 import type { SetValue } from "../../../models/value.ts";
 import { CHART_BOX, chartShape, pathYs } from "./chart.ts";
-import { completionFigure, pricingSummary, syncNotice, type PricingInput } from "./homeSummary.ts";
+import {
+  completionFigure,
+  pricingSummary,
+  rateLimitLine,
+  syncNotice,
+  type PricingInput,
+} from "./homeSummary.ts";
 
 /**
  * The decisions, not the markup.
@@ -30,6 +36,51 @@ function input(over: Partial<PricingInput> = {}): PricingInput {
     ...over,
   };
 }
+
+describe("rateLimitLine", () => {
+  it("says how far along a rate limited batch is, and that it is retrying", () => {
+    expect(rateLimitLine({ priced: 2, printings: 5, retrying: true })).toBe(
+      "Prices are slow right now: 2 of 5 priced, retrying",
+    );
+  });
+
+  it("says 0 priced rather than inventing a number", () => {
+    expect(rateLimitLine({ priced: 0, printings: 973, retrying: true })).toBe(
+      "Prices are slow right now: 0 of 973 priced, retrying",
+    );
+  });
+
+  it("drops 'retrying' once the retry is used up", () => {
+    expect(rateLimitLine({ priced: 480, printings: 973, retrying: false })).toBe(
+      "Prices are slow right now: 480 of 973 priced",
+    );
+  });
+
+  it("says nothing once everything is priced", () => {
+    expect(rateLimitLine({ priced: 973, printings: 973, retrying: true })).toBeNull();
+  });
+});
+
+describe("pricingSummary while rate limited", () => {
+  it("replaces the progress line with the notice while a request is rate limited", () => {
+    const s = pricingSummary(input({ priced: 2, printings: 5, pending: 3, rateLimited: 3, retrying: 3 }));
+    expect(s.line).toBe("Prices are slow right now: 2 of 5 priced, retrying");
+    expect(s.warn).toBe(true);
+    expect(s.loading).toBe(false);
+  });
+
+  it("keeps the total pending, not zero, when nothing is priced yet", () => {
+    const s = pricingSummary(input({ priced: 0, pending: 2, rateLimited: 2, retrying: 2 }));
+    expect(s.line).toBe("Prices are slow right now: 0 of 973 priced, retrying");
+    expect(s.loading).toBe(true);
+  });
+
+  it("is the normal line when nothing is rate limited", () => {
+    expect(pricingSummary(input({ priced: 480, pending: 2, rateLimited: 0, retrying: 0 })).line).toBe(
+      "480 of 973 printings priced · 2 sets still pricing",
+    );
+  });
+});
 
 describe("pricingSummary", () => {
   it("never reports a total without saying how much of it is priced", () => {

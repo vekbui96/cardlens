@@ -456,7 +456,10 @@ async function nameSeededSets(page: Page): Promise<void> {
       { id: "ex10", name: "Unseen Forces", total: 145, printedTotal: 115 },
       { id: "pop3", name: "POP Series 3", total: 17, printedTotal: 17 },
     ];
-    localStorage.setItem("cardlens:v1:cache:sets:v3", JSON.stringify({ all: { value: sets, storedAt: Date.now() } }));
+    localStorage.setItem(
+      "cardlens:v1:cache:sets:v3",
+      JSON.stringify({ all: { value: sets, storedAt: Date.now() } }),
+    );
   });
 }
 
@@ -495,6 +498,7 @@ test.describe("prices in flight @visual", () => {
     await openV2(page, "/", { seed: "collection" });
     await expect(page.getByRole("heading", { name: "Collection value" })).toBeVisible();
     await expect(page.getByText("Pricing 5 sets…")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Pricing your collection" })).toBeVisible();
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-prices-loading.png", { fullPage: true });
   });
@@ -506,23 +510,37 @@ test.describe("prices in flight @visual", () => {
    */
   test("prices rate limited", async ({ page }) => {
     await nameSeededSets(page);
-    const asked = new Set<string>();
+    /*
+     * Which request is "the retry" is told by timing, not by count: the dev
+     * build mounts twice (StrictMode) and the seed can reload the page, so a
+     * set's first request may be cancelled and sent again at once. Every
+     * request close behind the last 429 gets a 429 too; one arriving after
+     * React Query's retry delay (1s or more) is the retry, and is held open.
+     */
+    const last429 = new Map<string, number>();
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) last429.clear();
+    });
     await page.route("**/api/printings/**", (route) => {
       const setId = routeSetId(route.request().url());
       if (setId === "base2" || setId === "ecard3") {
         return route.fulfill({ status: 200, contentType: "application/json", body: printingsBody(setId) });
       }
-      if (!asked.has(setId)) {
-        asked.add(setId);
-        return route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"rate_limited"}' });
+      const at = last429.get(setId);
+      if (at === undefined || Date.now() - at < 800) {
+        last429.set(setId, Date.now());
+        return route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          body: '{"error":"rate_limited"}',
+        });
       }
       // The retry: never answered.
       return undefined;
     });
     await openV2(page, "/", { seed: "collection" });
     await expect(page.getByRole("heading", { name: "Collection value" })).toBeVisible();
-    await expect.poll(() => asked.size).toBe(3);
-    await expect(page.getByRole("main")).toContainText(/2 of 5/);
+    await expect(page.getByText("Prices are slow right now: 2 of 5 priced, retrying")).toBeVisible();
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-prices-rate-limited.png", { fullPage: true });
   });
