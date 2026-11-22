@@ -38,6 +38,10 @@ diary (that is what made the old file 63 KB).
 
 ## Waiting on Ve
 
+- **#111 value-history storage decision** (`docs/decisions/value-history.md`):
+  recommends a server-written daily `value-history.json`. #112 (writer) and #117
+  (chart) wait on it. #110 "Since you last looked" shipped 2026-11-21
+  (device-local key `cardlens:v1:last-look:v1`, v2 Home only).
 - **PR #63** (scan review: price each printing and the batch total) is open.
 - **Loop issues #85 and #96** are `approved` + `loop:failed`: both were built,
   merged, then reverted. Remove `loop:failed` to retry them, or close them.
