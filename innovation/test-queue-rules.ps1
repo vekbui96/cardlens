@@ -612,6 +612,8 @@ Check ((Vr -Child (Kid -L 'loop:proposal', 'loop:spec')).Eligible) 'a spec from 
 $pc = Format-RequestPlan -Request 170 -Children @([pscustomobject]@{ Number = 172; Title = 'B'; Status = 'deployed'; Done = $true; Failed = $false; Manual = $false }, [pscustomobject]@{ Number = 171; Title = 'A'; Status = 'failed, waiting on the owner'; Done = $false; Failed = $true; Manual = $false }) -Mode 'build' -RunId 'r1' -Marker $mk
 Check ($pc.StartsWith($mk) -and $pc.Contains($script:RequestPlanMarker) -and ((Get-RequestPlanChildren $pc) -join ',') -eq '171,172' -and $pc -match '- \[x\] #172' -and $pc -match '- \[ \] #171' -and $pc -match 'Failed, waiting on Ve: #171' -and $pc -match '/hold') "plan comment: markers, children list, checklist, failures, /hold ($pc)"
 Check ((Format-RequestPlan -Request 170 -Mode 'plan' -Marker $mk) -match 'Plan first') 'plan comment in Plan first mode says so'
+$aw = @([pscustomobject]@{ Number = 177; Title = 'Tab title'; Status = 'awaiting review'; Done = $false; Failed = $false; Manual = $false })
+Check ((Format-RequestPlan -Request 171 -Children $aw -Mode 'build' -Marker $mk) -match '#177 Tab title: approved via this request, waiting to be built' -and (Format-RequestPlan -Request 171 -Children $aw -Mode 'plan' -Marker $mk) -match '#177 Tab title: awaiting review') 'an open child reads approved via the request in Build it mode, awaiting review in Plan first'
 Check (@(Get-RequestPlanChildren 'no list here').Count -eq 0) 'no children marker -> no children'
 $sy = Format-RequestSynopsis -Request 170 -Children @([pscustomobject]@{ Number = 171; Title = 'A'; Deployed = $true }, [pscustomobject]@{ Number = 172; Title = 'B'; Deployed = $false }) -What 'Show the build SHA @someone' -Marker $mk
 Check ($sy.StartsWith($mk) -and $sy.Contains($script:RequestSynopsisMarker) -and $sy -match 'Done and live \(1\)' -and $sy -match 'Closed without a deploy \(1\)' -and $sy -notmatch '@someone') "synopsis: plain language, no mentions ($sy)"
@@ -645,6 +647,9 @@ Check ($pc.Launch) 'intake also runs in ProposeOnly mode'
 $pc = Get-PrecheckDecision -Queue $q0 -Budget ([pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold' }) -Intake 1 -RequestBuilds @(171)
 Check (-not $pc.Launch -and $pc.Hold) 'hold stops requests too'
 
+# check-approval.ps1's JSON is ASCII-only, so a console code page cannot mangle Ve's text
+$aj = ConvertTo-AsciiJson ((@{ what = "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)" } | ConvertTo-Json -Compress))
+Check ($aj -notmatch '[^\x00-\x7F]' -and ($aj | ConvertFrom-Json).what -eq "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)") "ASCII-only JSON round-trips non-ASCII text ($aj)"
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

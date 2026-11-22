@@ -1290,7 +1290,10 @@ function Format-RequestPlan {
     [void]$sb.AppendLine()
     foreach ($c in $ch) {
         $box = ' '; if ($c.Done) { $box = 'x' }
-        [void]$sb.AppendLine("- [$box] #$($c.Number) $($c.Title): $($c.Status)")
+        $st = $c.Status
+        # in Build it mode an open child without `approved` is approved through the request, not waiting for review
+        if ($Mode -eq 'build' -and $st -eq 'awaiting review') { $st = 'approved via this request, waiting to be built' }
+        [void]$sb.AppendLine("- [$box] #$($c.Number) $($c.Title): $st")
     }
     $fails = @($ch | Where-Object { $_.Failed })
     if ($fails.Count -gt 0) { [void]$sb.AppendLine(); [void]$sb.AppendLine("Failed, waiting on ${Who}: $(@($fails | ForEach-Object { "#$($_.Number)" }) -join ', ') (the failure comment on each issue says why)") }
@@ -1319,4 +1322,12 @@ function Format-RequestSynopsis {
     }
     [void]$sb.AppendLine(); [void]$sb.AppendLine('Every issue from this request is finished, so the loop closes it. Reopen it, or file a new request, if something is missing.')
     return $sb.ToString()
+}
+
+# JSON that survives a console pipe: every non-ASCII character as a \uXXXX escape (check-approval.ps1 prints its
+# result to stdout, which run-loop.ps1 and merge-pr.ps1 read through the console code page; Windows PowerShell 5.1
+# would otherwise turn e.g. U+00B7 in a request into two OEM characters). Surrogate pairs stay valid JSON.
+function ConvertTo-AsciiJson {
+    param([string]$Json)
+    return [regex]::Replace("$Json", '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
 }

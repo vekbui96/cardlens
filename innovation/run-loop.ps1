@@ -95,6 +95,9 @@ param(
     [string]$BudgetFile = '',
     [string]$ClaudeExe = (Join-Path $env:USERPROFILE '.local\bin\claude.exe')
 )
+# gh and git print UTF-8; read their output as UTF-8, not the console's OEM code page (a scheduled task's default),
+# which turned e.g. U+00B7 in Ve's request into two OEM characters. Never fatal.
+try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { }
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\reporting.ps1"   # run data, progress and spec checklists (functions only; used after each session)
 . "$PSScriptRoot\gate-rules.ps1"  # slots, specs, retry rule, precheck, session planning (pure functions)
