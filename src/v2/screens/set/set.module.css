@@ -90,6 +90,14 @@
   color: var(--v2-fg-muted);
 }
 
+/* Reserved at one line so the set does not shift when prices arrive. */
+.finishLine {
+  margin: var(--v2-space-0);
+  min-height: 1.5em;
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
 .noticeWarn {
   color: var(--v2-warn);
 }
