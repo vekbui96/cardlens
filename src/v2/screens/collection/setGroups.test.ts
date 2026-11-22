@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PokemonSet } from "../../../models/cards.ts";
-import { groupSets, matchesQuery, summaryLine } from "./setGroups.ts";
+import { SET_SORTS, groupSets, matchesQuery, setWorths, summaryLine, worthText } from "./setGroups.ts";
 
 /**
  * The decisions, not the markup.
@@ -80,6 +80,56 @@ describe("groupSets sort", () => {
   it("sorts untouched sets A to Z too", () => {
     const rest = groupSets([OBF, BASE, SIT], {}, {}, "", "az").rest;
     expect(rest.map((r) => r.set.name)).toEqual(["Base", "Obsidian Flames", "Silver Tempest"]);
+  });
+});
+
+describe("most valuable sort and per-set worth", () => {
+  const A = set({ id: "a", name: "Alpha", total: 100, printedTotal: 100 });
+  const B = set({ id: "b", name: "Bravo", total: 100, printedTotal: 100 });
+  const C = set({ id: "c", name: "Charlie", total: 100, printedTotal: 100 });
+  const D = set({ id: "d", name: "Delta", total: 100, printedTotal: 100 });
+  const E = set({ id: "e", name: "Echo", total: 100, printedTotal: 100 });
+  const counts = { a: 1, b: 1, c: 1, d: 1, e: 1 };
+  const nums = { a: ["1"], b: ["1"], c: ["1"], d: ["1"], e: ["1"] };
+  const entry = (setId: string, priced: number, value: number) => ({
+    setId,
+    printings: 1,
+    priced,
+    value,
+  });
+
+  it("offers the chip", () => {
+    expect(SET_SORTS.map((s) => s.label)).toContain("Most valuable");
+  });
+
+  it("orders priced sets by value, then unpriced and pricing sets, ties by name", () => {
+    const worths = setWorths(
+      [entry("a", 1, 10), entry("b", 0, 0), entry("c", 1, 50), entry("d", 1, 10), entry("e", 0, 0)],
+      0,
+    );
+    const ids = groupSets([A, B, C, D, E], counts, nums, "", "value", worths).inProgress.map((r) => r.set.id);
+    expect(ids).toEqual(["c", "a", "d", "b", "e"]);
+  });
+
+  it("puts a set with no worth information after priced ones", () => {
+    const worths = setWorths([entry("a", 1, 5)], 0);
+    const ids = groupSets([B, A], { a: 1, b: 1 }, { a: ["1"], b: ["1"] }, "", "value", worths).inProgress.map(
+      (r) => r.set.id,
+    );
+    expect(ids).toEqual(["a", "b"]);
+  });
+
+  it("says unpriced, never a zero amount", () => {
+    const w = setWorths([entry("a", 0, 0)], 0);
+    expect(w.a).toEqual({ state: "unpriced" });
+    expect(worthText(w.a)).toBe("unpriced");
+    expect(worthText(w.a)).not.toMatch(/\$|0/);
+  });
+
+  it("says pricing while anything is still loading and the set is not fully priced", () => {
+    const w = setWorths([entry("a", 0, 0), entry("b", 1, 20)], 2);
+    expect(worthText(w.a)).toBe("pricing");
+    expect(worthText(w.b)).toBe("about $20.00");
   });
 });
 

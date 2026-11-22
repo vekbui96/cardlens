@@ -2,7 +2,14 @@ import type { ReactNode } from "react";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import type { SetTiers } from "../../../models/setCompletion.ts";
 import { Card, Chip, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
-import { SET_SORTS, rowLabel, type SetGroups, type SetRowModel, type SetSortKey } from "./setGroups.ts";
+import {
+  SET_SORTS,
+  rowLabel,
+  worthText,
+  type SetGroups,
+  type SetRowModel,
+  type SetSortKey,
+} from "./setGroups.ts";
 import styles from "./collection.module.css";
 
 interface SetsViewProps {
@@ -218,6 +225,12 @@ export function SetRow({ row }: { row: SetRowModel }) {
         </span>
 
         {owned > 0 ? <Tiers name={set.name} tiers={tiers} /> : null}
+        {/* The slot is there from the first paint ("pricing"), so the row never grows when prices land. */}
+        {owned > 0 && worthText(row.worth) ? (
+          <span className={styles.setWorth} data-testid="set-worth">
+            {worthText(row.worth)}
+          </span>
+        ) : null}
       </div>
     </Card>
   );
