@@ -51,6 +51,14 @@ describe("EmptyHome connect action", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("says what Connect this device needs and what to do after a refused token", () => {
+    const { unmount } = render(<EmptyHome syncStatus={status("off")} onConnect={() => {}} />);
+    expect(screen.getByText(/sync token from the server's \.env file/)).toBeTruthy();
+    unmount();
+    render(<EmptyHome syncStatus={status("bad-token")} onConnect={() => {}} />);
+    expect(screen.getByRole("status").textContent).toMatch(/Copy it again.*press Connect this device/);
+  });
+
   it("keeps the two original actions", () => {
     render(<EmptyHome syncStatus={status("off")} onConnect={() => {}} />);
     expect(screen.getByRole("link", { name: /Browse sets/ })).toBeTruthy();
