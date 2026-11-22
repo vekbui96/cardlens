@@ -64,6 +64,7 @@ export function ProgressPanel({
               ))}
             </ul>
             {total ? <p className={styles.resumeMeta}>{total}</p> : null}
+            <WantListRow />
           </Stack>
         ) : (
           <p className={styles.note}>
@@ -73,6 +74,22 @@ export function ProgressPanel({
         )}
       </Stack>
     </Panel>
+  );
+}
+
+/** Every missing card across the started sets, one tap away (the Want list screen). */
+function WantListRow() {
+  return (
+    <Card
+      href={`#${screenToPath({ name: "wantlist" })}`}
+      label="Want list: every card missing from the sets you have started"
+      className={styles.tile}
+    >
+      <Stack gap={1}>
+        <span className={styles.resumeName}>Want list</span>
+        <span className={styles.resumeMeta}>Every card missing from the sets you have started, priced</span>
+      </Stack>
+    </Card>
   );
 }
 

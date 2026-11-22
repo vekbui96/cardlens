@@ -18,7 +18,9 @@ describe("ProgressPanel finish line", () => {
   it("shows what is left under the progress meter", () => {
     render(<ProgressPanel resume={null} rows={[row("13 cards to go, about $9.00")]} loading={false} />);
     expect(screen.getByText("13 cards to go, about $9.00")).toBeTruthy();
-    expect(screen.getByRole("link").getAttribute("aria-label")).toContain("13 cards to go, about $9.00");
+    expect(screen.getByRole("link", { name: /^Scarlet & Violet/ }).getAttribute("aria-label")).toContain(
+      "13 cards to go, about $9.00",
+    );
   });
 
   it("sums the rows into one line under the list", () => {
@@ -32,6 +34,12 @@ describe("ProgressPanel finish line", () => {
     render(<ProgressPanel resume={null} rows={[]} loading={false} />);
     render(<ProgressPanel resume={null} rows={[]} loading={true} />);
     expect(screen.queryByText(/To finish these/)).toBeNull();
+  });
+
+  it("links to the Want list under the sets in progress", () => {
+    render(<ProgressPanel resume={null} rows={[row("13 cards to go")]} loading={false} />);
+    const link = screen.getByRole("link", { name: /^Want list/ });
+    expect(link.getAttribute("href")).toBe("#/wantlist");
   });
 
   it("shows no extra line when nothing is left", () => {

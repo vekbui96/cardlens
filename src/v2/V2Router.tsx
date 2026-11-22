@@ -46,6 +46,9 @@ const CardDetails = lazy(() =>
 );
 const Binder = lazy(() => import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })));
 const Scan = lazy(() => import("./screens/scan/index.ts").then((m) => ({ default: m.ScanScreen })));
+const WantList = lazy(() =>
+  import("./screens/wantlist/index.ts").then((m) => ({ default: m.WantListScreen })),
+);
 /*
  * The three public pages. A visitor who opens one of these will usually never
  * open another screen in this app, so they are their own chunk — nobody
@@ -122,6 +125,8 @@ function render(screen: Screen) {
       return <Search query={screen.query} />;
     case "details":
       return <CardDetails cardId={screen.cardId} {...(screen.summary ? { summary: screen.summary } : {})} />;
+    case "wantlist":
+      return <WantList />;
     case "workshop":
       return <Workshop />;
     default:
