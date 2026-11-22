@@ -1,11 +1,13 @@
 import type { SyncStatus } from "../../../app/LibraryProvider.tsx";
-import { Card, Panel, Stack } from "../../primitives/index.ts";
-import { screenToPath } from "../../../app/screenUrl.ts";
+import { Card, Stack } from "../../primitives/index.ts";
+import { EmptyStart } from "./EmptyStart.tsx";
 import { emptySyncLine } from "./emptySyncLine.ts";
 import styles from "./Home.module.css";
 
 /**
- * Nothing tracked yet.
+ * Nothing tracked yet. The wording and the two ways in are `EmptyStart`'s,
+ * shared with Everything owned and the set list (#165); this adds Home's sync
+ * line and Connect this device.
  *
  * The one state where Home stops reporting and starts offering, because an
  * empty dashboard is a dead end: there is no number to read, no set to resume,
@@ -32,31 +34,11 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
         : null;
   const syncLine = emptySyncLine(syncStatus);
   return (
-    <Panel tone="raised" pad={5}>
-      <Stack gap={4}>
-        <h1 className={styles.emptyTitle}>Nothing tracked yet</h1>
-        <p className={styles.emptyHint}>
-          Open a set and mark the printings you own, or search for a card you have. Everything is saved on
-          this device straight away — sync is optional and comes later.
-        </p>
-        {syncLine ? (
-          <p role="status" className={styles.emptySyncLine}>
-            {syncLine}
-          </p>
-        ) : null}
-        <div className={styles.actions}>
-          <Card href={`#${screenToPath({ name: "sets" })}`} className={styles.tile} pad={4}>
-            <Stack gap={1}>
-              <span className={styles.actionName}>Browse sets</span>
-              <span className={styles.actionHint}>Pick a set and tick off what you have</span>
-            </Stack>
-          </Card>
-          <Card href={`#${screenToPath({ name: "results", query: "" })}`} className={styles.tile} pad={4}>
-            <Stack gap={1}>
-              <span className={styles.actionName}>Search for a card</span>
-              <span className={styles.actionHint}>By name or collector number</span>
-            </Stack>
-          </Card>
+    <EmptyStart
+      headingLevel={1}
+      status={syncLine}
+      extraActions={
+        <>
           {connect === "offer" ? (
             <Card onPress={onConnect} className={styles.tile} pad={4}>
               <Stack gap={1}>
@@ -75,8 +57,8 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
               </Stack>
             </Card>
           ) : null}
-        </div>
-      </Stack>
-    </Panel>
+        </>
+      }
+    />
   );
 }

@@ -116,7 +116,10 @@ test.describe("collection & sets", () => {
     await openV2(page, "/collection", { seed: "empty" });
 
     await expect(page.getByTestId("collection-summary")).toHaveText("Nothing tracked yet");
-    await expect(page.getByText(/Nothing marked owned yet/).first()).toBeVisible();
+    // The same empty state as Home (#165), with the same two ways in.
+    await expect(page.getByRole("heading", { name: "Nothing tracked yet", level: 2 })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Browse sets/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Search for a card/ })).toBeVisible();
     // Every set is still listed — an empty collection is not an empty catalog.
     await expect(page.getByRole("heading", { name: "Sets", level: 2 })).toBeVisible();
     await expect(page.getByTestId("set-grid").locator("> li")).not.toHaveCount(0);
@@ -341,7 +344,9 @@ test.describe("everything owned", () => {
     await page.addInitScript((key) => localStorage.setItem(key, "[]"), COLLECTION_KEY);
     await openV2(page, "/owned");
 
-    await expect(page.getByRole("link", { name: "Browse the sets" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Nothing tracked yet", level: 2 })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Browse sets/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Search for a card/ })).toBeVisible();
   });
 });
 
