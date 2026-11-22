@@ -52,13 +52,13 @@ job keeps each one's context small: on 2026-11-16 one long session doing two bui
    the usage metrics summary, opens the next slices of any spec you approved, then new `loop:proposal`
    issues (or one spec), up to 3.
 
-**Proposal slots (one rule everywhere).** A proposal holds one of the **3** slots while it awaits your
+**Proposal slots (one rule everywhere).** A proposal holds one of the **5** slots while it awaits your
 review: open, `loop:proposal`, and neither `approved` nor `loop:failed`. A spec awaiting review is one
 proposal (one slot); its slices take slots as they are opened, ahead of new ideas (an auto-approved slice
 takes none; the watcher's literal copy of the rule still counts it, so its refill is only more cautious); at most one unapproved
 spec is open at a time. Approved work is your build queue and does not block new ideas; failed issues are
 listed instead (below). The loop (`check-approval.ps1 -Slots`, `gate-rules.ps1 Get-ProposalSlots`) and the
-approval watcher's refill trigger count the same way (the watcher's `$Loops` entry carries `Cap = 3`).
+approval watcher's refill trigger count the same way (the watcher's `$Loops` entry carries `Cap = 5`).
 
 **Specs: big features in slices.** Some ideas are too big for one build (PRODUCT.md's bets: collection
 value over time with price alerts, faster shop mode, scanner gap measurement); before specs they could only

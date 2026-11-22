@@ -209,7 +209,7 @@ Check (@($sp.Allowed).Count -eq 0 -and @($sp.Deferred).Count -eq 2) 'hold: no bu
 Check ((Test-BudgetAllowsModel 'no-opus' (Get-SessionModel -Kind 'propose' -Config $cfg)) -and (Test-BudgetAllowsModel 'no-opus' (Get-SessionModel -Kind 'review' -Config $cfg))) 'no-opus: proposal and review sessions (Sonnet) may run'
 
 # the precheck under the budget
-function Qb { param([int[]]$B, [int]$Free) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 3; awaitingReview = @() }; waitingOnVe = @() } }
+function Qb { param([int[]]$B, [int]$Free) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 5; awaitingReview = @() }; waitingOnVe = @() } }
 $hold = [pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold (5h 97%)'; Warn = $false }
 $noop = [pscustomobject]@{ Verdict = 'no-opus'; Reason = 'plan budget no-opus (5h 88%)'; Warn = $false }
 $p = Get-PrecheckDecision -Queue (Qb @(12) 3) -Mode 'FULL' -Budget $hold

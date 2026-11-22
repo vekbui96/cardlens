@@ -16,28 +16,30 @@ $mk = '<!-- innovation-loop -->'
 # ---- proposal slots: the ONE cap rule (loop + watcher) -----------------------------------------------
 function Iss { param([int]$N, [string[]]$L, [string]$State = 'OPEN', [string]$Body = '', [string]$By = 'vekbui96')
     [pscustomobject]@{ number = $N; state = $State; body = $Body; author = [pscustomobject]@{ login = $By }; labels = @($L | ForEach-Object { [pscustomobject]@{ name = $_ } }) } }
-Check ($script:ProposalCap -eq 3 -and $script:MaxNewPerRun -eq 3 -and $script:MaxOpenSpecs -eq 1) 'cap 3 slots, at most 3 new per run, at most 1 unapproved spec'
+Check ($script:ProposalCap -eq 5 -and $script:MaxNewPerRun -eq 3 -and $script:MaxOpenSpecs -eq 1) 'cap 5 slots, at most 3 new per run, at most 1 unapproved spec'
 $open5 = @((Iss 33 'loop:proposal', 'approved', 'loop:failed'), (Iss 45 'loop:proposal'), (Iss 50 'loop:proposal', 'approved', 'loop:in-progress'),
     (Iss 57 'loop:proposal', 'area:x'))
 $s = Get-ProposalSlots -Issues $open5
-Check (($s.AwaitingReview -join ',') -eq '45,57' -and $s.Free -eq 1 -and $s.Open -eq 4 -and $s.NewThisRun -eq 1) "approved and failed do not hold slots (got awaiting $($s.AwaitingReview -join ','), free $($s.Free))"
-$s = Get-ProposalSlots -Issues @(1..3 | ForEach-Object { Iss $_ 'loop:proposal' })
-Check ($s.Free -eq 0 -and $s.NewThisRun -eq 0 -and -not $s.MayOpenSpec) '3 awaiting review -> no slot, no spec'
+Check (($s.AwaitingReview -join ',') -eq '45,57' -and $s.Free -eq 3 -and $s.Open -eq 4 -and $s.NewThisRun -eq 3) "approved and failed do not hold slots (got awaiting $($s.AwaitingReview -join ','), free $($s.Free))"
+$s = Get-ProposalSlots -Issues @(1..4 | ForEach-Object { Iss $_ 'loop:proposal' })
+Check ($s.Free -eq 1 -and $s.NewThisRun -eq 1 -and $s.MayOpenSpec) '4 awaiting review -> one slot left, a spec still allowed'
+$s = Get-ProposalSlots -Issues @(1..5 | ForEach-Object { Iss $_ 'loop:proposal' })
+Check ($s.Free -eq 0 -and $s.NewThisRun -eq 0 -and -not $s.MayOpenSpec) '5 awaiting review -> no slot, no spec'
 $s = Get-ProposalSlots -Issues @(1..7 | ForEach-Object { Iss $_ 'loop:proposal' })
-Check ($s.Free -eq 0) 'over the cap (e.g. after lowering it from 5) -> free 0, never negative'
+Check ($s.Free -eq 0) 'over the cap (e.g. after lowering it) -> free 0, never negative'
 $s = Get-ProposalSlots -Issues @()
-Check ($s.Free -eq 3 -and $s.NewThisRun -eq 3 -and $s.MayOpenSpec) 'none open -> 3 free, a spec allowed'
+Check ($s.Free -eq 5 -and $s.NewThisRun -eq 3 -and $s.MayOpenSpec) 'none open -> 5 free, at most 3 new this run, a spec allowed'
 $s = Get-ProposalSlots -Issues @((Iss 1 'loop:product-review'), (Iss 2 'loop:proposal', 'loop:failed'))
-Check ($s.Free -eq 3 -and $s.Open -eq 1) 'only loop:proposal issues count; a failed one (even unapproved) holds no slot'
+Check ($s.Free -eq 5 -and $s.Open -eq 1) 'only loop:proposal issues count; a failed one (even unapproved) holds no slot'
 $s = Get-ProposalSlots -Issues @([pscustomobject]@{ number = 9; labels = @('loop:proposal') })
 Check ($s.AwaitingReview -contains 9) 'labels as plain strings work too'
 
 # ---- specs hold slots like proposals ------------------------------------------------------------------
 $s = Get-ProposalSlots -Issues @((Iss 70 'loop:proposal', 'loop:spec'), (Iss 71 'loop:proposal'))
-Check ($s.Free -eq 1 -and ($s.SpecsAwaiting -join ',') -eq '70' -and -not $s.MayOpenSpec) 'an unapproved spec takes ONE slot; a second spec is not allowed while it waits'
+Check ($s.Free -eq 3 -and ($s.SpecsAwaiting -join ',') -eq '70' -and -not $s.MayOpenSpec) 'an unapproved spec takes ONE slot; a second spec is not allowed while it waits'
 $s = Get-ProposalSlots -Issues @((Iss 70 'loop:proposal', 'loop:spec', 'approved'), (Iss 72 'loop:proposal'))
-Check ($s.Free -eq 2 -and $s.SpecsAwaiting.Count -eq 0 -and $s.MayOpenSpec) 'an approved spec holds no slot; a new spec is allowed again'
-$s = Get-ProposalSlots -Issues @((Iss 70 'loop:proposal', 'loop:spec', 'approved'), (Iss 73 'loop:proposal'), (Iss 74 'loop:proposal'), (Iss 75 'loop:proposal'))
+Check ($s.Free -eq 4 -and $s.SpecsAwaiting.Count -eq 0 -and $s.MayOpenSpec) 'an approved spec holds no slot; a new spec is allowed again'
+$s = Get-ProposalSlots -Issues @((Iss 70 'loop:proposal', 'loop:spec', 'approved'), (Iss 73 'loop:proposal'), (Iss 74 'loop:proposal'), (Iss 75 'loop:proposal'), (Iss 76 'loop:proposal'), (Iss 77 'loop:proposal'))
 Check ($s.Free -eq 0 -and -not $s.MayOpenSpec) 'its open slices hold slots like any proposal; full -> nothing new'
 
 # ---- spec bodies, slice links, the spec plan ----------------------------------------------------------
@@ -128,7 +130,7 @@ $d = Get-RetryDecision -Labels @('loop:proposal', 'approved') -Failures @(Fr 'ci
 Check (-not $d.Failed -and -not $d.Retry -and $d.Reason -eq '') 'not loop:failed -> no retry decision'
 
 # ---- precheck before claude -------------------------------------------------------------------------
-function Q { param([int[]]$B, [int]$Free, [int[]]$Aw = @()) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 3; awaitingReview = @($Aw) }; waitingOnVe = @() } }
+function Q { param([int[]]$B, [int]$Free, [int[]]$Aw = @()) [pscustomobject]@{ buildable = @($B); retry = @(); slots = [pscustomobject]@{ free = $Free; cap = 5; awaitingReview = @($Aw) }; waitingOnVe = @() } }
 $p = Get-PrecheckDecision -Queue (Q @() 0 @(1, 2, 3)) -Mode 'FULL'
 Check (-not $p.Launch -and $p.Reason -match '0 buildable' -and $p.Reason -match '0 free proposal slot') "nothing buildable, no slot -> skip ($($p.Reason))"
 Check ((Get-PrecheckDecision -Queue (Q @(33) 0) -Mode 'FULL').Launch) 'a buildable issue -> launch'
@@ -331,7 +333,7 @@ $d = Vs $s4 -Edited '2026-11-22T02:00:00Z'
 Check (-not $d.Eligible -and (Why $d) -match 'body edited') 'slice body edited after it was opened -> not auto-approved'
 # slots and the notice
 $sv = Get-ProposalSlots -Issues @((Iss 108 'loop:proposal', 'loop:spec', 'approved'), (Iss 117 'loop:proposal'), (Iss 118 'loop:proposal')) -ApprovedViaSpec @(117)
-Check (($sv.AwaitingReview -join ',') -eq '118' -and $sv.Free -eq 2) "an auto-approved slice holds no proposal slot (got awaiting $($sv.AwaitingReview -join ','))"
+Check (($sv.AwaitingReview -join ',') -eq '118' -and $sv.Free -eq 4) "an auto-approved slice holds no proposal slot (got awaiting $($sv.AwaitingReview -join ','))"
 $nt = Format-ViaSpecNotice -Spec 108 -ApprovedAt '2026-11-20T17:00:00Z' -Who 'Ve' -Marker $mk
 Check ($nt.StartsWith($mk) -and $nt.Contains($script:ViaSpecMarker) -and $nt -match 'Auto-approved via spec #108 \(approved by Ve on 2026-11-20\)\. Comment `/hold` to stop\.') "notice text (got: $nt)"
 Check (-not ($nt -match $script:HoldRx)) 'the notice itself does not read as a hold'

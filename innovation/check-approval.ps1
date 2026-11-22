@@ -39,7 +39,7 @@
   "Auto-approved via spec" comment is there), `approvals` (issue -> `label` | `via-spec #<spec>`), `buildable` (oldest first),
   `retry` (the buildable ones that are an automatic retry), `labels` (issue -> labels, for the runner's
   model choice), `slots` (proposal slots: open loop:proposal issues, specs included, that are neither
-  approved nor loop:failed hold one; cap 3; `free`, `newThisRun`, `specsAwaiting`, `mayOpenSpec`), `specs`
+  approved nor loop:failed hold one; cap 5; `free`, `newThisRun`, `specsAwaiting`, `mayOpenSpec`), `specs`
   (approved open specs with their slices), `slicesToOpen` (the slices Phase B opens before any new idea,
   in order), `waitingOnVe` (failed issues that are not retried: issue + reason) and `checked` (every
   check). Exit 0 when something is buildable, else 1. -Slots prints the same without `checked` and always
