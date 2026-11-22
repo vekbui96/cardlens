@@ -177,4 +177,11 @@ test.describe("search @visual", () => {
     // The main region only: the header is the shell's snapshot, not this one's.
     await expect(page.getByRole("main")).toHaveScreenshot("search-results.png");
   });
+
+  test("the catalog failure looks like itself", async ({ page }) => {
+    await openV2(page, "/search/charizard", { sim: "fail" });
+    await expect(page.getByRole("heading", { name: /the card catalog did not answer/i })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("search-failure.png");
+  });
 });
