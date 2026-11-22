@@ -3,7 +3,14 @@ import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../../models/finishes.ts";
-import { OWNED_SORTS, sortOwned, totalOf, type OwnedSortKey } from "../../../models/ownedSort.ts";
+import { formatPct } from "../../../models/movement.ts";
+import {
+  OWNED_SORTS_V2,
+  sortOwned,
+  totalOf,
+  weekChange,
+  type OwnedSortKey,
+} from "../../../models/ownedSort.ts";
 import { Card, CardArt, Chip, Money, Panel, Row, Stack } from "../../primitives/index.ts";
 import { Showcase } from "./Showcase.tsx";
 import styles from "./collection.module.css";
@@ -112,7 +119,7 @@ export function OwnedView() {
           </div>
           <div role="group" aria-label="Sort by">
             <Row gap={2} wrap>
-              {OWNED_SORTS.map((s) => (
+              {OWNED_SORTS_V2.map((s) => (
                 <Chip key={s.key} onPress={() => setSort(s.key)} pressed={s.key === sort}>
                   {s.label}
                 </Chip>
@@ -122,7 +129,11 @@ export function OwnedView() {
         </Row>
 
         {view === "showcase" ? (
-          <Showcase rows={sorted} onOpen={(row) => push({ name: "details", cardId: row.cardId })} />
+          <Showcase
+            rows={sorted}
+            showChange={sort === "change"}
+            onOpen={(row) => push({ name: "details", cardId: row.cardId })}
+          />
         ) : (
           <ul className={styles.ownedGrid}>
             {sorted.map((row) => (
@@ -159,7 +170,14 @@ export function OwnedView() {
                       absent upstream, and "$0.00" would claim they are
                       worthless rather than unknown.
                     */}
-                    <Money value={row.price} absentLabel="unpriced" />
+                    <span className={styles.ownedPrice}>
+                      <Money value={row.price} absentLabel="unpriced" />
+                      {sort === "change" && weekChange(row) !== undefined ? (
+                        <span className={styles.ownedChange} data-testid="owned-change">
+                          {formatPct(weekChange(row) as number)}
+                        </span>
+                      ) : null}
+                    </span>
                   </div>
                 </Card>
               </li>

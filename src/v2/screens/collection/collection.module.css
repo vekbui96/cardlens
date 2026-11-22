@@ -429,6 +429,25 @@
   align-items: center;
 }
 
+/* Price with the week's percent change beneath it (Biggest change sort). */
+.ownedPrice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.ownedChange {
+  display: inline-block;
+  margin-inline-start: var(--v2-space-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--v2-fw-bold);
+  white-space: nowrap;
+}
+
+.ownedPrice .ownedChange {
+  margin-inline-start: 0;
+}
+
 /*
  * A fixed box whether or not the art loads. Sizing a tile from the image alone
  * collapsed it to 19px when upstream 404'd.

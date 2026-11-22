@@ -325,6 +325,13 @@ test.describe("everything owned", () => {
     await sorts.getByRole("button", { name: "Set & number" }).click();
     await expect(sorts.getByRole("button", { name: "Set & number" })).toHaveAttribute("aria-pressed", "true");
     await expect(rows).toHaveCount(24);
+
+    await sorts.getByRole("button", { name: "Biggest change" }).click();
+    await expect(sorts.getByRole("button", { name: "Biggest change" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(rows).toHaveCount(24);
   });
 
   test("an empty collection offers the action that fixes it", async ({ page }) => {
