@@ -30,6 +30,11 @@ diary (that is what made the old file 63 KB).
   Mault is GPLv3: never copy its code into this repo. It is back after a reboot
   only once Ve signs in to Windows (Docker Desktop starts at logon), so photo
   scan reads "offline" until then.
+- **Value history** (#112, decision `docs/decisions/value-history.md`): the
+  server writes one row a day to `D:\services\dataalue-history.json` (kept
+  forever, in the nightly data zip); read via `GET /api/value-history` (sync
+  token). #117 (the chart) reads it. #110 "Since you last looked" is a
+  device-local key `cardlens:v1:last-look:v1`.
 - **Usage metrics** are counts only, `GET /api/metrics/summary?days=N`; events
   in `src/models/metricsEvents.ts`.
 - **Innovation loop** (`innovation/`, daily, its own ideas only) proposes issues,
@@ -38,10 +43,6 @@ diary (that is what made the old file 63 KB).
 
 ## Waiting on Ve
 
-- **#111 value-history storage decision** (`docs/decisions/value-history.md`):
-  recommends a server-written daily `value-history.json`. #112 (writer) and #117
-  (chart) wait on it. #110 "Since you last looked" shipped 2026-11-21
-  (device-local key `cardlens:v1:last-look:v1`, v2 Home only).
 - **PR #63** (scan review: price each printing and the batch total) is open.
 - **Loop issues #85 and #96** are `approved` + `loop:failed`: both were built,
   merged, then reverted. Remove `loop:failed` to retry them, or close them.
