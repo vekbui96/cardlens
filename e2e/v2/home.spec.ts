@@ -165,7 +165,7 @@ const COLLECTION_KEY = "cardlens:v1:collection";
 /**
  * Cards from sets the mock catalog DOES have, each with the one printing the
  * stubbed `/api/printings` answers for: [cardId, setId, number, finish, avg7, avg1].
- * avg30 is not read by the movers strip. EUR figures; the screen shows percent only.
+ * avg30 equals avg7 here, so both windows rank alike. EUR figures; the screen shows percent only.
  */
 const MOVERS: Array<[string, string, string, string, number, number]> = [
   ["sv3-223", "sv3", "223", "holo", 40, 49.2], // +23.0%
@@ -229,6 +229,19 @@ test.describe("home @visual", () => {
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-movers.png", { fullPage: true });
+  });
+
+  test("movers: 30 days selected", async ({ page }) => {
+    await seedMovers(page);
+    await page.addInitScript(() => localStorage.setItem("cardlens:v1:movers-window", "30"));
+    await openV2(page, "/");
+    await expect(
+      page.getByRole("group", { name: "Movers window" }).getByRole("button", { name: "30 days" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("main")).toContainText("+23.0% 30d");
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-movers-30d.png", { fullPage: true });
   });
 
   /**

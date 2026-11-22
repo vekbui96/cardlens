@@ -131,6 +131,37 @@ describe("topMovers", () => {
     expect(m).toEqual({ risers: [], fallers: [] });
   });
 
+  describe("30-day window", () => {
+    const r30 = (id: string, avg1: number, avg30: number, avg7 = avg1) => ({
+      id,
+      eur: s(avg1, avg7, avg30),
+    });
+
+    it("ranks avg1 against avg30, not avg7", () => {
+      const m = topMovers(
+        [r30("up", 12, 8), r30("up2", 12, 10), r30("dn", 5, 10), r30("dn2", 8, 10), r30("flat", 6, 6)],
+        30,
+      );
+      expect(ids(m.risers)).toEqual(["up", "up2"]);
+      expect(ids(m.fallers)).toEqual(["dn", "dn2"]);
+      expect(m.risers[0]?.pct).toBeCloseTo(50, 5);
+    });
+
+    it("applies the floor to avg30 as well as avg1, and ignores avg7", () => {
+      const m = topMovers(
+        [r30("low30", 5, 0.9), r30("low1", 0.9, 5), r30("low7ok", 3, 2, 0.1), r30("a", 3, 2), r30("b", 4, 2)],
+        30,
+      );
+      expect(ids(m.risers)).toEqual(["b", "low7ok", "a"]);
+    });
+
+    it("defaults to the 7-day window", () => {
+      const rows = [r30("a", 12, 1, 10), r30("b", 11, 1, 10)];
+      expect(ids(topMovers(rows).risers)).toEqual(["a", "b"]);
+      expect(topMovers(rows, 30).risers[0]?.pct).toBeCloseTo(1100, 5);
+    });
+  });
+
   it("returns percentages only, never an EUR amount", () => {
     const m = topMovers([row("a", 10, 12), row("b", 10, 11)]);
     expect(m.risers.map((x) => x.pct)).toEqual([20, 10].map((p) => expect.closeTo(p, 5)));
