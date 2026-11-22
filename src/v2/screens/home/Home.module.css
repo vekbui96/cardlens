@@ -69,6 +69,12 @@
   font-size: var(--v2-fs-small);
 }
 
+/* The delta itself, "+3.2% · +12 cards": the sign carries the direction, never colour. */
+.since {
+  color: var(--v2-fg);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Paired with the word "No prices" in the line itself — never colour alone. */
 .lineWarn {
   color: var(--v2-warn);

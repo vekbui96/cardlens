@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Chip, Money, Panel, Row, Stack, cx } from "../../primitives/index.ts";
 import { formatPct } from "../../../models/movement.ts";
 import type { Movement } from "../../../models/movement.ts";
+import type { SinceLastLooked } from "../../../models/lastLook.ts";
 import { pricingSummary, type PricingInput } from "./homeSummary.ts";
 import styles from "./Home.module.css";
 
@@ -20,10 +21,13 @@ export function ValuePanel({
   total,
   movement,
   pricing,
+  since = null,
 }: {
   total: number;
   movement: Movement;
   pricing: PricingInput;
+  /** Change since this device's previous visit. Null on a first visit: nothing is shown. */
+  since?: SinceLastLooked | null;
 }) {
   const client = useQueryClient();
   const summary = pricingSummary(pricing);
@@ -68,6 +72,12 @@ export function ValuePanel({
         </Row>
 
         <p className={cx(styles.line, summary.warn && styles.lineWarn)}>{summary.line}</p>
+
+        {since ? (
+          <p className={styles.line}>
+            Since you last looked ({since.ago}): <span className={styles.since}>{since.text}</span>
+          </p>
+        ) : null}
 
         {summary.cannotPrice.length > 0 ? (
           <p className={styles.note}>

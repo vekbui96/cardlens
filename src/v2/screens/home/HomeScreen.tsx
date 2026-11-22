@@ -3,6 +3,7 @@ import { screenToPath } from "../../../app/screenUrl.ts";
 import { continueTarget, topProgress } from "../../../features/home/continueSet.ts";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
+import { useSinceLastLooked } from "../../../hooks/useSinceLastLooked.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { topMovers, type TopMovers } from "../../../models/movement.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
@@ -69,6 +70,14 @@ export function HomeScreen() {
   const { data: sets } = useSets();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
+  // One localStorage read and write once prices settle — no request (#110).
+  const since = useSinceLastLooked({
+    total: value.total,
+    cards: collection.length,
+    priced: value.priced,
+    printings: value.printings,
+    pending: value.pending,
+  });
   /*
    * The rows My cards lists, on query keys the total above already fetches, so
    * no request is added. Movers are drawn only once names and prices have
@@ -134,6 +143,7 @@ export function HomeScreen() {
         <ValuePanel
           total={value.total}
           movement={value.movement}
+          since={since}
           pricing={{
             printings: value.printings,
             priced: value.priced,

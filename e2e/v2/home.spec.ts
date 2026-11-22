@@ -288,3 +288,33 @@ test.describe("home @visual", () => {
     await expect(page).toHaveScreenshot("home-progress.png", { fullPage: true });
   });
 });
+
+test.describe("since you last looked (#110)", () => {
+  const KEY = "cardlens:v1:last-look:v1";
+
+  test("a clean device shows no comparison, and saves a baseline for next time", async ({ page }) => {
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByText("No prices for any of your 5 printings")).toBeVisible();
+    await expect(page.getByText(/Since you last looked/)).toHaveCount(0);
+    await expect.poll(() => page.evaluate((k) => localStorage.getItem(k), KEY)).not.toBeNull();
+  });
+
+  test("compares with the snapshot from the previous visit on this device", async ({ page }) => {
+    await page.addInitScript((k) => {
+      // Only seed once: the app overwrites the key after the first settle.
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      const at = Date.now() - 2 * 24 * 60 * 60_000;
+      const snap = { at, total: 0, cards: 2, priced: 0, printings: 2, currency: "USD" };
+      localStorage.setItem(k, JSON.stringify({ v: 1, previous: null, latest: snap }));
+    }, KEY);
+    await openV2(page, "/", { seed: "collection" });
+    // The fixture's five cards are unpriced under mocks, so only the card delta
+    // can be said — the price part is left out rather than read as a loss.
+    await expect(page.getByText("Since you last looked (2 days ago): +3 cards")).toBeVisible();
+
+    // A reload in the same visit keeps the comparison instead of "No change".
+    await page.reload();
+    await expect(page.getByText("Since you last looked (2 days ago): +3 cards")).toBeVisible();
+  });
+});
