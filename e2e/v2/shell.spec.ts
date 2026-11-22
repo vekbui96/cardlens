@@ -175,6 +175,50 @@ test.describe("the shell holds", () => {
     await expect(shell.navLink("Binders")).toHaveCount(1);
   });
 
+  /**
+   * The single-row header did not fit a phone: the version switch could not
+   * shrink, so it was pushed past the viewport and the whole page scrolled
+   * sideways — `scrollWidth` 420 on a 390px iPhone, 367 at 320. The header is
+   * now two rows below 1000px; this holds the page to the viewport at every
+   * phone width that matters, on the longest sync line the header can show.
+   */
+  for (const width of [320, 360, 390, 430]) {
+    test(`the shell does not scroll sideways at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const shell = await openV2(page, "/target");
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-snapshot="volatile"]');
+        if (el) el.textContent = "Sync: token rejected";
+      });
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(width);
+
+      // The switch is inside the viewport and finger-sized.
+      for (const name of ["Use interface V1", "Use interface V2"]) {
+        const box = await shell.versionSwitch.getByRole("button", { name }).boundingBox();
+        expect(box, name).not.toBeNull();
+        expect(box!.x + box!.width, name).toBeLessThanOrEqual(width);
+        expect(box!.height, name).toBeGreaterThanOrEqual(44);
+        expect(box!.width, name).toBeGreaterThanOrEqual(44);
+      }
+
+      // The current entry — the LAST one, on a deep link — is scrolled into
+      // view rather than lit up somewhere off the edge of the strip.
+      await expect(shell.current).toHaveText("Target");
+      await expect(shell.current).toBeInViewport({ ratio: 1 });
+
+      // And every destination is still reachable, at a tappable height.
+      for (const label of ["Home", "Collection", "Search", "Scan", "Binders", "Sealed", "Target"]) {
+        const link = shell.navLink(label);
+        // Scrolled the way a swipe on the strip would, sideways only.
+        await link.evaluate((el) => el.scrollIntoView({ block: "nearest", inline: "nearest" }));
+        await expect(link).toBeInViewport({ ratio: 1 });
+        const box = await link.boundingBox();
+        expect(box!.height, label).toBeGreaterThanOrEqual(44);
+      }
+    });
+  }
+
   test("sync status is reachable from the shell", async ({ page }) => {
     const shell = await openV2(page);
     await expect(shell.page.locator('[data-snapshot="volatile"]')).toContainText("Sync:");
