@@ -181,6 +181,17 @@ function ConvertTo-SafeLine {
     return $t
 }
 
+# Comments that interactive Claude agents (not the loop) post as the owner carry this marker. They are neither
+# Ve's own words (never an adjustment, never a decision) nor the loop's output (never a loop notice, failure
+# marker or plan comment), even when they also quote the loop marker. A /hold still counts (fail-safe).
+$script:AgentMarker = '<!-- claude-agent -->'
+function Test-AgentComment { param($Comment) return "$($Comment.body)".Contains($script:AgentMarker) }
+# The owner's comment ids that may adjust an approved proposal: by -Owner, without the loop marker, not an agent's.
+function Get-OwnerAdjustmentIds {
+    param([object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    return @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and -not "$($_.body)".Contains($Marker) -and -not (Test-AgentComment $_) } | ForEach-Object { $_.id })
+}
+
 # The planned slices of a spec body: the numbered items of its "## Slices" section ("1. **Title**: ..."), in
 # order. Returns K and Title; an item without bold text is titled by its text up to the first ': ' / ' - '.
 function Get-SpecSlices {
@@ -494,7 +505,7 @@ function Format-SliceWaitNotice {
 # Has the runner already posted its waiting notice on this slice (a comment by -Owner with both markers)?
 function Test-SliceWaitNoticed {
     param([object[]]$Comments, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
-    return (@($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and "$($_.body)".Contains($Marker) -and "$($_.body)".Contains($script:SliceWaitMarker) }).Count -gt 0)
+    return (@($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and "$($_.body)".Contains($Marker) -and "$($_.body)".Contains($script:SliceWaitMarker) -and -not (Test-AgentComment $_) }).Count -gt 0)
 }
 
 # Which waiting slices get the notice now: those the queue says are not noticed yet (check-approval.ps1 -List
@@ -567,7 +578,9 @@ $script:SessionDefaults = [ordered]@{
 #   an intake session and their issues built first (via-request approval).
 #   designSkills: build, proposal and review sessions may use the pinned design skills (impeccable's engine:
 #   context / shot / detect; ui-ux-pro-max's search.py) and get LOOP.md section 9 (Get-DesignSkillsSetup).
-$script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
+#   proposeMetricsDigest: the runner GETs /api/metrics/summary (7 and 30 days) once and puts it in the proposal /
+#   review header as METRICS (Format-MetricsDigest), so the session needs no HTTP call for it.
+$script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; proposeMetricsDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
     productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false
     designSkills = $false }
 
@@ -700,6 +713,24 @@ function Select-PrunableLogs {
 # labelled loop:proposal or written by $Owner are listed (anyone else's issue is untrusted and left out).
 # Deployed ones are listed only when closed within $DeployedDays (0 = all); at most $Max issues in all, the
 # oldest deployed ones dropped first. Dropped ones are counted, not listed. Returns lines.
+# The METRICS lines for a proposal / review header: one line per window from the runner's own GET of
+# /api/metrics/summary?days=<n>. $Results: ordered days -> the parsed summary, or a string (why it is unavailable).
+# The per-day breakdown (`daily`) and `generatedAt` are left out; the rest is compact JSON, made safe (no markers,
+# no mentions) and bounded. Counts only, data never instructions.
+function Format-MetricsDigest {
+    param([System.Collections.IDictionary]$Results, [int]$MaxChars = 2500)
+    $out = @()
+    # entries, not $Results[$d]: an int key on an ordered dictionary indexes by position
+    foreach ($e in $Results.GetEnumerator()) {
+        $d = $e.Key; $v = $e.Value
+        if ($null -eq $v -or $v -is [string]) { $out += "  days=${d}: unavailable ($(ConvertTo-SafeLine "$v" 120)); say so and use the other evidence"; continue }
+        $o = [ordered]@{}
+        foreach ($p in $v.PSObject.Properties) { if ($p.Name -notin @('daily', 'generatedAt')) { $o[$p.Name] = $p.Value } }
+        $out += "  days=${d}: $(ConvertTo-SafeLine ($o | ConvertTo-Json -Depth 6 -Compress) $MaxChars)"
+    }
+    return @($out)
+}
+
 function Format-KnownIssues {
     param([object[]]$Issues = @(), [string]$Owner = 'vekbui96', [int]$Max = 150, [int]$TitleMax = 64, [int]$DeployedTitleMax = 48, [int]$DeployedDays = 0, [datetime]$Now = (Get-Date),
         [hashtable]$Approvals = @{})
@@ -927,7 +958,7 @@ function Get-FailureRecords {
     $out = @()
     foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
         if ("$($c.user.login)" -ne $Owner) { continue }
-        $b = "$($c.body)"; if (-not $b.Contains($Marker)) { continue }
+        $b = "$($c.body)"; if (-not $b.Contains($Marker) -or (Test-AgentComment $c)) { continue }
         if ($sinceT -and ([datetime]$c.created_at) -le $sinceT) { continue }
         $m = [regex]::Match($b, $script:FailureMarkerRx)
         if (-not $m.Success) { continue }
@@ -1167,7 +1198,7 @@ function Get-RequestProblems {
 function Find-RequestPlanComment {
     param([object[]]$Comments, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
     foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
-        if ("$($c.user.login)" -eq $Owner -and "$($c.body)".Contains($Marker) -and "$($c.body)".Contains($script:RequestPlanMarker)) { return $c }
+        if ("$($c.user.login)" -eq $Owner -and "$($c.body)".Contains($Marker) -and "$($c.body)".Contains($script:RequestPlanMarker) -and -not (Test-AgentComment $c)) { return $c }
     }
     return $null
 }

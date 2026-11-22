@@ -156,6 +156,8 @@ caps: ...`), approved issues stay approved for a later day, and a run with nothi
   issues bypass it (`Get-DailyCapDecision -Request`): their intake and builds are not counted; the intake kind has its own cap of 6.
 - **Options** (`"options"` in `sessions.json`): `proposeIssueDigest` (the runner lists the issues once and
   puts a compact `KNOWN_ISSUES` block in the proposal header, so the session does not list them itself),
+  `proposeMetricsDigest` (the runner GETs `/api/metrics/summary` for 7 and 30 days and puts it in the
+  proposal / review header as `METRICS`, so the session needs no HTTP call for it),
   `compactPrompts` (LOOP.md blocks marked `<!-- only:build -->` stay out of proposal and review prompts),
   `logKeepDays` (30: older prompts, transcripts and summaries are deleted at the start of a run;
   `*.rundata.json` and `run-<id>.log` are kept for the ops hub; a dry run only lists them; 0 = never),
@@ -236,7 +238,9 @@ as before. It steers proposals only; it never widens what the loop may build or 
   and the allowlist).
 - To adjust scope, comment (before or after approving). Your comments (not the loop's, which carry a
   hidden `<!-- innovation-loop -->` marker) are adjustments. Comments from anyone else are ignored as
-  instructions.
+  instructions. Comments your interactive Claude agents post as `vekbui96` carry `<!-- claude-agent -->`:
+  they are never adjustments, never product decisions (`decisions.jsonl`) and never loop output. A past
+  agent comment without it is retracted in the store with an `ignore` record (`New-DecisionIgnore`).
 - If you **edit the issue body after approving**, the loop will not build it until you remove and re-add
   `approved`, so what gets built is what you approved.
 - A proposal marked **Manual / needs Ve** is never built or deployed by the loop: card index / recognition,

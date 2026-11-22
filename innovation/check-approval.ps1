@@ -34,7 +34,8 @@
      approved is the text that gets built
    - the body does not say "Manual / needs Ve" (out-of-scope proposals are never built by the loop)
 
-  Also prints `adjustments`: ids of comments by vekbui96 WITHOUT the `<!-- innovation-loop -->` marker.
+  Also prints `adjustments`: ids of comments by vekbui96 WITHOUT the `<!-- innovation-loop -->` marker (and
+  without `<!-- claude-agent -->`: interactive agents posting as vekbui96 are not Ve).
   Only those may adjust an approved proposal; comments by anyone else are untrusted data.
 
   -Issue <n> -Spec checks an approved SPEC instead: loop:spec + loop:proposal, open, opened by vekbui96,
@@ -163,7 +164,7 @@ function Test-Issue {
         $res.viaSpecReasons = @($via.Reasons)
         if ($via.Eligible) {
             $res.approval = 'via-spec'; $res.viaSpec = [int]$via.Spec
-            $res.viaSpecNoticed = (@($comments | Where-Object { "$($_.user.login)" -eq $Owner -and "$($_.body)".Contains($script:Marker) -and "$($_.body)".Contains($script:ViaSpecMarker) }).Count -gt 0)
+            $res.viaSpecNoticed = (@($comments | Where-Object { "$($_.user.login)" -eq $Owner -and "$($_.body)".Contains($script:Marker) -and "$($_.body)".Contains($script:ViaSpecMarker) -and -not (Test-AgentComment $_) }).Count -gt 0)
         }
     }
     # no `approved` of its own and "From request #N": approved through Ve's request ("Build it" mode), or a
@@ -225,7 +226,7 @@ function Test-Issue {
         }
     }
 
-    $res.adjustments = @($comments | Where-Object { $_.user.login -eq $Owner -and -not ($_.body -and $_.body.Contains($script:Marker)) } | ForEach-Object { $_.id })
+    $res.adjustments = @(Get-OwnerAdjustmentIds -Comments $comments -Owner $Owner -Marker $script:Marker)
 
     if (-not $AsSpec) {
         # loop:failed: buildable again only as the ONE automatic retry of a failure outside the change
