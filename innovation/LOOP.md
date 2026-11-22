@@ -143,7 +143,7 @@ that fails gets no automatic retry: it waits for Ve (who removes `loop:failed` t
 (you never edit it) and closes the spec once every slice is deployed or closed. A spec is never built:
 `check-approval.ps1` refuses it.
 
-**Proposal slots (the one cap rule).** A proposal holds one of the **3** slots while it awaits review: open,
+**Proposal slots (the one cap rule).** A proposal holds one of the **5** slots while it awaits review: open,
 `loop:proposal`, and neither `approved` (that is Ve's build queue) nor `loop:failed` (those are listed as
 "failed, waiting on Ve" instead). A spec awaiting review holds ONE slot like any proposal (none once
 approved); its slices hold slots as they are opened (an auto-approved slice holds none: it is build queue),

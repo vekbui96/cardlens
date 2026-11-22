@@ -125,7 +125,7 @@ function Get-GapDecision {
 # dot-source anything from a user-writable checkout). A proposal holds a slot while it AWAITS REVIEW: open,
 # labelled loop:proposal, and neither `approved` (that is the owner's build queue, not discovery's) nor
 # `loop:failed` (listed as "failed, waiting on the owner" instead, see Get-RetryDecision).
-$script:ProposalCap = 3     # the approval watcher's $Loops entry for this loop carries the same Cap
+$script:ProposalCap = 5     # the approval watcher's $Loops entry for this loop carries the same Cap
 $script:MaxNewPerRun = 3
 $script:SpecLabel = 'loop:spec'
 $script:MaxOpenSpecs = 1    # unapproved specs open at the same time
