@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRepositories } from "./contexts.tsx";
 import { useNavigation } from "./NavigationProvider.tsx";
 import { screenToPath } from "./screenUrl.ts";
+import { screenTitle } from "./documentTitle.ts";
 import type { LayoutMode } from "./layoutMode.ts";
 import type { UiVersion } from "./uiVersion.ts";
 import { configureMetrics, track, trackScreen } from "../services/metrics.ts";
@@ -32,6 +33,13 @@ export function MetricsBoot({ mode, uiVersion }: { mode: LayoutMode; uiVersion: 
   const key = screenToPath(screen);
   const name = screen.name;
   useEffect(() => trackScreen(name), [key, name]);
+
+  // The browser tab names the screen on the web shell; the glasses keep the
+  // static index.html title.
+  useEffect(() => {
+    if (mode !== "web") return;
+    document.title = screenTitle(name);
+  }, [mode, name]);
 
   return null;
 }
