@@ -333,7 +333,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    will change; approach; the test that must fail before the fix; the test plan; deploy targets (Pages
    only, or Pages + server, naming the server-relevant files); a change-specific string that only the new
    front-end build will contain (new UI copy is best; it is how the deploy is verified in the served
-   chunks); data risk (does any stored shape, whitelist or merge rule change? if yes, stop: rule 8);
+   chunks), or, ONLY when the change adds new `src/` modules that nothing imports yet (a model or utility
+   for a later slice, plus its tests) and modifies no shipped front-end file, "no visible string: <reason>"
+   (then use `-NoVisibleString "<reason>"` below instead of `-ExpectString`); data risk (does any stored shape, whitelist or merge rule change? if yes, stop: rule 8);
    screenshots (for a visible change: which screen(s), which existing `@visual` baselines will show it at
    390px and, if the desktop layout changes, 1440px, or which new case you will add first; see
    "Screenshots" above; "no visible change" otherwise); rollback plan. Then progress `plan` ok.
@@ -362,6 +364,11 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      browser, Prettier (`format`, enforced by CI), `npm run verify` (format:check, typecheck, lint, check:v2,
      ~1,250 unit tests), and a Pages-style build whose `index.html` must reference
      `/cardlens/assets/index-*.js` and whose chunks must contain the string. Last line `TEST-GATE PASS`.
+     A change with no visible string (plan step 5) runs `-NoVisibleString "<reason>"` instead of
+     `-ExpectString`: the gate then requires that every front-end file in your diff against origin/main is
+     NEW under `src/` (no modified, deleted or renamed one, nothing in `public/`, `index.html` or
+     `vite.config.ts`) and that none of the new modules is in the built source maps. If it refuses, the
+     change is served: give it a visible string. Never use it to skip the string for a visible change.
      For quick iteration on one test file: `-Step unit -UnitFilter <file>`.
    - If you changed anything a v2 visual snapshot covers (`src/v2/`, `src/web/`, shared UI): run
      `<SCRIPTS>\update-snapshots.ps1 -Issue <n>` in the BACKGROUND. It lists the baseline PNGs that
@@ -431,7 +438,10 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    - `MERGE-PR REFUSED ...` or `CI-TIMEOUT` (exit 4): nothing was merged. Go to Failure (no rollback
      needed; leave the PR open).
 10. **Deploy and verify.** `<SCRIPTS>\deploy.ps1 -Issue <n> -MergeSha <mergeSha> -ExpectString "<string>"`
-    in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source). Progress
+    in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source; for a change
+    with no visible string pass the same `-NoVisibleString "<reason>"` as the gate instead: deploy.ps1
+    re-checks the rule from git, refuses and reverts if it does not hold, and verifies by this sha's Pages
+    run, every served chunk and the render). Progress
     `deploy` (running: "server: snapshot + restart" or "Pages only") with heartbeats from its log, then
     `verify` (running) once its log shows the live checks (Pages run, served chunks, render). It deploys the
     server through the elevated task when needed (data snapshot, reset, `npm ci` if the lockfile changed,
@@ -492,7 +502,7 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 ## 4. Gates (summary)
 
 - Local: `test-gate.ps1 -Step all` PASS (install + browser, format, verify, Pages-style build with the
-  string in the chunks); visual baselines regenerated and read when UI changed. No local e2e.
+  string in the chunks, or `-NoVisibleString` with its rule and source-map check); visual baselines regenerated and read when UI changed. No local e2e.
 - Screenshots: any change a person can see has before/after images (390px, plus 1440px when the desktop
   layout changed) from the v2 visual baselines in the PR body and the final comment; without them the
   plan fails.
@@ -501,7 +511,8 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
   3 fix rounds; one rerun only for known-flaky specs via `ci-rerun.ps1`.
 - Merge: `merge-pr.ps1` (approval, protected paths, CI green on the exact head sha, `--match-head-commit`).
 - Deploy: `deploy.ps1` exit 0 (server health with a stable pid when deployed; the Pages run of this sha;
-  served bytes contain the string; the page renders).
+  served bytes contain the string, or for `-NoVisibleString` git proves only unreferenced `src/` modules
+  were added; the page renders).
 
 ## 5. Phase B: observe, then propose (proposal sessions)
 

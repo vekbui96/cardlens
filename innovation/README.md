@@ -315,6 +315,12 @@ so the server deploy runs in the separate elevated task, which takes no argument
   depth (`live-check.ps1` Find-InChunkGraph: Vite nests lazy chunks, e.g. entry -> V2App -> the v2 Home
   chunk; capped at 400 files, every one must load) for a change-specific string, and renders the page in headless Edge (a blank SPA returns 200). Rollback: `git revert` of the
   merge on main + push, then the same checks for the string being gone.
+  A change with no visible string (it only ADDS `src/` modules nothing imports yet, e.g. a model for a later
+  slice; #145) passes `-NoVisibleString "<reason>"` instead: `live-check.ps1` Get-NoVisibleStringDecision must
+  prove from git that every front-end file in the merge is new under `src/` and no shipped file uses
+  `import.meta.glob` (else the deploy refuses and reverts), `test-gate.ps1` also checks the new modules are
+  absent from the built source maps, and the live check is the same Pages-run / every-chunk / render check
+  without a string. Any modified shipped front-end file keeps the string mandatory.
 - **Server**, only when `server/`, a `tsconfig.node.json` shared file, `package.json` or the lockfile
   changed between the live HEAD and the merge: snapshot all of `D:\services\data` to
   `D:\services\backups\predeploy-<stamp>.zip` (newest 10 kept), record PREV, `git reset --hard <merge>` in

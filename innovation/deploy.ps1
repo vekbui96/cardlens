@@ -17,6 +17,9 @@
   3. front end: wait for the deploy-pages run of THIS sha (cancelling an older run stuck in `waiting` for
      30+ min), then the served index.html must reference a /cardlens/assets/index-*.js, every chunk reachable
      from it (any depth, live-check.ps1) must load, -ExpectString must be in one of them, and headless Edge must render #root
+     With -NoVisibleString "<reason>" instead (a change that only ADDS src/ modules nothing imports yet, so the
+     served bundle cannot change; live-check.ps1 Get-NoVisibleStringDecision proves that from git or the
+     deploy stops and reverts): the same Pages-run / every-chunk / render checks without a string
   4. on any failure: server rollback (elevated, if the server was deployed) + git revert of the merge on
      main (Pages then redeploys the old build) + verify the string is gone and the page renders
 
@@ -30,7 +33,10 @@ param(
     [Parameter(Mandatory)][string]$MergeSha,
     # A string that exists only in the new front-end build (new UI copy). Required when the merge changes
     # anything that ships in the bundle; omit only for server-only changes.
-    [string]$ExpectString = ''
+    [string]$ExpectString = '',
+    # Instead of -ExpectString, ONLY for a change that adds src/ modules nothing imports yet (model, utility,
+    # their tests): why there is no visible string. Refused unless git shows every front-end file is new.
+    [string]$NoVisibleString = ''
 )
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\live-check.ps1"   # Test-LiveSite (whole chunk graph); replaces the lib.ps1 copy
@@ -40,7 +46,7 @@ Add-GhToPath
 $null = Clear-SecretEnv
 $art = Join-Path $script:LoopHome "artifacts\$Issue"
 if (-not (Test-Path -LiteralPath $art)) { New-Item -ItemType Directory -Path $art | Out-Null }
-$state = [ordered]@{ issue = $Issue; mergeSha = $MergeSha; expectString = $ExpectString; startedUtc = [DateTime]::UtcNow.ToString('o'); serverDeployed = $false; status = 'started' }
+$state = [ordered]@{ issue = $Issue; mergeSha = $MergeSha; expectString = $ExpectString; noVisibleString = $NoVisibleString; startedUtc = [DateTime]::UtcNow.ToString('o'); serverDeployed = $false; status = 'started' }
 
 function Finish([int]$code, [string]$line) {
     $state.status = $line; $state.finishedUtc = [DateTime]::UtcNow.ToString('o'); Save-State "deploy-$Issue" $state
@@ -79,7 +85,21 @@ try {
     $frontFiles = @($mergeFiles | Where-Object { $_ -match '^(src/|public/|index\.html$|vite\.config\.ts$)' -and $_ -notmatch '\.test\.tsx?$|/__tests__/|/test/' })
     $state.prevSignature = Get-LiveSignature
     Write-Log "merge $MergeSha changes $($mergeFiles.Count) file(s); front-end relevant: $($frontFiles.Count); live build now $($state.prevSignature)"
-    if ($frontFiles.Count -gt 0 -and -not $ExpectString) { throw 'the merge changes the front end: pass -ExpectString <string only the new build contains>' }
+    if ($ExpectString -and $NoVisibleString) { throw 'pass -ExpectString or -NoVisibleString, not both' }
+    if ($frontFiles.Count -gt 0 -and -not $ExpectString) {
+        if (-not $NoVisibleString) { throw 'the merge changes the front end: pass -ExpectString <string only the new build contains> (or -NoVisibleString "<reason>" if it only adds src/ modules nothing imports yet)' }
+        if ($NoVisibleString.Trim().Length -lt 10) { throw '-NoVisibleString needs a reason (why the change has no visible string)' }
+        # Proof from git that the served bundle cannot change: every front-end file in the merge is new under
+        # src/ and nothing shipped uses import.meta.glob. Otherwise a visible string stays mandatory.
+        $ns = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--name-status', '--no-renames', $parent, $MergeSha) -Quiet).Output)
+        $gg = Invoke-Git -Repo $script:Clone -Arguments @('grep', '-l', '-F', 'import.meta.glob', $MergeSha, '--', 'src') -AllowFail -Quiet
+        if ($gg.Code -gt 1) { throw "git grep for import.meta.glob failed (exit $($gg.Code))" }
+        $globs = @($gg.Output | Where-Object { $_ } | ForEach-Object { "$_" -replace '^[0-9a-f]{40}:', '' })
+        $nv = Get-NoVisibleStringDecision -NameStatus $ns -GlobFiles $globs
+        if (-not $nv.Ok) { throw "-NoVisibleString refused: $($nv.Why)" }
+        $state.unreferencedModules = @($nv.Added)
+        Write-Log "no visible string ($NoVisibleString): the merge only adds unreferenced src/ module(s) $($nv.Added -join ', '); verifying by this sha's Pages run, every served chunk and the render"
+    } elseif ($NoVisibleString) { Write-Log "-NoVisibleString ignored: $(if ($ExpectString) { 'a string is given' } else { 'no front-end source changed' })" }
     $plan = Get-ServerPlan -Repo $script:Clone -Target $MergeSha -OwnCommitsFrom $parent
     $state.liveHeadBefore = $plan.LiveHead
     Write-Log "server plan: liveHead=$($plan.LiveHead) needed=$($plan.ServerNeeded) files=$($plan.ServerFiles -join ',') protected=$($plan.Protected -join ',') foreign=$($plan.Foreign -join ',')"
@@ -116,10 +136,12 @@ if ($plan.ServerNeeded) {
 
 # ---- 3. front end ------------------------------------------------------------------------------------
 if (-not (Wait-PagesRun -Sha $MergeSha)) { Undo "the deploy-pages run for $MergeSha did not succeed" }
-$notSig = ''; if ($frontFiles.Count -gt 0) { $notSig = $state.prevSignature }
+# A no-visible-string change ships a byte-identical bundle, so "the build changed" cannot be required for it.
+$notSig = ''; if ($frontFiles.Count -gt 0 -and $ExpectString) { $notSig = $state.prevSignature }
 $v = Test-LiveSite -ExpectString $ExpectString -NotSignature $notSig -RepoForSmoke $script:Clone -ShotPath (Join-Path $art 'live.png') -TimeoutSec 600
 if (-not $v.Ok) { Undo 'live front-end verification failed (string / chunks / render)' }
 $state.newAsset = $v.Asset
+if ($state.unreferencedModules) { Write-Log "served build after the no-visible-string deploy: $($v.Signature) (before: $($state.prevSignature))" }
 
 if ($state.serverDeployed) {
     # re-check the server after the front end went live, cheaply (GET only)

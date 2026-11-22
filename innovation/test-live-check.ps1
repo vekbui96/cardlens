@@ -112,6 +112,47 @@ $site['index-HOME0011.js'] = @{ Status = 200; Body = 'import"./V2App-AAAAAA11.js
 $v = Test-LiveSite -ExpectString 'Biggest movers' -NotSignature '/cardlens/assets/index-ENTRY111.js,/cardlens/assets/index-STYLE111.css,/cardlens/assets/vendor-VVVVVV11.js' -TimeoutSec 1
 Check (-not $v.Ok) 'Test-LiveSite still refuses the previous build (NotSignature unchanged)'
 
+# ---- "no visible string" rule (Get-NoVisibleStringDecision, Find-ModulesInSourceMaps) ------------------
+$T = "`t"
+# #145 exactly: a new model + its unit test, nothing else -> allowed, the model is the only shipped module
+$d = Get-NoVisibleStringDecision -NameStatus @("A${T}src/v2/screens/wantlist/wantList.ts", "A${T}src/v2/screens/wantlist/wantList.test.ts")
+Check $d.Ok "#145's diff (new model + its test) is a no-visible-string change ($($d.Why))"
+Check ((@($d.Added) -join ',') -eq 'src/v2/screens/wantlist/wantList.ts') "only the model counts as a new module (got $(@($d.Added) -join ','))"
+# plus inert non-front files (docs, innovation/, server tests) still fine
+$d = Get-NoVisibleStringDecision -NameStatus @("A${T}src/lib/x.ts", "M${T}docs/notes.md", "M${T}src/v2/a.test.tsx", "M${T}src/test/setup.ts")
+Check $d.Ok 'added module with modified docs and test files is allowed'
+# anything that can change the served bundle keeps the string mandatory
+foreach ($case in @(
+        @("A${T}src/lib/x.ts", "M${T}src/v2/screens/home/Home.tsx"),   # the new module gets imported
+        @("A${T}src/lib/x.ts", "D${T}src/lib/old.ts"),
+        @("R100${T}src/lib/old.ts${T}src/lib/new.ts"),
+        @("A${T}public/new-icon.svg"),
+        @("M${T}index.html"),
+        @("M${T}vite.config.ts"),
+        @("M${T}src/lib/format.ts"),
+        @("T${T}src/lib/link.ts"),
+        @("garbage line"))) {
+    $d = Get-NoVisibleStringDecision -NameStatus $case
+    Check (-not $d.Ok) "refused: $($case -join ' | ') ($($d.Why))"
+}
+$d = Get-NoVisibleStringDecision -NameStatus @("A${T}src/lib/x.ts") -GlobFiles @('src/v2/registry.ts')
+Check (-not $d.Ok) 'refused when a shipped file uses import.meta.glob (could bundle the new file)'
+$d = Get-NoVisibleStringDecision -NameStatus @("A${T}src/lib/x.ts") -GlobFiles @('src/v2/providers.test.ts', 'src/v2/shell/installable.test.ts')
+Check $d.Ok 'import.meta.glob in test files only does not block'
+$d = Get-NoVisibleStringDecision -NameStatus @("M${T}server/index.ts", "A${T}src/lib/x.test.ts")
+Check (-not $d.Ok) 'refused (not needed) when no front-end module is added'
+$maps = @('{"version":3,"sources":["../../src/v2/screens/home/Home.tsx","../../src/lib/format.ts"]}', '{"sources":["../../node_modules/react/index.js"]}')
+Check (@(Find-ModulesInSourceMaps -Modules @('src/v2/screens/wantlist/wantList.ts') -MapTexts $maps).Count -eq 0) 'tree-shaken module is absent from the source maps'
+Check ((@(Find-ModulesInSourceMaps -Modules @('src/lib/format.ts', 'src/lib/x.ts') -MapTexts $maps) -join ',') -eq 'src/lib/format.ts') 'a bundled module is found in the source maps'
+Check (@(Find-ModulesInSourceMaps -Modules @('src/v2/screens/home/Home.ts') -MapTexts $maps).Count -eq 0) 'Home.ts is not matched by Home.tsx (whole path)'
+# deploy.ps1 wiring: the rule is applied before anything is verified, and only a string-less deploy drops the
+# "build changed" requirement (a change WITH a visible string keeps -NotSignature)
+$dp = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'deploy.ps1'))
+Check ($dp.Contains('Get-NoVisibleStringDecision') -and $dp.IndexOf('Get-NoVisibleStringDecision') -lt $dp.IndexOf('# ---- 2. server')) 'deploy.ps1 applies the no-visible-string rule in its preconditions'
+Check ($dp.Contains('if ($frontFiles.Count -gt 0 -and $ExpectString) { $notSig = $state.prevSignature }')) 'deploy.ps1 still requires a new build whenever a string is given'
+$tg = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'test-gate.ps1'))
+Check ($tg.Contains('Get-NoVisibleStringDecision') -and $tg.Contains('Find-ModulesInSourceMaps')) 'test-gate.ps1 checks the same rule plus the source maps'
+
 # ---- wiring: every caller loads live-check.ps1 after lib.ps1, and it wins over the lib.ps1 copy ----------
 foreach ($f in 'deploy.ps1', 'rollback.ps1') {
     $t = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))

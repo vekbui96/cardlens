@@ -127,3 +127,59 @@ function Test-LiveSite {
     Write-Log "live site verification failed: $last" 'ERROR'
     return @{ Ok = $false; Asset = $null; Signature = $null }
 }
+
+# ---- "no visible string" changes --------------------------------------------------------------------
+# A front-end change normally proves it is live by a string only the new build contains (-ExpectString).
+# A change that only ADDS modules nothing imports yet (a model or utility for a later slice, with its unit
+# tests) has no such string: Vite tree-shakes it out, so the served build is byte-identical and no string
+# can ever be found (#145 was rolled back for exactly that). For those, deploy.ps1 / test-gate.ps1 accept
+# -NoVisibleString "<reason>" instead, but ONLY when this rule proves from git that the served bundle cannot
+# change: every front-end file the change touches is NEW (status A), under src/, and no shipped (non-test)
+# src/ file uses import.meta.glob (which could pull a new file in without an import). Any modified,
+# deleted or renamed front-end file, anything in public/, index.html or vite.config.ts means the change can
+# alter what users see, and then a visible string stays mandatory. The live check for these changes is the
+# deploy-pages run of THIS sha succeeding, every served chunk loading, the headless render and (server
+# changes) /api/health; test-gate.ps1 also checks the new modules are absent from the built source maps.
+
+# Same classification deploy.ps1 has always used for "changes the front end".
+function Test-FrontFile {
+    param([string]$Path)
+    return ($Path -match '^(src/|public/|index\.html$|vite\.config\.ts$)' -and $Path -notmatch '\.test\.tsx?$|/__tests__/|/test/')
+}
+
+# -NameStatus  lines of `git diff --name-status --no-renames <base> <head>` ("A`tsrc/x.ts")
+# -GlobFiles   paths (repo-relative) of src/ files containing import.meta.glob at the head
+# Returns Ok, Why, Added (the new front-end modules, for the source-map check and the log).
+function Get-NoVisibleStringDecision {
+    param([string[]]$NameStatus = @(), [string[]]$GlobFiles = @())
+    $added = New-Object System.Collections.ArrayList
+    $bad = New-Object System.Collections.ArrayList
+    foreach ($line in @($NameStatus)) {
+        if (-not $line -or -not $line.Trim()) { continue }
+        $parts = $line.Trim() -split "`t"
+        if ($parts.Count -lt 2) { [void]$bad.Add("unparsed diff line '$line'"); continue }
+        $st = $parts[0].Substring(0, 1).ToUpperInvariant(); $p = $parts[$parts.Count - 1]
+        if ($parts.Count -gt 2 -or $st -in @('R', 'C')) { foreach ($q in $parts[1..($parts.Count - 1)]) { if (Test-FrontFile $q) { [void]$bad.Add("$st $q") } }; continue }
+        if (-not (Test-FrontFile $p)) { continue }
+        if ($st -ne 'A') { [void]$bad.Add("$st $p"); continue }
+        if ($p -notlike 'src/*') { [void]$bad.Add("A $p (served as is)"); continue }
+        [void]$added.Add($p)
+    }
+    $globs = @($GlobFiles | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() } | Where-Object { Test-FrontFile $_ })
+    $why = ''
+    if ($bad.Count -gt 0) { $why = "the change modifies front-end files that ship ($((@($bad) | Select-Object -First 5) -join ', ')); it can change what users see, so pass -ExpectString" }
+    elseif ($globs.Count -gt 0) { $why = "shipped src/ files use import.meta.glob ($($globs -join ', ')), which can bundle a new file without an import; pass -ExpectString" }
+    elseif ($added.Count -eq 0) { $why = 'the change adds no front-end module; -NoVisibleString is not needed (omit both)' }
+    return [pscustomobject]@{ Ok = ($why -eq ''); Why = $why; Added = @($added) }
+}
+
+# The source-map check for a built dist\assets (test-gate.ps1): returns the new modules that DID end up in
+# the bundle (a path in some *.map "sources" list). Pure apart from reading the given map texts.
+function Find-ModulesInSourceMaps {
+    param([string[]]$Modules = @(), [string[]]$MapTexts = @())
+    $hits = @()
+    foreach ($m in @($Modules)) {
+        foreach ($t in @($MapTexts)) { if ($t -and $t.Contains($m + [char]34)) { $hits += $m; break } }   # ".../src/x.ts" in "sources"
+    }
+    return @($hits)
+}
