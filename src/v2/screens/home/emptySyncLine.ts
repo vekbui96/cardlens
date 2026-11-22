@@ -15,7 +15,7 @@ export function emptySyncLine(status: SyncStatus): string | null {
     case "idle":
       return "Can't reach the CardLens server right now. Browse sets still works and nothing is lost.";
     case "bad-token":
-      return "This device's sync token was refused. Connect again.";
+      return "This device's sync token was refused. Copy it again from the server's .env file, then press Connect this device.";
     default:
       return null;
   }

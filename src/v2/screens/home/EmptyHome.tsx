@@ -61,7 +61,9 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
             <Card onPress={onConnect} className={styles.tile} pad={4}>
               <Stack gap={1}>
                 <span className={styles.actionName}>Connect this device</span>
-                <span className={styles.actionHint}>Already use CardLens on another device?</span>
+                <span className={styles.actionHint}>
+                  Already use CardLens elsewhere? You will need the sync token from the server's .env file.
+                </span>
               </Stack>
             </Card>
           ) : null}

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { pulledLine } from "./pulledLine.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { completeSetCount, continueTarget, topProgress } from "../../../features/home/continueSet.ts";
@@ -70,6 +72,7 @@ export function HomeScreen() {
     syncStatus,
   } = useLibrary();
   const connectDevice = useConnectDevice();
+  const [connected, setConnected] = useState(false);
   const { data: sets } = useSets();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
@@ -95,7 +98,13 @@ export function HomeScreen() {
     return (
       <Stack gap={5}>
         {notice ? <SyncNotice label={notice.label} detail={notice.detail} /> : null}
-        <EmptyHome syncStatus={syncStatus} onConnect={() => void connectDevice()} />
+        <EmptyHome
+          syncStatus={syncStatus}
+          onConnect={() => {
+            setConnected(true);
+            void connectDevice();
+          }}
+        />
       </Stack>
     );
   }
@@ -130,6 +139,12 @@ export function HomeScreen() {
   return (
     <Stack gap={5}>
       {notice ? <SyncNotice label={notice.label} detail={notice.detail} /> : null}
+      {/* Only after the person pressed Connect on the empty Home: the count is the collection that arrived. */}
+      {connected ? (
+        <p role="status" className={styles.emptySyncLine}>
+          {pulledLine(collection.length)} <a href={`#${screenToPath({ name: "sets" })}`}>Browse your sets</a>
+        </p>
+      ) : null}
 
       <header>
         <h1 className={styles.title}>Your collection</h1>

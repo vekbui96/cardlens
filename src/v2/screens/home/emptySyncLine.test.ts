@@ -16,6 +16,7 @@ describe("emptySyncLine", () => {
 
   it("says a refused token needs connecting again", () => {
     expect(emptySyncLine(status("bad-token"))).toMatch(/token was refused/);
+    expect(emptySyncLine(status("bad-token"))).toMatch(/\.env file, then press Connect this device/);
   });
 
   it.each(["off", "syncing", "disabled"] as const)("adds nothing when sync is %s", (state) => {
