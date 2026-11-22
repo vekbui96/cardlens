@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import styles from "./ErrorBoundary.module.css";
+import { isChunkLoadError, reloadForUpdate } from "./staleChunk.ts";
 
 /**
  * Catch a render error and say what it was.
@@ -81,9 +82,16 @@ export class ErrorBoundary extends Component<Props, State> {
         <p className={styles.message}>{this.state.error.message || "Unknown error"}</p>
 
         <div className={styles.actions}>
+          {isChunkLoadError(this.state.error) && (
+            // A deploy deleted a chunk this tab wanted. The screen itself is
+            // fine, so reload in place rather than going home.
+            <button type="button" className={styles.primary} onClick={reloadForUpdate}>
+              Reload
+            </button>
+          )}
           <button
             type="button"
-            className={styles.primary}
+            className={isChunkLoadError(this.state.error) ? styles.secondary : styles.primary}
             onClick={() => {
               // Home, not just reload: whatever screen threw will throw again.
               window.location.hash = "#/";

@@ -8,6 +8,11 @@ import { PrivacyPage } from "./pages/PrivacyPage.tsx";
 import { isWebMode, layoutOverrideFromLocation, resolveLayoutMode } from "./app/layoutMode.ts";
 import { activeUiVersion } from "./app/uiVersion.ts";
 import { applyFixture, fixtureFromLocation } from "./dev/fixtures.ts";
+import { installStaleChunkRecovery } from "./app/staleChunk.ts";
+
+// Before anything can import a chunk: tags Vite preload failures so the
+// render path can recover from a deploy that deleted them (staleChunk.ts).
+installStaleChunkRecovery();
 
 /**
  * Seed named data BEFORE React mounts.

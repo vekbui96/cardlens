@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InputProvider, CatalogProvider, RepositoriesProvider, LayoutModeProvider } from "./contexts.tsx";
 import { NavigationProvider } from "./NavigationProvider.tsx";
@@ -11,6 +11,7 @@ import { DevPanel } from "../components/dev/DevPanel.tsx";
 import { migrateStorage } from "../storage/versioned.ts";
 import { activeUiVersion } from "./uiVersion.ts";
 import { MetricsBoot } from "./MetricsBoot.tsx";
+import { lazyWithReload } from "./staleChunk.ts";
 
 /**
  * The rebuild, behind one lazy import.
@@ -20,7 +21,7 @@ import { MetricsBoot } from "./MetricsBoot.tsx";
  * asserts that against the built output rather than trusting it, because a
  * single eager import added anywhere in `src/v2/` would silently undo it.
  */
-const V2App = lazy(() => import("../v2/V2App.tsx").then((m) => ({ default: m.V2App })));
+const V2App = lazyWithReload(() => import("../v2/V2App.tsx").then((m) => ({ default: m.V2App })));
 
 const queryClient = new QueryClient({
   defaultOptions: {

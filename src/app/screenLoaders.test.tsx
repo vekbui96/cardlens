@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { act, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import {
@@ -10,6 +11,8 @@ import {
   WebSetsScreen,
   type PrefetchTargets,
 } from "./screenLoaders.tsx";
+import { V2ErrorBoundary } from "../v2/shell/V2ErrorBoundary.tsx";
+import { AUTO_RELOAD_KEY, resetStaleChunkRecovery, staleChunkEnv } from "./staleChunk.ts";
 
 function Hello({ who }: { who: string }) {
   return <p>hello {who}</p>;
@@ -80,6 +83,69 @@ describe("preloadableScreen", () => {
     await target.prefetch();
 
     expect(load).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("preloadableScreen after a deploy deleted its chunk", () => {
+  const stale = () => new TypeError("Importing a module script failed.");
+  let reload: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    resetStaleChunkRecovery();
+    reload = vi.fn();
+    vi.spyOn(staleChunkEnv, "reload").mockImplementation(reload);
+    vi.spyOn(staleChunkEnv, "online").mockReturnValue(true);
+    vi.spyOn(staleChunkEnv, "refreshDocument").mockResolvedValue(true);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  const renderScreen = (target: ReturnType<typeof preloadableScreen<{ who: string }>>) =>
+    render(
+      <V2ErrorBoundary>
+        <Suspense fallback={<p>Loading…</p>}>
+          <target.Component who="Ve" />
+        </Suspense>
+      </V2ErrorBoundary>,
+    );
+
+  it("reloads the page once, holding the fallback instead of the error screen", async () => {
+    const target = preloadableScreen<{ who: string }>(() => Promise.reject(stale()));
+    renderScreen(target);
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not loop: straight after an automatic reload, it shows the error with a reloading Try again", async () => {
+    sessionStorage.setItem(AUTO_RELOAD_KEY, String(Date.now()));
+    vi.spyOn(staleChunkEnv, "now").mockReturnValue(Date.now() + 3_000);
+    const target = preloadableScreen<{ who: string }>(() => Promise.reject(stale()));
+    renderScreen(target);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Importing a module script failed.");
+    expect(reload).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+  });
+
+  it("never reloads for a prefetch — only a screen being shown may", async () => {
+    const target = preloadableScreen<{ who: string }>(() => Promise.reject(stale()));
+    await expect(target.prefetch()).rejects.toThrow("Importing a module script failed.");
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("leaves a screen that throws for any other reason to the boundary, with no reload", async () => {
+    const target = preloadableScreen<{ who: string }>(() =>
+      Promise.reject(new Error("syntax error in chunk")),
+    );
+    renderScreen(target);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("syntax error in chunk");
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(AUTO_RELOAD_KEY)).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { V2ErrorBoundary } from "./V2ErrorBoundary.tsx";
+import { staleChunkEnv } from "../../app/staleChunk.ts";
 
 function Boom({ message }: { message: string }): never {
   throw new Error(message);
@@ -82,5 +83,33 @@ describe("V2ErrorBoundary", () => {
     );
     // An empty error panel is indistinguishable from a broken error panel.
     expect(screen.getByRole("alert")).toHaveTextContent(/\S/);
+  });
+
+  it("reloads the page on Try again when a deploy deleted the screen's chunk", async () => {
+    // The 2026-11-22 crash. Re-rendering retries an import the browser has
+    // already cached as failed, so only a real reload gets past it.
+    const reload = vi.spyOn(staleChunkEnv, "reload").mockImplementation(() => {});
+    vi.spyOn(staleChunkEnv, "refreshDocument").mockResolvedValue(true);
+    render(
+      <V2ErrorBoundary>
+        <Boom message="Importing a module script failed." />
+      </V2ErrorBoundary>,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("CardLens was updated while the page was open");
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not reload on Try again for an ordinary error", async () => {
+    const reload = vi.spyOn(staleChunkEnv, "reload").mockImplementation(() => {});
+    render(
+      <V2ErrorBoundary>
+        <Boom message="cannot read printings of undefined" />
+      </V2ErrorBoundary>,
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("CardLens was updated while the page was open");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(reload).not.toHaveBeenCalled();
   });
 });

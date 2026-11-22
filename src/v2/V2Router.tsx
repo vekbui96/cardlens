@@ -1,6 +1,7 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { useNavigation } from "../app/NavigationProvider.tsx";
 import type { Screen } from "../app/navigation.ts";
+import { lazyWithReload } from "../app/staleChunk.ts";
 import { V2ErrorBoundary } from "./shell/V2ErrorBoundary.tsx";
 import { Panel, ScreenReaderOnly, Stack } from "./primitives/index.ts";
 import styles from "./shell/V2Shell.module.css";
@@ -22,7 +23,7 @@ import styles from "./shell/V2Shell.module.css";
  * "this is broken".
  */
 
-const Workshop = lazy(() => import("./dev/Workshop.tsx").then((m) => ({ default: m.Workshop })));
+const Workshop = lazyWithReload(() => import("./dev/Workshop.tsx").then((m) => ({ default: m.Workshop })));
 
 /*
  * Screens, one lazy import each.
@@ -31,22 +32,34 @@ const Workshop = lazy(() => import("./dev/Workshop.tsx").then((m) => ({ default:
  * it — the integrator does. Nine streams each appending a line to one shared
  * file is nine merge conflicts on the file that decides whether the app runs.
  */
-const Home = lazy(() => import("./screens/home/index.ts").then((m) => ({ default: m.HomeScreen })));
+const Home = lazyWithReload(() => import("./screens/home/index.ts").then((m) => ({ default: m.HomeScreen })));
 /** One screen behind three route names — see specs/02-collection.md. */
-const Collection = lazy(() =>
+const Collection = lazyWithReload(() =>
   import("./screens/collection/index.ts").then((m) => ({ default: m.CollectionScreen })),
 );
-const SetCards = lazy(() => import("./screens/set/index.ts").then((m) => ({ default: m.SetCardsScreen })));
-const Binders = lazy(() => import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })));
-const Target = lazy(() => import("./screens/target/index.ts").then((m) => ({ default: m.TargetScreen })));
-const Sealed = lazy(() => import("./screens/sealed/index.ts").then((m) => ({ default: m.SealedScreen })));
-const Search = lazy(() => import("./screens/search/index.ts").then((m) => ({ default: m.SearchScreen })));
-const CardDetails = lazy(() =>
+const SetCards = lazyWithReload(() =>
+  import("./screens/set/index.ts").then((m) => ({ default: m.SetCardsScreen })),
+);
+const Binders = lazyWithReload(() =>
+  import("./screens/binders/index.ts").then((m) => ({ default: m.BindersScreen })),
+);
+const Target = lazyWithReload(() =>
+  import("./screens/target/index.ts").then((m) => ({ default: m.TargetScreen })),
+);
+const Sealed = lazyWithReload(() =>
+  import("./screens/sealed/index.ts").then((m) => ({ default: m.SealedScreen })),
+);
+const Search = lazyWithReload(() =>
+  import("./screens/search/index.ts").then((m) => ({ default: m.SearchScreen })),
+);
+const CardDetails = lazyWithReload(() =>
   import("./screens/details/index.ts").then((m) => ({ default: m.CardDetailsScreen })),
 );
-const Binder = lazy(() => import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })));
-const Scan = lazy(() => import("./screens/scan/index.ts").then((m) => ({ default: m.ScanScreen })));
-const WantList = lazy(() =>
+const Binder = lazyWithReload(() =>
+  import("./screens/binder/index.ts").then((m) => ({ default: m.BinderScreen })),
+);
+const Scan = lazyWithReload(() => import("./screens/scan/index.ts").then((m) => ({ default: m.ScanScreen })));
+const WantList = lazyWithReload(() =>
   import("./screens/wantlist/index.ts").then((m) => ({ default: m.WantListScreen })),
 );
 /*
@@ -54,11 +67,13 @@ const WantList = lazy(() =>
  * open another screen in this app, so they are their own chunk — nobody
  * downloads the whole rebuild to look at somebody's binder once.
  */
-const Showcase = lazy(() => import("./screens/share/index.ts").then((m) => ({ default: m.ShowcaseScreen })));
-const LiveShowcase = lazy(() =>
+const Showcase = lazyWithReload(() =>
+  import("./screens/share/index.ts").then((m) => ({ default: m.ShowcaseScreen })),
+);
+const LiveShowcase = lazyWithReload(() =>
   import("./screens/share/index.ts").then((m) => ({ default: m.LiveShowcaseScreen })),
 );
-const TradeShare = lazy(() =>
+const TradeShare = lazyWithReload(() =>
   import("./screens/share/index.ts").then((m) => ({ default: m.TradeShareScreen })),
 );
 

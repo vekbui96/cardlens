@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { isChunkLoadError, reloadForUpdate } from "../../app/staleChunk.ts";
 import styles from "./V2Shell.module.css";
 
 interface Props {
@@ -46,12 +47,25 @@ export class V2ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
+    const staleChunk = isChunkLoadError(error);
 
     return (
       <div className={styles.error} role="alert">
         <h1 className={styles.errorTitle}>This screen broke</h1>
         <p className={styles.errorDetail}>{error.message || String(error)}</p>
-        <button type="button" className={styles.button} onClick={() => this.setState({ error: null })}>
+        {staleChunk && (
+          <p className={styles.errorDetail}>
+            This screen’s file could not be loaded — usually because CardLens was updated while the page was
+            open. Try again reloads it.
+          </p>
+        )}
+        <button
+          type="button"
+          className={styles.button}
+          // A failed chunk import is cached by the browser, so re-rendering
+          // would fail again. Only a reload fetches the new deploy's files.
+          onClick={staleChunk ? reloadForUpdate : () => this.setState({ error: null })}
+        >
           Try again
         </button>
       </div>

@@ -3,6 +3,7 @@ import type { CardDetailsScreen as CardDetailsScreenComponent } from "../feature
 import { useLayoutMode } from "./contexts.tsx";
 import type { LayoutMode } from "./layoutMode.ts";
 import type { Screen } from "./navigation.ts";
+import { recoverFromChunkError } from "./staleChunk.ts";
 
 /**
  * Every lazy screen, and the way to fetch one before it is tapped.
@@ -45,6 +46,10 @@ export interface PreloadableScreen<P extends Props> {
  *
  * A failed fetch is forgotten, so the next prefetch or the real tap tries
  * again — exactly what an offline blip should cost.
+ *
+ * The render path — never the prefetch — also recovers from a chunk that a
+ * deploy deleted, with one guarded reload (see `staleChunk.ts`). A prefetch
+ * that failed for that reason stays silent until the tap renders the screen.
  */
 export function preloadableScreen<P extends Props>(
   load: () => Promise<ComponentType<P>>,
@@ -70,7 +75,7 @@ export function preloadableScreen<P extends Props>(
   // folds ref attributes into its props, which TypeScript cannot reconcile with
   // an unconstrained generic P — though at runtime it forwards props verbatim.
   const Lazy = lazy(() =>
-    fetchOnce().then((component) => ({ default: component })),
+    fetchOnce().then((component) => ({ default: component }), recoverFromChunkError),
   ) as unknown as ComponentType<P>;
 
   function PreloadableScreenComponent(props: P) {
