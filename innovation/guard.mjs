@@ -287,7 +287,7 @@ function checkPmRefs(c) {
   }
   let refs;
   try {
-    refs = JSON.parse(readFileSync(HOME + "\\state\\pm-refs.json", "utf8").replace(/^﻿/, ""));
+    refs = JSON.parse(readFileSync(HOME + "\\state\\pm-refs.json", "utf8").replace(/^\uFEFF/, ""));
   } catch {
     block("the runner's list of citable ids (state\\pm-refs.json) is missing (failing closed)");
   }
