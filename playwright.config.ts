@@ -157,6 +157,10 @@ export default defineConfig({
         PRINTINGS_DIR: join(DATA, "printings"),
         SEALED_DIR: join(DATA, "sealed"),
         SHARES_FILE: join(DATA, "shares.json"),
+        // Scratch too, and the daily value job stays off: a test run must not
+        // price anything upstream or write history on a timer.
+        VALUE_HISTORY_FILE: join(DATA, "value-history.json"),
+        VALUE_HISTORY_JOB: "off",
       },
     },
     {

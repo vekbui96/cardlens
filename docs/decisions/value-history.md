@@ -1,6 +1,6 @@
 # Decision: where collection value history lives (#111)
 
-Status: **proposed, waiting on Ve** (2026-11-21). Unblocks #112 (snapshot writer) and #117 (chart).
+Status: **Accepted 2026-11-22: option A** (Ve answered "Yes" on 2026-11-22; proposed 2026-11-21). Unblocks #112 (snapshot writer) and #117 (chart).
 #110 ("since you last looked") does not depend on this: it keeps its own one-key, device-local snapshot.
 
 Row shape for every option: `{ day: "YYYY-MM-DD", total, priced, printings, cards, currency: "USD" }`, about 90 bytes, so ~33 KB a year.

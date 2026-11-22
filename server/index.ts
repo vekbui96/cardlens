@@ -19,6 +19,7 @@ import { BinderImageStore, ImageTooLargeError, MAX_IMAGE_BYTES } from "./binderI
 import { callRecogniser, recogniserHealth, MAX_IMAGE_BYTES as MAX_RECOGNITION_BYTES } from "./recognition.ts";
 import { MetricsStore, metricsRouter } from "./metricsStore.ts";
 import { MaultClient } from "./mault.ts";
+import { ValueHistoryJob, ValueHistoryStore, valueHistoryRouter } from "./valueHistory.ts";
 import { CardIndexLookup } from "./cardIndexLookup.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -73,6 +74,24 @@ const BINDER_IMAGES_DIR = process.env.BINDER_IMAGES_DIR ?? "D:/services/data/bin
  * points COLLECTION_FILE at a scratch dir, writes its metrics there too.
  */
 const METRICS_FILE = process.env.METRICS_FILE ?? join(dirname(COLLECTION_FILE), "metrics.json");
+/**
+ * Collection value over time (#112, docs/decisions/value-history.md). Beside the
+ * collection for the same reasons as metrics: no service config change, the
+ * nightly data-folder backup already covers it, and the e2e server (scratch
+ * COLLECTION_FILE) writes a scratch copy.
+ */
+const VALUE_HISTORY_FILE =
+  process.env.VALUE_HISTORY_FILE ?? join(dirname(COLLECTION_FILE), "value-history.json");
+/**
+ * The device's own set-list request, byte for byte, so the job reads the same
+ * day-long disk cache instead of adding an upstream call. Mirrors
+ * PokemonTcgIoProvider.listSets.
+ */
+const SET_LIST_PATH = `/sets?${new URLSearchParams({
+  orderBy: "-releaseDate",
+  pageSize: "250",
+  select: "id,name,series,releaseDate,total,printedTotal,ptcgoCode,images",
+}).toString()}`;
 
 /** Upstream failed with nothing cached to fall back on. */
 class UpstreamError extends Error {
@@ -120,6 +139,7 @@ export function createApp(
   binderImages: BinderImageStore = new BinderImageStore(BINDER_IMAGES_DIR),
   metrics: MetricsStore = new MetricsStore(METRICS_FILE),
   mault: MaultClient = new MaultClient(new CardIndexLookup()),
+  valueHistory: ValueHistoryStore = new ValueHistoryStore(VALUE_HISTORY_FILE),
 ) {
   const app = express();
   app.set("trust proxy", true);
@@ -230,6 +250,8 @@ export function createApp(
     const rows = Number.isFinite(since) && since > 0 ? collection.since(since) : collection.all();
     res.json({ rows, at: Date.now() });
   });
+
+  app.use(valueHistoryRouter(valueHistory, { auth: requireToken, limiter: collectionLimiter }));
 
   app.post("/api/collection/merge", collectionLimiter, requireToken, (req, res) => {
     const body = req.body as { rows?: unknown };
@@ -908,6 +930,42 @@ export function createApp(
    * restart, so a deploy followed by an upstream burst blanked Home.
    */
   const catalogSets = new CatalogSetsStore(CATALOG_SETS_DIR, loadCatalog);
+
+  /**
+   * The daily value row. Reads the collection as synced here and prices it
+   * through the same caches Home's requests fill, so a day costs a few cache
+   * reads, not an upstream run. Off under Vitest and when
+   * VALUE_HISTORY_JOB=off (the e2e server), so tests never start timers.
+   */
+  if (!process.env.VITEST && process.env.VALUE_HISTORY_JOB !== "off") {
+    let setNames: Promise<Map<string, string>> | null = null;
+    const nameOf = async (setId: string): Promise<string> => {
+      setNames ??= catalogSets.get(SET_LIST_PATH).then(
+        (body) => {
+          const names = new Map<string, string>();
+          const data = (body as { data?: unknown })?.data;
+          if (Array.isArray(data)) {
+            for (const s of data as { id?: unknown; name?: unknown }[]) {
+              if (typeof s.id === "string" && typeof s.name === "string") names.set(s.id, s.name);
+            }
+          }
+          return names;
+        },
+        () => new Map<string, string>(),
+      );
+      const names = await setNames;
+      if (names.size === 0) setNames = null; // try the list again next run
+      return names.get(setId) ?? "";
+    };
+    new ValueHistoryJob(valueHistory, () => collection.all(), {
+      async printings(setId) {
+        const name = await nameOf(setId);
+        if (!name) return null;
+        return (await printingsStore.get(setId, name)).value?.byNumber ?? null;
+      },
+      catalogPrices: (setId) => catalogPrices.get(setId),
+    }).start();
+  }
 
   /** Stream a catalog path straight to a client. */
   async function proxy(
