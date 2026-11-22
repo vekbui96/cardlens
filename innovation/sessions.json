@@ -67,7 +67,7 @@
     "memoryEveryDays": 7,
     "requestIntake": true,
     "designSkills": true,
-    "observerPm": false,
+    "observerPm": true,
     "observeMetricPoints": 10
   }
 }
