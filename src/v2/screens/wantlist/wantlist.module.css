@@ -19,6 +19,42 @@
   font-variant-numeric: tabular-nums;
 }
 
+.control {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.controlLabel {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+/* At least a tap target tall. */
+.select {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-body);
+}
+
+.select:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
 .list {
   list-style: none;
   margin: var(--v2-space-0);

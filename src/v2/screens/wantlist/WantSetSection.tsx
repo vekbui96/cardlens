@@ -16,6 +16,7 @@ import {
   Stack,
   UNPRICED,
 } from "../../primitives/index.ts";
+import { applyWantFilters, type WantFilters } from "./wantFilters.ts";
 import { wantForSet, wantSetLine, type WantCard, type WantSet } from "./wantList.ts";
 import styles from "./wantlist.module.css";
 
@@ -36,12 +37,14 @@ export function WantSetSection({
   setId,
   setName,
   ownedNumbers,
+  filters,
   onState,
 }: {
   setId: string;
   setName: string;
   /** Collector numbers held, or null when they do not add up to the cards held (never guessed). */
   ownedNumbers: readonly string[] | null;
+  filters: WantFilters;
   onState: (setId: string, kind: SectionKind, want: WantSet | null) => void;
 }) {
   const view = useSetView(setId, setName, { wantPrintings: true });
@@ -52,10 +55,24 @@ export function WantSetSection({
   const printingsPending = view.printings === null && printingsQuery.isFetching;
   const printingsFailed = view.printings === null && printingsQuery.isError;
 
-  const want = useMemo(
-    () => (ownedNumbers ? wantForSet(ownedNumbers, view.printings) : null),
-    [ownedNumbers, view.printings],
-  );
+  const cardsByNumber = useMemo(() => {
+    const map = new Map<string, PokemonCardSummary>();
+    for (const card of view.allCards ?? []) map.set(unpadded(card.collectorNumber), card);
+    return map;
+  }, [view.allCards]);
+
+  // Rarity comes from the catalog card; the printing index does not know it.
+  const want = useMemo(() => {
+    const found = ownedNumbers ? wantForSet(ownedNumbers, view.printings) : null;
+    if (!found) return null;
+    return {
+      ...found,
+      cards: found.cards.map((c) => {
+        const rarity = cardsByNumber.get(unpadded(c.collectorNumber))?.rarity;
+        return rarity ? { ...c, rarity } : c;
+      }),
+    };
+  }, [ownedNumbers, view.printings, cardsByNumber]);
   const kind: SectionKind =
     view.isLoading || printingsPending
       ? "loading"
@@ -69,11 +86,10 @@ export function WantSetSection({
     onState(setId, kind, kind === "ready" ? want : null);
   }, [onState, setId, kind, want]);
 
-  const cardsByNumber = useMemo(() => {
-    const map = new Map<string, PokemonCardSummary>();
-    for (const card of view.allCards ?? []) map.set(unpadded(card.collectorNumber), card);
-    return map;
-  }, [view.allCards]);
+  const shown = useMemo(() => (want ? applyWantFilters(want, filters) : null), [want, filters]);
+
+  // Another set is chosen: this one stays loaded (its numbers feed the filter list) but is not shown.
+  if (filters.setId !== null && filters.setId !== setId) return null;
 
   if (kind === "loading") return <SetSkeleton setName={setName} />;
 
@@ -99,7 +115,7 @@ export function WantSetSection({
     );
   }
 
-  if (kind === "unknown" || !want) {
+  if (kind === "unknown" || !want || !shown) {
     return (
       <Panel title={setName} headingLevel={2}>
         <p className={styles.meta}>
@@ -113,11 +129,13 @@ export function WantSetSection({
 
   // A finished set is not on a want list.
   if (want.missing === 0) return null;
+  // Nothing here matches the chosen rarities.
+  if (shown.missing === 0) return null;
 
   return (
-    <Panel title={setName} headingLevel={2} aside={<span className={styles.meta}>{wantSetLine(want)}</span>}>
+    <Panel title={setName} headingLevel={2} aside={<span className={styles.meta}>{wantSetLine(shown)}</span>}>
       <ul className={styles.list}>
-        {want.cards.map((wanted) => (
+        {shown.cards.map((wanted) => (
           <li key={wanted.collectorNumber}>
             <WantRow
               setId={setId}

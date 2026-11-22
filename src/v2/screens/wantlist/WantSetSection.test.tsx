@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { buildPrintingIndex } from "../../../models/printingIndex.ts";
 import type { SetView } from "../../../hooks/useSetView.ts";
 import { WantSetSection } from "./WantSetSection.tsx";
+import { DEFAULT_WANT_FILTERS } from "./wantFilters.ts";
 
 /** Each set's view, by set id: what `useSetView` would answer. */
 const views: Record<string, Partial<SetView>> = {};
@@ -45,7 +46,15 @@ describe("WantSetSection", () => {
       ],
     };
     const onState = vi.fn();
-    render(<WantSetSection setId="sv1" setName="Scarlet & Violet" ownedNumbers={["1"]} onState={onState} />);
+    render(
+      <WantSetSection
+        setId="sv1"
+        setName="Scarlet & Violet"
+        ownedNumbers={["1"]}
+        filters={DEFAULT_WANT_FILTERS}
+        onState={onState}
+      />,
+    );
     expect(screen.getByText("2 missing, about $2.50, 1 unpriced")).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Bulbasaur/ }).getAttribute("href")).toBe("#/card/sv1-2");
     expect(screen.getByText("Unpriced")).toBeTruthy();
@@ -58,8 +67,20 @@ describe("WantSetSection", () => {
     const onState = vi.fn();
     render(
       <>
-        <WantSetSection setId="bad" setName="Broken Set" ownedNumbers={["1"]} onState={onState} />
-        <WantSetSection setId="sv1" setName="Scarlet & Violet" ownedNumbers={["1"]} onState={onState} />
+        <WantSetSection
+          setId="bad"
+          setName="Broken Set"
+          ownedNumbers={["1"]}
+          filters={DEFAULT_WANT_FILTERS}
+          onState={onState}
+        />
+        <WantSetSection
+          setId="sv1"
+          setName="Scarlet & Violet"
+          ownedNumbers={["1"]}
+          filters={DEFAULT_WANT_FILTERS}
+          onState={onState}
+        />
       </>,
     );
     expect(screen.getByText(/Could not load Broken Set/)).toBeTruthy();
@@ -73,7 +94,15 @@ describe("WantSetSection", () => {
   it("shows a skeleton while the set loads, and reports it as loading", () => {
     views.slow = { isLoading: true };
     const onState = vi.fn();
-    render(<WantSetSection setId="slow" setName="Slow Set" ownedNumbers={["1"]} onState={onState} />);
+    render(
+      <WantSetSection
+        setId="slow"
+        setName="Slow Set"
+        ownedNumbers={["1"]}
+        filters={DEFAULT_WANT_FILTERS}
+        onState={onState}
+      />,
+    );
     expect(screen.getByText("Loading Slow Set")).toBeTruthy();
     expect(onState).toHaveBeenLastCalledWith("slow", "loading", null);
   });
@@ -81,7 +110,15 @@ describe("WantSetSection", () => {
   it("never guesses when owned numbers do not add up", () => {
     views.sv1 = { printings };
     const onState = vi.fn();
-    render(<WantSetSection setId="sv1" setName="Scarlet & Violet" ownedNumbers={null} onState={onState} />);
+    render(
+      <WantSetSection
+        setId="sv1"
+        setName="Scarlet & Violet"
+        ownedNumbers={null}
+        filters={DEFAULT_WANT_FILTERS}
+        onState={onState}
+      />,
+    );
     expect(screen.getByText(/marked without a collector number/)).toBeTruthy();
     expect(onState).toHaveBeenLastCalledWith("sv1", "unknown", null);
   });

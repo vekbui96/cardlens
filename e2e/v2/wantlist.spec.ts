@@ -90,6 +90,30 @@ test.describe("want list", () => {
     await expect(main.getByRole("heading", { name: "Evolving Skies" })).toHaveCount(0);
   });
 
+  test("a set filter and a sort narrow the list, add up what is shown and survive a reload", async ({
+    page,
+  }) => {
+    await seedWantList(page);
+    await openV2(page, "/wantlist");
+    const main = page.getByRole("main");
+    await expect(page.getByTestId("want-headline")).toHaveText(HEADLINE);
+    await main.getByRole("button", { name: "Most expensive first" }).click();
+    await main.getByLabel("Set").selectOption("base1");
+    await expect(page.getByTestId("want-headline")).toHaveText("Showing 1 card, about $300.00");
+    await expect(main.getByRole("heading", { name: "Obsidian Flames" })).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByTestId("want-headline")).toHaveText("Showing 1 card, about $300.00");
+    await expect(main.getByLabel("Set")).toHaveValue("base1");
+    await expect(main.getByRole("button", { name: "Most expensive first" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await main.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page.getByTestId("want-headline")).toHaveText(HEADLINE);
+  });
+
   test("a row opens the card", async ({ page }) => {
     await seedWantList(page);
     await openV2(page, "/wantlist");

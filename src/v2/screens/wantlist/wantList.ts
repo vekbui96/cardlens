@@ -10,6 +10,8 @@ export interface WantCard {
   finish: string;
   /** USD market price, or null when none is known (never guessed). */
   price: number | null;
+  /** Filled in by the screen from the catalog card, when it knows it. */
+  rarity?: string;
 }
 
 /** What one started set still needs. */
