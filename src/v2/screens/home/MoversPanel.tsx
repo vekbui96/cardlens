@@ -10,14 +10,16 @@ import {
 } from "../../../models/movement.ts";
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
-import { Card, Panel, Stack } from "../../primitives/index.ts";
+import { formatUsd } from "../../../utils/format.ts";
+import { Card, Money, Panel, Stack } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
 /**
  * The owned cards that moved most this week, as percentages.
  *
- * Percent only: the series is Cardmarket EUR while Home's total is TCGplayer USD,
- * so no amount is shown (see models/movement.ts). The caller decides when the
+ * The percent comes from the Cardmarket EUR series, so it is never turned into an
+ * amount (see models/movement.ts). Beside it sits the printing's current TCGplayer
+ * USD price (already loaded; none when unpriced, never 0). The caller decides when the
  * rows are final and applies the floor (`topMovers`); with nothing to show this
  * draws nothing at all, not an empty box. The sign is in the text, so colour is
  * never the only signal.
@@ -80,11 +82,14 @@ function Side({
       <ul className={styles.list}>
         {rows.map(({ row, pct }) => {
           const change = `${formatPct(pct)} ${window}d`;
+          // USD price of the printing; absent (or zero) shows no amount, never $0.00.
+          const priced = typeof row.price === "number" && row.price > 0;
+          const amount = priced ? formatUsd(row.price) : "";
           return (
             <li key={`${row.cardId}|${row.finish}`}>
               <Card
                 href={`#${screenToPath({ name: "details", cardId: row.cardId })}`}
-                label={`${row.name}, ${finishLabel(row.finish)}, ${change}`}
+                label={`${row.name}, ${finishLabel(row.finish)}, ${priced ? `${amount}, ` : ""}${change}`}
                 className={styles.tile}
               >
                 <span className={styles.mover}>
@@ -94,7 +99,10 @@ function Side({
                       {finishLabel(row.finish)} · {row.setName}
                     </span>
                   </span>
-                  <span className={styles.moverPct}>{change}</span>
+                  <span className={styles.moverFigures}>
+                    <span className={styles.moverPct}>{change}</span>
+                    {priced ? <Money value={row.price} /> : null}
+                  </span>
                 </span>
               </Card>
             </li>

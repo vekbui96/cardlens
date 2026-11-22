@@ -46,6 +46,22 @@ describe("MoversPanel", () => {
     expect(container.textContent).not.toContain("Noise");
   });
 
+  it("shows the current USD price beside the percent, and no amount when unpriced", () => {
+    const priced = [
+      { ...row("sv3-1", "Charizard ex", 100, 118.4), price: 12.4 },
+      row("sv3-2", "Pidgeot ex", 10, 11),
+      row("sv3-3", "Gardevoir ex", 20, 16),
+      { ...row("sv3-4", "Mew ex", 10, 9), price: 0 },
+    ];
+    const { container } = render(<MoversPanel rows={priced} />);
+    expect(screen.getByText("$12.40")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Charizard ex.*\$12\.40.*\+18\.4% 7d/ })).toBeTruthy();
+    // Only the one priced row has an amount: unpriced and zero show nothing, never $0.00.
+    expect(container.textContent?.match(/\$/g)).toHaveLength(1);
+    expect(container.textContent).not.toMatch(/Unavailable|0\.00/);
+    expect(container.textContent).not.toMatch(/€|EUR/);
+  });
+
   it("draws nothing when no card qualifies, or rows are not settled", () => {
     const a = render(<MoversPanel rows={[row("sv3-5", "Noise", 0.03, 0.05)]} />);
     expect(a.container.innerHTML).toBe("");
