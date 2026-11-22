@@ -107,6 +107,25 @@
   color: var(--v2-fg-muted);
 }
 
+/* The copy-failed fallback: full width, so it wraps onto its own line under the chips. */
+.listFallback {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+.listBox {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg);
+  background: var(--v2-surface-sunken);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  border-radius: var(--v2-radius-sm);
+}
+
 /* --- Pages ---------------------------------------------------------------- */
 
 /*
