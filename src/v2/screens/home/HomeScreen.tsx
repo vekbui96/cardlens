@@ -14,6 +14,7 @@ import { EmptyHome } from "./EmptyHome.tsx";
 import { GrowthChart } from "./GrowthChart.tsx";
 import { MoversPanel } from "./MoversPanel.tsx";
 import { ProgressPanel } from "./ProgressPanel.tsx";
+import { ValueHistoryPanel } from "./ValueChart.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
 import { syncNotice } from "./homeSummary.ts";
 import styles from "./Home.module.css";
@@ -51,6 +52,10 @@ import styles from "./Home.module.css";
  * per-set ones at 4.5–6.7s each, several of which failed outright and left Home
  * reporting "480 of 973 printings priced". `homeSummary.test.ts` asserts that
  * nothing in this directory opens a query of its own.
+ *
+ * The one exception is deliberate and small: a connected device asks the server
+ * once for its daily value rows (`useValueHistory`, #117) — a single GET that
+ * no other hook could answer, never one per set.
  */
 export function HomeScreen() {
   const {
@@ -151,6 +156,13 @@ export function HomeScreen() {
           }}
         />
         <GrowthChart stamps={ownedStamps} />
+        {/*
+          The one request Home causes beyond the shared hooks: the server's
+          daily value rows (#117), through `useValueHistory`, only on a device
+          with a sync token. Last in this row, so its arriving never moves the
+          two panels above or beside it.
+        */}
+        <ValueHistoryPanel />
       </div>
 
       <ProgressPanel resume={resume} rows={rows} loading={sets === undefined} />
