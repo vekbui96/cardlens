@@ -4,11 +4,13 @@ import { screenToPath } from "../../../app/screenUrl.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../../models/finishes.ts";
 import { formatPct } from "../../../models/movement.ts";
+import { csvFileName, ownedToCsv } from "../../../models/ownedCsv.ts";
 import {
   OWNED_SORTS_V2,
   sortOwned,
   totalOf,
   weekChange,
+  type OwnedPrintingRow,
   type OwnedSortKey,
 } from "../../../models/ownedSort.ts";
 import { Card, CardArt, Chip, Money, Panel, Row, Stack } from "../../primitives/index.ts";
@@ -21,6 +23,19 @@ const VIEWS = [
 ] as const;
 
 type ViewKey = (typeof VIEWS)[number]["key"];
+
+/** Same file as v1's: BOM first so Excel reads it as UTF-8. */
+function downloadCsv(rows: OwnedPrintingRow[]): void {
+  const blob = new Blob(["﻿" + ownedToCsv(rows)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = csvFileName(new Date());
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * Every printing held, as one sortable list — `#/owned`.
@@ -126,6 +141,15 @@ export function OwnedView() {
               ))}
             </Row>
           </div>
+          {/* Offered only once pricing has settled: a file written while sets
+              are still pricing would list their cards as unpriced. */}
+          {pricing === 0 && pending === 0 ? (
+            <div role="group" aria-label="Export">
+              <Row gap={2} wrap>
+                <Chip onPress={() => downloadCsv(sorted)}>Download CSV</Chip>
+              </Row>
+            </div>
+          ) : null}
         </Row>
 
         {view === "showcase" ? (
