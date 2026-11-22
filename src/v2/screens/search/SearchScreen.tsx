@@ -13,6 +13,7 @@ import {
   Card,
   CardArt,
   Chip,
+  ErrorNotice,
   Field,
   Grid,
   Money,
@@ -266,26 +267,22 @@ function CatalogFailure({
   retrying: boolean;
   onRetry: () => void;
 }) {
+  /*
+   * It says what could not be reached and does NOT blame the query. The
+   * catalog fails about a quarter of the time in bursts, so "no results,
+   * check your spelling" would be wrong far more often than it was right —
+   * and it would send people to correct a word that was already correct.
+   */
   return (
-    <Panel title="The card catalog did not answer" headingLevel={2} tone="raised">
-      <Stack gap={3}>
-        {/*
-          It says what could not be reached and does NOT blame the query. The
-          catalog fails about a quarter of the time in bursts, so "no results,
-          check your spelling" would be wrong far more often than it was right —
-          and it would send people to correct a word that was already correct.
-        */}
-        <p className={styles.prose}>
-          There is nothing wrong with “{query}”. pokemontcg.io drops requests in bursts and rate-limits on top
-          of that, so the same search usually works a moment later.
-        </p>
-        <Row gap={2}>
-          <button type="button" className={styles.primary} onClick={onRetry} disabled={retrying}>
-            {retrying ? "Trying again…" : "Try again"}
-          </button>
-        </Row>
-      </Stack>
-    </Panel>
+    <ErrorNotice
+      title="The card catalog did not answer"
+      stillWorks="Your collection and recent cards are still available."
+      busy={retrying}
+      onRetry={onRetry}
+    >
+      There is nothing wrong with “{query}”. pokemontcg.io drops requests in bursts and rate-limits on top of
+      that, so the same search usually works a moment later.
+    </ErrorNotice>
   );
 }
 

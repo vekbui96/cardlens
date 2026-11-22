@@ -143,4 +143,12 @@ test.describe("details @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("card-details.png");
   });
+
+  test("the printing-list failure looks like itself", async ({ page }) => {
+    await servePrintings(page, { failFirst: 99 });
+    await openV2(page, CARD);
+    await expect(page.getByText(/printing list could not be reached/i)).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("card-details-printings-failure.png");
+  });
 });
