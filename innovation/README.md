@@ -91,10 +91,28 @@ build session, 80 for proposals, 120 for the review; time limits 150 / 45 / 60 m
 is left of the run's 240. `-Model` / `-MaxTurns` on run-loop.ps1 override every session for one run.
 Claude Code's own small background calls (Haiku) are unchanged.
 
-**No-op runs cost nothing.** Before it starts any session, `run-loop.ps1` asks `check-approval.ps1 -List` for
-the queue. When nothing approved is buildable (FULL mode) and no proposal slot is free, it logs `precheck:
+**Spend caps** (`sessions.json`, yours; rules in `gate-rules.ps1`, tested in `test-queue-rules.ps1`):
+
+- **Per session, in USD:** `maxBudgetUsd` is passed to claude as `--max-budget-usd` (API-equivalent dollars,
+  as `claude -p` reports them). Defaults: build on Opus 8, build on any other model 2.50
+  (`build.smallMaxBudgetUsd`), proposals 0.75, the review 4; 0 = no cap. A build stopped by its cap is failure
+  class `max-budget`, retried once like `max-turns`.
+- **Per day, in sessions:** `maxPerDay` caps how many sessions of each kind start per local day across all
+  runs (every approval starts a run). Defaults: builds 8, proposals 4, review 1; 0 = no cap. Counts live in
+  `<LOOP_HOME>\state\daily-sessions.json`. Over the cap that kind is skipped with a logged reason (`daily
+caps: ...`), approved issues stay approved for a later day, and a run with nothing else to do ends in the
+  $0 precheck (`LOOP-RESULT: NOTHING-TO-DO ... daily session cap reached`). `Get-DailyCapDecision -Request`
+  is the hook for your direct requests to bypass the cap once they run through the runner (not wired yet).
+- **Options** (`"options"` in `sessions.json`): `proposeIssueDigest` (the runner lists the issues once and
+  puts a compact `KNOWN_ISSUES` block in the proposal header, so the session does not list them itself),
+  `compactPrompts` (LOOP.md blocks marked `<!-- only:build -->` stay out of proposal and review prompts),
+  `logKeepDays` (30: older prompts, transcripts and summaries are deleted at the start of a run;
+  `*.rundata.json` and `run-<id>.log` are kept for the ops hub; a dry run only lists them; 0 = never),
+  `digestMaxIssues` and `digestDeployedDays` (deployed issues listed only from the last N days).
+  **No-op runs cost nothing.** Before it starts any session, `run-loop.ps1` asks `check-approval.ps1 -List` for
+  the queue. When nothing approved is buildable (FULL mode) and no proposal slot is free, it logs `precheck:
 launch=False (...)`, writes a summary ending `LOOP-RESULT: NOTHING-TO-DO` and `run-<id>.rundata.json`
-(cost 0), and exits 0 without a session. If that check fails, the run starts claude as before.
+  (cost 0), and exits 0 without a session. If that check fails, the run starts claude as before.
 
 **Plan budget (the ops hub).** The loop shares your Max plan's 5-hour and weekly limits with your own use, so
 before every session the runner (never claude) reads `D:\hub\state\plan-budget.json` (written by the ops hub
@@ -121,7 +139,7 @@ out of time, the run's time or turn limit), the next run builds it ONCE more: it
 `loop:retried`, continues the open PR if there is one, and a second failure waits for you. A failure caused
 by the change (tests still failing after the fix rounds, a refusal of the PR's own diff, out of scope, a
 rolled-back deploy) is never retried automatically. If the session is killed mid-build (time limit, turn
-limit), the runner marks the issue `loop:failed` itself (class `timeout` / `max-turns`, retried once;
+limit, USD cap), the runner marks the issue `loop:failed` itself (class `timeout` / `max-turns` / `max-budget`, retried once;
 anything already merged in that run is `session-ended` and waits for you). Failed issues no longer take a
 proposal slot, so the run summary and every Run data comment end with `Failed, waiting on Ve: #n
 (reason)`. Failures from before this rule have no marker and are never retried automatically. To build
