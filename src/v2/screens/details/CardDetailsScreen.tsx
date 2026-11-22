@@ -15,6 +15,7 @@ import {
   Card,
   CardArt,
   Chip,
+  ErrorNotice,
   Money,
   Panel,
   Row,
@@ -122,24 +123,15 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
 
   if (!card) {
     return details.isError ? (
-      <Panel title="That card could not be loaded" headingLevel={2} tone="raised">
-        <Stack gap={3}>
-          <p className={styles.prose}>
-            The catalog did not answer for <code>{cardId}</code>. It fails in bursts rather than staying down,
-            so trying again usually works.
-          </p>
-          <Row gap={2}>
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => void details.refetch()}
-              disabled={details.isFetching}
-            >
-              {details.isFetching ? "Trying again…" : "Try again"}
-            </button>
-          </Row>
-        </Stack>
-      </Panel>
+      <ErrorNotice
+        title="That card could not be loaded"
+        stillWorks="Your collection and recent cards are still available."
+        busy={details.isFetching}
+        onRetry={() => void details.refetch()}
+      >
+        The catalog did not answer for <code>{cardId}</code>. It fails in bursts rather than staying down, so
+        trying again usually works.
+      </ErrorNotice>
     ) : (
       <LoadingCard />
     );
@@ -286,20 +278,16 @@ function PrintingsFailure({
   haveFallback: boolean;
 }) {
   return (
-    <div className={styles.failure}>
-      <Stack gap={3}>
-        <p className={styles.prose}>
-          The printing list could not be reached. The catalog drops requests in bursts rather than staying
-          down — nothing here is wrong with the card.
-          {haveFallback ? " What is below came from pricing data and may be short a printing." : ""}
-        </p>
-        <Row gap={2}>
-          <button type="button" className={styles.primary} onClick={onRetry} disabled={retrying}>
-            {retrying ? "Trying again…" : "Try again"}
-          </button>
-        </Row>
-      </Stack>
-    </div>
+    <ErrorNotice
+      stillWorks={
+        haveFallback ? "What is below came from pricing data and may be short a printing." : undefined
+      }
+      busy={retrying}
+      onRetry={onRetry}
+    >
+      The printing list could not be reached. The catalog drops requests in bursts rather than staying down —
+      nothing here is wrong with the card.
+    </ErrorNotice>
   );
 }
 
