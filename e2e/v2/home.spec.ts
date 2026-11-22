@@ -229,6 +229,25 @@ test.describe("home @visual", () => {
     await expect(page).toHaveScreenshot("home-empty.png", { fullPage: true });
   });
 
+  test("empty first-run state, sync offline", async ({ page }) => {
+    // A connected device (token set) whose every sync request is aborted: the
+    // status is "offline", and the empty Home should say why nothing arrived.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "cardlens:v1:sync-settings",
+        JSON.stringify({ token: "empty-offline-visual", lastPushedAt: 0, lastPulledAt: 0, lastSyncAt: 0 }),
+      );
+    });
+    for (const pattern of ["**/api/collection**", "**/api/binders**", "**/api/metrics**"]) {
+      await page.route(pattern, (route) => route.abort());
+    }
+    await openV2(page, "/", { seed: "empty" });
+    await expect(page.getByRole("heading", { name: "Nothing tracked yet", level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-empty-offline.png", { fullPage: true });
+  });
+
   test("movers: owned cards with Cardmarket averages", async ({ page }) => {
     await seedMovers(page);
     await openV2(page, "/");
