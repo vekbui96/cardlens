@@ -15,7 +15,11 @@
     unit     npm.cmd exec -- vitest run <-UnitFilter>        (quick iteration on one test file)
     build    npm.cmd run build with the Pages env set IN POWERSHELL (VITE_BASE=/cardlens/; never Git Bash,
              which mangles it into /Program Files/Git/cardlens/), then dist\index.html must reference
-             /cardlens/assets/index-*.js; with -ExpectString it must be in a built dist\assets\*.js
+             /cardlens/assets/index-*.js; with -ExpectString it must be in a built dist\assets\*.js.
+             With -NoVisibleString "<reason>" instead (a change that only adds src/ modules nothing imports
+             yet): the branch's diff against origin/main must pass live-check.ps1 Get-NoVisibleStringDecision
+             (every front-end file new under src/, no shipped import.meta.glob) and none of the new modules
+             may appear in the built source maps, i.e. the served bundle will not change
     e2e      Playwright (non-visual) on ALTERNATE ports with scratch data. As configured, the e2e webServer
              defaults to port 8787 with reuseExistingServer when !CI, i.e. the LIVE service and live data.
              This sets CI=1 (no server reuse), CL_E2E_PORT=5273, CL_E2E_API_PORT=8887, points every *_FILE /
@@ -37,9 +41,11 @@ param(
     [string]$Issue = 'adhoc',
     [string]$UnitFilter = '',
     [string]$ExpectString = '',
+    [string]$NoVisibleString = '',
     [string]$RepoPath = ''
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\live-check.ps1"   # Get-NoVisibleStringDecision, Find-ModulesInSourceMaps (same rule as deploy.ps1)
 Start-ScriptLog "test-gate-$Issue-$Step"
 if (-not $RepoPath) { $RepoPath = $script:Clone }
 $failures = New-Object System.Collections.ArrayList
@@ -134,6 +140,20 @@ foreach ($s in $steps) {
                 if ($ExpectString) {
                     $hit = Select-String -Path (Join-Path $full 'dist\assets\*.js') -SimpleMatch -Pattern $ExpectString -List | Select-Object -First 1
                     if (-not $hit) { Fail "ExpectString not found in any dist\assets\*.js" } else { Write-Log "ExpectString found in $(Split-Path $hit.Path -Leaf)" }
+                }
+                if ($NoVisibleString) {
+                    if ($ExpectString) { Fail 'pass -ExpectString or -NoVisibleString, not both'; break }
+                    if ($NoVisibleString.Trim().Length -lt 10) { Fail '-NoVisibleString needs a reason (why the change has no visible string)'; break }
+                    $ns = @((Invoke-Git -Repo $full -Arguments @('diff', '--name-status', '--no-renames', 'origin/main...HEAD') -Quiet).Output)
+                    $gg = Invoke-Git -Repo $full -Arguments @('grep', '-l', '-F', 'import.meta.glob', 'HEAD', '--', 'src') -AllowFail -Quiet
+                    $globs = @($gg.Output | Where-Object { $_ } | ForEach-Object { "$_" -replace '^HEAD:', '' })
+                    $nv = Get-NoVisibleStringDecision -NameStatus $ns -GlobFiles $globs
+                    if (-not $nv.Ok) { Fail "-NoVisibleString refused (deploy.ps1 would refuse it too): $($nv.Why)"; break }
+                    $maps = @(Get-ChildItem -LiteralPath (Join-Path $full 'dist\assets') -Filter '*.map' -File | ForEach-Object { [IO.File]::ReadAllText($_.FullName) })
+                    if ($maps.Count -eq 0) { Fail 'no source maps in dist\assets (build.sourcemap off?): cannot prove the new modules are not bundled'; break }
+                    $in = @(Find-ModulesInSourceMaps -Modules $nv.Added -MapTexts $maps)
+                    if ($in.Count -gt 0) { Fail "-NoVisibleString: these new modules ARE in the bundle, so the change is served: $($in -join ', '); give it a visible string (-ExpectString)" }
+                    else { Write-Log "no visible string ($NoVisibleString): new module(s) $($nv.Added -join ', ') are not in any of $($maps.Count) source map(s); the served bundle will not change" }
                 }
             }
             'e2e' {
