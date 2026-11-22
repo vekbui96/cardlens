@@ -563,6 +563,10 @@ $script:SessionDefaults = [ordered]@{
     # findings JSON out); the PM replaces the propose session (reads findings, opens proposals that cite them)
     observe = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 30; timeoutMinutes = 15; maxBudgetUsd = 0.60; maxPerDay = 2 }
     pm      = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
+    # Phase 3 (options.qaUx, product-qa.ps1): QA of each deployed build against its acceptance criteria on the live site,
+    # and a UX review of UI changes (plus a weekly sample); both read-only, JSON out, validated by the runner
+    qa      = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 25; timeoutMinutes = 15; minMinutes = 8; maxBudgetUsd = 0.50; maxPerDay = 8 }
+    ux      = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 25; timeoutMinutes = 15; minMinutes = 8; maxBudgetUsd = 0.50; maxPerDay = 3 }
 }
 
 # Run-wide switches from sessions.json's "options" object (all optional; these are the safe defaults).
@@ -588,9 +592,11 @@ $script:SessionDefaults = [ordered]@{
 #   slot; product-intel.ps1 Get-CoordinatorDecision); off = the single propose session as before (needs productStore).
 #   observeMetricPoints: a 7-day metrics rate that moved by at least this many percentage points since the last
 #   observation makes the Observer run.
+#   Phase 3: qaUx runs a QA session after each deployed build (and shipped request child) and a UX review after a UI
+#   change, plus a weekly UX sample of one workflow not reviewed for uxStaleDays (every uxSampleDays); product-qa.ps1.
 $script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; proposeMetricsDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
     productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false
-    designSkills = $false; observerPm = $false; observeMetricPoints = 10 }
+    designSkills = $false; observerPm = $false; observeMetricPoints = 10; qaUx = $false; uxSampleDays = 7; uxStaleDays = 30 }
 
 # ---- design skills (options.designSkills) ----------------------------------------------------------
 # Pinned copies outside Ve's ~\.claude (guard.mjs keeps sessions out of it: credentials live there). Only
@@ -606,7 +612,7 @@ $script:DesignSkillPaths = [ordered]@{
     # Python is a per-user install, not on the machine PATH the runner starts from (lib.ps1): prepended for sessions
     PythonDir    = ('{0}\Programs\Python\Python312' -f $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { "$env:USERPROFILE\AppData\Local" }))
 }
-$script:DesignSkillKinds = @('build', 'propose', 'review', 'observe', 'pm')
+$script:DesignSkillKinds = @('build', 'propose', 'review', 'observe', 'pm', 'qa', 'ux')
 
 # What the runner adds when options.designSkills is on and the files check out: Ok/Reason (why it is off),
 # Allow (the permission rules for the session kinds in DesignSkillKinds), PathPrepend (Python's folder, put in
@@ -674,7 +680,7 @@ function Format-BudgetUsd { param([double]$Usd) return $Usd.ToString('0.00', [Gl
 # ---- daily session caps (run-loop.ps1 keeps the counts in <LOOP_HOME>\state\daily-sessions.json) ----------
 # Every approval starts a run, so without a cap a busy day has no upper bound. The counts are per local day
 # and per kind (build | propose | review); a launch is counted when the session is started (never in a dry run).
-$script:DailyCapKinds = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm')
+$script:DailyCapKinds = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm', 'qa', 'ux')
 
 # Today's counts from the saved state ($null / another day / garbage = all zero).
 function Get-DailyCounts {
@@ -1087,7 +1093,7 @@ function Split-BuildableByBudget {
 # (-Request) but never the plan budget's hold.
 function Get-PrecheckDecision {
     param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true,
-        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @(), $Coordinator = $null)
+        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @(), $Coordinator = $null, [int]$QaUx = 0)
     $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
     if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
     if ($Mode -ne 'PRODUCT_REVIEW' -and $Intake -gt 0) { return (& $mk $true "$Intake request(s) of Ve's to plan (intake goes first)") }
@@ -1120,7 +1126,9 @@ function Get-PrecheckDecision {
     # Phase 2 (options.observerPm): Phase B runs only when the coordinator (product-intel.ps1) says the Observer or
     # the PM has work; its caps and the plan budget are already folded into its decision. Idle = no session, $0.
     if ($null -ne $Coordinator) { $pb = [bool]$Coordinator.PhaseB; $why += "phase B: $(if ($pb) { 'observer/pm needed' } else { 'idle (no change to observe, nothing new for the PM)' })" }
-    $launch = (($Mode -eq 'FULL' -and $b -gt 0 -and -not $BuildCap) -or $pb)
+    # Phase 3 (options.qaUx): QA / UX sessions the coordinator (product-qa.ps1 Get-QaUxPlan) would start now
+    if ($QaUx -gt 0) { $why += "$QaUx QA/UX session(s) due" }
+    $launch = (($Mode -eq 'FULL' -and $b -gt 0 -and -not $BuildCap) -or $pb -or ($Mode -ne 'PRODUCT_REVIEW' -and $QaUx -gt 0))
     return (& $mk $launch ($why -join ', '))
 }
 

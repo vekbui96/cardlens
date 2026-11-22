@@ -97,6 +97,45 @@ neither runs unless there is a reason. A deterministic coordinator in `run-loop.
   store (`logs\run-<id>.store`) with every GitHub write refused; the PM lists what it would open.
 - With `observerPm` off, the single `propose` session runs exactly as before.
 
+### Phase 3: QA and UX review (`options.qaUx`)
+
+With `qaUx` on (it needs `productStore`), every deployed UI change gets a QA verdict and a UX review, and a
+regression on the live site reaches the PM within one run. Order in a run: builds, QA, UX, then the Observer and
+the PM. The coordinator (`product-qa.ps1` `Get-QaUxPlan`, no AI) never QAs or reviews the same commit twice
+(`cursors.qa.done` / `ux.done`), respects the daily caps, the plan budget (`hold` stops everything) and the run's
+time; what does not fit waits in `cursors.qa.pending` for the next run (and makes the next run's precheck launch).
+
+- **Acceptance criteria.** A build's Plan comment ends with 1-6 user-visible, checkable criteria in a
+  `<!-- loop-criteria -->` block, one per line: `- <workflow> | <path> | <criterion>` (LOOP.md section 3 step 5).
+  The runner reads them from the loop's own comments only (Ve's account, first line the loop marker; anyone
+  else's text is ignored). A build without them falls back to the proposal's "How it would be tested".
+- **QA** (`qa`: Sonnet, 25 turns, 15 min, $0.50, 8 a day) starts after each `loop:deployed` build and each shipped
+  request child, once the deploy is verified. A deterministic precheck skips it with no session when the merge
+  touched only tests, docs or `innovation/` (qa.jsonl records `skipped (no user-facing change)`). It gets the
+  criteria with their live URLs, a diff summary and the touched workflows, and checks the LIVE site read-only:
+  WebFetch, and impeccable `shot` (390px first) / `detect`. There is no browser automation: Playwright is not
+  allowlisted and the guard refuses it, so a criterion that needs a click, a signed-in collection or a device is
+  `unverified` with the reason. No gh at all, no innovation script, no POST/PUT/DELETE, no token, files only in
+  WORK and ARTIFACTS (guard mode QA). Its JSON (pass / fail / unverified per criterion with evidence, screenshots
+  as `artifact:qa/...png`, up to 3 regressions, an optional lesson) is validated by the runner, which appends the
+  verdict to `qa.jsonl`, adds a QA line to the issue's Run data comment (or a short comment of its own when the
+  build was in an earlier run), writes failed criteria and regressions to `findings.jsonl` (agent qa, tag qa,
+  severity high: the PM sees them first) and hands the lesson to the memory agent as input only (never evidence
+  for a preference). **QA never rolls back**; rollback stays with the deploy scripts.
+- **UX review** (`ux`: Sonnet, 25 turns, $0.50, 3 a day) starts after a deploy that changed the UI (the deploy
+  verified an ExpectString, or visual baselines changed; never a NoVisibleString deploy), and once a week
+  (`uxSampleDays`) for the workflow nobody reviewed for `uxStaleDays` (30). It gets the diff summary, the before /
+  after CI baselines (extracted by the runner), Ve's confirmed UI preferences, FOCUS.md, the v2 design system and
+  the workflow's spec, and may use impeccable's critique / audit guidance and a few ui-ux-pro-max lookups. The
+  Observer's guard posture (mode UX). Every finding (tag ux) carries a measurable recommendation ("tap target 32
+  -> 44px"); vague ones are refused.
+- The hub digest shows the QA verdicts of the last day (fails first) and the new UX findings; run data and the
+  ledger record the agents `qa` / `ux`.
+- Proof without side effects: `run-loop.ps1 -DryRun -AgentsDryRun -QaIssues 174,177` queues those deployed issues
+  and really runs QA / UX against a copy of the store; `-DryRun -QaIssues ...` alone only plans and writes the
+  prompts.
+- With `qaUx` off, nothing of this runs.
+
 ## How it works
 
 Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in

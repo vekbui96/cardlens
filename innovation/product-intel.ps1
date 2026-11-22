@@ -199,7 +199,9 @@ function Get-FindingsState {
         if (-not $by.Contains($id)) {
             if (-not $r.summary) { continue }   # a status record for an unknown finding
             $by[$id] = [pscustomobject]@{ id = $id; ts = "$($r.ts)"; agent = "$($r.agent)"; workflow = "$($r.workflow)"; summary = "$($r.summary)"
-                evidence = @($r.evidence); confidence = [double]$r.confidence; severity = "$($r.severity)"; status = 'open'; refs = @($r.refs | Where-Object { $_ }); statusTs = "$($r.ts)" }
+                evidence = @($r.evidence); confidence = [double]$r.confidence; severity = "$($r.severity)"; status = 'open'; refs = @($r.refs | Where-Object { $_ }); statusTs = "$($r.ts)"
+                # Phase 3 (product-qa.ps1): QA / UX findings carry tags ([qa] / [ux]) and UX ones a measurable recommendation
+                tags = @($(if ($null -ne $r.tags) { @($r.tags | Where-Object { $_ } | ForEach-Object { "$_" }) })); recommendation = "$(if ($null -ne $r.recommendation) { $r.recommendation })" }
             if ("$($r.status)" -in $script:FindingStatuses) { $by[$id].status = "$($r.status)" }
             continue
         }
@@ -217,10 +219,11 @@ function Test-FindingTransition {
     return ($From -eq 'open' -and $To -in @('addressed', 'dismissed'))
 }
 function Get-SeverityRank { param([string]$S) switch ($S) { 'high' { 3 } 'medium' { 2 } default { 1 } } }
-# The top -Max open findings: severity, then confidence, then newest.
+# The top -Max open findings: QA failures first (a regression on the live site; Phase 3), then severity, then
+# confidence, then newest.
 function Select-OpenFindings {
     param([object[]]$Findings = @(), [int]$Max = $script:IntelTopFindings)
-    return @(@($Findings | Where-Object { $_ -and $_.status -eq 'open' }) | Sort-Object @{ Expression = { Get-SeverityRank $_.severity }; Descending = $true }, @{ Expression = { [double]$_.confidence }; Descending = $true }, @{ Expression = { "$($_.ts)" }; Descending = $true } | Select-Object -First $Max)
+    return @(@($Findings | Where-Object { $_ -and $_.status -eq 'open' }) | Sort-Object @{ Expression = { [int](@($_.PSObject.Properties.Name) -contains 'tags' -and @($_.tags) -contains 'qa') }; Descending = $true }, @{ Expression = { Get-SeverityRank $_.severity }; Descending = $true }, @{ Expression = { [double]$_.confidence }; Descending = $true }, @{ Expression = { "$($_.ts)" }; Descending = $true } | Select-Object -First $Max)
 }
 # Open findings first seen after -SinceUtc ('' = all of them).
 function Select-FindingsSince {
@@ -444,7 +447,9 @@ function Test-ProposalRefs {
 
 # ---- prompt blocks (runner-built, compact) --------------------------------------------------------------------
 function Format-FindingLine { param($F, [switch]$Short)
-    $l = "- $($F.id) [$($F.workflow), $($F.severity), $(([double]$F.confidence).ToString('0.00', $script:IntelInv))] $(ConvertTo-SafeLine $F.summary 200)"
+    $tg = ''; if (@($F.PSObject.Properties.Name) -contains 'tags' -and @($F.tags).Count) { $tg = ", $(@($F.tags) -join '/')" }
+    $l = "- $($F.id) [$($F.workflow), $($F.severity), $(([double]$F.confidence).ToString('0.00', $script:IntelInv))$tg] $(ConvertTo-SafeLine $F.summary 200)"
+    if (@($F.PSObject.Properties.Name) -contains 'recommendation' -and "$($F.recommendation)") { $l += " (recommendation: $(ConvertTo-SafeLine "$($F.recommendation)" 160))" }
     if (-not $Short) { $l += " (evidence: $(@($F.evidence | Select-Object -First 3 | ForEach-Object { ConvertTo-SafeLine "$_" 90 }) -join '; '))" }
     return $l }
 # The Observer's header lines: workflows changed (with files), diff stats, metric deltas, open findings (dedup),

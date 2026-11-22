@@ -34,12 +34,28 @@ const REPO = "vekbui96/cardlens";
 // plus one rule: every issue it opens cites a known finding / decision id in a <!-- loop-refs: ... --> line (the ids
 // the runner wrote to <HOME>\state\pm-refs.json before the session). INNOVATION_LOOP_CARDLENS_NO_GH_WRITES=1
 // (run-loop -DryRun -AgentsDryRun) refuses every GitHub write in any mode.
+// QA and UX (Phase 3: the QA session after a deploy, the UX reviewer) have the Observer's posture: read-only, no
+// GitHub writes (no gh at all), no innovation script, files only in WORK and ARTIFACTS (screenshots), HTTP GET to the
+// live site and the public API routes only (never a token, never a write route, never the local server's data).
 const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpperCase();
 const INTAKE = MODE === "INTAKE";
 const OBSERVE = MODE === "OBSERVE";
 const PM = MODE === "PM";
+const QA = MODE === "QA";
+const UX = MODE === "UX";
+// the read-only agents: the runner validates their JSON; they change nothing
+const AGENT_RO = OBSERVE || QA || UX;
 const NO_GH_WRITES = process.env.INNOVATION_LOOP_CARDLENS_NO_GH_WRITES === "1";
-const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY", "INTAKE", "OBSERVE", "PM"].includes(MODE);
+const READ_ONLY = [
+  "PRODUCT_REVIEW",
+  "PROPOSE",
+  "PROPOSE_ONLY",
+  "INTAKE",
+  "OBSERVE",
+  "PM",
+  "QA",
+  "UX",
+].includes(MODE);
 // keep identical to product-intel.ps1 $script:LoopRefsRx
 const LOOP_REFS = /<!--\s*loop-refs:\s*([^>]*?)\s*-->/g;
 const REQUEST = String(process.env.INNOVATION_LOOP_CARDLENS_REQUEST || "").trim();
@@ -323,6 +339,10 @@ if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].inclu
       block(`writes are only allowed in the loop clone (${CLONE}) and ${HOME}\\work / artifacts`);
     if (OBSERVE && !n.startsWith(HOME + "\\work\\"))
       block(`the Observer writes files only in ${HOME}\\work (it reports findings; it changes nothing)`);
+    if ((QA || UX) && inClone)
+      block(
+        `the ${MODE} session writes files only in ${HOME}\\work and artifacts (it reports; it changes nothing)`,
+      );
     if (inClone) {
       const rel = n.slice(CLONE.length + 1).replace(/\\/g, "/");
       if (rel === ".git" || rel.startsWith(".git/")) block("do not edit .git directly");
@@ -347,6 +367,8 @@ if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].inclu
 // ---- web ---------------------------------------------------------------------------------------
 if (tool === "WebFetch") {
   const u = String(ti.url || "");
+  if ((QA || UX) && /token|secret|[?&]key=|\/api\/sync/i.test(u))
+    block(`the ${MODE} session never sends a token or a sync call (${u})`);
   if (
     !/^https:\/\/(vekbui96\.github\.io\/cardlens|server-pc\.tail0e4194\.ts\.net:8443\/api\/(health|catalog|printings|metrics\/summary)|api\.pokemontcg\.io|api\.tcgdex\.net)(\/|\?|$)/i.test(
       u,
@@ -414,6 +436,8 @@ if (tool === "Bash" || tool === "PowerShell") {
       .slice(1)
       .map((x) => (x || "").toLowerCase());
     const [g1, g2] = sub;
+    if (QA || UX)
+      block(`the ${MODE} session uses no gh at all: the runner gave it the issue, the diff and the criteria`);
     if (OBSERVE) {
       // the Observer reads GitHub at most; it never writes (no issue / PR / label / comment of any kind)
       const readOnlyGh =
@@ -685,6 +709,17 @@ if (tool === "Bash" || tool === "PowerShell") {
         !/api\.(pokemontcg|tcgdex)/i.test(u)
       )
         block(`route not allowed from the session: ${u} (metrics: GET /api/metrics/summary only)`);
+      // QA / UX look at what a collector sees: the live site and the public, GET-safe API routes; never the local
+      // server or the recognition service, never a token in a URL
+      if ((QA || UX) && /token|secret|[?&]key=|\/api\/sync/i.test(u))
+        block(`the ${MODE} session never sends a token or a sync call (${u})`);
+      if (
+        (QA || UX) &&
+        !/^https:\/\/(vekbui96\.github\.io\/cardlens(\/|#|$)|server-pc\.tail0e4194\.ts\.net:8443\/api\/(health|catalog|printings|metrics\/summary)\b|api\.pokemontcg\.io\/|api\.tcgdex\.net\/)/i.test(
+          u,
+        )
+      )
+        block(`the ${MODE} session reads the live site and the public API routes only (saw ${u})`);
     }
   }
 
@@ -775,7 +810,10 @@ if (tool === "Bash" || tool === "PowerShell") {
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );
-      if (OBSERVE) block(`the Observer runs no innovation script (${s}); the runner gave it what it needs`);
+      if (AGENT_RO)
+        block(
+          `the ${OBSERVE ? "Observer" : MODE + " session"} runs no innovation script (${s}); the runner gave it what it needs`,
+        );
       if (READ_ONLY && !/\\check-approval\.ps1$/.test(f))
         block(
           `proposal and review sessions are read-only: ${s} builds, merges or deploys and is not allowed in this session`,
@@ -797,6 +835,8 @@ if (tool === "Bash" || tool === "PowerShell") {
     for (const p of paths) {
       if (OBSERVE && !(p.startsWith(HOME + "\\work\\") || p === HOME + "\\work"))
         block(`the Observer changes files only in ${HOME}\\work (saw ${p})`);
+      if ((QA || UX) && p.startsWith(CLONE + "\\"))
+        block(`the ${MODE} session changes files only in ${HOME}\\work and artifacts (saw ${p})`);
       const ok =
         p.startsWith(CLONE + "\\") ||
         p.startsWith(HOME + "\\work\\") ||
