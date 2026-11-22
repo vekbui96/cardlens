@@ -206,6 +206,8 @@ Check ($cfg.pm.model -match 'sonnet' -and [int]$cfg.pm.maxPerDay -gt 0 -and (Get
 Check ($script:DailyCapKinds -contains 'observe' -and $script:DailyCapKinds -contains 'pm') 'observe and pm are daily-capped kinds'
 $opts = Get-LoopOptions ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json)
 Check ($opts.Contains('observerPm') -and $opts.Contains('observeMetricPoints') -and (Get-LoopOptions $null).observerPm -eq $false) 'options.observerPm exists and defaults to off'
+$ds = Get-DesignSkillsSetup -Enabled $true -EngineHash $script:DesignSkillPaths.EngineSha256
+Check (-not $ds.Env.Contains('DO_NOT_TRACK')) 'design skills never set DO_NOT_TRACK (claude then offers no PowerShell tool)'
 $dc = Get-DailyCapDecision -Kind 'observe' -Counts ([ordered]@{ observe = 2 }) -Config $cfg
 Check (-not $dc.Allowed) 'the third observe session of a day is capped'
 

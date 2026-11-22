@@ -707,7 +707,7 @@ function Get-Coordination {
             $co.Base = $base
             if ($base -ne $co.Head) {
                 $co.Files = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--name-only', $base, $co.Head) -Quiet).Output | Where-Object { "$_".Trim() })
-                $co.DiffStat = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--stat=120', $base, $co.Head) -Quiet).Output | Where-Object { "$_".Trim() })
+                $co.DiffStat = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--stat=120', $base, $co.Head) -Quiet).Output | Where-Object { "$_".Trim() -and "$_" -notmatch '\|\s+Bin ' })   # binary snapshots are noise
             }
             $co.Changed = Get-ChangedWorkflows -Files $co.Files -Workflows $co.Workflows
         } catch { Write-Log "coordinator: the diff could not be read: $_" 'WARN'; $co.Changed = $null }
@@ -768,7 +768,7 @@ function Invoke-Observer {
     if ($sha -ne $Co.Head) { Write-Log "observer: origin/main moved to $sha since the coordinator read $($Co.Head); observing up to $($Co.Head) (the clone is at $sha)" 'WARN' }
     $pp = New-SessionPrompt -Kind 'observe' -SessionModel $sm -Turns ([int]$c.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $queue -MainSha $sha -LiveHead $liveHead -ExtraLines $lines
     $usd = Get-SessionBudget -Kind 'observe' -Model $sm -Config $Cfg
-    if ($DryRun -and -not $AgentsDryRun) { Write-Log "DRY RUN plan: observe session model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $usd) workflows=$(@($Co.Decision.Workflows) -join ',') prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"; return 0 }
+    if ($DryRun -and -not $AgentsDryRun) { Write-Log "DRY RUN plan: observe session model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $usd) workflows=$(@($Co.Decision.Workflows) -join ',') prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"; [void]$runNotes.Add("Observer: planned ($(@($Co.Decision.Workflows) -join ', '))"); return 0 }
     $s = Invoke-Session -Kind 'observe' -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd $usd
     [void]$sessions.Add($s)
     if ($s.EndClass -eq 'not-started') { [void]$problems.Add("observe: the session could not be started ($($s.Reason))"); return 0 }
@@ -814,7 +814,7 @@ function Invoke-Pm {
     $sha = Reset-Clone
     $pp = New-SessionPrompt -Kind 'pm' -SessionModel $sm -Turns ([int]$c.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $Q -MainSha $sha -LiveHead $liveHead -BuiltLine $BuiltLine -KnownIssues $known -MetricsLines (Get-MetricsDigestLines) -ExtraLines $lines
     $usd = Get-SessionBudget -Kind 'pm' -Model $sm -Config $Cfg
-    if ($DryRun -and -not $AgentsDryRun) { Write-Log "DRY RUN plan: pm session model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $usd) slots newThisRun=$($Q.slots.newThisRun) slicesToOpen=$(@($Q.slicesToOpen | Where-Object { $_ }).Count) findings=$(@($findings | Where-Object { $_.status -eq 'open' }).Count) citable=$($valid.Count) prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"; return $null }
+    if ($DryRun -and -not $AgentsDryRun) { Write-Log "DRY RUN plan: pm session model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $usd) slots newThisRun=$($Q.slots.newThisRun) slicesToOpen=$(@($Q.slicesToOpen | Where-Object { $_ }).Count) findings=$(@($findings | Where-Object { $_.status -eq 'open' }).Count) citable=$($valid.Count) prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"; [void]$runNotes.Add("PM: planned ($($valid.Count) citable ids)"); return $null }
     $startUtc = [datetime]::UtcNow
     if ($dry) { $env:INNOVATION_LOOP_CARDLENS_NO_GH_WRITES = '1' }
     try { $s = Invoke-Session -Kind 'pm' -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd $usd -Request:$ReqSlices }
@@ -1177,6 +1177,7 @@ try {
 
     $stopRun = $false
     $proposeRan = $false
+    $didIntake = $false     # set by the intake block below; read by Phase B (strict mode)
     $built = @()            # {Issue; Outcome} per build session
     $serverUsed = ''
     $simMinutes = 0         # dry run: minutes a build is assumed to take, for planning the next one
