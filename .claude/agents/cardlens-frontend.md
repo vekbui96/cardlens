@@ -1,7 +1,7 @@
 ---
 name: cardlens-frontend
 description: Use for anything the user sees in CardLens — React screens and components, CSS modules, the design system, layout on phone/desktop/glasses, navigation and routing, client hooks and models, and the Vitest/Playwright tests that cover them. Prefer this over a general agent whenever the change is under src/ (excluding server-shared models), src/styles/, or e2e/. Do NOT use it for server/, deploys, or the Python recogniser.
-tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, TodoWrite
+tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, TodoWrite, Skill
 model: inherit
 ---
 
@@ -61,6 +61,26 @@ Web styling lives under `[data-shell="web"]` and `src/styles/web-theme.css`.
 - Mock fixtures do **not** contain Pitch Black (`me5`), which several screens
   default to. Use Obsidian Flames in e2e.
 - A Playwright project with no `testMatch` runs every spec.
+
+## Design skills
+
+Two user-level design skills are installed on server-pc. Use them as guidance for
+visible web/phone UI work, with the Skill tool. This file, `CLAUDE.md`, the v2 design
+system and `innovation/FOCUS.md`'s web rules win over any skill's taste: focus ring
+off on web, 44px tap targets, no layout shift while prices load, partial success over
+blank, "unpriced" over invented numbers, v2 first.
+
+- **impeccable**: `critique` or `audit` a screen before reworking it, `polish` before
+  shipping, and read its `craft-floor` before UI edits. It is Operate mode (app UI):
+  precision over expression. Never enable its `hooks` or `pin` verbs.
+- **ui-ux-pro-max**: one focused lookup at a time (`scripts/search.py "<query>"
+--domain ux`, or `--stack react`). Never `--persist` or `--force`.
+- Do **not** use `design-taste-frontend` (taste) here. It is for marketing sites and
+  conflicts with the app's rules.
+- None of these apply to the glasses layout (600×600 additive, four gestures). Keep
+  the glasses rules above.
+
+Load only what the task needs.
 
 ## Testing
 
