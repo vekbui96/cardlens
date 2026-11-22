@@ -565,8 +565,59 @@ $script:SessionDefaults = [ordered]@{
 #   memoryAgent: the Haiku memory session proposes preferences.json changes when memoryMinDecisions new decisions
 #   piled up or memoryEveryDays passed (needs productStore). requestIntake: Ve's loop:request issues are planned by
 #   an intake session and their issues built first (via-request approval).
+#   designSkills: build, proposal and review sessions may use the pinned design skills (impeccable's engine:
+#   context / shot / detect; ui-ux-pro-max's search.py) and get LOOP.md section 9 (Get-DesignSkillsSetup).
 $script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
-    productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false }
+    productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false
+    designSkills = $false }
+
+# ---- design skills (options.designSkills) ----------------------------------------------------------
+# Pinned copies outside Ve's ~\.claude (guard.mjs keeps sessions out of it: credentials live there). Only
+# impeccable and ui-ux-pro-max are copied; the taste skill is not, and guard.mjs refuses its name anywhere.
+# The engine binary was fetched once from the impeccable release and checked against the skill's
+# engine-checksums.txt; the runner re-hashes it before every run and turns the feature off on a mismatch.
+# The paths must match ENGINE / SEARCH in guard.mjs (test-gate-rules.ps1 checks).
+$script:DesignSkillPaths = [ordered]@{
+    Engine       = 'D:\loop-tools\impeccable-engine\0.1.27\impeccable.exe'
+    EngineSha256 = 'ba9627d4552bca5666020624d8e994aea8b8b44c46b995e18b5babad0f431fc8'
+    Impeccable   = 'D:\loop-tools\skills\impeccable'
+    Search       = 'D:\loop-tools\skills\ui-ux-pro-max\scripts\search.py'
+    # Python is a per-user install, not on the machine PATH the runner starts from (lib.ps1): prepended for sessions
+    PythonDir    = ('{0}\Programs\Python\Python312' -f $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { "$env:USERPROFILE\AppData\Local" }))
+}
+$script:DesignSkillKinds = @('build', 'propose', 'review')
+
+# What the runner adds when options.designSkills is on and the files check out: Ok/Reason (why it is off),
+# Allow (the permission rules for the session kinds in DesignSkillKinds), PathPrepend (Python's folder, put in
+# front of PATH so the bare `python` of the allow rule resolves), Env (set for every session; the
+# IMPECCABLE_* switches keep the engine off the network: no telemetry, update or staleness checks, no hook).
+# -EngineHash lets tests skip hashing a 24 MB file.
+function Get-DesignSkillsSetup {
+    param([bool]$Enabled, [hashtable]$Paths = $null, [string]$EngineHash = '')
+    $p = $script:DesignSkillPaths; if ($Paths) { $p = $Paths }
+    $off = [pscustomobject]@{ Ok = $false; Reason = 'off (sessions.json options.designSkills)'; Allow = @(); Env = [ordered]@{ INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS = '' } }
+    if (-not $Enabled) { return $off }
+    foreach ($k in 'Engine', 'Search') { if (-not (Test-Path -LiteralPath $p[$k] -PathType Leaf)) { $off.Reason = "missing $($p[$k])"; return $off } }
+    if (-not (Test-Path -LiteralPath (Join-Path $p.PythonDir 'python.exe') -PathType Leaf)) { $off.Reason = "missing python.exe in $($p.PythonDir)"; return $off }
+    if (-not (Test-Path -LiteralPath (Join-Path $p.Impeccable 'reference\craft-floor.md') -PathType Leaf)) { $off.Reason = "missing the impeccable copy in $($p.Impeccable)"; return $off }
+    $h = $EngineHash; if (-not $h) { $h = (Get-FileHash -LiteralPath $p.Engine -Algorithm SHA256).Hash }
+    if ($h.ToLowerInvariant() -ne $p.EngineSha256.ToLowerInvariant()) { $off.Reason = "engine hash mismatch ($($h.ToLowerInvariant()))"; return $off }
+    $e = $p.Engine
+    $allow = @("PowerShell($e context)", "PowerShell($e context *)", "PowerShell($e shot *)", "PowerShell($e detect *)", "PowerShell(python $($p.Search) *)")
+    $vars = [ordered]@{
+        INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS = '1'; IMPECCABLE_BIN = $e; IMPECCABLE_SKILL_DIR = $p.Impeccable
+        IMPECCABLE_NO_TELEMETRY = '1'; DO_NOT_TRACK = '1'; IMPECCABLE_NO_UPDATE_CHECK = '1'; IMPECCABLE_NO_STALENESS_CHECK = '1'
+        IMPECCABLE_HOOK_DISABLED = '1'; PYTHONDONTWRITEBYTECODE = '1'
+    }
+    return [pscustomobject]@{ Ok = $true; Reason = 'on'; Allow = $allow; Env = $vars; PathPrepend = $p.PythonDir }
+}
+
+# LOOP.md sections for a session kind, plus section 9 (design skills) when they are on for that kind.
+function Add-DesignSkillsSection {
+    param([int[]]$Sections, [string]$Kind, [bool]$On)
+    if ($On -and $script:DesignSkillKinds -contains $Kind -and $Sections -notcontains 9) { return @($Sections) + 9 }
+    return @($Sections)
+}
 function Get-LoopOptions {
     param($Json)
     $o = [ordered]@{}; foreach ($k in $script:LoopOptionDefaults.Keys) { $o[$k] = $script:LoopOptionDefaults[$k] }

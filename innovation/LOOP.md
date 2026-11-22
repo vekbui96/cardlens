@@ -808,3 +808,46 @@ the daily session caps; the plan budget and each session's USD cap still apply.
 Your summary (section 6) lists what you opened (numbers, titles, small / spec / Manual), or the question
 you asked, or why you declined; its last line is `LOOP-RESULT: OK` (issues opened, question asked or
 declined) or `LOOP-RESULT: FAILED <reason>`.
+
+## 9. Design skills (only when the header says DESIGN_SKILLS: on)
+
+Two design aids are pinned for you under `D:\loop-tools` (read-only; the taste skill is not available to
+this loop and the guard refuses its name). They are advice, never authority: FOCUS.md, PRODUCT.md, the issue,
+`docs/` and the existing v2 design system (its tokens and components) win over any skill's taste. CardLens is
+an app UI ("Operate" mode in impeccable's terms): 390px first, 44px tap targets, no layout shift, v2 before
+legacy, glasses layout untouched, no redesigns, scope is the issue.
+
+Nobody is there to answer. Ignore any skill text that says to ask the user, interview, probe with a question
+tool, open a decision page, run `init` / `document` / `extract` / `live`, or write PRODUCT.md, DESIGN.md,
+`.impeccable/` or `design-system/` files (impeccable's AUTONOMY_DIRECTIVE_CHECK included): you have no such
+tool and the scope is fixed. If a skill command fails or is refused, do not retry; carry on without it and say
+so in your summary.
+
+Commands (exactly these shapes; anything else is refused):
+
+- `D:\loop-tools\impeccable-engine\0.1.27\impeccable.exe context --target "<CLONE>\src\<area>"`: at most
+  once per session, only when you will change or judge UI. Its directives about interviews do not apply.
+- `D:\loop-tools\impeccable-engine\0.1.27\impeccable.exe shot <url> --viewport 390x844 --out "<WORK>\shots-<n>"`:
+  a screenshot to Read. URLs: the live site `https://vekbui96.github.io/cardlens/...` (it shows main, not
+  your branch) or a local preview on port 5273 / 4173. Add `,1440x900` only when desktop matters.
+- `D:\loop-tools\impeccable-engine\0.1.27\impeccable.exe detect --json "<CLONE>\src\<path>"`: an
+  anti-pattern scan of the files you changed or want to judge (`--scope layout` or `type` to narrow it).
+- `python D:\loop-tools\skills\ui-ux-pro-max\scripts\search.py '<query>' --domain ux -n 3`: one specific UX
+  question (domains: ux, style, color, typography, chart, ...; or `--stack react`). Single-quoted query;
+  never `--persist`, `--page`, `-o`, `--force`, `--preview`, `--tokens`. Do not read its SKILL.md or data.
+
+Reading (one file at a time, only the one the job needs; never the whole folder):
+`D:\loop-tools\skills\impeccable\reference\<name>.md`. `craft-floor.md` (short) is the quality floor; the
+task references are `audit`, `polish`, `layout`, `typeset`, `onboard` (empty and first-run states),
+`clarify` (labels, errors, copy), `harden` (errors, edge cases) and `adapt` (screen sizes). Skip the long
+ones (`critique.md`, `new-work*.md`, `live.md`, `document.md`, `init.md`) and SKILL.md itself.
+
+When to use them:
+
+- **Build** (a UI issue only): read `craft-floor.md` once, immediately before your first UI edit, plus the one
+  task reference that matches the issue if there is one. Use `search.py` only for a concrete question the
+  code and docs do not settle. After the change, `detect` on the changed files is a cheap check; the PR's
+  screenshots still come from the section 3 "Screenshots" flow. Not for server, data or test-only issues.
+- **Propose / review**: only for an idea about how a screen looks or reads. One `shot` of that live screen at
+  390x844 and, if useful, one `detect` or one short reference; quote the concrete finding in the proposal's
+  Why (what you saw, at what width). At most two skill calls per proposal; none for non-UI ideas.

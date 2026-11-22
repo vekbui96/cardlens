@@ -85,6 +85,10 @@ const NEVER = [
     "the recognition service",
   ],
   [/cardlens-backup/i, "the cardlens-backup task"],
+  [
+    /design-taste-frontend|taste-skill|tasteskill/i,
+    "the taste design skill (not used by this loop: marketing-site rules, and its Stop hook must never arm)",
+  ],
   [/services[\\/]+scripts/i, "D:\\services\\scripts"],
   [/\.innovation-loop(?!-cardlens)\b/i, "the website loop's state"],
   [
@@ -146,6 +150,117 @@ const PROTECTED = [
   /^netlify\.toml$/,
   /^vercel\.json$/,
 ];
+
+// ---- design skills (sessions.json options.designSkills; LOOP.md section 9) ----------------------
+// run-loop.ps1 sets INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS=1 only when the flag is on and the engine's hash
+// checked out. The engine and the skill copies are pinned under D:\loop-tools (never Ve's ~\.claude, which the
+// SECRET rule keeps out of reach). Only read-only verbs: context, shot (into WORK/ARTIFACTS), detect.
+// hooks, pin, live, doctor, foundations, install, update, login, telemetry, world, ignores are refused, and so
+// are search.py's writing flags (--persist, --page, --output-dir, --force, --preview, --tokens).
+const DESIGN = process.env.INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS === "1";
+const ENGINE = "d:\\loop-tools\\impeccable-engine\\0.1.27\\impeccable.exe";
+const SEARCH = "d:\\loop-tools\\skills\\ui-ux-pro-max\\scripts\\search.py";
+const SHOT_URL =
+  /^(https:\/\/vekbui96\.github\.io\/cardlens(\/[^\s"']*)?|http:\/\/(127\.0\.0\.1|localhost):(5273|4173)(\/[^\s"']*)?)$/i;
+const VIEWPORT = /^\d{2,4}x\d{2,4}(,\d{2,4}x\d{2,4}){0,3}$/i;
+function checkDesignCommand(c, isPy) {
+  if (!DESIGN) block("design skills are off for this run (sessions.json options.designSkills)");
+  if (/\$/.test(c)) block("design skill commands take literal arguments only (no $ variables)");
+  const toks = [...c.trim().matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => ({
+    v: m[1] ?? m[2] ?? m[3],
+    sq: m[2] !== undefined,
+  }));
+  const inClone = (p) => {
+    const n = norm(p);
+    return n === CLONE || n.startsWith(CLONE + "\\");
+  };
+  const inWork = (p) => {
+    const n = norm(p);
+    return n.startsWith(HOME + "\\work\\") || n === HOME + "\\work" || n.startsWith(HOME + "\\artifacts");
+  };
+  if (isPy) {
+    if (!toks[1] || norm(toks[1].v) !== SEARCH)
+      block(`ui-ux-pro-max: run exactly python ${SEARCH} '<query>' [read-only flags] (no interpreter flags)`);
+    if (!toks[2] || !toks[2].sq) block("ui-ux-pro-max: the query must be one single-quoted string");
+    const withValue =
+      /^(--domain|-d|--stack|-s|--max-results|-n|--project-name|-p|--format|-f|--variance|--motion|--density)$/;
+    for (let i = 3; i < toks.length; i++) {
+      const t = toks[i].v;
+      if (/^(--persist|--page|--output-dir|-o|--force|--preview|--tokens)(=|$)/.test(t))
+        block(`ui-ux-pro-max: ${t} writes files; the loop only searches (never persists a design system)`);
+      if (/^(--json|--full|--design-system|-ds)$/.test(t)) continue;
+      if (withValue.test(t) && toks[i + 1] && /^[\w .-]{1,40}$/.test(toks[i + 1].v)) {
+        i++;
+        continue;
+      }
+      block(`ui-ux-pro-max: ${t} is not an allowed search flag`);
+    }
+    return;
+  }
+  if (norm(toks[0].v) !== ENGINE)
+    block(
+      `impeccable: call the pinned engine by bare full path ${ENGINE} (never the launcher or another copy)`,
+    );
+  const verb = (toks[1] && toks[1].v.toLowerCase()) || "";
+  const rest = toks.slice(2);
+  if (verb === "context") {
+    if (rest.length === 0) return;
+    if (rest.length === 2 && rest[0].v === "--target" && inClone(rest[1].v)) return;
+    block(`impeccable context takes only --target <path in the loop clone ${CLONE}>`);
+  }
+  if (verb === "shot") {
+    let url = 0;
+    let out = false;
+    for (let i = 0; i < rest.length; i++) {
+      const t = rest[i].v;
+      if (t === "--full") continue;
+      if (t === "--viewport" && rest[i + 1] && VIEWPORT.test(rest[i + 1].v)) {
+        i++;
+        continue;
+      }
+      if (t === "--out" && rest[i + 1] && inWork(rest[i + 1].v)) {
+        out = true;
+        i++;
+        continue;
+      }
+      if (SHOT_URL.test(t)) {
+        url++;
+        continue;
+      }
+      block(
+        `impeccable shot: ${t} is not allowed (one URL: the live site or a local preview on 5273/4173; --viewport, --full, --out <WORK or ARTIFACTS>)`,
+      );
+    }
+    if (url !== 1) block("impeccable shot takes exactly one page URL");
+    if (!out) block(`impeccable shot needs --out <a folder in ${HOME}\\work or artifacts>`);
+    return;
+  }
+  if (verb === "detect") {
+    let targets = 0;
+    for (let i = 0; i < rest.length; i++) {
+      const t = rest[i].v;
+      if (/^(--json|--quiet)$/.test(t)) continue;
+      if (t === "--scope" && rest[i + 1] && /^(type|layout)(,(type|layout))?$/.test(rest[i + 1].v)) {
+        i++;
+        continue;
+      }
+      if (t === "--viewport" && rest[i + 1] && VIEWPORT.test(rest[i + 1].v)) {
+        i++;
+        continue;
+      }
+      if (inClone(t) || SHOT_URL.test(t)) {
+        targets++;
+        continue;
+      }
+      block(`impeccable detect: ${t} is not allowed (targets: paths in the loop clone or the live site)`);
+    }
+    if (targets === 0) block("impeccable detect needs a target (a path in the loop clone or the live site)");
+    return;
+  }
+  block(
+    `impeccable ${verb || "(no verb)"} is not allowed for the loop: only context, shot and detect (never hooks, pin, live, doctor, foundations, install, update, login, telemetry, world or ignores)`,
+  );
+}
 
 // ---- file tools --------------------------------------------------------------------------------
 if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].includes(tool)) {
@@ -222,6 +337,19 @@ if (tool === "Bash" || tool === "PowerShell") {
   }
   if (/^\s*(cd|Set-Location|sl|Push-Location|pushd|chdir)\b/i.test(c))
     block('do not change directory; use git -C "<clone>" and absolute paths');
+
+  // design skills (LOOP.md section 9): the pinned impeccable engine and ui-ux-pro-max's search.py, read-only
+  // verbs only. Judged here in full, then allowed: they are the one exception to the interpreter rule below.
+  const first0 = (c.trim().match(/^\S+/) || [""])[0];
+  const isPy = /^(python3?|py)(\.exe)?$/i.test(path.win32.basename(first0));
+  if (
+    /impeccable/i.test(first0) ||
+    (!isGhOrGit && /impeccable(\.exe|\.cmd)?(["'\s]|$)/i.test(c)) ||
+    (isPy && /ui-ux-pro-max/i.test(c))
+  ) {
+    checkDesignCommand(c, isPy);
+    process.exit(0);
+  }
 
   // only this repo
   for (const r of c.match(/vekbui96\/[A-Za-z0-9_.-]+/gi) || []) {
