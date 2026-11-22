@@ -5,13 +5,64 @@ one, builds, tests, merges, deploys and verifies it on its own. It mirrors the p
 (`D:\projects\solid-website\innovation`), with one structural difference: **the loop runs NON-elevated,
 and only the server deploy/rollback runs elevated**, through a separate pre-registered task.
 
-## This is only for the loop's own ideas
+## The loop's own ideas, and your requests
 
-The issue/label/approval flow below exists **only for ideas the loop comes up with itself**. Your direct
-requests ("change X in CardLens") do not go through it: ask as usual, and the cardlens agents
-(`cardlens-frontend`, `cardlens-backend`) handle them end to end, as they always have. No issue or label
-is needed, and nobody should route manual work through the loop. The loop never touches issues that are
-not labelled `loop:proposal` (e.g. your #2-#4).
+The issue/label/approval flow below exists for ideas the loop comes up with itself, plus the requests you
+file on purpose as `loop:request` issues (see "Your requests"). Requests you make in chat ("change X in
+CardLens") still go to the cardlens agents (`cardlens-frontend`, `cardlens-backend`), end to end, as they
+always have; no issue or label is needed for those. The loop never touches your other issues (e.g. your
+#2-#4).
+
+## Your requests
+
+When you want something built hands-off, file it with the **Request** issue template (New issue ->
+Request). It gets `loop:request` and asks for: What I want; What I should notice (optional: the thing the
+deploy check should see on the live site); Constraints (optional); Mode (**Build it** | **Plan first, wait
+for my OK**); Urgency (Normal | Now).
+
+1. The approval watcher sees it within 10 minutes and starts a run at once (like an approval, not on the
+   hourly refill cooldown).
+2. The run's **intake session** (Sonnet, 40 turns, 20 min, $0.75, at most 6 a day; `sessions.json` `intake`)
+   reads it with FOCUS.md, PRODUCT.md and the code, and does ONE of: opens one proposal (small; `size:small`
+   when it is), opens a spec with slices (big), splits out parts the loop must not build as **Manual / needs
+   Ve**, asks you ONE question (`loop:needs-info`: answer with a comment and it plans again), or declines
+   it because it conflicts with FOCUS.md "Avoid" (`loop:declined`, the comment says why). Every issue it opens
+   starts with `From request #<n>`.
+3. The runner posts a **Plan** comment on your request listing those issues ("Comment `/hold` to stop") and
+   adds `loop:planned`. In **Build it** mode they are approved through the request (`approval: via-request
+#<n>`) and built next, ahead of the loop's own ideas, with no daily session cap (the plan budget and the
+   per-session USD caps still apply). In **Plan first** mode nothing is built until you add `approved` to an
+   issue. Issues from a request take no proposal slot.
+4. The plan comment is edited in place as a checklist (failures listed, with the usual failure classes on
+   each issue). When every issue is deployed or closed, the runner posts a plain-language **Synopsis** and
+   closes the request.
+
+To stop: comment `/hold` on the request (all of its issues) or on one issue; or close it. Editing the
+request after its plan voids the via-request approval (approve issues by hand, or file a new request).
+The loop can never file a request, add or remove `loop:request`, edit a request, add `approved`, or mark a
+preference confirmed (guard.mjs; test-guard.mjs cases).
+
+The switches live in `sessions.json` `options`: `requestIntake` (requests), `productStore` (the decision
+collector) and `memoryAgent` (preferences); each is off unless set to `true`.
+
+## What the loop learns: the product store
+
+`D:\hub\state\product\cardlens\` (outside every repo) is where agents' learning lives; GitHub stays the source
+for proposals and approvals, and FOCUS.md / PRODUCT.md stay yours.
+
+- `decisions.jsonl`: append-only, written by a deterministic PowerShell collector (no AI) on every run (GitHub
+  is asked at most every `productCollectMinutes`, 10): your approvals, unapprovals, closes without deploy
+  (rejections), `/hold`s, comments without the loop marker, edits after approval, and requests. Each record:
+  id, ts, kind, issue, labels, one-line gist, link.
+- `preferences.json`: what the **memory agent** (Haiku, tool-less, 5 turns, $0.10) infers from new decisions,
+  when 5 or more piled up or weekly. The runner validates its JSON and writes it; anything invalid is logged
+  and dropped. It can only mark a preference **confirmed** when the evidence is something you wrote (a
+  FOCUS.md / PRODUCT.md line, or your own comment); everything else stays **inferred**, and inferred
+  preferences are never permissions or approvals.
+- The hub's daily digest lists **new inferred preferences**. Reply on the digest issue with one line per item:
+  `confirm p-xxxxxx` (it becomes confirmed) or `no p-xxxxxx` (removed and never re-added). The next run records
+  your reply as a decision and applies it, with no AI.
+- `cursors.json`: where the collector and the memory agent left off (schema-versioned).
 
 ## How it works
 
@@ -101,8 +152,8 @@ Claude Code's own small background calls (Haiku) are unchanged.
   runs (every approval starts a run). Defaults: builds 8, proposals 4, review 1; 0 = no cap. Counts live in
   `<LOOP_HOME>\state\daily-sessions.json`. Over the cap that kind is skipped with a logged reason (`daily
 caps: ...`), approved issues stay approved for a later day, and a run with nothing else to do ends in the
-  $0 precheck (`LOOP-RESULT: NOTHING-TO-DO ... daily session cap reached`). `Get-DailyCapDecision -Request`
-  is the hook for your direct requests to bypass the cap once they run through the runner (not wired yet).
+  $0 precheck (`LOOP-RESULT: NOTHING-TO-DO ... daily session cap reached`). Your `loop:request`
+  issues bypass it (`Get-DailyCapDecision -Request`): their intake and builds are not counted; the intake kind has its own cap of 6.
 - **Options** (`"options"` in `sessions.json`): `proposeIssueDigest` (the runner lists the issues once and
   puts a compact `KNOWN_ISSUES` block in the proposal header, so the session does not list them itself),
   `compactPrompts` (LOOP.md blocks marked `<!-- only:build -->` stay out of proposal and review prompts),

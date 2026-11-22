@@ -147,9 +147,11 @@ function Get-IssueLabelNames {
 # counts them as awaiting review: its refill is only ever more cautious than the loop.)
 function Get-ProposalSlots {
     param([object[]]$Issues, [int]$Cap = $script:ProposalCap, [int]$MaxNew = $script:MaxNewPerRun, [int]$MaxSpecs = $script:MaxOpenSpecs,
-        [int[]]$ApprovedViaSpec = @())
+        [int[]]$ApprovedViaSpec = @(), [int[]]$RequestChildren = @())
+    # -RequestChildren: issues the intake session opened for one of Ve's requests (listed in its plan); they are
+    # Ve's own work, not discovery, so they hold no slot either.
     $open = @($Issues | Where-Object { $_ -and (Get-IssueLabelNames $_) -contains 'loop:proposal' })
-    $viaSpec = @($ApprovedViaSpec | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
+    $viaSpec = @(@($ApprovedViaSpec) + @($RequestChildren) | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
     $awaitingIssues = @($open | Where-Object { $n = Get-IssueLabelNames $_; -not ($n -contains 'approved' -or $n -contains 'loop:failed' -or $viaSpec -contains [int]$_.number) })
     $awaiting = @($awaitingIssues | ForEach-Object { [int]$_.number } | Sort-Object)
     $specs = @($awaitingIssues | Where-Object { (Get-IssueLabelNames $_) -contains $script:SpecLabel } | ForEach-Object { [int]$_.number } | Sort-Object)
@@ -542,6 +544,10 @@ $script:SessionDefaults = [ordered]@{
         maxBudgetUsd = 8; smallMaxBudgetUsd = 2.5; maxPerDay = 8 }
     propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
     review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60; maxBudgetUsd = 4; maxPerDay = 1 }
+    # Ve's requests (options.requestIntake): one intake session per request that needs planning
+    intake  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 40; timeoutMinutes = 20; maxBudgetUsd = 0.75; maxPerDay = 6 }
+    # the memory agent (options.memoryAgent): tool-less, input in the prompt, JSON out, validated by the runner
+    memory  = [ordered]@{ model = 'claude-haiku-5-5'; maxTurns = 5; timeoutMinutes = 5; maxBudgetUsd = 0.10; maxPerDay = 2 }
 }
 
 # Run-wide switches from sessions.json's "options" object (all optional; these are the safe defaults).
@@ -553,7 +559,14 @@ $script:SessionDefaults = [ordered]@{
 #   digestMaxIssues: at most this many issues in KNOWN_ISSUES (the oldest deployed ones are dropped first).
 #   digestDeployedDays: deployed (closed) proposals are listed only when closed within this many days; older
 #   ones are counted (they are in the code); 0 = list them all. Open and rejected ones are always listed.
-$script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3 }
+#   Phase 1 (product intelligence), each OFF unless sessions.json turns it on:
+#   productStore: the runner's deterministic decision collector (product-store.ps1) writes D:\hub\state\product\
+#   cardlens\{cursors.json, decisions.jsonl}; productCollectMinutes: GitHub is asked at most this often.
+#   memoryAgent: the Haiku memory session proposes preferences.json changes when memoryMinDecisions new decisions
+#   piled up or memoryEveryDays passed (needs productStore). requestIntake: Ve's loop:request issues are planned by
+#   an intake session and their issues built first (via-request approval).
+$script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
+    productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false }
 function Get-LoopOptions {
     param($Json)
     $o = [ordered]@{}; foreach ($k in $script:LoopOptionDefaults.Keys) { $o[$k] = $script:LoopOptionDefaults[$k] }
@@ -587,7 +600,7 @@ function Format-BudgetUsd { param([double]$Usd) return $Usd.ToString('0.00', [Gl
 # ---- daily session caps (run-loop.ps1 keeps the counts in <LOOP_HOME>\state\daily-sessions.json) ----------
 # Every approval starts a run, so without a cap a busy day has no upper bound. The counts are per local day
 # and per kind (build | propose | review); a launch is counted when the session is started (never in a dry run).
-$script:DailyCapKinds = @('build', 'propose', 'review')
+$script:DailyCapKinds = @('build', 'propose', 'review', 'intake', 'memory')
 
 # Today's counts from the saved state ($null / another day / garbage = all zero).
 function Get-DailyCounts {
@@ -606,8 +619,8 @@ function Add-DailyLaunch {
     return $c
 }
 # May another $Kind session start today? Allowed + Reason (one line for the log and summary).
-# HOOK (not wired yet): -Request marks a session started for Ve's direct request; such sessions will bypass
-# the daily cap (and take priority over the loop's own work) once direct requests run through the runner.
+# -Request marks a session started for one of Ve's loop:request issues (its intake, or a build of an issue
+# that came from it): not counted against the daily cap. The plan budget and the per-session USD cap still apply.
 function Get-DailyCapDecision {
     param([string]$Kind, $Counts, $Config, [switch]$Request)
     $mk = { param([bool]$A, [string]$Why) [pscustomobject]@{ Allowed = $A; Reason = $Why } }
@@ -977,11 +990,18 @@ function Split-BuildableByBudget {
 # session's model run under the budget (Test-BudgetAllowsModel)?
 # Daily caps (Get-DailyCapDecision): $BuildCap / $PhaseBCap are the refusal reasons ('' = not capped). A capped
 # kind counts as nothing to do, so a run where every kind with work is capped starts no session ($0).
+# Ve's requests: $Intake = requests that need an intake session now and may have one (model allowed by the
+# budget); $RequestBuilds = buildable issues that came from a request (not deferred). Both bypass the daily caps
+# (-Request) but never the plan budget's hold.
 function Get-PrecheckDecision {
     param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true,
-        [string]$BuildCap = '', [string]$PhaseBCap = '')
+        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @())
     $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
     if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
+    if ($Mode -ne 'PRODUCT_REVIEW' -and $Intake -gt 0) { return (& $mk $true "$Intake request(s) of Ve's to plan (intake goes first)") }
+    if ($Mode -eq 'FULL' -and $null -ne $Queue -and @($RequestBuilds | Where-Object { $null -ne $_ -and @($Deferred) -notcontains [int]$_ }).Count -gt 0) {
+        return (& $mk $true "Ve's request issue(s) buildable: $(@($RequestBuilds | ForEach-Object { "#$_" }) -join ' ') (requests go first; no daily cap)")
+    }
     if ($Mode -eq 'PRODUCT_REVIEW') {
         if ($PhaseBCap) { return (& $mk $false "product review: $PhaseBCap") }
         if (-not $PhaseBAllowed) { return (& $mk $false "product review: its model is not allowed by the $($Budget.Reason)") }
@@ -1035,4 +1055,217 @@ function Get-UnfinishedFailure {
         $state = "Nothing was merged, so the live site and server are unchanged. It is not retried automatically; it waits for $Who."
     }
     return [pscustomobject]@{ Class = $class; Synopsis = "$what $state" }
+}
+
+# ==================================================================================================
+# Ve's requests (loop:request). Ve files an issue from .github/ISSUE_TEMPLATE/request.yml; the approval watcher
+# starts a run at once; the runner's intake session plans it (proposals or a spec that say "From request #N",
+# or one question + loop:needs-info, or loop:declined); the runner posts ONE plan comment on the request
+# (edited in place as the progress checklist) and adds loop:planned. In "Build it" mode the children are
+# approved through the request (Get-ViaRequestDecision) and built ahead of everything else; in "Plan first"
+# mode they wait for Ve's `approved` like any proposal. The loop never opens, labels or edits a request
+# itself (guard.mjs): only the request's own author, Ve, can.
+# ==================================================================================================
+$script:RequestLabel = 'loop:request'
+$script:RequestPlanMarker = '<!-- innovation-loop:request-plan -->'
+$script:RequestSynopsisMarker = '<!-- innovation-loop:request-synopsis -->'
+$script:RequestLinkRx = '(?im)^[ \t>*_]*From request #(\d+)\b'
+$script:RequestChildrenRx = '<!--\s*innovation-loop:request-children\s+([0-9,\s]*)-->'
+
+# "From request #<n>" in an issue body -> n, or 0.
+function Get-RequestLink {
+    param([string]$Body)
+    $m = [regex]::Match("$Body", $script:RequestLinkRx)
+    if (-not $m.Success) { return 0 }
+    return [int]$m.Groups[1].Value
+}
+
+# The request form's fields from an issue body (GitHub renders a form as "### <label>" sections; an empty
+# optional field reads "_No response_"). Mode: build | plan | '' (unknown counts as plan: never auto-approved).
+# Urgency: now | normal.
+function Get-RequestForm {
+    param([string]$Body)
+    $sec = @{}
+    foreach ($m in [regex]::Matches("$Body", '(?ms)^###[ \t]+([^\r\n]+)\r?\n(.*?)(?=^###[ \t]|\z)')) {
+        $v = $m.Groups[2].Value.Trim(); if ($v -eq '_No response_') { $v = '' }
+        $sec[($m.Groups[1].Value.Trim() -replace '\s*\([^)]*\)\s*$', '').ToLowerInvariant()] = $v   # "Constraints (optional)" = "constraints"
+    }
+    $get = { param([string]$k) if ($sec.ContainsKey($k)) { "$($sec[$k])" } else { '' } }
+    $mode = ''; $mv = & $get 'mode'
+    if ($mv -match '^(?i)\s*build it\b') { $mode = 'build' } elseif ($mv -match '^(?i)\s*plan first\b') { $mode = 'plan' }
+    $urg = 'normal'; if ((& $get 'urgency') -match '^(?i)\s*now\b') { $urg = 'now' }
+    return [pscustomobject]@{ What = (& $get 'what i want'); Notice = (& $get 'what i should notice'); Constraints = (& $get 'constraints'); Mode = $mode; Urgency = $urg }
+}
+
+# Is $Issue a request Ve filed (not something the loop or anyone else opened)? Reasons why not; empty = yes.
+function Get-RequestProblems {
+    param($Issue, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $r = @()
+    if (-not $Issue) { return @('request not found') }
+    if ($Issue.PSObject.Properties.Name -contains 'pull_request' -and $Issue.pull_request) { $r += 'is a pull request' }
+    if ("$($Issue.state)" -notmatch '^(?i)open$') { $r += 'request is closed' }
+    $l = @(Get-IssueLabelNames $Issue)
+    if ($l -notcontains $script:RequestLabel) { $r += "missing label $($script:RequestLabel)" }
+    if ($l -contains 'loop:declined') { $r += 'request is loop:declined' }
+    $a = Get-IssueAuthor $Issue; if ($a -ne $Owner) { $r += "opened by $a, not $Owner" }
+    if ("$($Issue.body)".Contains($Marker)) { $r += 'request body carries the loop marker (the loop never files requests)' }
+    return @($r)
+}
+
+# The runner's plan comment on a request (owner + loop marker + plan marker), oldest first, or $null.
+function Find-RequestPlanComment {
+    param([object[]]$Comments, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
+        if ("$($c.user.login)" -eq $Owner -and "$($c.body)".Contains($Marker) -and "$($c.body)".Contains($script:RequestPlanMarker)) { return $c }
+    }
+    return $null
+}
+# The child issue numbers the plan comment lists (<!-- innovation-loop:request-children 12,13 -->).
+function Get-RequestPlanChildren {
+    param([string]$Body)
+    $m = [regex]::Match("$Body", $script:RequestChildrenRx)
+    if (-not $m.Success) { return @() }
+    return @($m.Groups[1].Value -split '[,\s]+' | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ })
+}
+
+# Does a request need an intake session now? Returns NeedsIntake, Key (the approval watcher's once-key:
+# 'req:<n>:<id of Ve's latest comment, or 0>') and Reason. Yes when it is a valid request, not loop:planned,
+# not loop:declined, and either not loop:needs-info or Ve has commented (without the loop marker) after the
+# loop's latest comment. The approval watcher keeps a LITERAL COPY of this function (it runs from an
+# admin-only folder and dot-sources nothing): change both together (test-queue-rules.ps1 compares them).
+function Get-RequestTriggerDecision {
+    param($Issue, [object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $mk = { param([bool]$N, [string]$K, [string]$Why) [pscustomobject]@{ NeedsIntake = $N; Key = $K; Reason = $Why } }
+    if (-not $Issue) { return (& $mk $false '' 'no issue') }
+    $l = @(@($Issue.labels) | Where-Object { $_ } | ForEach-Object { if ($_ -is [string]) { $_ } else { "$($_.name)" } })
+    $author = ''; if ($Issue.author) { $author = "$($Issue.author.login)" } elseif ($Issue.user) { $author = "$($Issue.user.login)" }
+    if ("$($Issue.state)" -notmatch '^(?i)open$') { return (& $mk $false '' 'closed') }
+    if ($l -notcontains 'loop:request') { return (& $mk $false '' 'not a loop:request') }
+    if ($author -ne $Owner) { return (& $mk $false '' "opened by $author, not $Owner") }
+    if ("$($Issue.body)".Contains($Marker)) { return (& $mk $false '' 'body carries the loop marker') }
+    if ($l -contains 'loop:declined') { return (& $mk $false '' 'declined') }
+    if ($l -contains 'loop:planned') { return (& $mk $false '' 'already planned') }
+    $cs = @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner } | Sort-Object { [datetime]$_.created_at })
+    $ve = @($cs | Where-Object { -not "$($_.body)".Contains($Marker) })
+    $loop = @($cs | Where-Object { "$($_.body)".Contains($Marker) })
+    $lastVe = $null; if ($ve.Count -gt 0) { $lastVe = $ve[-1] }
+    $lastLoop = $null; if ($loop.Count -gt 0) { $lastLoop = $loop[-1] }
+    $vid = '0'; if ($lastVe) { $vid = "$($lastVe.id)" }
+    $key = "req:$($Issue.number):$vid"
+    if ($l -contains 'loop:needs-info') {
+        if (-not $lastVe -or ($lastLoop -and [datetime]$lastVe.created_at -le [datetime]$lastLoop.created_at)) { return (& $mk $false '' 'waiting for an answer (loop:needs-info)') }
+        return (& $mk $true $key 'the question was answered')
+    }
+    return (& $mk $true $key 'not planned yet')
+}
+
+# Is $Child (an issue: number, title, state, labels, body, author/user) approved through Ve's request?
+# $ChildEditedAt: GraphQL lastEditedAt ('' = never edited); $ChildComments; $ChildApprovalEvents: how many
+# labeled/unlabeled `approved` events it has. $Request: the request issue; $RequestEditedAt; $RequestComments.
+# ALL must hold: the request is open, loop:request, opened by the owner, no loop marker in its body, not
+# declined; its Mode is "Build it"; the runner's plan comment exists and lists this child; the request body
+# was not edited after that plan comment; the child is a loop:proposal opened by the owner whose body starts
+# with the loop marker and says "From request #<n>"; no owner /hold on the request or on the child; the child
+# is open, not Manual, not loop:failed, its body never edited, and no `approved` added/removed on it by hand.
+# Returns Linked (the body names a request), Eligible, Request, Mode, PlanAt, Reasons.
+function Get-ViaRequestDecision {
+    param($Child, [string]$ChildEditedAt = '', [object[]]$ChildComments = @(), [int]$ChildApprovalEvents = 0,
+        $Request = $null, [string]$RequestEditedAt = '', [object[]]$RequestComments = @(),
+        [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $r = New-Object System.Collections.ArrayList
+    $body = "$($Child.body)"
+    $n = Get-RequestLink -Body $body
+    if ($n -le 0) { return [pscustomobject]@{ Linked = $false; Eligible = $false; Request = 0; Mode = ''; PlanAt = ''; Listed = $false; RequestValid = $false; Reasons = @('not from a request (no "From request #<n>" line)') } }
+    $labels = @(Get-IssueLabelNames $Child)
+    # the child: opened by the loop, in the loop's format
+    if ($labels -notcontains 'loop:proposal') { [void]$r.Add('missing label loop:proposal') }
+    if ($labels -contains $script:RequestLabel) { [void]$r.Add('is itself a request') }
+    $author = Get-IssueAuthor $Child; if ($author -ne $Owner) { [void]$r.Add("opened by $author, not $Owner") }
+    $lines = @($body -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($lines.Count -lt 1 -or $lines[0] -ne $Marker) { [void]$r.Add('body does not start with the loop marker line') }
+    # the request
+    $mode = ''; $planAt = ''; $listed = $false; $valid = $false
+    if (-not $Request -or [int]$Request.number -ne $n) { [void]$r.Add("request #$n not found") }
+    else {
+        $probs = @(Get-RequestProblems -Issue $Request -Owner $Owner -Marker $Marker); $valid = ($probs.Count -eq 0)
+        foreach ($p in $probs) { [void]$r.Add("request #${n}: $p") }
+        $mode = (Get-RequestForm -Body "$($Request.body)").Mode
+        if ($mode -ne 'build') { [void]$r.Add("request #$n is in ""Plan first"" mode (or names no mode): its issues need ``approved`` by hand") }
+        $plan = Find-RequestPlanComment -Comments $RequestComments -Owner $Owner -Marker $Marker
+        if (-not $plan) { [void]$r.Add("request #$n has no plan comment yet") }
+        else {
+            $planAt = "$($plan.created_at)"
+            $listed = (@(Get-RequestPlanChildren -Body "$($plan.body)") -contains [int]$Child.number)
+            if (-not $listed) { [void]$r.Add("the plan on request #$n does not list this issue") }
+            if ($RequestEditedAt -and [datetime]$RequestEditedAt -gt [datetime]$planAt) { [void]$r.Add("request #$n was edited at $RequestEditedAt, after its plan; approve this issue by hand or file a new request") }
+        }
+        $h = Find-HoldComment -Comments $RequestComments -Owner $Owner -Marker $Marker
+        if ($h) { [void]$r.Add("$Owner put request #$n on hold (comment $($h.id))") }
+    }
+    # the child's own state
+    if ("$($Child.state)" -notmatch '^(?i)open$') { [void]$r.Add('issue is closed') }
+    if ($body -match $script:ManualRx) { [void]$r.Add('marked Manual / needs Ve') }
+    if ($labels -contains 'loop:failed') { [void]$r.Add('has label loop:failed (an issue approved through a request gets no automatic retry)') }
+    if ($ChildApprovalEvents -gt 0) { [void]$r.Add('`approved` was added to and removed from this issue by hand; that decision stands over the request') }
+    $hc = Find-HoldComment -Comments $ChildComments -Owner $Owner -Marker $Marker
+    if ($hc) { [void]$r.Add("$Owner put this issue on hold (comment $($hc.id))") }
+    if ($ChildEditedAt) { [void]$r.Add("body edited at $ChildEditedAt, after it was opened") }
+    return [pscustomobject]@{ Linked = $true; Eligible = ($r.Count -eq 0); Request = $n; Mode = $mode; PlanAt = $planAt; Listed = $listed; RequestValid = $valid; Reasons = @($r) }
+}
+
+# One child's line on the request checklist: Number, Title, Status, Done (closed), Deployed, Failed, Manual.
+function Get-RequestChildState {
+    param($Issue)
+    $l = @(Get-IssueLabelNames $Issue)
+    $manual = ("$($Issue.body)" -match $script:ManualRx)
+    $closed = ("$($Issue.state)" -match '^(?i)closed$')
+    $st = Get-SliceStatus $Issue
+    if (-not $closed -and $manual) { $st = 'Manual / needs Ve (the loop does not build it)' }
+    if (-not $closed -and $l -contains $script:SpecLabel) { $st = "spec, $st" }
+    return [pscustomobject]@{ Number = [int]$Issue.number; Title = (ConvertTo-SafeLine "$($Issue.title)" 90); Status = $st; Done = $closed
+        Deployed = ($closed -and $l -contains 'loop:deployed'); Failed = ((-not $closed) -and $l -contains 'loop:failed'); Manual = $manual }
+}
+
+# The plan / progress comment on a request (edited in place). $Children: Get-RequestChildState objects.
+function Format-RequestPlan {
+    param([int]$Request, [object[]]$Children = @(), [string]$Mode = '', [string]$RunId = '', [string]$Marker = '<!-- innovation-loop -->', [string]$Who = 'Ve')
+    $ch = @($Children | Where-Object { $_ } | Sort-Object Number)
+    $sb = New-Object Text.StringBuilder
+    [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:RequestPlanMarker)
+    [void]$sb.AppendLine("<!-- innovation-loop:request-children $(@($ch | ForEach-Object { $_.Number }) -join ',') -->")
+    [void]$sb.AppendLine('## Plan'); [void]$sb.AppendLine()
+    if ($Mode -eq 'build') { [void]$sb.AppendLine("Mode: **Build it**. Each issue below is built without its own ``approved`` (approved through this request), ahead of the loop's own ideas, unless it is Manual, failed, edited or held. Comment ``/hold`` here to stop them all, or on one issue to stop that one.") }
+    else { [void]$sb.AppendLine("Mode: **Plan first**. Nothing is built until $Who adds ``approved`` to an issue below. Comment ``/hold`` to stop.") }
+    [void]$sb.AppendLine()
+    foreach ($c in $ch) {
+        $box = ' '; if ($c.Done) { $box = 'x' }
+        [void]$sb.AppendLine("- [$box] #$($c.Number) $($c.Title): $($c.Status)")
+    }
+    $fails = @($ch | Where-Object { $_.Failed })
+    if ($fails.Count -gt 0) { [void]$sb.AppendLine(); [void]$sb.AppendLine("Failed, waiting on ${Who}: $(@($fails | ForEach-Object { "#$($_.Number)" }) -join ', ') (the failure comment on each issue says why)") }
+    $r = ''; if ($RunId) { $r = " after run ``$RunId``" }
+    [void]$sb.AppendLine(); [void]$sb.AppendLine("<sub>Updated by the runner$r; this comment is edited in place. The request closes with a synopsis when every issue is deployed or closed.</sub>")
+    return $sb.ToString()
+}
+
+# The closing synopsis, in plain language. $Children: Get-RequestChildState objects (all closed).
+function Format-RequestSynopsis {
+    param([int]$Request, [object[]]$Children = @(), [string]$What = '', [string]$Marker = '<!-- innovation-loop -->')
+    $ch = @($Children | Where-Object { $_ } | Sort-Object Number)
+    $dep = @($ch | Where-Object { $_.Deployed }); $other = @($ch | Where-Object { -not $_.Deployed })
+    $sb = New-Object Text.StringBuilder
+    [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:RequestSynopsisMarker)
+    [void]$sb.AppendLine('## Synopsis'); [void]$sb.AppendLine()
+    $w = ConvertTo-SafeLine $What 160
+    if ($w) { [void]$sb.AppendLine("You asked: $w"); [void]$sb.AppendLine() }
+    if ($dep.Count -gt 0) {
+        [void]$sb.AppendLine("Done and live ($($dep.Count)):")
+        foreach ($c in $dep) { [void]$sb.AppendLine("- #$($c.Number) $($c.Title): built, merged, deployed and checked on the live site.") }
+    }
+    if ($other.Count -gt 0) {
+        [void]$sb.AppendLine(); [void]$sb.AppendLine("Closed without a deploy ($($other.Count)):")
+        foreach ($c in $other) { [void]$sb.AppendLine("- #$($c.Number) $($c.Title): closed, not built by the loop.") }
+    }
+    [void]$sb.AppendLine(); [void]$sb.AppendLine('Every issue from this request is finished, so the loop closes it. Reopen it, or file a new request, if something is missing.')
+    return $sb.ToString()
 }

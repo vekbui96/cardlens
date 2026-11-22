@@ -499,6 +499,152 @@ $pr = @(Select-PrunableLogs -Files $lf -Now $now -KeepDays 30 | ForEach-Object {
 Check (($pr -join ',') -eq 'run-20261001-101010.propose.jsonl,run-20261001-101010.build-12.prompt.md,run-20261001-101010.summary.txt') "prunes old transcripts, prompts, summaries; keeps rundata and the run log ($($pr -join ','))"
 Check (@(Select-PrunableLogs -Files $lf -Now $now -KeepDays 0).Count -eq 0) 'logKeepDays 0 = never prune'
 
+# ---- Ve's requests: the form, the trigger, via-request approval, the plan comment ------------------------------
+$rqBody = @"
+### What I want
+
+Settings/about: show the deployed build commit short SHA.
+
+### What I should notice (optional)
+
+_No response_
+
+### Constraints (optional)
+
+Front end only.
+
+### Mode
+
+Build it
+
+### Urgency
+
+Normal
+"@
+$f = Get-RequestForm $rqBody
+Check ($f.Mode -eq 'build' -and $f.Urgency -eq 'normal' -and $f.What -like 'Settings/about*' -and $f.Notice -eq '' -and $f.Constraints -eq 'Front end only.') "request form parsed (mode $($f.Mode), what '$($f.What)', notice '$($f.Notice)')"
+Check ((Get-RequestForm ($rqBody -replace 'Build it', 'Plan first, wait for my OK')).Mode -eq 'plan') 'Plan first mode'
+Check ((Get-RequestForm ($rqBody -replace 'Build it', 'Whatever')).Mode -eq '') 'an unknown mode is not build'
+Check ((Get-RequestForm ($rqBody -replace '### Urgency\s+Normal', "### Urgency`n`nNow")).Urgency -eq 'now') 'Urgency Now'
+Check ((Get-RequestLink "$mk`nFrom request #170`n## Problem") -eq 170 -and (Get-RequestLink "$mk`n## Problem`nfrom request 170") -eq 0) 'From request #N link'
+
+function RqIss { param([int]$N = 170, [string[]]$L = @('loop:request'), [string]$Body = $rqBody, [string]$State = 'open', [string]$By = 'vekbui96')
+    [pscustomobject]@{ number = $N; title = 'Settings: build SHA'; state = $State; body = $Body; created_at = '2026-11-22T18:00:00Z'; user = [pscustomobject]@{ login = $By }; labels = @($L | ForEach-Object { [pscustomobject]@{ name = $_ } }) } }
+function RqCmt { param([string]$Body, [string]$At, [string]$By = 'vekbui96', [long]$Id = 1) [pscustomobject]@{ id = $Id; body = $Body; created_at = $At; user = [pscustomobject]@{ login = $By } } }
+
+# the trigger (the approval watcher's literal copy runs the same function)
+$t = Get-RequestTriggerDecision -Issue (RqIss) -Comments @() -Owner 'vekbui96' -Marker $mk
+Check ($t.NeedsIntake -and $t.Key -eq 'req:170:0') "a new request needs intake at once (key $($t.Key))"
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -By 'someone') -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'a request opened by someone else is ignored'
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -Body "$mk`n$rqBody") -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'a request carrying the loop marker is ignored (the loop never files requests)'
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:planned') -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'a planned request needs no intake'
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:declined') -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'a declined request needs no intake'
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -State 'closed') -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'a closed request needs no intake'
+Check (-not (Get-RequestTriggerDecision -Issue (RqIss -L 'bug') -Owner 'vekbui96' -Marker $mk).NeedsIntake) 'no loop:request label, no intake'
+$q1 = RqCmt "$mk`nOne question: which screen?" '2026-11-22T18:10:00Z' -Id 11
+$t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1) -Owner 'vekbui96' -Marker $mk
+Check (-not $t.NeedsIntake) "needs-info and no answer yet -> wait ($($t.Reason))"
+$a1 = RqCmt 'The Settings screen, under About.' '2026-11-22T18:20:00Z' -Id 12
+$t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1, $a1) -Owner 'vekbui96' -Marker $mk
+Check ($t.NeedsIntake -and $t.Key -eq 'req:170:12') "Ve answered after the question -> intake again (key $($t.Key))"
+$t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1, (RqCmt 'drive-by' '2026-11-22T18:30:00Z' -By 'stranger' -Id 13)) -Owner 'vekbui96' -Marker $mk
+Check (-not $t.NeedsIntake) 'someone else answering does not count'
+
+# the approval watcher keeps a literal copy of Get-RequestTriggerDecision: the two must stay identical
+$watchRef = 'C:\Users\Ve Bui\.claude\skills\loop-install\assets\watch-approvals.reference.ps1'
+if (Test-Path -LiteralPath $watchRef) {
+    $fnText = { param([string]$File) $ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+        $fn = $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq 'Get-RequestTriggerDecision' }, $true) | Select-Object -First 1
+        if ($fn) { ($fn.Extent.Text -replace '\s+', ' ').Trim() } else { '' } }
+    $mine = & $fnText "$PSScriptRoot\gate-rules.ps1"; $theirs = & $fnText $watchRef
+    Check ($theirs -and $mine -eq $theirs) 'the approval watcher''s copy of Get-RequestTriggerDecision matches gate-rules.ps1 (change both together)'
+}
+
+# via-request approval: every condition
+$planAt = '2026-11-22T18:40:00Z'
+$plan = RqCmt (Format-RequestPlan -Request 170 -Children @([pscustomobject]@{ Number = 171; Title = 'Settings: build SHA'; Status = 'awaiting review'; Done = $false; Failed = $false; Manual = $false }) -Mode 'build' -Marker $mk) $planAt -Id 20
+function Kid { param([int]$N = 171, [string[]]$L = @('loop:proposal', 'size:small'), [string]$Body = "$mk`nFrom request #170`n`n## Problem and evidence`nx", [string]$State = 'open', [string]$By = 'vekbui96')
+    [pscustomobject]@{ number = $N; title = 'Settings: build SHA'; state = $State; body = $Body; createdAt = '2026-11-22T18:35:00Z'; author = [pscustomobject]@{ login = $By }; labels = @($L | ForEach-Object { [pscustomobject]@{ name = $_ } }) } }
+function Vr { param($Child = (Kid), $Request = (RqIss -L 'loop:request', 'loop:planned'), [object[]]$RComments = @($plan), [string]$REdited = '', [string]$CEdited = '', [object[]]$CComments = @(), [int]$Ev = 0)
+    Get-ViaRequestDecision -Child $Child -ChildEditedAt $CEdited -ChildComments $CComments -ChildApprovalEvents $Ev -Request $Request -RequestEditedAt $REdited -RequestComments $RComments -Owner 'vekbui96' -Marker $mk }
+$d = Vr
+Check ($d.Linked -and $d.Eligible -and $d.Request -eq 170 -and $d.Mode -eq 'build' -and $d.PlanAt -eq $planAt -and $d.Listed -and $d.RequestValid) "Build it request, listed child, nothing edited or held -> approved via request (got: $(Why $d))"
+$d = Vr -Child (Kid -Body "$mk`n## Problem`nx")
+Check (-not $d.Linked -and -not $d.Eligible) 'no "From request #N" -> not a request child'
+# the request
+Check (-not (Vr -Request (RqIss -N 170 -State 'closed' -L 'loop:request', 'loop:planned')).Eligible) 'request closed -> not approved'
+Check (-not (Vr -Request (RqIss -L 'loop:planned')).Eligible) 'request without loop:request -> not approved'
+Check (-not (Vr -Request (RqIss -By 'someone' -L 'loop:request', 'loop:planned')).Eligible) 'request opened by someone else -> not approved'
+Check (-not (Vr -Request (RqIss -Body "$mk`n$rqBody" -L 'loop:request', 'loop:planned')).Eligible) 'request body with the loop marker (a forged request) -> not approved'
+Check (-not (Vr -Request (RqIss -L 'loop:request', 'loop:declined')).Eligible) 'declined request -> not approved'
+$d = Vr -Request (RqIss -Body ($rqBody -replace 'Build it', 'Plan first, wait for my OK') -L 'loop:request', 'loop:planned')
+Check (-not $d.Eligible -and (Why $d) -match 'Plan first' -and $d.Listed -and $d.RequestValid) "Plan first -> needs approved by hand, still a listed request child ($(Why $d))"
+Check (-not (Vr -Request (RqIss -N 172 -L 'loop:request', 'loop:planned')).Eligible) 'the request found is not the one linked -> not approved'
+Check (-not (Vr -Request $null).Eligible) 'request missing -> not approved'
+# the plan comment
+Check (-not (Vr -RComments @()).Eligible) 'no plan comment yet -> not approved'
+Check (-not (Vr -RComments @((RqCmt ($plan.body) $planAt -By 'stranger'))).Eligible) 'a plan comment by someone else does not count'
+Check (-not (Vr -RComments @((RqCmt (($plan.body) -replace [regex]::Escape($script:RequestPlanMarker), '') $planAt))).Eligible) 'a loop comment without the plan marker is not a plan'
+$d = Vr -Child (Kid -N 175)
+Check (-not $d.Eligible -and -not $d.Listed -and (Why $d) -match 'does not list') "a child the plan does not list -> not approved ($(Why $d))"
+$d = Vr -REdited '2026-11-22T19:00:00Z'
+Check (-not $d.Eligible -and (Why $d) -match 'edited') "request body edited after the plan -> not approved ($(Why $d))"
+Check ((Vr -REdited '2026-11-22T18:39:00Z').Eligible) 'request edited before the plan -> still approved'
+# holds
+Check (-not (Vr -RComments @($plan, (RqCmt '/hold' '2026-11-22T19:00:00Z' -Id 30))).Eligible) 'Ve''s /hold on the request -> not approved'
+Check (-not (Vr -CComments @((RqCmt 'hold please' '2026-11-22T19:00:00Z' -Id 31))).Eligible) 'Ve''s hold on the child -> not approved'
+Check ((Vr -CComments @((RqCmt '/hold' '2026-11-22T19:00:00Z' -By 'stranger' -Id 32))).Eligible) 'someone else''s /hold does not count'
+Check ((Vr -RComments @($plan, (RqCmt "$mk`n/hold" '2026-11-22T19:00:00Z' -Id 33))).Eligible) 'a loop comment starting /hold does not count'
+# the child
+Check (-not (Vr -Child (Kid -Body "From request #170`n$mk`n## x")).Eligible) 'child body not starting with the loop marker -> not approved'
+Check (-not (Vr -Child (Kid -By 'someone')).Eligible) 'child opened by someone else -> not approved'
+Check (-not (Vr -Child (Kid -L 'size:small')).Eligible) 'child without loop:proposal -> not approved'
+Check (-not (Vr -Child (Kid -L 'loop:proposal', 'loop:request')).Eligible) 'child that is itself a request -> not approved'
+Check (-not (Vr -Child (Kid -Body "$mk`nFrom request #170`n**Manual / needs Ve**: set a secret")).Eligible) 'Manual child -> not approved'
+Check (-not (Vr -Child (Kid -L 'loop:proposal', 'loop:failed')).Eligible) 'failed child -> not approved (no automatic retry)'
+Check (-not (Vr -Child (Kid -State 'closed')).Eligible) 'closed child -> not approved'
+Check (-not (Vr -CEdited '2026-11-22T18:50:00Z').Eligible) 'child body edited -> not approved'
+Check (-not (Vr -Ev 2).Eligible) '`approved` added and removed on the child by hand -> that decision stands'
+# a spec from a request is approved the same way (its slices then follow the via-spec rule)
+Check ((Vr -Child (Kid -L 'loop:proposal', 'loop:spec')).Eligible) 'a spec from a Build it request is approved via the request'
+
+# the plan comment and the synopsis
+$pc = Format-RequestPlan -Request 170 -Children @([pscustomobject]@{ Number = 172; Title = 'B'; Status = 'deployed'; Done = $true; Failed = $false; Manual = $false }, [pscustomobject]@{ Number = 171; Title = 'A'; Status = 'failed, waiting on the owner'; Done = $false; Failed = $true; Manual = $false }) -Mode 'build' -RunId 'r1' -Marker $mk
+Check ($pc.StartsWith($mk) -and $pc.Contains($script:RequestPlanMarker) -and ((Get-RequestPlanChildren $pc) -join ',') -eq '171,172' -and $pc -match '- \[x\] #172' -and $pc -match '- \[ \] #171' -and $pc -match 'Failed, waiting on Ve: #171' -and $pc -match '/hold') "plan comment: markers, children list, checklist, failures, /hold ($pc)"
+Check ((Format-RequestPlan -Request 170 -Mode 'plan' -Marker $mk) -match 'Plan first') 'plan comment in Plan first mode says so'
+Check (@(Get-RequestPlanChildren 'no list here').Count -eq 0) 'no children marker -> no children'
+$sy = Format-RequestSynopsis -Request 170 -Children @([pscustomobject]@{ Number = 171; Title = 'A'; Deployed = $true }, [pscustomobject]@{ Number = 172; Title = 'B'; Deployed = $false }) -What 'Show the build SHA @someone' -Marker $mk
+Check ($sy.StartsWith($mk) -and $sy.Contains($script:RequestSynopsisMarker) -and $sy -match 'Done and live \(1\)' -and $sy -match 'Closed without a deploy \(1\)' -and $sy -notmatch '@someone') "synopsis: plain language, no mentions ($sy)"
+$cs = Get-RequestChildState (Kid -Body "$mk`nFrom request #170`n**Manual / needs Ve**: x")
+Check ($cs.Manual -and $cs.Status -match 'Manual' -and -not $cs.Done) 'child state: Manual'
+$cs = Get-RequestChildState (Kid -State 'closed' -L 'loop:proposal', 'loop:deployed')
+Check ($cs.Done -and $cs.Deployed) 'child state: deployed'
+
+# children take no proposal slots; requests bypass the daily caps but not the budget
+$s = Get-ProposalSlots -Issues @((Iss 171 'loop:proposal'), (Iss 172 'loop:proposal'), (Iss 180 'loop:proposal')) -RequestChildren @(171, 172)
+Check (($s.AwaitingReview -join ',') -eq '180' -and $s.Free -eq 4) "request children hold no slot (awaiting $($s.AwaitingReview -join ','))"
+$cnt = Get-DailyCounts -State ([pscustomobject]@{ date = (Get-Date).ToString('yyyy-MM-dd'); intake = 6; build = 8 })
+Check (-not (Get-DailyCapDecision -Kind 'intake' -Counts $cnt -Config (Get-SessionConfig $null)).Allowed) 'intake has its own daily cap (6)'
+Check ((Get-DailyCapDecision -Kind 'build' -Counts $cnt -Config (Get-SessionConfig $null) -Request).Allowed) 'a request build is not capped by the daily build cap'
+$cfg0 = Get-SessionConfig $null
+Check ($cfg0.intake.model -match 'sonnet' -and $cfg0.intake.maxTurns -eq 40 -and $cfg0.intake.timeoutMinutes -eq 20 -and [double]$cfg0.intake.maxBudgetUsd -eq 0.75 -and $cfg0.intake.maxPerDay -eq 6) 'intake session defaults: Sonnet, 40 turns, 20 min, $0.75, 6 a day'
+Check ($cfg0.memory.model -match 'haiku' -and $cfg0.memory.maxTurns -eq 5 -and [double]$cfg0.memory.maxBudgetUsd -eq 0.10) 'memory session defaults: Haiku, 5 turns, $0.10'
+$o0 = Get-LoopOptions $null
+Check (-not $o0.productStore -and -not $o0.memoryAgent -and -not $o0.requestIntake) 'Phase 1 switches default OFF'
+$o1 = Get-LoopOptions ([pscustomobject]@{ options = [pscustomobject]@{ productStore = $true; memoryAgent = 'true'; requestIntake = $true; productCollectMinutes = 15 } })
+Check ($o1.productStore -and $o1.memoryAgent -and $o1.requestIntake -and $o1.productCollectMinutes -eq 15) 'sessions.json turns them on'
+$q0 = [pscustomobject]@{ buildable = @(171, 50); slots = [pscustomobject]@{ free = 0; cap = 5; awaitingReview = @(1, 2, 3, 4, 5) } }
+$pc = Get-PrecheckDecision -Queue $q0 -BuildCap 'daily cap reached' -PhaseBCap 'daily cap reached' -RequestBuilds @(171)
+Check ($pc.Launch -and $pc.Reason -match 'request') "builds capped, but a request issue is buildable -> launch ($($pc.Reason))"
+$pc = Get-PrecheckDecision -Queue $q0 -BuildCap 'daily cap reached' -PhaseBCap 'x' -RequestBuilds @(171) -Deferred @(171)
+Check (-not $pc.Launch) 'a request issue deferred by the plan budget does not launch a capped run'
+$pc = Get-PrecheckDecision -Queue $q0 -BuildCap 'x' -PhaseBCap 'x' -Intake 1
+Check ($pc.Launch -and $pc.Reason -match 'plan') "a request to plan launches the run ($($pc.Reason))"
+$pc = Get-PrecheckDecision -Queue $q0 -Mode 'PROPOSE_ONLY' -PhaseBCap 'x' -Intake 1
+Check ($pc.Launch) 'intake also runs in ProposeOnly mode'
+$pc = Get-PrecheckDecision -Queue $q0 -Budget ([pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold' }) -Intake 1 -RequestBuilds @(171)
+Check (-not $pc.Launch -and $pc.Hold) 'hold stops requests too'
+
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

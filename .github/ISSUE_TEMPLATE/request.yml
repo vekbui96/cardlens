@@ -1,0 +1,51 @@
+name: Request
+description: Ask the innovation loop to build something for you, hands-off.
+title: "Request: "
+labels: ["loop:request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The innovation loop plans this within about 10 minutes: one proposal (small), a spec with slices (big),
+        or one question back to you. It posts a Plan comment here and keeps it updated; when everything is
+        deployed or closed it posts a synopsis and closes this request. Comment `/hold` at any time to stop.
+        Editing this request after the plan voids its approval. Chat requests still go to the cardlens agents.
+  - type: textarea
+    id: want
+    attributes:
+      label: What I want
+      description: The change, in your words. One request per issue.
+    validations:
+      required: true
+  - type: textarea
+    id: notice
+    attributes:
+      label: What I should notice
+      description: Optional. What you should see on the live site when it is done (the deploy check looks for it).
+    validations:
+      required: false
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Optional. Anything it must not change, screens to leave alone, limits.
+    validations:
+      required: false
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Build it
+        - Plan first, wait for my OK
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      options:
+        - Normal
+        - Now
+    validations:
+      required: true

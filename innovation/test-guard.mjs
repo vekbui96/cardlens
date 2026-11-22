@@ -2,6 +2,8 @@
 // Each case spawns guard.mjs with the hook JSON on stdin, exactly as Claude Code does.
 /* global process, console */
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -427,12 +429,116 @@ reviewDeny.push(
   ),
 );
 
+// the intake session (MODE=INTAKE) plans ONE of Ve's requests (#170 here): read-only research, proposals or a
+// spec that start with the loop marker and say "From request #170", one comment / needs-info / declined on #170
+const intakeEnv = {
+  ...env,
+  INNOVATION_LOOP_CARDLENS_MODE: "INTAKE",
+  INNOVATION_LOOP_CARDLENS_REQUEST: "170",
+};
+const tmp = mkdtempSync(path.join(os.tmpdir(), "guard-intake-"));
+const bodyFile = (name, text) => {
+  const p = path.join(tmp, name);
+  writeFileSync(p, text, "utf8");
+  return p;
+};
+const goodBody = bodyFile(
+  "good.md",
+  "<!-- innovation-loop -->\nFrom request #170\n\n## Problem and evidence\nx\n",
+);
+const wrongReq = bodyFile("wrong.md", "<!-- innovation-loop -->\nFrom request #171\n\n## Problem\nx\n");
+const noMarker = bodyFile("nomarker.md", "From request #170\n\n## Problem\nx\n");
+const noLink = bodyFile("nolink.md", "<!-- innovation-loop -->\n## Problem\nx\n");
+const intakeAllow = [
+  ps(`${S}\\check-approval.ps1 -List`),
+  ps(`gh issue view 170 -R vekbui96/cardlens --json title,body,labels,comments`),
+  ps(`gh issue list -R vekbui96/cardlens --label loop:request --state open --json number`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Settings: show build SHA" --label loop:proposal --label size:small --body-file "${goodBody}"`,
+  ),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Spec: x" --label loop:proposal --label loop:spec --body-file "${goodBody}"`,
+  ),
+  ps(`gh issue comment 170 -R vekbui96/cardlens --body-file "${W}\\q.md"`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --add-label loop:needs-info`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --add-label loop:declined`),
+  ps(`git -C "${C}" log --oneline -5`),
+  { tool_name: "Read", tool_input: { file_path: `${C}\\src\\app\\App.tsx` } },
+  { tool_name: "Write", tool_input: { file_path: `${W}\\q.md`, content: "One question: which screen?" } },
+];
+const intakeDeny = [
+  // never a request: no filing, labelling or editing of loop:request issues, and never loop:planned
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:request --body-file "${goodBody}"`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal,loop:request --body-file "${goodBody}"`,
+  ),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --remove-label loop:request`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --add-label loop:planned`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --body-file "${W}\\b.md"`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --title "x"`),
+  ps(`gh api repos/vekbui96/cardlens/issues/170 -X PATCH --input "${W}\\b.json"`),
+  // never approved, never labels outside its two, never on another issue
+  ps(`gh issue edit 171 -R vekbui96/cardlens --add-label approved`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --add-label approved`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --add-label loop:in-progress`),
+  ps(`gh issue edit 170 -R vekbui96/cardlens --remove-label loop:needs-info`),
+  ps(`gh issue edit 171 -R vekbui96/cardlens --add-label loop:needs-info`),
+  ps(`gh issue comment 171 -R vekbui96/cardlens --body-file "${W}\\q.md"`),
+  ps(`gh issue close 170 -R vekbui96/cardlens`),
+  ps(
+    `gh issue create -R vekbui96/cardlens --title x --label loop:proposal --label approved --body-file "${goodBody}"`,
+  ),
+  // what it opens must say "From request #170" and start with the loop marker
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${wrongReq}"`),
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${noMarker}"`),
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${noLink}"`),
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${W}\\missing.md"`),
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:product-review --body-file "${goodBody}"`),
+  // read-only: no code, no builds, no PRs
+  ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
+  ps(`git -C "${C}" push -u origin loop/170-x`),
+  ps(`${S}\\test-gate.ps1 -Issue 170 -Step all`),
+  ps(`gh pr create -R vekbui96/cardlens --head loop/170-x --title x --body-file "${W}\\p.md"`),
+];
+// the product store is the runner's: no session reads or writes it, nobody writes `confirmed`
+const storeDeny = [
+  {
+    tool_name: "Write",
+    tool_input: {
+      file_path: "D:\\hub\\state\\product\\cardlens\\preferences.json",
+      content: '{"items":[{"id":"p-abc123","statement":"x","status":"confirmed"}]}',
+    },
+  },
+  { tool_name: "Read", tool_input: { file_path: "D:\\hub\\state\\product\\cardlens\\decisions.jsonl" } },
+  ps(`Set-Content -Path "D:\\hub\\state\\product\\cardlens\\preferences.json" -Value x`),
+  ps(`Get-Content "D:\\hub\\state\\product\\cardlens\\preferences.json"`),
+  {
+    tool_name: "Write",
+    tool_input: {
+      file_path: `${W}\\prefs.json`,
+      content: '{"statement":"Ve wants dark mode","status":"confirmed"}',
+    },
+  },
+];
+// the memory agent has no tools at all
+const memoryEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "MEMORY" };
+const memoryDeny = [
+  { tool_name: "Read", tool_input: { file_path: `${C}\\src\\app\\App.tsx` } },
+  ps(`gh issue list -R vekbui96/cardlens --state open --json number`),
+  { tool_name: "Write", tool_input: { file_path: `${W}\\x.md`, content: "x" } },
+];
+
 let failures = 0;
 for (const [name, e, list, want] of [
   ["build", buildEnv, buildAllow, 0],
   ["build", buildEnv, buildDeny, 2],
   ["propose", proposeEnv, proposeAllow, 0],
   ["propose", proposeEnv, proposeDeny, 2],
+  ["intake", intakeEnv, intakeAllow, 0],
+  ["intake", intakeEnv, intakeDeny, 2],
+  ["store (full)", env, storeDeny, 2],
+  ["store (intake)", intakeEnv, storeDeny, 2],
+  ["memory", memoryEnv, memoryDeny, 2],
 ]) {
   for (const c of list) {
     const r = run(c, e);
@@ -497,6 +603,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);

@@ -26,8 +26,14 @@ const REPO = "vekbui96/cardlens";
 // The session kind, set by run-loop.ps1 before each session: BUILD (one approved issue), PROPOSE (Phase B
 // proposals), PRODUCT_REVIEW (the weekly review). FULL (unset: tests, older runners) allows both build and
 // proposal commands. PROPOSE and PRODUCT_REVIEW are read-only research plus opening issues.
+// INTAKE plans ONE of Ve's loop:request issues (INNOVATION_LOOP_CARDLENS_REQUEST = its number): read-only
+// research plus opening proposals/specs that say "From request #N", and commenting on / adding loop:needs-info
+// or loop:declined to that one request. MEMORY (the memory agent) has no tools at all.
 const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpperCase();
-const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY"].includes(MODE);
+const INTAKE = MODE === "INTAKE";
+const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY", "INTAKE"].includes(MODE);
+const REQUEST = String(process.env.INNOVATION_LOOP_CARDLENS_REQUEST || "").trim();
+const MARKER = "<!-- innovation-loop -->";
 
 function block(msg) {
   process.stderr.write(`innovation-loop guard blocked this: ${msg}\n`);
@@ -42,6 +48,24 @@ try {
 }
 const tool = input.tool_name || "";
 const ti = input.tool_input || {};
+
+if (MODE === "MEMORY") block("the memory session has no tools: reply with the JSON object only");
+
+// The product store (D:\hub\state\product\...: decisions, preferences, cursors) is written by the runner only,
+// after it validated an agent's JSON; no session reads or writes it (so none can mark a preference confirmed).
+const STORE = /hub[\\/]+state[\\/]+product\b|preferences\.json|decisions\.jsonl/i;
+{
+  const all = [ti.file_path, ti.path, ti.notebook_path, ti.glob, ti.pattern, ti.command]
+    .filter(Boolean)
+    .join(" ");
+  if (STORE.test(all))
+    block(
+      "the product store (decisions, preferences) is written only by the runner; sessions never touch it",
+    );
+  const content = [ti.content, ti.new_string].filter(Boolean).join("\n");
+  if (/"status"\s*:\s*"confirmed"/i.test(content) && /preference|statement/i.test(content))
+    block("a session never writes a confirmed preference (only Ve confirms; the runner records it)");
+}
 
 // ---- never-touch items, by name (anywhere: paths, patterns, commands) ------------------------
 const NEVER = [
@@ -284,6 +308,11 @@ if (tool === "Bash" || tool === "PowerShell") {
     if (g1 === "issue") {
       if (["delete", "transfer", "lock", "unlock", "pin", "unpin", "reopen", "develop"].includes(g2))
         block(`gh issue ${g2} is not allowed`);
+      // Ve's requests: only Ve files, labels or edits them (the loop acts as Ve's GitHub account)
+      if (/\bloop:request\b/i.test(c) && !/^\s*\S*gh(\.exe)?["']?\s+issue\s+(list|view|status)\b/i.test(c))
+        block("loop:request is Ve's label: the loop never files a request or adds/removes loop:request");
+      if (/\bloop:planned\b/i.test(c) && !/^\s*\S*gh(\.exe)?["']?\s+issue\s+(list|view|status)\b/i.test(c))
+        block("loop:planned is set by the runner after its plan comment, never by a session");
       if (g2 === "edit") {
         if (
           /\s(--body|--body-file|-b|--title|-t|--milestone|--assignee|--add-assignee|--remove-assignee|--add-project)\b/i.test(
@@ -295,11 +324,24 @@ if (tool === "Bash" || tool === "PowerShell") {
           m[1].split(","),
         );
         if (labels.length === 0) block("gh issue edit is only for the loop:* state labels");
-        for (const l of labels)
-          if (!/^loop:(in-progress|deployed|failed|retried)$/i.test(l))
+        if (INTAKE) {
+          // the intake session labels only its own request, and only loop:needs-info or loop:declined
+          const num = (c.match(/gh(?:\.exe)?["']?\s+issue\s+edit\s+["']?#?(\d+)\b/i) || [])[1];
+          if (!REQUEST || num !== REQUEST)
             block(
-              `the loop may only add/remove loop:in-progress, loop:deployed, loop:failed (and add loop:retried) (saw ${l}); never 'approved'`,
+              `the intake session may only label its request #${REQUEST || "?"} (saw ${num || "no number"})`,
             );
+          if (/--remove-label/i.test(c)) block("the intake session never removes labels");
+          for (const l of labels)
+            if (!/^loop:(needs-info|declined)$/i.test(l))
+              block(`the intake session may only add loop:needs-info or loop:declined (saw ${l})`);
+        } else {
+          for (const l of labels)
+            if (!/^loop:(in-progress|deployed|failed|retried)$/i.test(l))
+              block(
+                `the loop may only add/remove loop:in-progress, loop:deployed, loop:failed (and add loop:retried) (saw ${l}); never 'approved'`,
+              );
+        }
         // loop:retried caps the automatic retry of a failed build at one; only Ve may take it off
         if (/--remove-label\s+["']?[^"'\s]*loop:retried\b/i.test(c))
           block("the loop never removes loop:retried (it limits a failed build to one automatic retry)");
@@ -331,6 +373,29 @@ if (tool === "Bash" || tool === "PowerShell") {
               `gh issue create may only use the labels loop:proposal, loop:spec, size:small, test-only (and loop:product-review in the review run); saw ${l}`,
             );
         if (!/--body-file\s/i.test(c)) block("gh issue create needs --body-file <file in WORK>");
+        if (INTAKE) {
+          if (isReview) block("the intake session opens proposals or a spec, never a product review");
+          // what the intake session opens must link back to its request and carry the loop marker
+          const bf = (c.match(/--body-file\s+("([^"]+)"|'([^']+)'|(\S+))/i) || []).slice(2).find(Boolean);
+          let text = "";
+          try {
+            text = readFileSync(String(bf || ""), "utf8");
+          } catch {
+            block("the intake session's issue body file could not be read (failing closed)");
+          }
+          const first = (text.split(/\r?\n/).find((l) => l.trim()) || "").trim();
+          if (first !== MARKER) block("an issue from a request must start with the loop marker line");
+          const link = (text.match(/^[ \t>*_]*From request #(\d+)\b/im) || [])[1];
+          if (!REQUEST || link !== REQUEST)
+            block(`an issue from request #${REQUEST || "?"} must say "From request #${REQUEST || "?"}"`);
+        }
+      }
+      if (INTAKE && g2 === "comment") {
+        const num = (c.match(/gh(?:\.exe)?["']?\s+issue\s+comment\s+["']?#?(\d+)\b/i) || [])[1];
+        if (!REQUEST || num !== REQUEST)
+          block(
+            `the intake session comments only on its request #${REQUEST || "?"} (saw ${num || "no number"})`,
+          );
       }
       if (g2 === "comment" && (/\s(-b|--body)\s/i.test(c) || /--edit-last|--delete-last/i.test(c)))
         block("comment with --body-file <file in WORK>; never edit/delete comments");
@@ -351,9 +416,13 @@ if (tool === "Bash" || tool === "PowerShell") {
       )
     )
       block("proposal and review sessions are read-only: no commits, branches or pushes");
-    if (/\bgh(\.exe)?["']?\s+(pr\s+(create|merge|comment|close)|issue\s+(edit|close|comment))\b/i.test(c))
+    if (/\bgh(\.exe)?["']?\s+(pr\s+(create|merge|comment|close)|issue\s+close)\b/i.test(c))
       block(
-        "proposal and review sessions only read and open issues (proposals, specs, the review); no PRs, edits or comments",
+        "proposal, review and intake sessions only read and open issues (proposals, specs, the review); no PRs or closes",
+      );
+    if (!INTAKE && /\bgh(\.exe)?["']?\s+issue\s+(edit|comment)\b/i.test(c))
+      block(
+        "proposal and review sessions only read and open issues (proposals, specs, the review); no edits or comments",
       );
   }
 
