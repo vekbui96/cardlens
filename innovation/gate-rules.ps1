@@ -1230,7 +1230,7 @@ function Get-RequestPlanChildren {
 # loop's latest comment. The approval watcher keeps a LITERAL COPY of this function (it runs from an
 # admin-only folder and dot-sources nothing): change both together (test-queue-rules.ps1 compares them).
 function Get-RequestTriggerDecision {
-    param($Issue, [object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    param($Issue, [object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->', [string]$AgentMarker = '<!-- claude-agent -->')
     $mk = { param([bool]$N, [string]$K, [string]$Why) [pscustomobject]@{ NeedsIntake = $N; Key = $K; Reason = $Why } }
     if (-not $Issue) { return (& $mk $false '' 'no issue') }
     $l = @(@($Issue.labels) | Where-Object { $_ } | ForEach-Object { if ($_ -is [string]) { $_ } else { "$($_.name)" } })
@@ -1241,7 +1241,8 @@ function Get-RequestTriggerDecision {
     if ("$($Issue.body)".Contains($Marker)) { return (& $mk $false '' 'body carries the loop marker') }
     if ($l -contains 'loop:declined') { return (& $mk $false '' 'declined') }
     if ($l -contains 'loop:planned') { return (& $mk $false '' 'already planned') }
-    $cs = @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner } | Sort-Object { [datetime]$_.created_at })
+    # a comment an agent posted as the owner (<!-- claude-agent -->) is neither Ve's answer nor the loop's question
+    $cs = @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and -not "$($_.body)".Contains($AgentMarker) } | Sort-Object { [datetime]$_.created_at })
     $ve = @($cs | Where-Object { -not "$($_.body)".Contains($Marker) })
     $loop = @($cs | Where-Object { "$($_.body)".Contains($Marker) })
     $lastVe = $null; if ($ve.Count -gt 0) { $lastVe = $ve[-1] }

@@ -64,6 +64,39 @@ for proposals and approvals, and FOCUS.md / PRODUCT.md stay yours.
   your reply as a decision and applies it, with no AI.
 - `cursors.json`: where the collector and the memory agent left off (schema-versioned).
 
+### Phase 2: the Observer and the PM (`options.observerPm`)
+
+With `observerPm` on (it needs `productStore`), Phase B is two sessions instead of one `propose` session, and
+neither runs unless there is a reason. A deterministic coordinator in `run-loop.ps1` (`product-intel.ps1`
+`Get-CoordinatorDecision`, no AI) decides before any session starts, and logs why:
+
+- **Observer** (`observe` in sessions.json: Sonnet, 30 turns, 15 min, $0.60, 2 a day) runs only when a file of a
+  workflow in `workflows.json` (Home, Collection, Set, Want list, Search, Scan, Binders, Sealed, Target,
+  Settings/Sync, onboarding/empty states, shell) changed on main since `cursors.lastObservedCommit`, or a 7-day
+  metrics rate moved by `observeMetricPoints` (10) percentage points since the last observation. It gets the
+  changed files and workflows, diff stats, metric deltas, the open findings (for dedup) and the PRODUCT.md lines
+  that mention those workflows. Read-only: no GitHub writes, no innovation script, files only in WORK (the guard's
+  OBSERVE mode). It answers with findings as JSON; the runner validates them (workflow, 15-280 character summary,
+  1-6 pieces of evidence that are `file:line` in the repo, an allowed URL or `metric:...`, confidence, severity),
+  drops duplicates and anything invalid, and appends the rest to `findings.jsonl`. A range with no workflow file
+  only moves the cursor.
+- **PM** (`pm`: Sonnet, $0.75, 4 a day; same GitHub rights as `propose`) runs only when there are new open
+  findings, new decisions, new research or approved slices to open since its last run, AND a proposal slot is
+  free. It reads FOCUS.md, PRODUCT.md, your confirmed preferences in full (inferred ones marked as guesses), the
+  top 20 open findings, recent decisions, `opportunities.json`, KNOWN_ISSUES and METRICS, ranks the opportunities
+  (value, confidence, effort, risk; the runner scores them and keeps 15) and opens slices / proposals / one spec
+  as before. **Every issue it opens ends with `<!-- loop-refs: f-... d-... -->`** citing at least one open finding
+  or decision (a slice cites `spec-<n>`); the guard refuses `gh issue create` otherwise. The runner then marks the
+  cited findings `addressed`. It may add one FOCUS.md suggestion (shown in the hub digest, never applied) and one
+  research question (stored for Phase 4).
+- An idle day (no workflow change, no metric move, nothing new for the PM) starts no session: $0.
+- New store files: `findings.jsonl` (append-only; a status change is a new record; `open` -> `addressed` |
+  `dismissed`, both final), `opportunities.json`, `focus-suggestions.jsonl`, `research.jsonl`; `cursors.json`
+  gains `observe` (last run, metrics snapshot) and `pm` (last run).
+- Proof without side effects: `run-loop.ps1 -DryRun -AgentsDryRun` really runs both sessions against a copy of the
+  store (`logs\run-<id>.store`) with every GitHub write refused; the PM lists what it would open.
+- With `observerPm` off, the single `propose` session runs exactly as before.
+
 ## How it works
 
 Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in

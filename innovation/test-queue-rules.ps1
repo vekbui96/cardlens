@@ -573,6 +573,11 @@ $t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-inf
 Check ($t.NeedsIntake -and $t.Key -eq 'req:170:12') "Ve answered after the question -> intake again (key $($t.Key))"
 $t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1, (RqCmt 'drive-by' '2026-11-22T18:30:00Z' -By 'stranger' -Id 13)) -Owner 'vekbui96' -Marker $mk
 Check (-not $t.NeedsIntake) 'someone else answering does not count'
+$ag = RqCmt "<!-- claude-agent -->`nNoted, the agent will look at this." '2026-11-22T18:30:00Z' -Id 14
+$t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1, $ag) -Owner 'vekbui96' -Marker $mk
+Check (-not $t.NeedsIntake) "an agent's comment (<!-- claude-agent -->) posted as Ve is not Ve's answer ($($t.Reason))"
+$t = Get-RequestTriggerDecision -Issue (RqIss -L 'loop:request', 'loop:needs-info') -Comments @($q1, $a1, $ag) -Owner 'vekbui96' -Marker $mk
+Check ($t.NeedsIntake -and $t.Key -eq 'req:170:12') "an agent comment after Ve's answer does not change the trigger key (key $($t.Key))"
 
 # the approval watcher keeps a literal copy of Get-RequestTriggerDecision: the two must stay identical
 $watchRef = 'C:\Users\Ve Bui\.claude\skills\loop-install\assets\watch-approvals.reference.ps1'

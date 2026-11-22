@@ -421,14 +421,18 @@ if (tool === "Bash" || tool === "PowerShell") {
         (g1 === "run" && ["list", "view"].includes(g2)) ||
         g1 === "api";
       if (!readOnlyGh)
-        block(`the Observer never writes to GitHub (gh ${g1} ${g2 || ""} refused); report findings in your JSON`);
+        block(
+          `the Observer never writes to GitHub (gh ${g1} ${g2 || ""} refused); report findings in your JSON`,
+        );
     }
     if (
       NO_GH_WRITES &&
       ((["issue", "pr"].includes(g1) && !["view", "list", "diff", "status", "checks"].includes(g2)) ||
         g1 === "label")
     )
-      block(`dry run: no GitHub writes (gh ${g1} ${g2 || ""}); list what you would open in your JSON (wouldOpen)`);
+      block(
+        `dry run: no GitHub writes (gh ${g1} ${g2 || ""}); list what you would open in your JSON (wouldOpen)`,
+      );
     const named =
       new RegExp(`(-R|--repo)\\s+["']?${REPO}\\b`, "i").test(c) ||
       new RegExp(`repos/${REPO}\\b`, "i").test(c);
@@ -771,8 +775,7 @@ if (tool === "Bash" || tool === "PowerShell") {
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );
-      if (OBSERVE)
-        block(`the Observer runs no innovation script (${s}); the runner gave it what it needs`);
+      if (OBSERVE) block(`the Observer runs no innovation script (${s}); the runner gave it what it needs`);
       if (READ_ONLY && !/\\check-approval\.ps1$/.test(f))
         block(
           `proposal and review sessions are read-only: ${s} builds, merges or deploys and is not allowed in this session`,

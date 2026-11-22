@@ -624,7 +624,11 @@ const designOffDeny = [ps(`${E} context`), ps(`${PY} 'tap target' --domain ux`)]
 // Phase 2: the Observer (MODE=OBSERVE) reads and reports; no GitHub writes, no innovation script, file writes
 // only in WORK. The PM (MODE=PM) is a proposal session whose every issue cites a known finding / decision id
 // (state\pm-refs.json, written by the runner); a dry run (NO_GH_WRITES=1) refuses every GitHub write.
-const observeEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "OBSERVE", INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1" };
+const observeEnv = {
+  ...env,
+  INNOVATION_LOOP_CARDLENS_MODE: "OBSERVE",
+  INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1",
+};
 const observeAllow = [
   ps(`git -C "${C}" log --oneline 0123abc..4567def`),
   ps(`git -C "${C}" diff 0123abc..4567def -- src/v2/screens/home/HomeScreen.tsx`),
@@ -654,9 +658,15 @@ const observeDeny = [
   ps(`${S}\\progress.ps1 -Issue 12 -Step plan`),
   // file writes only in WORK: not the clone, not artifacts, not the store
   { tool_name: "Write", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, content: "x" } },
-  { tool_name: "Edit", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, old_string: "a", new_string: "b" } },
+  {
+    tool_name: "Edit",
+    tool_input: { file_path: `${C}\\src\\app\\App.tsx`, old_string: "a", new_string: "b" },
+  },
   { tool_name: "Write", tool_input: { file_path: `${HOME}\\artifacts\\x.png`, content: "x" } },
-  { tool_name: "Write", tool_input: { file_path: "D:\\hub\\state\\product\\cardlens\\findings.jsonl", content: "{}" } },
+  {
+    tool_name: "Write",
+    tool_input: { file_path: "D:\\hub\\state\\product\\cardlens\\findings.jsonl", content: "{}" },
+  },
   ps(`New-Item -ItemType File "${C}\\notes.md"`),
   ps(`Remove-Item "${C}\\src\\app\\App.tsx"`),
   ps(`${E} shot https://vekbui96.github.io/cardlens/ --out "${HOME}\\artifacts\\shots"`),
@@ -678,13 +688,24 @@ const pmBody = (name, text) => {
   return p;
 };
 const citesFinding = pmBody("f.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: f-0123abcd -->\n");
-const citesDecision = pmBody("d.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: d-0123456789 f-99999999 -->\n");
-const citesSpec = pmBody("s.md", "<!-- innovation-loop -->\nPart of #150 (slice 2 of 3)\n## What\nx\n<!-- loop-refs: spec-150 -->\n");
+const citesDecision = pmBody(
+  "d.md",
+  "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: d-0123456789 f-99999999 -->\n",
+);
+const citesSpec = pmBody(
+  "s.md",
+  "<!-- innovation-loop -->\nPart of #150 (slice 2 of 3)\n## What\nx\n<!-- loop-refs: spec-150 -->\n",
+);
 const citesNothing = pmBody("n.md", "<!-- innovation-loop -->\n## What\nx\n");
-const citesUnknown = pmBody("u.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: f-99999999 d-9999999999 -->\n");
+const citesUnknown = pmBody(
+  "u.md",
+  "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: f-99999999 d-9999999999 -->\n",
+);
 const citesOtherSpec = pmBody("o.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: spec-151 -->\n");
 const create = (f, extra = "") =>
-  ps(`gh issue create -R vekbui96/cardlens --title "Home: x" --label loop:proposal ${extra}--body-file "${f}"`);
+  ps(
+    `gh issue create -R vekbui96/cardlens --title "Home: x" --label loop:proposal ${extra}--body-file "${f}"`,
+  );
 const pmAllow = [
   create(citesFinding),
   create(citesDecision, "--label size:small "),
@@ -708,7 +729,10 @@ const pmDeny = [
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
 ];
 // the PM fails closed without the runner's id list
-const pmNoRefsEnv = { ...pmEnv, INNOVATION_LOOP_CARDLENS_HOME: mkdtempSync(path.join(os.tmpdir(), "guard-pm0-")) };
+const pmNoRefsEnv = {
+  ...pmEnv,
+  INNOVATION_LOOP_CARDLENS_HOME: mkdtempSync(path.join(os.tmpdir(), "guard-pm0-")),
+};
 const dryEnv = { ...pmEnv, INNOVATION_LOOP_CARDLENS_NO_GH_WRITES: "1" };
 const dryDeny = [
   create(citesFinding),
