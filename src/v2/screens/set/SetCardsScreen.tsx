@@ -4,6 +4,7 @@ import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useSetView } from "../../../hooks/useSetView.ts";
 import { RARITY_FILTERS } from "../../../features/results/rarityFilters.ts";
 import { BINDER_PAGE_SIZE } from "../../../models/binder.ts";
+import { CopyMissingList } from "./CopyMissingList.tsx";
 import { FinishLine } from "./FinishLine.tsx";
 import { SetPocket } from "./SetPocket.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
@@ -158,6 +159,14 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
           >
             Missing only
           </Chip>
+          {/* Every slot of the set, not `visible`: the list is the set's want list
+              whichever filter is on. */}
+          <CopyMissingList
+            slots={slots}
+            priceFor={priceFor}
+            setName={setName}
+            printingsKnown={view.printings !== null}
+          />
           {excludedCount > 0 ? (
             <Chip
               onPress={() => setFilters((s) => ({ ...s, showExcluded: !s.showExcluded }))}
