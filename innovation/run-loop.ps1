@@ -628,23 +628,44 @@ function Get-RequestWork {
     if (-not $Opts.requestIntake -or $null -eq $Q -or -not ($Q.PSObject.Properties.Name -contains 'requestWork')) { return @() }
     return @($Q.requestWork | Where-Object { $_ } | ForEach-Object { [int]$_.issue })
 }
-# The issues an intake session opened for request $N: open, opened by Ve's account (the loop), body starting with
-# the loop marker and saying "From request #N", created after -Since.
+# The open issues the loop opened for request $N (opened by Ve's account, body starting with the loop marker and
+# saying "From request #N", loop:proposal). -Numbers: issues the intake session's transcript says it created; they
+# are read one by one (a consistent read: the issue list can lag seconds behind a create, which once hid a
+# just-opened child), then the open list adds any earlier ones (from an intake whose plan was never posted).
 function Find-RequestChildren {
-    param([int]$N, [datetime]$Since)
-    $out = @()
-    foreach ($i in @(Get-GhJson @('issue', 'list', '-R', $script:Repo, '--state', 'open', '--label', 'loop:proposal', '--json', 'number,title,body,labels,state,author,createdAt', '--limit', '100') | ForEach-Object { $_ } | Where-Object { $_ })) {
+    param([int]$N, [int[]]$Numbers = @())
+    $cands = @()
+    foreach ($k in @($Numbers | Where-Object { $_ -gt 0 } | Select-Object -Unique)) { try { $cands += (Get-GhJson @('api', "repos/$($script:Repo)/issues/$k")) } catch { Write-Log "request #${N}: cannot read #${k}: $_" 'WARN' } }
+    try { $cands += @(Get-GhJson @('issue', 'list', '-R', $script:Repo, '--state', 'open', '--label', 'loop:proposal', '--json', 'number,title,body,labels,state,author,createdAt', '--limit', '100') | ForEach-Object { $_ } | Where-Object { $_ }) } catch { Write-Log "request #${N}: issue list failed: $_" 'WARN' }
+    $out = @(); $seen = @{}
+    foreach ($i in @($cands | Where-Object { $_ })) {
+        $num = [int]$i.number; if ($seen.ContainsKey($num)) { continue }; $seen[$num] = $true
+        if ("$($i.state)" -notmatch '^(?i)open$') { continue }
         if ((Get-IssueAuthor $i) -ne $script:Owner) { continue }
+        if (@(Get-IssueLabelNames $i) -notcontains 'loop:proposal') { continue }
         $first = @("$($i.body)" -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -First 1)
         if ($first.Count -eq 0 -or $first[0] -ne $script:Marker) { continue }
         if ((Get-RequestLink -Body "$($i.body)") -ne $N) { continue }
-        if (([datetime]$i.createdAt).ToUniversalTime() -lt $Since.ToUniversalTime().AddMinutes(-1)) { continue }
         $out += $i
     }
     return @($out | Sort-Object { [int]$_.number })
 }
+# The runner's part of planning request $N: the plan comment listing $Kids and loop:planned. Returns $true when posted.
+function Complete-RequestPlan {
+    param([int]$N, [object[]]$Kids, $RequestIssue)
+    $states = @($Kids | ForEach-Object { Get-RequestChildState $_ })
+    $mode = (Get-RequestForm -Body "$($RequestIssue.body)").Mode
+    $cid = Publish-RequestPlan -LoopHome $script:LoopHome -RunId $RunId -Repo $script:Repo -GhExe $script:GhExe -Request $N -Children $states -Mode $mode -Marker $script:Marker -Who 'Ve'
+    if ($cid -le 0) { [void]$problems.Add("request #${N}: the intake opened $(@($states | ForEach-Object { "#$($_.Number)" }) -join ', ') but the plan comment could not be posted"); return $false }
+    Invoke-Gh -Arguments @('issue', 'edit', "$N", '-R', $script:Repo, '--add-label', 'loop:planned') -Quiet | Out-Null
+    Write-Log "request #${N}: planned ($(@($states | ForEach-Object { "#$($_.Number)" }) -join ' '); mode $(if ($mode -eq 'build') { 'Build it' } else { 'Plan first' })); plan comment $cid, loop:planned added"
+    [void]$runNotes.Add("Request #${N}: planned as $(@($states | ForEach-Object { "#$($_.Number)" }) -join ', ') ($(if ($mode -eq 'build') { 'Build it: approved via the request' } else { 'Plan first: waiting for approved' }))")
+    return $true
+}
 # One intake session for request $Rq (a check-approval.ps1 `requests` entry), then the runner's own part: the plan
-# comment listing what the session opened, and loop:planned. Returns the session object (or $null in a dry run).
+# comment listing what the session opened, and loop:planned. A request that already has issues from an earlier
+# intake (whose plan was never posted) is planned from those, with no new session (no duplicates). Returns the
+# session object, or $null when no session ran (dry run, or planned from existing issues).
 function Invoke-RequestIntake {
     param($Rq, $Budget, $Q)
     $n = [int]$Rq.issue
@@ -656,28 +677,33 @@ function Invoke-RequestIntake {
     $pp = New-SessionPrompt -Kind 'intake' -Issue $n -SessionModel $sm -Turns ([int]$c.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $Q -MainSha $mainSha -LiveHead $liveHead -KnownIssues $known -RequestInfo $Rq -PrefLines $prefLines
     $usdCap = Get-SessionBudget -Kind 'intake' -Model $sm -Config $Cfg
     if ($DryRun) { Write-Log "DRY RUN plan: intake session for request #$n model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $usdCap) (a request: no daily cap) prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"; return $null }
-    # Ve answered the question: the runner (never the session) takes loop:needs-info off before planning again
-    try { $li = Get-GhJson @('api', "repos/$($script:Repo)/issues/$n"); if (@($li.labels | ForEach-Object { $_.name }) -contains 'loop:needs-info') { Invoke-Gh -Arguments @('issue', 'edit', "$n", '-R', $script:Repo, '--remove-label', 'loop:needs-info') -Quiet | Out-Null; Write-Log "request #${n}: Ve answered; loop:needs-info removed" } } catch { Write-Log "request #${n}: could not read its labels: $_" 'WARN' }
+    $li = $null
+    try { $li = Get-GhJson @('api', "repos/$($script:Repo)/issues/$n") } catch { Write-Log "request #${n}: could not read it: $_" 'WARN'; return $null }
+    $ll = @($li.labels | ForEach-Object { $_.name })
+    if ($ll -notcontains 'loop:needs-info') {
+        $earlier = @(Find-RequestChildren -N $n)
+        if ($earlier.Count -gt 0) {
+            Write-Log "request #${n}: already has issue(s) from an earlier intake ($(@($earlier | ForEach-Object { "#$($_.number)" }) -join ' ')); planning from them, no new session"
+            try { [void](Complete-RequestPlan -N $n -Kids $earlier -RequestIssue $li) } catch { [void]$problems.Add("request #${n}: could not finish the plan: $_") }
+            return $null
+        }
+    } else {
+        # Ve answered the question: the runner (never the session) takes loop:needs-info off before planning again
+        Invoke-Gh -Arguments @('issue', 'edit', "$n", '-R', $script:Repo, '--remove-label', 'loop:needs-info') -Quiet | Out-Null; Write-Log "request #${n}: Ve answered; loop:needs-info removed"
+    }
     $s = Invoke-Session -Kind 'intake' -Issue $n -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd $usdCap -Request -RequestIssue $n
     $env:INNOVATION_LOOP_CARDLENS_REQUEST = ''
     try {
         $li = Get-GhJson @('api', "repos/$($script:Repo)/issues/$n"); $ll = @($li.labels | ForEach-Object { $_.name })
         if ($ll -contains 'loop:declined') { Write-Log "request #${n}: declined by the intake session (its comment says why)"; [void]$runNotes.Add("Request #${n}: declined (conflicts with FOCUS.md; see the comment)"); return $s }
         if ($ll -contains 'loop:needs-info') { Write-Log "request #${n}: the intake session asked a question (loop:needs-info)"; [void]$runNotes.Add("Request #${n}: waiting for Ve's answer (loop:needs-info)"); return $s }
-        $kids = @(Find-RequestChildren -N $n -Since $s.Start)
+        $made = @(); try { $made = @((Read-LoopTranscript -Path $s.Path).CreatedIssues | Where-Object { "$_" -like "$($script:Repo)#*" } | ForEach-Object { [int](("$_" -split '#', 2)[1]) }) } catch { }
+        $kids = @(Find-RequestChildren -N $n -Numbers $made)
         if ($kids.Count -eq 0) { Write-Log "request #${n}: the intake session opened nothing and asked nothing; it stays unplanned (the next run tries again)" 'WARN'; [void]$problems.Add("request #${n}: intake opened no issue and asked no question"); return $s }
-        $states = @($kids | ForEach-Object { Get-RequestChildState $_ })
-        $mode = (Get-RequestForm -Body "$($li.body)").Mode
-        $cid = Publish-RequestPlan -LoopHome $script:LoopHome -RunId $RunId -Repo $script:Repo -GhExe $script:GhExe -Request $n -Children $states -Mode $mode -Marker $script:Marker -Who 'Ve'
-        if ($cid -gt 0) {
-            Invoke-Gh -Arguments @('issue', 'edit', "$n", '-R', $script:Repo, '--add-label', 'loop:planned') -Quiet | Out-Null
-            Write-Log "request #${n}: planned ($(@($states | ForEach-Object { "#$($_.Number)" }) -join ' '); mode $(if ($mode -eq 'build') { 'Build it' } else { 'Plan first' })); plan comment $cid, loop:planned added"
-            [void]$runNotes.Add("Request #${n}: planned as $(@($states | ForEach-Object { "#$($_.Number)" }) -join ', ') ($(if ($mode -eq 'build') { 'Build it: approved via the request' } else { 'Plan first: waiting for approved' }))")
-        } else { [void]$problems.Add("request #${n}: the intake opened $(@($states | ForEach-Object { "#$($_.Number)" }) -join ', ') but the plan comment could not be posted") }
+        [void](Complete-RequestPlan -N $n -Kids $kids -RequestIssue $li)
     } catch { Write-Log "request #${n}: after the intake session: $_" 'WARN'; [void]$problems.Add("request #${n}: could not finish the plan: $_") }
     return $s
 }
-
 $exitCode = 1
 $queue = $null; $finalQueue = $null; $res = $null
 $sessions = New-Object System.Collections.ArrayList
@@ -880,8 +906,9 @@ try {
             if (-not (Test-BudgetAllowsModel -Verdict $budget.Verdict -Model $(if ($Model) { $Model } else { "$($Cfg.intake.model)" }))) { [void]$runNotes.Add("Request #$($rq.issue): intake deferred ($($budget.Reason))"); break }
             if ((($Deadline - (Get-Date)).TotalMinutes) -lt 10) { [void]$runNotes.Add("Request #$($rq.issue): intake deferred (out of time)"); break }
             $is = Invoke-RequestIntake -Rq $rq -Budget $budget -Q $queue
+            if (-not $DryRun) { $didIntake = $true }   # a session ran, or a plan was posted from earlier issues
             if ($is) {
-                [void]$sessions.Add($is); $didIntake = $true
+                [void]$sessions.Add($is)
                 if ($is.EndClass -eq 'not-started') { [void]$problems.Add("intake #$($rq.issue): the session could not be started ($($is.Reason)); the run stopped"); $stopRun = $true; break }
             }
         }
