@@ -427,6 +427,13 @@
   max-width: 52ch;
 }
 
+/* Why nothing arrived, when sync is the reason. One quiet line under the hint. */
+.emptySyncLine {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 52ch;
+}
+
 /*
  * The two ways in. `--v2-pocket` as the basis rather than a bare number: it is
  * already the width v2 calls "one card", and these sit two-up at 390 and

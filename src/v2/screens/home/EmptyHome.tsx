@@ -1,6 +1,7 @@
 import type { SyncStatus } from "../../../app/LibraryProvider.tsx";
 import { Card, Panel, Stack } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
+import { emptySyncLine } from "./emptySyncLine.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -20,8 +21,8 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
    * A third way in, for a fresh device whose collection already lives on the
    * server. Offered only where it can work: sync off, or a rejected token.
    * While the first pull runs it says so (and is not pressable); once rows
-   * arrive Home swaps to the full screen. Offline / idle / server-off show
-   * nothing here — the shell's sync label and Home's notice cover those.
+   * arrive Home swaps to the full screen. Offline / idle / refused token get
+   * no action but a status line below the hint (`emptySyncLine`).
    */
   const connect =
     syncStatus.state === "off" || syncStatus.state === "bad-token"
@@ -29,6 +30,7 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
       : syncStatus.state === "syncing"
         ? "busy"
         : null;
+  const syncLine = emptySyncLine(syncStatus);
   return (
     <Panel tone="raised" pad={5}>
       <Stack gap={4}>
@@ -37,6 +39,11 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
           Open a set and mark the printings you own, or search for a card you have. Everything is saved on
           this device straight away — sync is optional and comes later.
         </p>
+        {syncLine ? (
+          <p role="status" className={styles.emptySyncLine}>
+            {syncLine}
+          </p>
+        ) : null}
         <div className={styles.actions}>
           <Card href={`#${screenToPath({ name: "sets" })}`} className={styles.tile} pad={4}>
             <Stack gap={1}>
