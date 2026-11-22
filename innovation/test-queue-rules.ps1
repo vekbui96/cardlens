@@ -647,6 +647,9 @@ Check ($pc.Launch) 'intake also runs in ProposeOnly mode'
 $pc = Get-PrecheckDecision -Queue $q0 -Budget ([pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold' }) -Intake 1 -RequestBuilds @(171)
 Check (-not $pc.Launch -and $pc.Hold) 'hold stops requests too'
 
+# check-approval.ps1's JSON is ASCII-only, so a console code page cannot mangle Ve's text
+$aj = ConvertTo-AsciiJson ((@{ what = "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)" } | ConvertTo-Json -Compress))
+Check ($aj -notmatch '[^\x00-\x7F]' -and ($aj | ConvertFrom-Json).what -eq "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)") "ASCII-only JSON round-trips non-ASCII text ($aj)"
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

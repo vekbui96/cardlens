@@ -377,12 +377,12 @@ try {
     if ($List -or $Slots) {
         $q = Get-Queue
         if ($Slots) { $q.Remove('checked') }
-        Write-Output ($q | ConvertTo-Json -Depth 8 -Compress)
+        Write-Output (ConvertTo-AsciiJson ($q | ConvertTo-Json -Depth 8 -Compress))
         if ($Slots -or $q.buildable.Count -gt 0) { exit 0 } else { exit 1 }
     }
     if ($Issue -le 0) { throw 'pass -Issue <n> [-Spec], -List or -Slots' }
     $r = Test-Issue -Number $Issue -AsSpec:$Spec
-    Write-Output ($r | ConvertTo-Json -Depth 5 -Compress)
+    Write-Output (ConvertTo-AsciiJson ($r | ConvertTo-Json -Depth 5 -Compress))
     if ($r.buildable) { exit 0 } else { exit 1 }
 } catch {
     Write-Output (@{ error = "$_" } | ConvertTo-Json -Compress)

@@ -1272,3 +1272,11 @@ function Format-RequestSynopsis {
     [void]$sb.AppendLine(); [void]$sb.AppendLine('Every issue from this request is finished, so the loop closes it. Reopen it, or file a new request, if something is missing.')
     return $sb.ToString()
 }
+
+# JSON that survives a console pipe: every non-ASCII character as a \uXXXX escape (check-approval.ps1 prints its
+# result to stdout, which run-loop.ps1 and merge-pr.ps1 read through the console code page; Windows PowerShell 5.1
+# would otherwise turn e.g. U+00B7 in a request into two OEM characters). Surrogate pairs stay valid JSON.
+function ConvertTo-AsciiJson {
+    param([string]$Json)
+    return [regex]::Replace("$Json", '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+}
