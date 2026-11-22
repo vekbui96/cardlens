@@ -110,6 +110,21 @@
   max-width: 62ch;
 }
 
+/* --- Sort ----------------------------------------------------------------- */
+
+.sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-2);
+}
+
+.sortLabel {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+}
+
 /* --- A result tile -------------------------------------------------------- */
 
 .tile {
