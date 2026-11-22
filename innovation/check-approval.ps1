@@ -65,6 +65,9 @@ param(
     [switch]$List,
     [switch]$Slots
 )
+# gh and git print UTF-8; read their output as UTF-8, not the console's OEM code page (a scheduled task's default),
+# which turned e.g. U+00B7 in Ve's request into two OEM characters. Never fatal.
+try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { }
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\gate-rules.ps1"   # proposal slots, specs and the retry rule (pure functions)
 Add-GhToPath
