@@ -262,6 +262,35 @@ test.describe("home @visual", () => {
   });
 
   /**
+   * A notched phone, simulated (#126).
+   *
+   * A desktop browser reports every `env(safe-area-inset-*)` as 0, so the inset
+   * goes in through the token the shell reads (`--v2-safe-top`), and a
+   * translucent band is drawn over the top 47px where an iPhone's status bar
+   * would be. The header must sit BELOW the band, not under it.
+   */
+  test("clears a notched phone's status bar", async ({ page }) => {
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    await page.addStyleTag({
+      content: `
+        [data-ui="v2"] { --v2-safe-top: 47px; }
+        body::after {
+          content: "";
+          position: fixed;
+          inset: 0 0 auto 0;
+          height: 47px;
+          background: rgb(255 0 200 / 45%);
+          z-index: 1000;
+          pointer-events: none;
+        }
+      `,
+    });
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-notch.png", { fullPage: true });
+  });
+
+  /**
    * "Closest to complete" rows. The mock catalog knows none of the seeded sets'
    * sizes, so the sets list and two sets' printings go in through the app's own
    * cache keys: ex2 and pop3 have printings (a price on the line), base2 has

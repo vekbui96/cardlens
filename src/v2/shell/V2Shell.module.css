@@ -54,8 +54,14 @@
   display: flex;
   align-items: center;
   gap: var(--v2-space-4);
-  height: var(--v2-header-h);
-  padding-inline: var(--v2-gutter);
+  /*
+   * The surface runs up under a notched phone's status bar; the row itself
+   * starts below it. Sides likewise keep the gutter clear of a landscape notch.
+   */
+  height: var(--v2-header-offset);
+  padding-top: var(--v2-safe-top);
+  padding-left: calc(var(--v2-gutter) + var(--v2-safe-left));
+  padding-right: calc(var(--v2-gutter) + var(--v2-safe-right));
   background: var(--v2-surface);
   border-bottom: var(--v2-border-w) solid var(--v2-border);
 }
@@ -155,7 +161,8 @@
 .content {
   flex: 1 1 auto;
   width: 100%;
-  padding: var(--v2-space-5) var(--v2-gutter) var(--v2-space-7);
+  padding: var(--v2-space-5) calc(var(--v2-gutter) + var(--v2-safe-right)) var(--v2-space-7)
+    calc(var(--v2-gutter) + var(--v2-safe-left));
   min-width: 0;
 }
 

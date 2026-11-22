@@ -470,11 +470,11 @@
  */
 .rail {
   position: sticky;
-  top: calc(var(--v2-header-h) + var(--v2-space-4));
+  top: calc(var(--v2-header-offset) + var(--v2-space-4));
   align-self: start;
   width: var(--rail-w);
-  max-height: calc(100vh - var(--v2-header-h) - var(--v2-space-5));
-  max-height: calc(100dvh - var(--v2-header-h) - var(--v2-space-5));
+  max-height: calc(100vh - var(--v2-header-offset) - var(--v2-space-5));
+  max-height: calc(100dvh - var(--v2-header-offset) - var(--v2-space-5));
   overflow: hidden auto;
   background: var(--v2-surface);
   border: var(--v2-border-w) solid var(--v2-border);
