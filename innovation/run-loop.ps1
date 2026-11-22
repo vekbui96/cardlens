@@ -556,6 +556,11 @@ function Invoke-Session {
         if ($run.TimedOut) { $s.EndClass = 'timeout'; Write-Log "session $name exceeded $Minutes minutes (process tree killed)" 'ERROR' }
         else { Write-Log "session $name claude pid $($run.Pid) exit code $($run.ExitCode)" }
     } catch { Write-Log "session ${name}: $_" 'ERROR'; $s.Reason = "could not run: $_"; $s.EndClass = 'not-started' }
+    # every session but the tool-less memory agent needs the PowerShell tool; claude drops it silently for some
+    # environment variables (DO_NOT_TRACK did, run 20261122-133356): say so loudly instead of a mysterious failure
+    if ($Kind -ne 'memory' -and (Test-Path -LiteralPath $s.Path)) {
+        foreach ($line in [IO.File]::ReadAllLines($s.Path)) { if ($line -match '"subtype"\s*:\s*"init"') { try { $ini = $line | ConvertFrom-Json; if (@($ini.tools) -notcontains 'PowerShell') { Write-Log "session ${name}: claude offered NO PowerShell tool (tools: $(@($ini.tools) -join ','))" 'ERROR'; [void]$problems.Add("session ${name} had no PowerShell tool (an environment variable hid it); its result is not trustworthy") } } catch { }; break } }
+    }
     $result = $null
     if (Test-Path -LiteralPath $s.Path) { foreach ($line in [IO.File]::ReadAllLines($s.Path)) { if ($line -match '"type"\s*:\s*"result"') { try { $result = $line | ConvertFrom-Json } catch { } } } }
     if ($result) {
@@ -741,6 +746,12 @@ try {
     # ---- environment ------------------------------------------------------------------------
     Add-GhToPath
     foreach ($n in (Clear-SecretEnv)) { Write-Log "unset env var $n for this run" }
+    # Started from inside another Claude Code session (a supervised run by an agent), the parent's session markers
+    # leak into the child claude. The scheduled task never has them; drop them so every launch gets the same
+    # environment. Auth variables are kept.
+    foreach ($v in @(Get-ChildItem env: | Where-Object { $_.Name -match '^(CLAUDECODE|CLAUDE_PID|CLAUDE_EFFORT|CLAUDE_CODE_(ENTRYPOINT|CHILD_SESSION|SESSION_ID|SESSION_ATTENDED|ENVIRONMENT_KIND|EXECPATH|WORKER_EPOCH|MESSAGING_\w+|BRIDGE_\w+))$' })) {
+        Remove-Item -LiteralPath "env:$($v.Name)"; Write-Log "unset parent-session variable $($v.Name) (launched from a Claude Code session)"
+    }
     $env:INNOVATION_LOOP_CARDLENS_HOME = $script:LoopHome
     $env:INNOVATION_LOOP_CARDLENS_SCRIPTS = $ScriptsDir
     $env:INNOVATION_LOOP_RUN_ID = $RunId
