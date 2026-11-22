@@ -94,7 +94,7 @@ export function SetsView({
               already marked owned is still on the device — so this is a partial
               outage worth naming, not a broken app.
             */}
-            <p className={styles.muted}>
+            <p className={styles.muted} role="alert">
               The set catalog did not answer. Anything you have already marked owned is safe on this device.
             </p>
             <button type="button" className={styles.button} onClick={onRetry}>

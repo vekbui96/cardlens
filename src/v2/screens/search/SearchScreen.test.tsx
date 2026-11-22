@@ -190,6 +190,8 @@ describe("a flaky catalog", () => {
     expect(
       await screen.findByRole("heading", { name: /the card catalog did not answer/i }),
     ).toBeInTheDocument();
+    // The failure arrives after the person pressed Search, so it is announced.
+    expect(screen.getByRole("alert")).toHaveTextContent(/the card catalog did not answer/i);
     // Not "check your spelling": the query was fine and sending someone to
     // correct a correct word is worse than saying nothing.
     expect(screen.getByText(/nothing wrong with “charizard”/i)).toBeInTheDocument();

@@ -113,11 +113,13 @@
   cursor: pointer;
 }
 
-.noticeRetry:hover:not(:disabled) {
+.noticeRetry:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--v2-accent-strong);
 }
 
-.noticeRetry:disabled {
+/* aria-disabled, not disabled, while a retry is in flight: see ErrorNotice. */
+.noticeRetry:disabled,
+.noticeRetry[aria-disabled="true"] {
   background: var(--v2-surface);
   color: var(--v2-fg-dim);
   cursor: default;

@@ -187,7 +187,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
             {/* Says what failed and offers the retry. It does not blame the
                 user: the catalog fails in bursts, roughly a quarter of the
                 time, and nothing they did caused it. */}
-            <p className={styles.prose}>
+            <p className={styles.prose} role="alert">
               {setName} could not be loaded. Anything already marked is safe — the collection is held on this
               device.
             </p>
