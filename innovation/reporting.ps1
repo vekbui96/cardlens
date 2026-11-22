@@ -356,7 +356,8 @@ function Merge-LoopRunData {
         foreach ($n in $d.Notes) { [void]$notes.Add("$label session: $n") }
         foreach ($c in $d.CreatedIssues) { if (-not $created.Contains($c)) { [void]$created.Add($c) } }
         foreach ($c in $d.TouchedIssues) { if (-not $touched.Contains($c)) { [void]$touched.Add($c) } }
-        $rows += [pscustomobject]@{ Kind = "$($s.Kind)"; Issue = [int]$s.Issue; Model = "$($s.Model)"; Status = $d.Status; HasResult = $d.HasResult
+        # Agent: which agent the session was (build | propose | review | intake | observe | pm); the hub ledger reads it
+        $rows += [pscustomobject]@{ Kind = "$($s.Kind)"; Agent = "$($s.Kind)"; Issue = [int]$s.Issue; Model = "$($s.Model)"; Status = $d.Status; HasResult = $d.HasResult
             Turns = $d.Totals.Turns; Input = $d.Totals.Input; Output = $d.Totals.Output; CacheRead = $d.Totals.CacheRead; CacheWrite = $d.Totals.CacheWrite
             Cost = $d.Totals.Cost; HasCost = $d.Totals.HasCost; Start = $d.Totals.Start; End = $d.Totals.End; Models = @($d.Totals.Models) }
     }
@@ -377,7 +378,7 @@ function Format-RunDataSessions {
     param($Data)
     $rows = @(); if ($Data.PSObject.Properties.Name -contains 'Sessions') { $rows = @($Data.Sessions) }
     if ($rows.Count -eq 0) { return '' }
-    $names = @{ build = 'build'; propose = 'proposals'; review = 'product review' }
+    $names = @{ build = 'build'; propose = 'proposals'; review = 'product review'; observe = 'observer'; pm = 'product manager'; intake = 'intake' }
     $txt = @($rows | ForEach-Object {
             $n = $names["$($_.Kind)"]; if (-not $n) { $n = "$($_.Kind)" }; if ($_.Issue) { $n += " #$($_.Issue)" }
             $c = 'cost n/a'; if ($_.HasCost) { $c = '$' + ([double]$_.Cost).ToString('0.00', $script:RunDataInv) }
@@ -591,7 +592,7 @@ function Publish-LoopRunData {
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
                 createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting; waitingOnSlice = @($WaitingOnSlice | Where-Object { $_ })
                 approvals = @(if ($Approvals) { @($Approvals.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; approval = "$($Approvals[$_])" } }) })
-                sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
+                sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Agent, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         } catch { Write-RunDataLog "run data: could not write $base.json: $_" 'WARN' }
 

@@ -559,6 +559,10 @@ $script:SessionDefaults = [ordered]@{
     intake  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 40; timeoutMinutes = 20; maxBudgetUsd = 0.75; maxPerDay = 6 }
     # the memory agent (options.memoryAgent): tool-less, input in the prompt, JSON out, validated by the runner
     memory  = [ordered]@{ model = 'claude-haiku-5-5'; maxTurns = 5; timeoutMinutes = 5; maxBudgetUsd = 0.10; maxPerDay = 2 }
+    # Phase 2 (options.observerPm): the Observer runs only when a workflow file or a metric changed (read-only,
+    # findings JSON out); the PM replaces the propose session (reads findings, opens proposals that cite them)
+    observe = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 30; timeoutMinutes = 15; maxBudgetUsd = 0.60; maxPerDay = 2 }
+    pm      = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
 }
 
 # Run-wide switches from sessions.json's "options" object (all optional; these are the safe defaults).
@@ -580,9 +584,13 @@ $script:SessionDefaults = [ordered]@{
 #   context / shot / detect; ui-ux-pro-max's search.py) and get LOOP.md section 9 (Get-DesignSkillsSetup).
 #   proposeMetricsDigest: the runner GETs /api/metrics/summary (7 and 30 days) once and puts it in the proposal /
 #   review header as METRICS (Format-MetricsDigest), so the session needs no HTTP call for it.
+#   Phase 2: observerPm splits Phase B into the Observer (only on change) and the PM (only on new input with a free
+#   slot; product-intel.ps1 Get-CoordinatorDecision); off = the single propose session as before (needs productStore).
+#   observeMetricPoints: a 7-day metrics rate that moved by at least this many percentage points since the last
+#   observation makes the Observer run.
 $script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; proposeMetricsDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
     productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false
-    designSkills = $false }
+    designSkills = $false; observerPm = $false; observeMetricPoints = 10 }
 
 # ---- design skills (options.designSkills) ----------------------------------------------------------
 # Pinned copies outside Ve's ~\.claude (guard.mjs keeps sessions out of it: credentials live there). Only
@@ -598,7 +606,7 @@ $script:DesignSkillPaths = [ordered]@{
     # Python is a per-user install, not on the machine PATH the runner starts from (lib.ps1): prepended for sessions
     PythonDir    = ('{0}\Programs\Python\Python312' -f $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { "$env:USERPROFILE\AppData\Local" }))
 }
-$script:DesignSkillKinds = @('build', 'propose', 'review')
+$script:DesignSkillKinds = @('build', 'propose', 'review', 'observe', 'pm')
 
 # What the runner adds when options.designSkills is on and the files check out: Ok/Reason (why it is off),
 # Allow (the permission rules for the session kinds in DesignSkillKinds), PathPrepend (Python's folder, put in
@@ -666,7 +674,7 @@ function Format-BudgetUsd { param([double]$Usd) return $Usd.ToString('0.00', [Gl
 # ---- daily session caps (run-loop.ps1 keeps the counts in <LOOP_HOME>\state\daily-sessions.json) ----------
 # Every approval starts a run, so without a cap a busy day has no upper bound. The counts are per local day
 # and per kind (build | propose | review); a launch is counted when the session is started (never in a dry run).
-$script:DailyCapKinds = @('build', 'propose', 'review', 'intake', 'memory')
+$script:DailyCapKinds = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm')
 
 # Today's counts from the saved state ($null / another day / garbage = all zero).
 function Get-DailyCounts {
@@ -1079,7 +1087,7 @@ function Split-BuildableByBudget {
 # (-Request) but never the plan budget's hold.
 function Get-PrecheckDecision {
     param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true,
-        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @())
+        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @(), $Coordinator = $null)
     $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
     if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
     if ($Mode -ne 'PRODUCT_REVIEW' -and $Intake -gt 0) { return (& $mk $true "$Intake request(s) of Ve's to plan (intake goes first)") }
@@ -1108,7 +1116,11 @@ function Get-PrecheckDecision {
     $why += "$free free proposal slot(s) ($aw awaiting review, cap $($Queue.slots.cap))"
     if ($free -gt 0 -and -not $PhaseBAllowed) { $why += 'the proposal model is not allowed by the plan budget' }
     if ($free -gt 0 -and $PhaseBCap) { $why += "proposals: $PhaseBCap" }
-    $launch = (($Mode -eq 'FULL' -and $b -gt 0 -and -not $BuildCap) -or ($free -gt 0 -and $PhaseBAllowed -and -not $PhaseBCap))
+    $pb = ($free -gt 0 -and $PhaseBAllowed -and -not $PhaseBCap)
+    # Phase 2 (options.observerPm): Phase B runs only when the coordinator (product-intel.ps1) says the Observer or
+    # the PM has work; its caps and the plan budget are already folded into its decision. Idle = no session, $0.
+    if ($null -ne $Coordinator) { $pb = [bool]$Coordinator.PhaseB; $why += "phase B: $(if ($pb) { 'observer/pm needed' } else { 'idle (no change to observe, nothing new for the PM)' })" }
+    $launch = (($Mode -eq 'FULL' -and $b -gt 0 -and -not $BuildCap) -or $pb)
     return (& $mk $launch ($why -join ', '))
 }
 
@@ -1218,7 +1230,7 @@ function Get-RequestPlanChildren {
 # loop's latest comment. The approval watcher keeps a LITERAL COPY of this function (it runs from an
 # admin-only folder and dot-sources nothing): change both together (test-queue-rules.ps1 compares them).
 function Get-RequestTriggerDecision {
-    param($Issue, [object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    param($Issue, [object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->', [string]$AgentMarker = '<!-- claude-agent -->')
     $mk = { param([bool]$N, [string]$K, [string]$Why) [pscustomobject]@{ NeedsIntake = $N; Key = $K; Reason = $Why } }
     if (-not $Issue) { return (& $mk $false '' 'no issue') }
     $l = @(@($Issue.labels) | Where-Object { $_ } | ForEach-Object { if ($_ -is [string]) { $_ } else { "$($_.name)" } })
@@ -1229,7 +1241,8 @@ function Get-RequestTriggerDecision {
     if ("$($Issue.body)".Contains($Marker)) { return (& $mk $false '' 'body carries the loop marker') }
     if ($l -contains 'loop:declined') { return (& $mk $false '' 'declined') }
     if ($l -contains 'loop:planned') { return (& $mk $false '' 'already planned') }
-    $cs = @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner } | Sort-Object { [datetime]$_.created_at })
+    # a comment an agent posted as the owner (<!-- claude-agent -->) is neither Ve's answer nor the loop's question
+    $cs = @($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and -not "$($_.body)".Contains($AgentMarker) } | Sort-Object { [datetime]$_.created_at })
     $ve = @($cs | Where-Object { -not "$($_.body)".Contains($Marker) })
     $loop = @($cs | Where-Object { "$($_.body)".Contains($Marker) })
     $lastVe = $null; if ($ve.Count -gt 0) { $lastVe = $ve[-1] }
