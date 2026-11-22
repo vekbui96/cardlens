@@ -442,6 +442,92 @@ async function connectWithValueHistory(page: Page, rows: unknown[]): Promise<voi
   );
 }
 
+/**
+ * The five `?seed=collection` sets, named through the app's own cache key so
+ * their printings requests are actually made (a set with no name is never
+ * asked about), then answered by the route below.
+ */
+async function nameSeededSets(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const sets = [
+      { id: "base2", name: "Jungle", total: 64, printedTotal: 64 },
+      { id: "ecard3", name: "Skyridge", total: 182, printedTotal: 144 },
+      { id: "ex2", name: "Sandstorm", total: 100, printedTotal: 100 },
+      { id: "ex10", name: "Unseen Forces", total: 145, printedTotal: 115 },
+      { id: "pop3", name: "POP Series 3", total: 17, printedTotal: 17 },
+    ];
+    localStorage.setItem("cardlens:v1:cache:sets:v3", JSON.stringify({ all: { value: sets, storedAt: Date.now() } }));
+  });
+}
+
+/** The seeded card in each set: [setId, collector number, finish]. */
+const SEEDED: Array<[string, string, string]> = [
+  ["base2", "4", "holo"],
+  ["ecard3", "13", "normal"],
+  ["ex2", "6", "holo"],
+  ["ex10", "8", "holo"],
+  ["pop3", "3", "normal"],
+];
+
+function printingsBody(setId: string): string {
+  const byNumber: Record<string, unknown[]> = {};
+  for (const [set, number, finish] of SEEDED) {
+    if (set === setId) byNumber[number] = [{ type: finish, price: 12.5 }];
+  }
+  return JSON.stringify({ tcgdexSetId: setId, byNumber });
+}
+
+function routeSetId(url: string): string {
+  return decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "");
+}
+
+test.describe("prices in flight @visual", () => {
+  /**
+   * Every printings request held open: nothing is priced yet, so the total is
+   * still to come. A request that never answers, not an aborted one — an abort
+   * is a failure, which is a different screen.
+   */
+  test("prices loading", async ({ page }) => {
+    await nameSeededSets(page);
+    await page.route("**/api/printings/**", () => {
+      // Never answered.
+    });
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Collection value" })).toBeVisible();
+    await expect(page.getByText("Pricing 5 sets…")).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-prices-loading.png", { fullPage: true });
+  });
+
+  /**
+   * A 429 burst: two sets answer, three are rate limited and their one retry is
+   * still out. Held mid-retry so the shot is the state the reader sees while
+   * the app is trying again.
+   */
+  test("prices rate limited", async ({ page }) => {
+    await nameSeededSets(page);
+    const asked = new Set<string>();
+    await page.route("**/api/printings/**", (route) => {
+      const setId = routeSetId(route.request().url());
+      if (setId === "base2" || setId === "ecard3") {
+        return route.fulfill({ status: 200, contentType: "application/json", body: printingsBody(setId) });
+      }
+      if (!asked.has(setId)) {
+        asked.add(setId);
+        return route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"rate_limited"}' });
+      }
+      // The retry: never answered.
+      return undefined;
+    });
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Collection value" })).toBeVisible();
+    await expect.poll(() => asked.size).toBe(3);
+    await expect(page.getByRole("main")).toContainText(/2 of 5/);
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-prices-rate-limited.png", { fullPage: true });
+  });
+});
+
 test.describe("value over time @visual", () => {
   test("a month of daily values, with gaps", async ({ page }) => {
     await connectWithValueHistory(page, seededValueRows());
