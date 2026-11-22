@@ -165,6 +165,19 @@
   --v2-header-h: 56px;
   --v2-gutter: var(--v2-space-4);
 
+  /*
+   * Safe areas (#126). The viewport is `viewport-fit=cover`, and an installed
+   * app uses a translucent status bar, so on a notched phone the page draws
+   * under the status bar and, in landscape, beside the notch. These are 0 on
+   * any screen without one (the glasses never render v2's shell anyway).
+   * Tokens rather than raw `env()` so a test can simulate a notch.
+   */
+  --v2-safe-top: env(safe-area-inset-top, 0px);
+  --v2-safe-left: env(safe-area-inset-left, 0px);
+  --v2-safe-right: env(safe-area-inset-right, 0px);
+  /* The header's real height: its own row plus the status bar it pads past. */
+  --v2-header-offset: calc(var(--v2-header-h) + var(--v2-safe-top));
+
   /* The side panel's width when it is open. Shut, it is `--v2-space-0`. */
   --v2-rail-w: 320px;
 }

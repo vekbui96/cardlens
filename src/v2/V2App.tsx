@@ -3,6 +3,7 @@ import "./tokens.css";
 import "./shell/reset.css";
 import { V2Shell } from "./shell/V2Shell.tsx";
 import { V2Router } from "./V2Router.tsx";
+import { followThemeColor } from "./shell/themeColor.ts";
 
 /**
  * The v2 entry point, and the only module `App.tsx` knows about.
@@ -21,6 +22,10 @@ import { V2Router } from "./V2Router.tsx";
  */
 export function V2App() {
   useUiAttribute();
+  // After useUiAttribute, in the same component: effects run in order, and the
+  // colour only exists once `<html>` carries `data-ui="v2"`. (A child's effect
+  // would run first and read nothing.)
+  useThemeColor();
   return (
     <V2Shell version="v2">
       <V2Router />
@@ -40,6 +45,14 @@ export function V2App() {
  * Removed on unmount so nothing is left behind if v2 is ever mounted and
  * discarded within one page — the workshop and the tests both do that.
  */
+/** The browser's theme-color follows v2's header while v2 is up (#126). */
+function useThemeColor(): void {
+  useEffect(() => {
+    const root = document.documentElement;
+    return followThemeColor(document, getComputedStyle(root).getPropertyValue("--v2-surface"));
+  }, []);
+}
+
 function useUiAttribute(): void {
   useEffect(() => {
     const root = document.documentElement;

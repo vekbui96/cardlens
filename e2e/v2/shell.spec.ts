@@ -29,6 +29,20 @@ test.describe("version resolution", () => {
     expect(await shell.isShowing()).toBe(false);
   });
 
+  test("the browser bar takes v2's header colour, and v1 keeps black (#126)", async ({ page }) => {
+    const themeColor = page.locator('meta[name="theme-color"]');
+    await openV2(page);
+    // `--v2-surface`, read back from the page rather than repeated here.
+    const surface = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--v2-surface").trim(),
+    );
+    expect(surface).not.toBe("");
+    await expect(themeColor).toHaveAttribute("content", surface);
+
+    await page.goto("/?v=1");
+    await expect(themeColor).toHaveAttribute("content", "#000000");
+  });
+
   test("a 600x600 viewport renders v1 whatever ?v= says", async ({ page }) => {
     // The glasses. v2 is a web rebuild and must never mount on the device —
     // gated in `activeUiVersion`, not in the shell, so no v2 code can run there.
