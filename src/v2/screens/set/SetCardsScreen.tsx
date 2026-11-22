@@ -4,6 +4,7 @@ import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useSetView } from "../../../hooks/useSetView.ts";
 import { RARITY_FILTERS } from "../../../features/results/rarityFilters.ts";
 import { BINDER_PAGE_SIZE } from "../../../models/binder.ts";
+import { FinishLine } from "./FinishLine.tsx";
 import { SetPocket } from "./SetPocket.tsx";
 import { SetSwitcher } from "./SetSwitcher.tsx";
 import {
@@ -113,6 +114,8 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
               : `${ownedPrintings} printings held · total not known yet`
           }
         />
+
+        <FinishLine slots={slots} priceFor={priceFor} settled={settled} />
 
         <Notices
           printingsKnown={view.printings !== null}
