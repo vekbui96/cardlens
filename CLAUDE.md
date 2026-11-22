@@ -6,7 +6,7 @@ Most of this was learned the hard way; the numbers and incident stories live in 
 
 - **Something broken, or deploying?** `docs/runbook.md` — triage order, exact commands, outage traps.
 - **Starting a session?** `docs/handoff.md` — current state, what is half-built, what not to re-litigate. This file is the durable rules.
-- **Innovation loop.** `innovation/` is a daily unattended loop (`innovation/README.md`) for the loop's OWN ideas only. Ve's direct requests never go through it and need no issue. Do not edit `innovation/` as part of other work; never add the `approved` label.
+- **Innovation loop.** `innovation/` is a daily unattended loop (`innovation/README.md`) for the loop's OWN ideas, plus requests Ve files on purpose as `loop:request` issues (Request template). Ve's direct requests in chat never go through it and need no issue. Do not edit `innovation/` as part of other work; never add the `approved` label.
 
 ## Read when… (index)
 

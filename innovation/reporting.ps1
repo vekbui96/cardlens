@@ -936,3 +936,74 @@ function Publish-SpecProgress {
     }
     return @($done)
 }
+
+# ==================================================================================================
+# Ve's requests (loop:request): the runner's ONE plan comment per request (created after the intake session,
+# then edited in place as the progress checklist), loop:planned, and the closing synopsis. Needs gate-rules.ps1
+# (Format-RequestPlan, Format-RequestSynopsis, Get-RequestProblems) dot-sourced. Never throws.
+# ==================================================================================================
+# Create (CommentId 0) or edit the plan comment on request $Request. $Children: Get-RequestChildState objects.
+# Returns the comment id, or 0 when nothing was written. A comment id that is not this loop's plan comment on
+# this request is never edited.
+function Publish-RequestPlan {
+    param([string]$LoopHome, [string]$RunId, [string]$Repo, [string]$GhExe, [int]$Request, [object[]]$Children = @(), [string]$Mode = '',
+        [long]$CommentId = 0, [string]$Marker = '<!-- innovation-loop -->', [string]$Who = 'Ve', [switch]$NoPost)
+    try {
+        $body = Format-RequestPlan -Request $Request -Children $Children -Mode $Mode -RunId $RunId -Marker $Marker -Who $Who
+        $dir = Join-Path $LoopHome 'state\request'
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if ($NoPost) { [IO.File]::WriteAllText((Join-Path $dir "request-$Request.md"), $body, (New-Object Text.UTF8Encoding $false)); return [long]0 }
+        $key = (($body -split "`n") | Where-Object { $_ -notmatch '^<sub>Updated by the runner' }) -join "`n"
+        $hash = [BitConverter]::ToString((New-Object Security.Cryptography.SHA256Managed).ComputeHash([Text.Encoding]::UTF8.GetBytes($key))) -replace '-', ''
+        $sp = Join-Path $dir "request-$Request.json"
+        $st = $null; if (Test-Path -LiteralPath $sp) { try { $st = [IO.File]::ReadAllText($sp) | ConvertFrom-Json } catch { } }
+        if ($CommentId -gt 0 -and $st -and [long]$st.commentId -eq $CommentId -and "$($st.hash)" -eq $hash) { return $CommentId }
+        $tmp = Join-Path $dir "request-$Request.body.json"
+        [IO.File]::WriteAllText($tmp, (@{ body = $body } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+        $cid = $CommentId; $ok = $false
+        if ($cid -gt 0) {
+            $g = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/comments/$cid")
+            $own = $false
+            if ($g.Code -eq 0) { $c = $g.Output | ConvertFrom-Json; $own = ("$($c.issue_url)" -like "*/repos/$Repo/issues/$Request") -and "$($c.body)".Contains($Marker) -and "$($c.body)".Contains($script:RequestPlanMarker) }
+            if (-not $own) { Write-RunDataLog "request plan: comment $cid is not this loop's plan on #$Request; not touching it" 'WARN'; return [long]0 }
+            $r = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/comments/$cid", '-X', 'PATCH', '--input', $tmp); $ok = ($r.Code -eq 0)
+        } else {
+            $r = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$Request/comments", '-X', 'POST', '--input', $tmp)
+            if ($r.Code -eq 0) { $cid = [long](($r.Output | ConvertFrom-Json).id); $ok = $true }
+        }
+        if (-not $ok) { Write-RunDataLog "request plan: could not write the plan on #$Request" 'WARN'; return [long]0 }
+        [IO.File]::WriteAllText($sp, (@{ request = $Request; commentId = $cid; hash = $hash; runId = $RunId } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+        return $cid
+    } catch { Write-RunDataLog "request plan #${Request}: $_" 'WARN'; return [long]0 }
+}
+
+# Every run: refresh each planned request's checklist; when every listed issue is closed (deployed or closed by
+# Ve), post the synopsis and close the request. $Plans: check-approval.ps1 -List `requestPlans`. Returns the
+# requests it closed.
+function Publish-RequestProgress {
+    param([string]$LoopHome, [string]$RunId, [string]$Repo, [string]$GhExe, [object[]]$Plans = @(), [string]$Marker = '<!-- innovation-loop -->',
+        [string]$Who = 'Ve', [switch]$NoPost)
+    $closed = @()
+    foreach ($p in @($Plans | Where-Object { $_ })) {
+        try {
+            $n = [int]$p.request
+            $kids = @(@($p.children) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Number = [int]$_.number; Title = "$($_.title)"; Status = "$($_.status)"; Done = [bool]$_.done; Deployed = [bool]$_.deployed; Failed = [bool]$_.failed; Manual = [bool]$_.manual } })
+            [void](Publish-RequestPlan -LoopHome $LoopHome -RunId $RunId -Repo $Repo -GhExe $GhExe -Request $n -Children $kids -Mode "$($p.mode)" -CommentId ([long]$p.planCommentId) -Marker $Marker -Who $Who -NoPost:$NoPost)
+            if ($kids.Count -eq 0 -or @($kids | Where-Object { -not $_.Done }).Count -gt 0) { continue }
+            $syn = Format-RequestSynopsis -Request $n -Children $kids -What "$($p.what)" -Marker $Marker
+            if ($NoPost) { Write-RunDataLog "request progress: #$n is complete (dry run: synopsis not posted)"; continue }
+            $v = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$n")
+            if ($v.Code -ne 0) { continue }
+            $iss = $v.Output | ConvertFrom-Json
+            if (@(Get-RequestProblems -Issue $iss -Owner $script:Owner -Marker $Marker).Count -gt 0) { Write-RunDataLog "request progress: #$n is no longer an open request of $($script:Owner); not closing it" 'WARN'; continue }
+            $tmp = Join-Path $LoopHome "state\request\request-$n.synopsis.json"
+            [IO.File]::WriteAllText($tmp, (@{ body = $syn } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+            $r = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$n/comments", '-X', 'POST', '--input', $tmp)
+            if ($r.Code -ne 0) { Write-RunDataLog "request progress: could not post the synopsis on #$n" 'WARN'; continue }
+            $cl = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('issue', 'close', "$n", '-R', $Repo, '--reason', 'completed')
+            if ($cl.Code -eq 0) { Write-RunDataLog "request progress: every issue of request #$n is done; synopsis posted and the request closed"; $closed += $n }
+            else { Write-RunDataLog "request progress: closing #$n failed: $($cl.Output)" 'WARN' }
+        } catch { Write-RunDataLog "request progress: #$($p.request): $_" 'WARN' }
+    }
+    return @($closed)
+}
