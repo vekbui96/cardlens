@@ -21,6 +21,23 @@
   font-size: var(--v2-fs-small);
 }
 
+/* The link keeps the line's height; its ::after widens the tap area to 44px. */
+.statLink {
+  position: relative;
+  color: inherit;
+  text-decoration: none;
+}
+
+.statLink::after {
+  content: "";
+  position: absolute;
+  inset: -14px -6px;
+}
+
+.statLink:hover {
+  text-decoration: underline;
+}
+
 .statNumber {
   color: var(--v2-fg);
   font-weight: var(--v2-fw-medium);

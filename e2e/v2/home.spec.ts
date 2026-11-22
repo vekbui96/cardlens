@@ -353,6 +353,9 @@ test.describe("home @visual", () => {
     });
     await openV2(page, "/", { seed: "numbered" });
     await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    const link = page.getByRole("link", { name: "1 complete: see the Completed group" });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", /#\/sets$/);
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-complete-sets.png", { fullPage: true });
   });

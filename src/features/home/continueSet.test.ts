@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { continueTarget, topProgress } from "./continueSet.ts";
+import { completeSetCount, continueTarget, topProgress } from "./continueSet.ts";
 import type { OwnedCard } from "../../storage/repositories.ts";
 import type { PokemonSet } from "../../models/cards.ts";
 
@@ -98,5 +98,38 @@ describe("topProgress with collector numbers", () => {
     expect(target?.tiers.baseOwned).toBe(190);
     expect(target?.tiers.masterOwned).toBe(190);
     expect(target?.tiers.tier).toBe("none");
+  });
+});
+
+describe("completeSetCount", () => {
+  const known: PokemonSet[] = [
+    { id: "a", name: "A", total: 10 },
+    { id: "b", name: "B", total: 10 },
+    { id: "c", name: "C", total: 10 },
+  ];
+
+  it("counts owned sets that reach their size", () => {
+    expect(completeSetCount({ a: 10, b: 12 }, known)).toBe(2);
+  });
+
+  it("does not count a set one card short", () => {
+    expect(completeSetCount({ a: 9 }, known)).toBe(0);
+  });
+
+  it("does not count a set whose size is unknown, or that is not in the list", () => {
+    const noSize: PokemonSet[] = [{ id: "a", name: "A" }];
+    expect(completeSetCount({ a: 50, zzz: 50 }, noSize)).toBe(0);
+  });
+
+  it("is zero when nothing is owned or the sets are not loaded", () => {
+    expect(completeSetCount({}, known)).toBe(0);
+    expect(completeSetCount({ a: 10 }, undefined)).toBe(0);
+  });
+
+  it("uses the base tier when collector numbers are known", () => {
+    const tiered: PokemonSet[] = [{ id: "w", name: "W", total: 12, printedTotal: 10 }];
+    const base = Array.from({ length: 10 }, (_, i) => String(i + 1));
+    expect(completeSetCount({ w: 10 }, tiered, { w: base })).toBe(1);
+    expect(completeSetCount({ w: 10 }, tiered)).toBe(0);
   });
 });
