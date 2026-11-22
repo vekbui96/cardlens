@@ -302,6 +302,88 @@ test.describe("home @visual", () => {
   });
 });
 
+/**
+ * Value over time (#117). The rows come from `GET /api/value-history`, which
+ * needs the sync token, so the device is "connected" with a token the scratch
+ * server would refuse — and every sync and metrics request is aborted before it
+ * leaves the page. That keeps the scratch collection untouched by these tests
+ * (other specs share it) and keeps Home free of the "token rejected" notice:
+ * an aborted sync is "offline", which only the shell's header says, and the
+ * header's label is hidden in snapshots.
+ */
+const VALUE_TOKEN = "value-history-visual";
+
+/** `YYYY-MM-DD` for a day `back` days before today, in this machine's local time. */
+function localDay(back: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - back);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Thirty days ending today, with the three kinds of hole a real file has: a
+ * day with no row (the server was off), a day where nothing could be priced,
+ * and a row in another currency. All three must read as gaps.
+ */
+function seededValueRows() {
+  const rows = [];
+  for (let back = 29; back >= 0; back--) {
+    if (back === 18) continue; // no row at all
+    const total = 6900 + (29 - back) * 9 + (back % 4) * 14;
+    rows.push({
+      day: localDay(back),
+      total: back === 9 ? 0 : total,
+      priced: back === 9 ? 0 : 2184 - (back % 3) * 40,
+      printings: 2363,
+      cards: 2001,
+      currency: back === 24 ? "EUR" : "USD",
+      at: 1_700_000_000_000,
+    });
+  }
+  return rows;
+}
+
+async function connectWithValueHistory(page: Page, rows: unknown[]): Promise<void> {
+  await page.addInitScript((token) => {
+    localStorage.setItem(
+      "cardlens:v1:sync-settings",
+      JSON.stringify({ token, lastPushedAt: 0, lastPulledAt: 0, lastSyncAt: 0 }),
+    );
+  }, VALUE_TOKEN);
+  for (const pattern of ["**/api/collection**", "**/api/binders**", "**/api/metrics**"]) {
+    await page.route(pattern, (route) => route.abort());
+  }
+  await page.route("**/api/value-history", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "cache-control": "no-store" },
+      body: JSON.stringify({ version: 1, rows }),
+    }),
+  );
+}
+
+test.describe("value over time @visual", () => {
+  test("a month of daily values, with gaps", async ({ page }) => {
+    await connectWithValueHistory(page, seededValueRows());
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-value-history.png", { fullPage: true });
+  });
+
+  test("no rows saved yet", async ({ page }) => {
+    await connectWithValueHistory(page, []);
+    await openV2(page, "/", { seed: "collection" });
+    await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-value-history-empty.png", { fullPage: true });
+  });
+});
+
 test.describe("since you last looked (#110)", () => {
   const KEY = "cardlens:v1:last-look:v1";
 
