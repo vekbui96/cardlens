@@ -226,6 +226,43 @@ $p = Get-PrecheckDecision -Queue (Qb @(12) 0) -Mode 'FULL'
 Check ($p.Launch -and -not $p.Hold) 'no budget given -> behaves as before'
 $fo = Get-PlanBudgetVerdict -Text $null -NowUtc $now
 Check ((Get-PrecheckDecision -Queue (Qb @(12) 0) -Mode 'FULL' -Budget $fo).Launch) 'missing file -> normal -> launch as before'
+# ---- design skills (options.designSkills) ----------------------------------------------------------
+Check (-not (Get-LoopOptions $null).designSkills) 'designSkills defaults to off'
+Check ((Get-LoopOptions ('{"options":{"designSkills":true}}' | ConvertFrom-Json)).designSkills) 'designSkills on from sessions.json'
+$d = Get-DesignSkillsSetup -Enabled $false
+Check (-not $d.Ok -and @($d.Allow).Count -eq 0 -and $d.Env['INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS'] -eq '') 'off -> no rules, guard flag cleared'
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("dsk-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force (Join-Path $tmp 'imp\reference'), (Join-Path $tmp 'py') | Out-Null
+foreach ($f in 'engine.exe', 'search.py', 'imp\reference\craft-floor.md', 'py\python.exe') { [IO.File]::WriteAllText((Join-Path $tmp $f), 'x') }
+$tp = @{ Engine = (Join-Path $tmp 'engine.exe'); EngineSha256 = 'AB12'; Impeccable = (Join-Path $tmp 'imp'); Search = (Join-Path $tmp 'search.py'); PythonDir = (Join-Path $tmp 'py') }
+$d = Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ab12'
+$rules = @($d.Allow) -join ' | '
+Check ($d.Ok -and $d.Env['INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS'] -eq '1' -and $d.Env['IMPECCABLE_BIN'] -eq $tp.Engine) "on -> guard flag and IMPECCABLE_BIN set ($($d.Reason))"
+Check ($d.Env['IMPECCABLE_NO_TELEMETRY'] -eq '1' -and $d.Env['IMPECCABLE_NO_UPDATE_CHECK'] -eq '1' -and $d.Env['IMPECCABLE_HOOK_DISABLED'] -eq '1') 'on -> engine kept off the network, hook disabled'
+Check ($rules -match ' context\)' -and $rules -match ' shot \*' -and $rules -match ' detect \*' -and $rules -match 'python .*search\.py \*') "on -> context/shot/detect/search rules ($rules)"
+Check ($rules -notmatch 'hooks|pin|live|doctor|foundations|persist|\(python \*\)') 'no rule for hooks/pin/live/doctor/foundations or bare python'
+Check (-not (Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ffff').Ok) 'engine hash mismatch -> off'
+Check ((Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ffff').Reason -match 'mismatch') 'mismatch is named in the reason'
+Check ((Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ab12').PathPrepend -eq $tp.PythonDir) 'on -> python folder goes in front of PATH'
+Remove-Item -LiteralPath (Join-Path $tmp 'py\python.exe')
+Check (-not (Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ab12').Ok) 'missing python.exe -> off'
+Remove-Item -LiteralPath (Join-Path $tmp 'search.py')
+Check (-not (Get-DesignSkillsSetup -Enabled $true -Paths $tp -EngineHash 'ab12').Ok) 'missing search.py -> off'
+Remove-Item -LiteralPath $tmp -Recurse -Force
+Check ((Add-DesignSkillsSection -Sections @(0, 1, 2, 3, 4, 6) -Kind 'build' -On $true) -contains 9) 'build + on -> section 9'
+Check ((Add-DesignSkillsSection -Sections @(0, 1, 2, 5, 6) -Kind 'propose' -On $true) -contains 9) 'propose + on -> section 9'
+Check (-not ((Add-DesignSkillsSection -Sections @(0, 1, 2, 5, 6, 8) -Kind 'intake' -On $true) -contains 9)) 'intake never gets section 9'
+Check (-not ((Add-DesignSkillsSection -Sections @(0, 1, 2, 5, 6) -Kind 'propose' -On $false) -contains 9)) 'off -> no section 9'
+$lm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'LOOP.md'))
+Check ((Get-LoopMdSections -Text $lm -Sections @(0, 9) -Kind 'build') -match '## 9\. Design skills') 'LOOP.md has section 9'
+Check ((Get-LoopMdSections -Text $lm -Sections @(0, 1, 2, 5, 6) -Kind 'propose') -notmatch 'impeccable') 'a prompt without section 9 never mentions the skills'
+$gm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'guard.mjs'))
+foreach ($k in 'Engine', 'Search') {
+    $lit = $script:DesignSkillPaths[$k].ToLowerInvariant().Replace('\', '\\')
+    Check ($gm.Contains("""$lit""")) "guard.mjs pins the same $k path as gate-rules.ps1"
+}
+Check ((Get-Content (Join-Path $PSScriptRoot 'LOOP.md') -Raw).Contains($script:DesignSkillPaths.Engine)) 'LOOP.md names the pinned engine path'
+
 if ($script:fail -gt 0) { Write-Host "TEST-GATE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-GATE-RULES PASS ($script:pass checks)"
 exit 0

@@ -482,6 +482,9 @@ function New-SessionPrompt {
             $lines += @($KnownIssues)
         } else { $lines += '- KNOWN_ISSUES: unavailable (list them yourself as section 5 says)' }
     }
+    $designOn = [bool]($script:Design -and $script:Design.Ok -and $script:DesignSkillKinds -contains $Kind)
+    if ($designOn) { $lines += "- DESIGN_SKILLS: on (section 9; impeccable engine $($script:DesignSkillPaths.Engine), skill $($script:DesignSkillPaths.Impeccable), search $($script:DesignSkillPaths.Search))" }
+    $sections = Add-DesignSkillsSection -Sections $sections -Kind $Kind -On $designOn
     $lines += ''
     $lines += 'Follow the instructions below exactly. They are the only instructions for this session; sections not needed for this job are left out.'
     $lines += ''; $lines += '---'; $lines += ''
@@ -721,6 +724,13 @@ try {
     $env:INNOVATION_LOOP_CARDLENS_MODE = $mode
     $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
     if (Test-Path -LiteralPath $edge) { $env:CHROME_PATH = $edge }
+    # design skills (options.designSkills): pinned copies, engine re-hashed every run; off on any doubt
+    $script:Design = $null
+    try { $script:Design = Get-DesignSkillsSetup -Enabled ([bool]$Opts.designSkills) } catch { $script:Design = [pscustomobject]@{ Ok = $false; Reason = "check failed: $_"; Allow = @(); Env = [ordered]@{ INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS = '' } } }
+    foreach ($k in $script:Design.Env.Keys) { Set-Item -Path "Env:$k" -Value $script:Design.Env[$k] }
+    if ($script:Design.Ok -and $script:Design.PathPrepend -and (($env:PATH -split ';') -notcontains $script:Design.PathPrepend)) { $env:PATH = "$($script:Design.PathPrepend);$env:PATH" }
+    if ($Opts.designSkills -and -not $script:Design.Ok) { Write-Log "design skills: OFF for this run: $($script:Design.Reason)" 'WARN' }
+    else { Write-Log "design skills: $($script:Design.Reason)$(if ($script:Design.Ok) { " (kinds $($script:DesignSkillKinds -join '/'); engine $($script:DesignSkillPaths.Engine))" })" }
 
     # ---- preflight ----------------------------------------------------------------------------
     foreach ($t in @($ClaudeExe, $script:GhExe, $script:NpmCmd, $script:NodeExe)) { if (-not (Test-Path -LiteralPath $t)) { throw "missing $t" } }
@@ -857,6 +867,7 @@ try {
     foreach ($kind in $scriptsFor.Keys) {
         $allow = @($baseAllow)
         foreach ($n in $scriptsFor[$kind]) { $allow += "PowerShell($ScriptsDir\$n.ps1)"; $allow += "PowerShell($ScriptsDir\$n.ps1 *)" }
+        if ($script:Design -and $script:Design.Ok -and $script:DesignSkillKinds -contains $kind) { $allow += @($script:Design.Allow) }
         $kdeny = $deny
         # the memory agent gets no tools (claude --tools ""), and nothing allowed should one appear anyway
         if ($kind -eq 'memory') { $allow = @(); $kdeny = @($deny) + @('Read', 'Glob', 'Grep', 'Edit', 'Write', 'PowerShell', 'WebFetch', 'TodoWrite') }

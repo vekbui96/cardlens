@@ -528,8 +528,102 @@ const memoryDeny = [
   { tool_name: "Write", tool_input: { file_path: `${W}\\x.md`, content: "x" } },
 ];
 
+// design skills (sessions.json options.designSkills -> INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS=1): the pinned
+// impeccable engine (context / shot / detect only) and ui-ux-pro-max's search.py (read-only flags only)
+const E = "D:\\loop-tools\\impeccable-engine\\0.1.27\\impeccable.exe";
+const PY = "python D:\\loop-tools\\skills\\ui-ux-pro-max\\scripts\\search.py";
+const designEnv = {
+  ...env,
+  INNOVATION_LOOP_CARDLENS_MODE: "BUILD",
+  INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1",
+};
+const designProposeEnv = { ...designEnv, INNOVATION_LOOP_CARDLENS_MODE: "PROPOSE" };
+const designAllow = [
+  ps(`${E} context`),
+  ps(`${E} context --target "${C}\\src\\v2"`),
+  ps(`${E} shot https://vekbui96.github.io/cardlens/ --viewport 390x844 --out "${W}\\shots-12"`),
+  ps(
+    `${E} shot https://vekbui96.github.io/cardlens/?ui=web --viewport 390x844,1280x800 --full --out "${HOME}\\artifacts\\12"`,
+  ),
+  ps(`${E} shot http://127.0.0.1:5273/cardlens/ --out "${W}\\s"`),
+  ps(`${E} detect --json "${C}\\src\\v2\\home"`),
+  ps(`${E} detect --scope layout --viewport 390x844 https://vekbui96.github.io/cardlens/`),
+  ps(`${PY} 'tap target size mobile' --domain ux -n 3`),
+  ps(`${PY} 'empty state' --stack react --json`),
+  ps(`${PY} 'collection tracker app dark' --design-system -p CardLens -f markdown`),
+  {
+    tool_name: "Read",
+    tool_input: { file_path: "D:\\loop-tools\\skills\\impeccable\\reference\\craft-floor.md" },
+  },
+  // a git/gh text that merely mentions the skill is judged by the git/gh rules, not as an engine call
+  ps(`git -C "${C}" log --oneline --grep "impeccable polish"`),
+  ps(`gh pr list -R vekbui96/cardlens --search "impeccable audit"`),
+];
+const designDeny = [
+  // the hook installer, shortcuts, live mode, repairs, account/network verbs
+  ps(`${E} hooks on`),
+  ps(`${E} hooks status`),
+  ps(`${E} pin pin critique`),
+  ps(`${E} live`),
+  ps(`${E} doctor --fix`),
+  ps(`${E} doctor`),
+  ps(`${E} foundations`),
+  ps(`${E} install`),
+  ps(`${E} update`),
+  ps(`${E} login`),
+  ps(`${E} telemetry on`),
+  ps(`${E} world archives --print`),
+  ps(`${E} ignores add x`),
+  ps(`${E}`),
+  // not the pinned engine: the launcher, Ve's install, a copy in WORK
+  ps(`C:\\Users\\Ve Bui\\.claude\\skills\\impeccable\\scripts\\impeccable.cmd context`),
+  ps(`${W}\\impeccable.exe context`),
+  ps(`impeccable context`),
+  // context / shot / detect outside their lanes
+  ps(`${E} context --target D:\\projects\\cardlens\\src`),
+  ps(`${E} shot https://example.com/ --out "${W}\\s"`),
+  ps(`${E} shot https://vekbui96.github.io/cardlens/ --out D:\\projects\\cardlens\\shots`),
+  ps(`${E} shot https://vekbui96.github.io/cardlens/`),
+  ps(`${E} shot http://127.0.0.1:8787/api/collection --out "${W}\\s"`),
+  ps(`${E} detect --changed`),
+  ps(`${E} detect --github "${C}\\src"`),
+  ps(`${E} detect D:\\services\\cardlens\\src`),
+  ps(`${E} context --target $env:TEMP`),
+  // search.py: writing flags, interpreter flags, other scripts, unquoted or double-quoted queries
+  ps(`${PY} 'dashboard' --design-system --persist -p CardLens`),
+  ps(`${PY} 'dashboard' --design-system --persist --force -p CardLens`),
+  ps(`${PY} 'dashboard' --design-system --page home`),
+  ps(`${PY} 'dashboard' --design-system -o ${C}`),
+  ps(`${PY} 'dashboard' --design-system --preview`),
+  ps(`${PY} 'dashboard' --design-system --tokens css`),
+  ps(`${PY} dashboard --domain ux`),
+  ps(`${PY} "dashboard" --domain ux`),
+  ps(`python -c "import os" D:\\loop-tools\\skills\\ui-ux-pro-max\\scripts\\search.py`),
+  ps(`python D:\\loop-tools\\skills\\ui-ux-pro-max\\scripts\\design_system.py 'x'`),
+  ps(`python C:\\Users\\Ve Bui\\.claude\\skills\\ui-ux-pro-max\\scripts\\search.py 'x'`),
+  ps(`python ${W}\\search.py 'x'`),
+  // the pinned copies are read-only for sessions
+  {
+    tool_name: "Write",
+    tool_input: { file_path: "D:\\loop-tools\\skills\\impeccable\\SKILL.md", content: "x" },
+  },
+  ps(`Copy-Item ${W}\\x.exe D:\\loop-tools\\impeccable-engine\\0.1.27\\impeccable.exe`),
+  // taste is excluded from this loop entirely; its finish gate can never be armed
+  { tool_name: "Read", tool_input: { file_path: "D:\\loop-tools\\skills\\design-taste-frontend\\SKILL.md" } },
+  { tool_name: "Write", tool_input: { file_path: `${C}\\.taste-skill\\build.json`, content: "{}" } },
+  ps(`New-Item -ItemType Directory ${C}\\.taste-skill`),
+  ps(`node C:\\x\\design-taste-frontend\\scripts\\gate.mjs --hook claude`),
+];
+// with the flag off (no env var), every engine and search.py call is refused
+const designOffDeny = [ps(`${E} context`), ps(`${PY} 'tap target' --domain ux`)];
+
 let failures = 0;
 for (const [name, e, list, want] of [
+  ["design", designEnv, designAllow, 0],
+  ["design (propose)", designProposeEnv, designAllow, 0],
+  ["design", designEnv, designDeny, 2],
+  ["design (propose)", designProposeEnv, designDeny, 2],
+  ["design off", buildEnv, designOffDeny, 2],
   ["build", buildEnv, buildAllow, 0],
   ["build", buildEnv, buildDeny, 2],
   ["propose", proposeEnv, proposeAllow, 0],
@@ -603,6 +697,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);
