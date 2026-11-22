@@ -1,21 +1,35 @@
 {
-  "_readme": "Ve's file: the model, turn cap and time limit of each kind of claude session (run-loop.ps1 starts one session per job). Edit by hand; the loop only reads it. Missing or empty values fall back to the defaults in gate-rules.ps1 ($SessionDefaults). A build uses build.smallModel when its issue carries one of build.smallLabels, else build.model. run-loop.ps1 -Model / -MaxTurns override every session for one run.",
+  "_readme": "Ve's file: the model, turn cap, time limit, USD cap and daily cap of each kind of claude session (run-loop.ps1 starts one session per job). Edit by hand; the loop only reads it. Missing or empty values fall back to the defaults in gate-rules.ps1 ($SessionDefaults, $LoopOptionDefaults). A build uses build.smallModel when its issue carries one of build.smallLabels, else build.model. maxBudgetUsd is passed to claude as --max-budget-usd (0 = no cap); a build on a model that is not Opus uses build.smallMaxBudgetUsd. A session stopped by its USD cap mid-build is failure class max-budget (retried once, like max-turns). maxPerDay: at most this many sessions of the kind start per local day across all runs (0 = no cap; counts in <LOOP_HOME>\\state\\daily-sessions.json). options: proposeIssueDigest (the runner lists the issues once into the proposal header), compactPrompts (build-only LOOP.md blocks left out of proposal/review prompts), logKeepDays (prune old logs at run start; rundata.json and run-<id>.log kept; 0 = never), digestMaxIssues, digestDeployedDays. run-loop.ps1 -Model / -MaxTurns override every session for one run.",
   "build": {
     "model": "claude-opus-5-5",
     "smallModel": "claude-sonnet-5-5",
     "smallLabels": ["size:small", "test-only"],
     "maxTurns": 150,
-    "timeoutMinutes": 150
+    "timeoutMinutes": 150,
+    "maxBudgetUsd": 8,
+    "smallMaxBudgetUsd": 2.5,
+    "maxPerDay": 8
   },
   "propose": {
     "model": "claude-sonnet-5-5",
     "maxTurns": 80,
     "timeoutMinutes": 45,
-    "minMinutes": 15
+    "minMinutes": 15,
+    "maxBudgetUsd": 0.75,
+    "maxPerDay": 4
   },
   "review": {
     "model": "claude-sonnet-5-5",
     "maxTurns": 120,
-    "timeoutMinutes": 60
+    "timeoutMinutes": 60,
+    "maxBudgetUsd": 4,
+    "maxPerDay": 1
+  },
+  "options": {
+    "proposeIssueDigest": true,
+    "compactPrompts": true,
+    "logKeepDays": 30,
+    "digestMaxIssues": 150,
+    "digestDeployedDays": 3
   }
 }

@@ -508,8 +508,20 @@ function Select-SliceWaitNotices {
 # ==================================================================================================
 
 # The intro (everything before the first "## <n>." heading) plus the listed numbered sections, in order.
+# Blocks between a line `<!-- only:<kind>[,<kind>] -->` and a line `<!-- /only -->` are kept (markers removed)
+# when -Kind is empty or listed, and left out otherwise (sessions.json options.compactPrompts): a proposal
+# session does not need the build mechanics it has no permission to use anyway. Rules for every kind are
+# never inside such a block.
 function Get-LoopMdSections {
-    param([string]$Text, [int[]]$Sections)
+    param([string]$Text, [int[]]$Sections, [string]$Kind = '')
+    $Text = [regex]::Replace("$Text", '(?ms)^[ \t]*<!-- only:([a-z,\- ]+) -->[ \t]*\r?\n(.*?)^[ \t]*<!-- /only -->[ \t]*(\r?\n|\z)', {
+            param($m)
+            $kinds = @($m.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            if (-not $Kind -or $kinds -contains $Kind) { return $m.Groups[2].Value }
+            return ''
+        })
+    # prettier puts blank lines around the markers; drop the runs they leave behind
+    $Text = [regex]::Replace($Text, '\n[ \t]*\n([ \t]*\n)+', "`n`n")
     $ms = @([regex]::Matches("$Text", '(?m)^## (\d+)\.'))
     if ($ms.Count -eq 0) { return "$Text" }
     $sb = New-Object Text.StringBuilder
@@ -521,11 +533,152 @@ function Get-LoopMdSections {
     return $sb.ToString()
 }
 
-# Defaults for innovation\sessions.json (the owner's file: models, turn caps, per-session time limits).
+# Defaults for innovation\sessions.json (the owner's file: models, turn caps, per-session time limits, USD
+# caps, daily session caps). maxBudgetUsd is passed to claude as --max-budget-usd (0 = no cap); a build on a
+# model that is not Opus uses build.smallMaxBudgetUsd instead (Get-SessionBudget). maxPerDay: at most this
+# many sessions of the kind are started per local day across all runs (0 = no cap; Get-DailyCapDecision).
 $script:SessionDefaults = [ordered]@{
-    build   = [ordered]@{ model = 'claude-opus-5-5'; smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only'); maxTurns = 150; timeoutMinutes = 150 }
-    propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15 }
-    review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60 }
+    build   = [ordered]@{ model = 'claude-opus-5-5'; smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only'); maxTurns = 150; timeoutMinutes = 150
+        maxBudgetUsd = 8; smallMaxBudgetUsd = 2.5; maxPerDay = 8 }
+    propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
+    review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60; maxBudgetUsd = 4; maxPerDay = 1 }
+}
+
+# Run-wide switches from sessions.json's "options" object (all optional; these are the safe defaults).
+# proposeIssueDigest: the runner lists the issues once and puts a compact KNOWN_ISSUES block in the proposal /
+#   review header (Format-KnownIssues), so the session does not list them itself; false = the session lists them
+#   as before. compactPrompts: LOOP.md blocks marked <!-- only:<kinds> --> are left out of other kinds' prompts;
+#   false = every session gets them. logKeepDays: run logs, prompts and transcripts older than this are deleted
+#   at the start of a run (Select-PrunableLogs; rundata.json and the main run log are kept); 0 = never.
+#   digestMaxIssues: at most this many issues in KNOWN_ISSUES (the oldest deployed ones are dropped first).
+#   digestDeployedDays: deployed (closed) proposals are listed only when closed within this many days; older
+#   ones are counted (they are in the code); 0 = list them all. Open and rejected ones are always listed.
+$script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3 }
+function Get-LoopOptions {
+    param($Json)
+    $o = [ordered]@{}; foreach ($k in $script:LoopOptionDefaults.Keys) { $o[$k] = $script:LoopOptionDefaults[$k] }
+    if ($Json -and $Json.PSObject.Properties.Name -contains 'options' -and $Json.options) {
+        foreach ($p in $Json.options.PSObject.Properties) {
+            if (-not $o.Contains($p.Name) -or $null -eq $p.Value -or "$($p.Value)" -eq '') { continue }
+            if ($o[$p.Name] -is [bool]) {
+                $v = "$($p.Value)".Trim().ToLowerInvariant()
+                if ($v -in @('true', '1', 'yes')) { $o[$p.Name] = $true } elseif ($v -in @('false', '0', 'no')) { $o[$p.Name] = $false }
+            } else { $n = 0; if ([int]::TryParse("$($p.Value)", [ref]$n) -and $n -ge 0) { $o[$p.Name] = $n } }
+        }
+    }
+    return $o
+}
+
+# The USD cap for one session (claude --max-budget-usd), 0 = none. A build on a model that is not Opus uses
+# build.smallMaxBudgetUsd; an empty model (claude's own default) counts as Opus, as in Test-BudgetAllowsModel.
+function Get-SessionBudget {
+    param([string]$Kind, [string]$Model = '', $Config)
+    $c = $Config[$Kind]; if ($null -eq $c) { return [double]0 }
+    $v = $c['maxBudgetUsd']
+    $isOpus = ($Model.Trim() -eq '' -or $Model -match 'opus')
+    if ($Kind -eq 'build' -and -not $isOpus -and $c.Contains('smallMaxBudgetUsd')) { $v = $c['smallMaxBudgetUsd'] }
+    $d = [double]0
+    if (-not [double]::TryParse("$v", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$d) -or $d -le 0) { return [double]0 }
+    return $d
+}
+# '2.50' (invariant culture: claude reads a dot).
+function Format-BudgetUsd { param([double]$Usd) return $Usd.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture) }
+
+# ---- daily session caps (run-loop.ps1 keeps the counts in <LOOP_HOME>\state\daily-sessions.json) ----------
+# Every approval starts a run, so without a cap a busy day has no upper bound. The counts are per local day
+# and per kind (build | propose | review); a launch is counted when the session is started (never in a dry run).
+$script:DailyCapKinds = @('build', 'propose', 'review')
+
+# Today's counts from the saved state ($null / another day / garbage = all zero).
+function Get-DailyCounts {
+    param($State, [datetime]$Now = (Get-Date))
+    $day = $Now.ToString('yyyy-MM-dd')
+    $c = [ordered]@{ date = $day }; foreach ($k in $script:DailyCapKinds) { $c[$k] = 0 }
+    if ($null -eq $State -or "$($State.date)" -ne $day) { return $c }
+    foreach ($k in $script:DailyCapKinds) { $n = 0; if ([int]::TryParse("$($State.$k)", [ref]$n) -and $n -gt 0) { $c[$k] = $n } }
+    return $c
+}
+# The state after one more $Kind launch now (a new day starts from zero).
+function Add-DailyLaunch {
+    param($State, [string]$Kind, [datetime]$Now = (Get-Date))
+    $c = Get-DailyCounts -State $State -Now $Now
+    if ($c.Contains($Kind)) { $c[$Kind] = [int]$c[$Kind] + 1 }
+    return $c
+}
+# May another $Kind session start today? Allowed + Reason (one line for the log and summary).
+# HOOK (not wired yet): -Request marks a session started for Ve's direct request; such sessions will bypass
+# the daily cap (and take priority over the loop's own work) once direct requests run through the runner.
+function Get-DailyCapDecision {
+    param([string]$Kind, $Counts, $Config, [switch]$Request)
+    $mk = { param([bool]$A, [string]$Why) [pscustomobject]@{ Allowed = $A; Reason = $Why } }
+    if ($Request) { return (& $mk $true "a direct request: not counted against the daily $Kind cap") }
+    $cap = 0; if ($Config -and $Config[$Kind]) { [void][int]::TryParse("$($Config[$Kind]['maxPerDay'])", [ref]$cap) }
+    $used = 0; if ($Counts -and $Counts.Contains($Kind)) { $used = [int]$Counts[$Kind] }
+    if ($cap -le 0) { return (& $mk $true "no daily $Kind cap") }
+    if ($used -ge $cap) { return (& $mk $false "daily cap reached: $used of $cap $Kind session(s) already started today (sessions.json $Kind.maxPerDay)") }
+    return (& $mk $true "$Kind session $($used + 1) of at most $cap today")
+}
+
+# Loop log files that may be deleted: older than $KeepDays (by LastWriteTime), except the run data
+# (*.rundata.json: the hub's token source) and the main run logs (run-<id>.log: the hub ledger reads them).
+# $Files: objects with Name and LastWriteTime (FileInfo). $KeepDays <= 0 = nothing.
+function Select-PrunableLogs {
+    param([object[]]$Files = @(), [datetime]$Now = (Get-Date), [int]$KeepDays = 30)
+    if ($KeepDays -le 0) { return @() }
+    $cut = $Now.AddDays(-$KeepDays)
+    return @($Files | Where-Object { $_ -and $_.LastWriteTime -lt $cut -and "$($_.Name)" -notmatch '\.rundata\.json$' -and "$($_.Name)" -notmatch '^run-\d{8}-\d{6}\.log$' })
+}
+
+# The KNOWN_ISSUES block for a proposal / review header, from ONE
+# `gh issue list --state all --json number,title,state,labels,author,closedAt` (the runner's, before the session).
+# Lists every loop proposal (open by state; closed split into deployed and rejected-or-failed) plus Ve's own
+# open issues and Ve's open device-feedback issues. Titles are made single-line and shortened. Only issues
+# labelled loop:proposal or written by $Owner are listed (anyone else's issue is untrusted and left out).
+# Deployed ones are listed only when closed within $DeployedDays (0 = all); at most $Max issues in all, the
+# oldest deployed ones dropped first. Dropped ones are counted, not listed. Returns lines.
+function Format-KnownIssues {
+    param([object[]]$Issues = @(), [string]$Owner = 'vekbui96', [int]$Max = 150, [int]$TitleMax = 64, [int]$DeployedTitleMax = 48, [int]$DeployedDays = 0, [datetime]$Now = (Get-Date),
+        [hashtable]$Approvals = @{})
+    $all = @($Issues | Where-Object { $_ } | Sort-Object { [int]$_.number } -Descending)
+    $lab = { param($i) @($i.labels | ForEach-Object { if ($_.name) { "$($_.name)" } else { "$_" } }) }
+    $who = { param($i) if ($i.author -and $i.author.login) { "$($i.author.login)" } else { "$($i.author)" } }
+    $line = { param($i, [string]$Tag, [int]$Len = $TitleMax) $t = ConvertTo-SafeLine "$($i.title)" $Len; if ($Tag) { "  #$($i.number) [$Tag] $t" } else { "  #$($i.number) $t" } }
+    $loop = @($all | Where-Object { (& $lab $_) -contains 'loop:proposal' })
+    $open = @($loop | Where-Object { "$($_.state)" -match '^(?i)open$' })
+    $closed = @($loop | Where-Object { "$($_.state)" -notmatch '^(?i)open$' })
+    $deployed = @($closed | Where-Object { (& $lab $_) -contains 'loop:deployed' })
+    $rejected = @($closed | Where-Object { (& $lab $_) -notcontains 'loop:deployed' })
+    $own = @($all | Where-Object { "$($_.state)" -match '^(?i)open$' -and (& $who $_) -eq $Owner -and (& $lab $_) -notcontains 'loop:proposal' })
+    $fb = @($own | Where-Object { (& $lab $_) -contains 'device-feedback' })
+    $own = @($own | Where-Object { (& $lab $_) -notcontains 'device-feedback' })
+    $room = [math]::Max(0, $Max - $open.Count - $rejected.Count - $own.Count - $fb.Count)
+    $dropped = 0
+    if ($DeployedDays -gt 0) {
+        $since = $Now.AddDays(-$DeployedDays)
+        $recent = @($deployed | Where-Object { $c = [datetime]::MinValue; [datetime]::TryParse("$($_.closedAt)", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$c) -and $c.ToLocalTime() -ge $since })
+        $dropped = $deployed.Count - $recent.Count; $deployed = $recent
+    }
+    if ($deployed.Count -gt $room) { $dropped += $deployed.Count - $room; $deployed = @($deployed | Select-Object -First $room) }
+    $out = @()
+    $out += "open loop proposals ($($open.Count)):"
+    foreach ($i in $open) {
+        $l = & $lab $i
+        $tag = 'awaiting review'
+        $via = ''; if ($Approvals.ContainsKey([int]$i.number) -and "$($Approvals[[int]$i.number])" -like 'via-spec*') { $via = "$($Approvals[[int]$i.number])" }
+        if ($l -contains 'loop:in-progress') { $tag = 'in progress' } elseif ($l -contains 'loop:failed') { $tag = 'failed' } elseif ($l -contains 'approved') { $tag = 'approved' } elseif ($via) { $tag = "auto-approved $via" }
+        if ($l -contains 'loop:spec') { $tag = "spec, $tag" }
+        if ($l -contains 'loop:product-review') { $tag = 'product review' }
+        $out += (& $line $i $tag)
+    }
+    $out += "closed without loop:deployed = rejected or failed, never re-propose these or a close variant ($($rejected.Count)):"
+    foreach ($i in $rejected) { $tag = ''; if ((& $lab $i) -contains 'loop:spec') { $tag = 'spec' }; $out += (& $line $i $tag) }
+    $out += "deployed, closed$(if ($DeployedDays -gt 0) { " in the last $DeployedDays days" }) ($($deployed.Count)$(if ($dropped) { "; $dropped earlier ones not listed, they are in the code" })):"
+    foreach ($i in $deployed) { $out += (& $line $i '' $DeployedTitleMax) }
+    $out += "Ve's own open issues ($($own.Count)):"
+    foreach ($i in $own) { $out += (& $line $i '') }
+    $out += "Ve's open device-feedback issues ($($fb.Count)):"
+    foreach ($i in $fb) { $out += (& $line $i '') }
+    return @($out)
 }
 
 # The session settings: $SessionDefaults overlaid with the parsed sessions.json ($Json, may be $null).
@@ -673,7 +826,7 @@ function Format-WaitCiLine {
 
 # Failure classes. The session writes the class of every build failure as a marker line in its final
 # failure comment (LOOP.md section 3, "Failure classes"); run-loop.ps1 writes timeout / max-turns /
-# session-ended itself when the session stopped mid-build. Retryable = the cause was outside the change, so
+# max-budget / session-ended itself when the session stopped mid-build. Retryable = the cause was outside the change, so
 # the same approved change may be built once more without the owner.
 $script:RetryableFailures = [ordered]@{
     'ci-infra'           = 'CI infrastructure (a runner, network or GitHub problem, or a required job cancelled or never started)'
@@ -683,6 +836,7 @@ $script:RetryableFailures = [ordered]@{
     'out-of-time'        = 'the run ran out of time before the merge'
     'timeout'            = 'the run hit its time limit mid-build'
     'max-turns'          = 'the session hit its turn limit mid-build'
+    'max-budget'         = 'the session hit its USD cap (sessions.json maxBudgetUsd) mid-build'
 }
 $script:ChangeFailures = [ordered]@{
     'tests'         = 'tests or CI still failed after the fix rounds'
@@ -821,15 +975,22 @@ function Split-BuildableByBudget {
 # whatever the queue says. $Deferred: buildable issues whose build model the budget does not allow now
 # (Split-BuildableByBudget); they do not count as buildable. $PhaseBAllowed: may the proposal / review
 # session's model run under the budget (Test-BudgetAllowsModel)?
+# Daily caps (Get-DailyCapDecision): $BuildCap / $PhaseBCap are the refusal reasons ('' = not capped). A capped
+# kind counts as nothing to do, so a run where every kind with work is capped starts no session ($0).
 function Get-PrecheckDecision {
-    param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true)
+    param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true,
+        [string]$BuildCap = '', [string]$PhaseBCap = '')
     $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
     if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
     if ($Mode -eq 'PRODUCT_REVIEW') {
+        if ($PhaseBCap) { return (& $mk $false "product review: $PhaseBCap") }
         if (-not $PhaseBAllowed) { return (& $mk $false "product review: its model is not allowed by the $($Budget.Reason)") }
         return (& $mk $true 'product review: always runs')
     }
-    if ($null -eq $Queue -or $null -eq $Queue.slots) { return (& $mk $true 'queue check failed: launching claude as usual') }
+    if ($null -eq $Queue -or $null -eq $Queue.slots) {
+        if ($PhaseBCap -and ($BuildCap -or $Mode -ne 'FULL')) { return (& $mk $false "queue check failed, and every session kind is capped ($(@($BuildCap, $PhaseBCap | Where-Object { $_ }) -join '; '))") }
+        return (& $mk $true 'queue check failed: launching claude as usual')
+    }
     $def = @($Deferred | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
     $b = @($Queue.buildable | Where-Object { $null -ne $_ -and $def -notcontains [int]$_ }).Count
     $free = [int]$Queue.slots.free
@@ -838,10 +999,12 @@ function Get-PrecheckDecision {
     if ($Mode -eq 'FULL') {
         $why += "$b buildable approved issue(s)"
         if ($def.Count -gt 0) { $why += "$($def.Count) deferred by the plan budget ($(@($def | ForEach-Object { "#$_" }) -join ' '))" }
+        if ($b -gt 0 -and $BuildCap) { $why += "builds: $BuildCap" }
     } else { $why += "$Mode (no Phase A)" }
     $why += "$free free proposal slot(s) ($aw awaiting review, cap $($Queue.slots.cap))"
     if ($free -gt 0 -and -not $PhaseBAllowed) { $why += 'the proposal model is not allowed by the plan budget' }
-    $launch = (($Mode -eq 'FULL' -and $b -gt 0) -or ($free -gt 0 -and $PhaseBAllowed))
+    if ($free -gt 0 -and $PhaseBCap) { $why += "proposals: $PhaseBCap" }
+    $launch = (($Mode -eq 'FULL' -and $b -gt 0 -and -not $BuildCap) -or ($free -gt 0 -and $PhaseBAllowed -and -not $PhaseBCap))
     return (& $mk $launch ($why -join ', '))
 }
 
@@ -854,15 +1017,16 @@ function Format-WaitingOnOwner {
 }
 
 # The session stopped (killed at the time limit, turn limit, or exited) while an issue still carried
-# loop:in-progress. $EndClass: timeout | max-turns | session-ended. $MergeSha: set when merge-pr merged this
+# loop:in-progress. $EndClass: timeout | max-turns | max-budget | session-ended. $MergeSha: set when merge-pr merged this
 # issue in this run (then it is never retried: a merge that was not verified needs the owner).
 function Get-UnfinishedFailure {
     param([string]$EndClass, [string]$MergeSha = '', [int]$TimeoutMinutes = 0, [string]$Who = 'the owner')
-    $class = $EndClass; if ($class -notin @('timeout', 'max-turns')) { $class = 'session-ended' }
+    $class = $EndClass; if ($class -notin @('timeout', 'max-turns', 'max-budget')) { $class = 'session-ended' }
     if ($MergeSha) { $class = 'session-ended' }
     $what = 'The session ended while this issue was still being built.'
     if ($EndClass -eq 'timeout') { $what = "The run hit its $TimeoutMinutes-minute limit while this issue was being built, and the session was stopped." }
     if ($EndClass -eq 'max-turns') { $what = 'The session hit its turn limit while this issue was being built.' }
+    if ($EndClass -eq 'max-budget') { $what = 'The session hit its USD cap (sessions.json maxBudgetUsd) while this issue was being built.' }
     if ($MergeSha) {
         $state = "The change was merged as $MergeSha, but its deploy was not verified in this run. It needs $Who to check the live site and server (and roll back with rollback.ps1 if needed); it is not retried automatically."
     } elseif ($script:RetryableFailures.Contains($class)) {
