@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { finishLabel } from "../../../models/finishes.ts";
 import { formatPct } from "../../../models/movement.ts";
 import { weekChange, type OwnedPrintingRow } from "../../../models/ownedSort.ts";
-import { CardArt, Money, Stack, cx } from "../../primitives/index.ts";
+import { CardArt, Money, Stack, UNPRICED, cx } from "../../primitives/index.ts";
 import styles from "./collection.module.css";
 
 interface ShowcaseProps {
@@ -123,7 +123,7 @@ export function Showcase({ rows, onOpen, showChange = false }: ShowcaseProps) {
             {finishLabel(current.finish)} · {current.setName} {current.collectorNumber}
           </p>
           <p className={styles.stagePrice}>
-            <Money value={current.price} absentLabel="No price upstream" />
+            <Money value={current.price} absentLabel={UNPRICED} />
             {showChange && weekChange(current) !== undefined ? (
               <span className={styles.ownedChange}>{formatPct(weekChange(current) as number)}</span>
             ) : null}
@@ -169,7 +169,7 @@ export function Showcase({ rows, onOpen, showChange = false }: ShowcaseProps) {
             </span>
             <span className={styles.thumbName}>{row.name}</span>
             <span className={styles.thumbPrice}>
-              <Money value={row.price} absentLabel="—" />
+              <Money value={row.price} absentLabel={UNPRICED} />
               {showChange && weekChange(row) !== undefined ? (
                 <span className={styles.ownedChange}>{formatPct(weekChange(row) as number)}</span>
               ) : null}

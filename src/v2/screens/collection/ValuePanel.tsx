@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { formatPct } from "../../../models/movement.ts";
-import { Money, Panel, Row, Stack, cx } from "../../primitives/index.ts";
+import { Money, Panel, Row, Stack, UNPRICED, cx } from "../../primitives/index.ts";
 import { foldValue, setLabel, TOP_SETS } from "./valueFold.ts";
 import styles from "./collection.module.css";
 
@@ -103,7 +103,7 @@ export function ValuePanel() {
               <span className={styles.valueCount}>
                 {s.priced}/{s.printings}
               </span>
-              <Money value={s.value} absentLabel="Unpriced" />
+              <Money value={s.value} absentLabel={UNPRICED} />
             </li>
           ))}
         </ul>
@@ -130,7 +130,7 @@ export function ValuePanel() {
               <>
                 <span className={styles.expanderLead}>
                   {fold.hidden.length} more set{fold.hidden.length === 1 ? "" : "s"} ·{" "}
-                  <Money value={fold.hiddenValue} absentLabel="no price yet" />
+                  <Money value={fold.hiddenValue} absentLabel={UNPRICED} />
                 </span>
                 <span className={cx(styles.expanderNames, styles.muted)}>{fold.hiddenNames.join(", ")}</span>
               </>

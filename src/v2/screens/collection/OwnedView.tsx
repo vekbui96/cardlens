@@ -13,7 +13,7 @@ import {
   type OwnedPrintingRow,
   type OwnedSortKey,
 } from "../../../models/ownedSort.ts";
-import { Card, CardArt, Chip, Money, Panel, Row, Stack } from "../../primitives/index.ts";
+import { Card, CardArt, Chip, Money, Panel, Row, Stack, UNPRICED } from "../../primitives/index.ts";
 import { Showcase } from "./Showcase.tsx";
 import styles from "./collection.module.css";
 
@@ -195,7 +195,7 @@ export function OwnedView() {
                       worthless rather than unknown.
                     */}
                     <span className={styles.ownedPrice}>
-                      <Money value={row.price} absentLabel="unpriced" />
+                      <Money value={row.price} absentLabel={UNPRICED} />
                       {sort === "change" && weekChange(row) !== undefined ? (
                         <span className={styles.ownedChange} data-testid="owned-change">
                           {formatPct(weekChange(row) as number)}

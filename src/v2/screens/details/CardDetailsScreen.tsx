@@ -11,7 +11,17 @@ import { useSetPrintings } from "../../../hooks/useSetPrintings.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
-import { Card, CardArt, Chip, Money, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
+import {
+  Card,
+  CardArt,
+  Chip,
+  Money,
+  Panel,
+  Row,
+  ScreenReaderOnly,
+  Stack,
+  UNPRICED,
+} from "../../primitives/index.ts";
 import { printingsOf } from "./printings.ts";
 import styles from "./CardDetailsScreen.module.css";
 
@@ -34,7 +44,7 @@ import styles from "./CardDetailsScreen.module.css";
  *
  * ## A missing price says so
  *
- * Every row shows a market price or the words `n/a`. A blank where a price
+ * Every row shows a market price or the word `Unpriced`. A blank where a price
  * belongs reads as loading, forever — and `$0.00` reads as free, which is a
  * different card from an unpriced one. Both come from `Money`, which cannot
  * render either.
@@ -259,7 +269,7 @@ function PrintingRow({
         and `aria-pressed` alone is not visible to anyone reading the screen.
       */}
       <span className={owned ? styles.owned : styles.notOwned}>{owned ? "Owned" : "Not owned"}</span>
-      <Money value={price} loading={pricePending} absentLabel="n/a" />
+      <Money value={price} loading={pricePending} absentLabel={UNPRICED} />
     </Card>
   );
 }

@@ -13,6 +13,6 @@ export { Panel, Card } from "./surfaces.tsx";
 export { Field, type FieldProps } from "./field.tsx";
 export { Select, type SelectProps } from "./select.tsx";
 export { CardArt, type ArtDetail } from "./CardArt.tsx";
-export { Meter, Chip, Money } from "./data.tsx";
+export { Meter, Chip, Money, UNPRICED } from "./data.tsx";
 export { RailHost, Sheet } from "./disclosure.tsx";
 export { space, cardWidth, type Space, type CardWidth, type Align, type Justify } from "./tokens.ts";

@@ -101,6 +101,9 @@ export function Chip({ children, tone = "default", onPress, pressed, label }: Ch
 
 /* --- Money ---------------------------------------------------------------- */
 
+/** The one word for a card with no price; pass it as `absentLabel` on card and set prices. */
+export const UNPRICED = "Unpriced";
+
 interface MoneyProps {
   /**
    * The amount. `undefined` means "we do not have a price"; it does not mean
