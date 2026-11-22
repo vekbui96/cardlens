@@ -563,6 +563,7 @@ function Publish-LoopRunData {
         [string]$OutDir = '',
         [string]$LoopHome = '',
         [string]$Waiting = '',   # 'Failed, waiting on Ve: #n (reason)' line (run-loop.ps1), appended to every comment
+        [hashtable]$Approvals = @{},   # build issue -> 'label' | 'via-spec #<spec>' (run-loop.ps1); via-spec is noted
         [int]$MaxIssues = 6, [int]$MaxProposals = 5,
         [switch]$NoPost
     )
@@ -588,6 +589,7 @@ function Publish-LoopRunData {
                 overhead = $data.Overhead | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
                 createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting
+                approvals = @(if ($Approvals) { @($Approvals.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; approval = "$($Approvals[$_])" } }) })
                 sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         } catch { Write-RunDataLog "run data: could not write $base.json: $_" 'WARN' }
@@ -611,7 +613,9 @@ function Publish-LoopRunData {
         $jobs = New-Object System.Collections.ArrayList
         foreach ($tg in $targets) {
             $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
-            [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = (Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting) })
+            $cb = Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting
+            if ($Approvals -and $Approvals.ContainsKey([int]$tg.Issue) -and "$($Approvals[[int]$tg.Issue])" -like 'via-spec*') { $cb = $cb.TrimEnd() + "`n`nApproval: $($Approvals[[int]$tg.Issue]) (auto-approved by the spec's approval; no ``approved`` label of its own)`n" }
+            [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = $cb })
         }
         foreach ($n in $proposals) { [void]$jobs.Add([pscustomobject]@{ Issue = $n; Body = (Format-RunDataProposalComment -Data $data -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Waiting $Waiting) }) }
         if ($jobs.Count -eq 0) { Write-RunDataLog 'run data: no issue to post on'; return 0 }

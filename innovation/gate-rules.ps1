@@ -14,6 +14,7 @@
   Get-GapDecision     which protected paths between the live server and a PR / merge block it?
   Get-ProposalSlots   how many proposals await review, and how many may still be opened (the ONE cap rule)?
   Get-SpecPlan        an approved spec's slices: opened, still to open, done? (Format-SpecProgress: its checklist)
+  Get-ViaSpecDecision is a slice of an approved spec buildable without its own `approved` (auto-approved)?
   Get-RetryDecision   may an approved issue with loop:failed get its one automatic retry?
   Get-PrecheckDecision  does this run have anything to do at all, before claude is started?
   Get-PlanBudgetVerdict / Test-BudgetAllowsModel / Split-BuildableByBudget  the ops hub's plan-budget
@@ -140,10 +141,15 @@ function Get-IssueLabelNames {
 # review, like any proposal, and none once approved (its slices then hold slots as they are opened).
 # SpecsAwaiting lists the unapproved open specs; MayOpenSpec says whether this run may open a new spec (at most
 # $MaxOpenSpecs unapproved specs at a time, and only with a free slot).
+# -ApprovedViaSpec: slices auto-approved through their approved spec (Get-ViaSpecDecision); they are build
+# queue, not review, so they hold no slot either. (The approval watcher's literal copy does not know them and
+# counts them as awaiting review: its refill is only ever more cautious than the loop.)
 function Get-ProposalSlots {
-    param([object[]]$Issues, [int]$Cap = $script:ProposalCap, [int]$MaxNew = $script:MaxNewPerRun, [int]$MaxSpecs = $script:MaxOpenSpecs)
+    param([object[]]$Issues, [int]$Cap = $script:ProposalCap, [int]$MaxNew = $script:MaxNewPerRun, [int]$MaxSpecs = $script:MaxOpenSpecs,
+        [int[]]$ApprovedViaSpec = @())
     $open = @($Issues | Where-Object { $_ -and (Get-IssueLabelNames $_) -contains 'loop:proposal' })
-    $awaitingIssues = @($open | Where-Object { $n = Get-IssueLabelNames $_; -not ($n -contains 'approved' -or $n -contains 'loop:failed') })
+    $viaSpec = @($ApprovedViaSpec | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
+    $awaitingIssues = @($open | Where-Object { $n = Get-IssueLabelNames $_; -not ($n -contains 'approved' -or $n -contains 'loop:failed' -or $viaSpec -contains [int]$_.number) })
     $awaiting = @($awaitingIssues | ForEach-Object { [int]$_.number } | Sort-Object)
     $specs = @($awaitingIssues | Where-Object { (Get-IssueLabelNames $_) -contains $script:SpecLabel } | ForEach-Object { [int]$_.number } | Sort-Object)
     $free = [math]::Max(0, $Cap - $awaiting.Count)
@@ -263,10 +269,172 @@ function Format-SpecProgress {
     if ($Plan.Duplicates.Count -gt 0) { [void]$sb.AppendLine(); [void]$sb.AppendLine("Note: more than one issue claims slice $($Plan.Duplicates -join ', '); the open one (or the newest) is shown.") }
     [void]$sb.AppendLine()
     if ($Plan.Complete) { [void]$sb.AppendLine('**All slices are done (deployed or closed). The loop closes this spec.**') }
-    else { [void]$sb.AppendLine("Each slice is a normal proposal: $Who approves them one by one. The spec closes when every slice is deployed or closed.") }
+    else { [void]$sb.AppendLine("Approving this spec approves its slices: each one the loop opens is built without its own ``approved``, in order, unless it is marked Manual / needs Ve, failed, edited or held. Comment ``/hold`` on a slice to stop that slice, or on this spec to stop them all. The spec closes when every slice is deployed or closed.") }
     $r = ''; if ($RunId) { $r = " after run ``$RunId``" }
     [void]$sb.AppendLine(); [void]$sb.AppendLine("<sub>Updated by the runner$r; this comment is edited in place.</sub>")
     return $sb.ToString()
+}
+
+# ==================================================================================================
+# Slices auto-approved through their spec. Approving a spec approves the slices the loop opens for it: a
+# slice is buildable WITHOUT its own `approved` label when every condition below holds (else it waits for the
+# owner's `approved` like any proposal). The loop still never adds `approved`; check-approval.ps1 reports such
+# a slice as approval `via-spec` and merge-pr.ps1 re-checks it the same way before merging.
+#  1. its spec is open, loop:spec + loop:proposal, and approved under the normal rule (check-approval.ps1
+#     -Spec: last `labeled approved` by the owner, not removed since, body not edited since); the spec has no
+#     hold comment from the owner after that approval; and the slice was opened AFTER that approval
+#  2. the slice was opened by the loop: loop:proposal (not loop:spec), opened by the owner's account, body's
+#     first line is the loop marker and its next line `Part of #<spec> (slice <k> of <m>)`; <m> is the number
+#     of slices in the spec's "## Slices" list, <k> is in it, the issue title matches that slice's title
+#     (tolerant: case, punctuation, a prefix such as "Home (phone/desktop): ", most words), and it is the issue
+#     the spec plan counts for slice <k> (no duplicate claims it instead)
+#  3. not marked Manual / needs Ve, no loop:failed, and every EARLIER slice of the spec is opened and is
+#     either closed or open without loop:failed / Manual (slices build in order; a failed or manual earlier
+#     slice holds the later ones until it is closed)
+#  4. no veto: slice open, no `approved` label events on the slice (the owner adding and then removing
+#     `approved` is a decision), and no hold comment from the owner after the slice was opened
+#  5. the slice body was never edited after it was opened (the loop never edits bodies, so any edit is someone
+#     else's; the owner can still approve an edited slice with `approved`)
+# A hold comment: a comment by the owner WITHOUT the loop marker whose text starts with `/hold` or `hold`
+# (case-insensitive). To build a held slice anyway, the owner adds `approved` to it by hand.
+# ==================================================================================================
+$script:ManualRx = '(?im)^\s*\**\s*(manual\s*/\s*needs\s+ve|manual step required)'
+$script:HoldRx = '^(?i)\s*/?hold\b'
+$script:ViaSpecMarker = '<!-- innovation-loop:via-spec -->'
+
+function Get-IssueAuthor {
+    param($Issue)
+    if ($Issue.author) { return "$($Issue.author.login)" }
+    if ($Issue.user) { return "$($Issue.user.login)" }
+    return ''
+}
+function Get-IssueCreated {
+    param($Issue)
+    foreach ($k in 'createdAt', 'created_at') { if ($Issue.PSObject.Properties.Name -contains $k -and $Issue.$k) { return [datetime]$Issue.$k } }
+    return $null
+}
+
+# A title reduced to lowercase words (HTML entities decoded, punctuation dropped).
+function ConvertTo-TitleKey {
+    param([string]$Title)
+    $t = [Net.WebUtility]::HtmlDecode("$Title").ToLowerInvariant()
+    return (($t -replace '[^a-z0-9]+', ' ').Trim())
+}
+
+# Does an issue title match a spec's planned slice title? Equal, one containing the other as whole words (8+
+# chars), or at least 60% of the longer title's words (3+ letters) shared.
+function Test-SliceTitleMatch {
+    param([string]$Planned, [string]$Actual)
+    $a = ConvertTo-TitleKey $Planned; $b = ConvertTo-TitleKey $Actual
+    if (-not $a -or -not $b) { return $false }
+    if ($a -eq $b) { return $true }
+    $short = $a; $long = $b; if ($a.Length -gt $b.Length) { $short = $b; $long = $a }
+    if ($short.Length -ge 8 -and (" $long ").Contains(" $short ")) { return $true }
+    $ta = @($a -split ' ' | Where-Object { $_.Length -ge 3 } | Select-Object -Unique)
+    $tb = @($b -split ' ' | Where-Object { $_.Length -ge 3 } | Select-Object -Unique)
+    if ($ta.Count -eq 0 -or $tb.Count -eq 0) { return $false }
+    $common = @($ta | Where-Object { $tb -contains $_ }).Count
+    return (($common / [double][math]::Max($ta.Count, $tb.Count)) -ge 0.6)
+}
+
+# The owner's first hold comment after -Since (comments API objects), or $null. Comments with the loop
+# marker are the loop's own and never count; nor does anyone else's.
+function Find-HoldComment {
+    param([object[]]$Comments, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->', $Since = $null)
+    $sinceT = $null; if ($Since) { $sinceT = [datetime]$Since }
+    foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
+        if ("$($c.user.login)" -ne $Owner) { continue }
+        $b = "$($c.body)"; if ($b.Contains($Marker)) { continue }
+        if ($sinceT -and ([datetime]$c.created_at) -le $sinceT) { continue }
+        if ($b -match $script:HoldRx) { return $c }
+    }
+    return $null
+}
+
+# Is $Slice (an issue: number, title, state, labels, body, author/user, createdAt/created_at) buildable through
+# its approved spec? $SliceEditedAt: GraphQL lastEditedAt ('' = never edited). $SliceComments: its comments.
+# $SliceApprovalEvents: how many labeled/unlabeled `approved` events the slice has. $Spec: the spec issue
+# (number, state, labels, body). $SpecCheck: check-approval.ps1's Test-Issue -AsSpec result (buildable,
+# approvedAt, reasons). $SpecComments: the spec's comments. $Issues: every loop:proposal issue, open and
+# closed (for the spec plan and the earlier slices). Returns Linked (the body names a spec at all), Eligible,
+# Spec, K, Of, SpecApprovedAt and Reasons (why not; empty when Eligible).
+function Get-ViaSpecDecision {
+    param($Slice, [string]$SliceEditedAt = '', [object[]]$SliceComments = @(), [int]$SliceApprovalEvents = 0,
+        $Spec = $null, $SpecCheck = $null, [object[]]$SpecComments = @(), [object[]]$Issues = @(),
+        [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $r = New-Object System.Collections.ArrayList
+    $body = "$($Slice.body)"
+    $link = Get-SliceLink -Body $body
+    $specAt = ''; if ($SpecCheck -and $SpecCheck.approvedAt) { $specAt = "$($SpecCheck.approvedAt)" }
+    if (-not $link) {
+        return [pscustomobject]@{ Linked = $false; Eligible = $false; Spec = 0; K = 0; Of = 0; SpecApprovedAt = $specAt; Reasons = @('not a slice (no "Part of #<spec> (slice <k> of <m>)" line)') }
+    }
+    $labels = @(Get-IssueLabelNames $Slice)
+    $created = Get-IssueCreated $Slice
+
+    # 2. opened by the loop, in the loop's format
+    if ($labels -notcontains 'loop:proposal') { [void]$r.Add('missing label loop:proposal') }
+    if ($labels -contains $script:SpecLabel) { [void]$r.Add('is itself a spec') }
+    $author = Get-IssueAuthor $Slice
+    if ($author -ne $Owner) { [void]$r.Add("opened by $author, not $Owner") }
+    $lines = @($body -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($lines.Count -lt 2 -or $lines[0] -ne $Marker -or -not ([regex]::Match($lines[1], $script:SliceLinkRx).Success)) {
+        [void]$r.Add('body does not start with the loop marker line followed by the "Part of #<spec> (slice <k> of <m>)" line')
+    }
+
+    # 1. the spec and its approval; 2. the slice's place in the spec; 3. build order
+    if (-not $Spec -or [int]$Spec.number -ne $link.Spec) { [void]$r.Add("spec #$($link.Spec) not found") }
+    else {
+        $sl = @(Get-IssueLabelNames $Spec)
+        if ("$($Spec.state)" -notmatch '^(?i)open$') { [void]$r.Add("spec #$($link.Spec) is closed") }
+        if ($sl -notcontains $script:SpecLabel -or $sl -notcontains 'loop:proposal') { [void]$r.Add("#$($link.Spec) is not a loop:spec issue") }
+        if (-not $SpecCheck -or -not $SpecCheck.buildable -or -not $specAt) {
+            $why = 'not checked'; if ($SpecCheck) { $why = (@($SpecCheck.reasons) -join '; ') }
+            [void]$r.Add("spec #$($link.Spec) is not approved ($why)")
+        } else {
+            $specT = [datetime]$specAt
+            $h = Find-HoldComment -Comments $SpecComments -Owner $Owner -Marker $Marker -Since $specT
+            if ($h) { [void]$r.Add("$Owner put spec #$($link.Spec) on hold (comment $($h.id))") }
+            if (-not $created -or $created -le $specT) { [void]$r.Add("opened before spec #$($link.Spec) was (last) approved") }
+        }
+        $plan = Get-SpecPlan -Spec $Spec -Issues $Issues -Owner $Owner -Marker $Marker
+        if (-not $plan.Valid) { [void]$r.Add("spec #$($link.Spec): $($plan.Problem)") }
+        else {
+            if ($link.Of -ne $plan.Of) { [void]$r.Add("says $($link.Of) slices, spec #$($link.Spec) lists $($plan.Of)") }
+            $item = @($plan.Slices | Where-Object { $_.K -eq $link.K } | Select-Object -First 1)
+            if ($item.Count -eq 0) { [void]$r.Add("slice $($link.K) is not in spec #$($link.Spec)'s ## Slices list") }
+            else {
+                if (-not (Test-SliceTitleMatch -Planned $item[0].Title -Actual "$($Slice.title)")) { [void]$r.Add("title does not match slice $($link.K) of spec #$($link.Spec) ('$($item[0].Title)')") }
+                if ([int]$item[0].Issue -ne [int]$Slice.number) { [void]$r.Add("spec #$($link.Spec) counts #$($item[0].Issue) as slice $($link.K), not this issue") }
+                foreach ($e in @($plan.Slices | Where-Object { $_.K -lt $link.K } | Sort-Object K)) {
+                    if ([int]$e.Issue -le 0) { [void]$r.Add("earlier slice $($e.K) is not opened yet"); continue }
+                    $ei = @($Issues | Where-Object { [int]$_.number -eq [int]$e.Issue } | Select-Object -First 1)
+                    if ($ei.Count -eq 0 -or "$($ei[0].state)" -notmatch '^(?i)open$') { continue }
+                    if (@(Get-IssueLabelNames $ei[0]) -contains 'loop:failed') { [void]$r.Add("earlier slice $($e.K) (#$($e.Issue)) failed and is still open") }
+                    elseif ("$($ei[0].body)" -match $script:ManualRx) { [void]$r.Add("earlier slice $($e.K) (#$($e.Issue)) is Manual / needs Ve and still open") }
+                }
+            }
+        }
+    }
+
+    # 3. not manual, not failed
+    if ($body -match $script:ManualRx) { [void]$r.Add('marked Manual / needs Ve') }
+    if ($labels -contains 'loop:failed') { [void]$r.Add('has label loop:failed (an auto-approved slice gets no automatic retry)') }
+    # 4. no veto
+    if ("$($Slice.state)" -notmatch '^(?i)open$') { [void]$r.Add('slice is closed') }
+    if ($SliceApprovalEvents -gt 0) { [void]$r.Add('`approved` was added to and removed from this slice by hand; that decision stands over the spec') }
+    $hs = Find-HoldComment -Comments $SliceComments -Owner $Owner -Marker $Marker -Since $created
+    if ($hs) { [void]$r.Add("$Owner put this slice on hold (comment $($hs.id))") }
+    # 5. body never edited
+    if ($SliceEditedAt) { [void]$r.Add("body edited at $SliceEditedAt, after it was opened") }
+    return [pscustomobject]@{ Linked = $true; Eligible = ($r.Count -eq 0); Spec = $link.Spec; K = $link.K; Of = $link.Of; SpecApprovedAt = $specAt; Reasons = @($r) }
+}
+
+# The one comment the runner posts on a slice the first time it is treated as auto-approved.
+function Format-ViaSpecNotice {
+    param([int]$Spec, [string]$ApprovedAt, [string]$Who = 'the owner', [string]$Marker = '<!-- innovation-loop -->')
+    $d = "$ApprovedAt"; try { $d = ([datetime]$ApprovedAt).ToUniversalTime().ToString('yyyy-MM-dd') } catch { }
+    return "$Marker`n$($script:ViaSpecMarker)`nAuto-approved via spec #$Spec (approved by $Who on $d). Comment ``/hold`` to stop.`n"
 }
 
 # ==================================================================================================

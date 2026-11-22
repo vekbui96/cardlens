@@ -170,8 +170,39 @@ function Get-LoopQueue {
         if ($code -gt 1 -or -not $json) { Write-Log "queue check failed (check-approval exit $code): $((@($out) | Select-Object -Last 3) -join ' ')" 'WARN'; return $null }
         $q = $json | ConvertFrom-Json
         if ($q.PSObject.Properties.Name -contains 'error' -or -not ($q.PSObject.Properties.Name -contains 'slots')) { Write-Log "queue check failed: $json" 'WARN'; return $null }
+        Publish-ViaSpecNotices $q
         return $q
     } catch { Write-Log "queue check failed: $_" 'WARN'; return $null }
+}
+# The ONE comment on a slice the first time it is treated as auto-approved through its spec (check-approval.ps1
+# -List `viaSpec`, noticed = false). Runner side (same gh and rights as the queue check), never in a dry run;
+# a failure is a warning and is retried by the next queue check.
+$script:ViaSpecNoticed = @{}
+function Publish-ViaSpecNotices {
+    param($Q)
+    if ($DryRun -or $null -eq $Q -or -not ($Q.PSObject.Properties.Name -contains 'viaSpec')) { return }
+    foreach ($v in @($Q.viaSpec | Where-Object { $_ -and -not $_.noticed })) {
+        $n = [int]$v.issue
+        if ($script:ViaSpecNoticed.ContainsKey($n)) { continue }
+        try {
+            $body = Format-ViaSpecNotice -Spec ([int]$v.spec) -ApprovedAt "$($v.specApprovedAt)" -Who 'Ve' -Marker $script:Marker
+            $tmp = Join-Path $script:LoopHome "state\viaspec-$n.json"
+            [IO.File]::WriteAllText($tmp, (@{ body = $body } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+            $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            $out = & $script:GhExe api "repos/$($script:Repo)/issues/$n/comments" -X POST --input $tmp 2>&1 | ForEach-Object { "$_" }
+            $code = $LASTEXITCODE; $ErrorActionPreference = $prev
+            if ($code -eq 0) { $script:ViaSpecNoticed[$n] = $true; Write-Log "#${n}: auto-approved via spec #$($v.spec); notice posted" }
+            else { Write-Log "#${n}: could not post the auto-approval notice: $((@($out) | Select-Object -Last 1))" 'WARN' }
+        } catch { Write-Log "#${n}: auto-approval notice failed: $_" 'WARN' }
+    }
+}
+# 'via-spec #<spec>' when the queue says the issue is auto-approved through its spec, else 'label'.
+function Get-QueueApproval {
+    param($Q, [int]$Issue)
+    if ($null -eq $Q -or -not ($Q.PSObject.Properties.Name -contains 'approvals') -or $null -eq $Q.approvals) { return 'label' }
+    $p = $Q.approvals.PSObject.Properties | Where-Object { $_.Name -eq "$Issue" } | Select-Object -First 1
+    if ($p -and "$($p.Value)") { return "$($p.Value)" }
+    return 'label'
 }
 function Format-QueueLine {
     param($Q)
@@ -179,6 +210,8 @@ function Format-QueueLine {
     $b = @($Q.buildable | Where-Object { $null -ne $_ }); $r = @($Q.retry | Where-Object { $null -ne $_ })
     $s = "buildable [$(@($b | ForEach-Object { "#$_" }) -join ' ')]"
     if ($r.Count -gt 0) { $s += " (automatic retry: $(@($r | ForEach-Object { "#$_" }) -join ' '))" }
+    $vs = @($b | Where-Object { (Get-QueueApproval $Q ([int]$_)) -ne 'label' })
+    if ($vs.Count -gt 0) { $s += " (approval: $(@($vs | ForEach-Object { "#$_ $(Get-QueueApproval $Q ([int]$_))" }) -join ', '))" }
     $s += "; proposal slots free $($Q.slots.free) of $($Q.slots.cap) (awaiting review: $(@($Q.slots.awaitingReview | ForEach-Object { "#$_" }) -join ' '))"
     $sp = @($Q.specs | Where-Object { $_ -and $_.approved })
     if ($sp.Count -gt 0) { $s += "; approved specs: $(@($sp | ForEach-Object { "#$($_.issue) ($(@($_.toOpen).Count) of $($_.of) slices still to open)" }) -join ', ')" }
@@ -275,6 +308,9 @@ function New-SessionPrompt {
             $lines += ''
             $lines += "- JOB: build issue #$Issue, and only it (section 3). Then end (section 6). This session opens no proposals: a separate session does that."
             $lines += "- ISSUE: $Issue   (retry: $retry)"
+            $ap = Get-QueueApproval $Q $Issue
+            if ($ap -ne 'label') { $lines += "- APPROVAL: $ap   (a slice auto-approved by Ve's approval of its spec: it has no ``approved`` label of its own and needs none; check-approval.ps1 -Issue $Issue shows approval via-spec. Say ``approval: $ap`` in your summary.)" }
+            else { $lines += '- APPROVAL: label (Ve added `approved`)' }
             $lines += "- SERVER_DEPLOY: $serverDeploy   $( if ($serverDeploy -notlike 'available*') { "($serverWhy) -> if this change needs a server deploy, skip it (section 3 step 3)" } )"
             $su = 'no'; if ($ServerUsed) { $su = "yes ($ServerUsed): at most one server deploy per run, so if this change needs one, skip it (section 3 step 3)" }
             $lines += "- SERVER_DEPLOYED_THIS_RUN: $su"
@@ -532,13 +568,18 @@ try {
     Write-Log "PRODUCT: $product"
 
     $stopRun = $false
+    $proposeRan = $false
     $built = @()            # {Issue; Outcome} per build session
     $serverUsed = ''
     $simMinutes = 0         # dry run: minutes a build is assumed to take, for planning the next one
     $minutesLeft = { ($Deadline - (Get-Date)).TotalMinutes - $simMinutes }
 
+    $approvalOf = @{}      # issue -> 'label' | 'via-spec #<spec>', for the summary and run data
     # ---- Phase A: one session per approved issue ------------------------------------------------
-    if ($mode -eq 'FULL') {
+    # A block, dot-sourced (same scope): it runs again after Phase B when that session opened slices that are
+    # auto-approved through their spec, so they are built in the same run (MaxBuilds and the time rules still
+    # count every build of the run).
+    $phaseA = {
         $q = $queue
         while ($true) {
             if ($built.Count -gt 0 -and -not $DryRun) { $q = Get-LoopQueue }
@@ -556,6 +597,8 @@ try {
             if (-not $dec.Start) { [void]$runNotes.Add("Phase A stopped: $($dec.Reason)"); break }
             $n = $dec.Issue
             $labels = Get-QueueLabels $q $n
+            $approvalOf[$n] = Get-QueueApproval $q $n
+            if ($approvalOf[$n] -ne 'label') { Write-Log "Phase A: #$n approval: $($approvalOf[$n])" }
             $sm = Get-SessionModel -Kind 'build' -Labels $labels -Config $Cfg -Override $Model
             $minutes = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
             $sessDeadline = (Get-Date).AddMinutes($minutes)
@@ -593,6 +636,7 @@ try {
 
         }
     }
+    if ($mode -eq 'FULL') { . $phaseA }
 
     # ---- Phase B: one proposal session (or the weekly review) -------------------------------------
     if (-not $stopRun) {
@@ -622,7 +666,21 @@ try {
                 Write-Log "DRY RUN plan: $kind session model=$sm maxTurns=$($c.maxTurns) timeout=${minutes}m slots newThisRun=$($qb.slots.newThisRun) slicesToOpen=$(@($qb.slicesToOpen).Count) prompt=$pp"
             } else {
                 [void]$sessions.Add((Invoke-Session -Kind $kind -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp))
+                $proposeRan = ($kind -eq 'propose')
             }
+        }
+    }
+
+    # ---- Phase A again: slices the proposal session just opened that are auto-approved via their spec ----
+    if ($mode -eq 'FULL' -and -not $stopRun -and -not $DryRun -and $proposeRan) {
+        $q2 = Get-LoopQueue
+        $tried = @($built | ForEach-Object { [int]$_.Issue })
+        $fresh = @(@($q2.buildable) | Where-Object { $null -ne $_ -and $tried -notcontains [int]$_ -and (Get-QueueApproval $q2 ([int]$_)) -ne 'label' })
+        if ($null -ne $q2 -and $fresh.Count -gt 0) {
+            Write-Log "Phase A (after Phase B): auto-approved slice(s) now buildable: $(@($fresh | ForEach-Object { "#$_" }) -join ' ')"
+            $queue = $q2; $mainSha = Reset-Clone; try { $liveHead = Get-LiveHead } catch { }
+            $budget = Get-PlanBudget
+            . $phaseA
         }
     }
 
@@ -641,7 +699,10 @@ try {
         $c = 'n/a'; if ($null -ne $s.Cost) { $c = '$' + ([double]$s.Cost).ToString('0.00', [Globalization.CultureInfo]::InvariantCulture) }
         [void]$sum.Add("- $nm ($($s.Model), $($s.Turns) turns, $c, ended: $($s.EndClass)): LOOP-RESULT $($s.Status) $($s.Reason)".TrimEnd())
     }
-    foreach ($b in $built) { [void]$sum.Add("- build #$($b.Issue): $($b.Outcome)") }
+    foreach ($b in $built) {
+        $ap = ''; if ($approvalOf.ContainsKey([int]$b.Issue) -and $approvalOf[[int]$b.Issue] -ne 'label') { $ap = " (approval: $($approvalOf[[int]$b.Issue]))" }
+        [void]$sum.Add("- build #$($b.Issue): $($b.Outcome)$ap")
+    }
     foreach ($r in $runNotes) { [void]$sum.Add("- $r") }
     foreach ($p in $problems) { [void]$sum.Add("- RUNNER: $p") }
     foreach ($s in $sessions) {
@@ -677,7 +738,7 @@ try {
             if ($waitLine) { Write-Log $waitLine }
             $st = ''; if ($res) { $st = $res.Status }
             $posted = Publish-LoopRunData -Sessions @($ran | ForEach-Object { [pscustomobject]@{ Path = $_.Path; Kind = $_.Kind; Issue = $_.Issue; Model = $_.Model } }) -Status $st `
-                -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome -Waiting $waitLine
+                -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome -Waiting $waitLine -Approvals $approvalOf
             Write-Log "run data: $posted comment(s) posted"
         } catch { Write-Log "run data / progress reporting skipped: $_" 'WARN' }
     }
