@@ -31,7 +31,7 @@ diary (that is what made the old file 63 KB).
   only once Ve signs in to Windows (Docker Desktop starts at logon), so photo
   scan reads "offline" until then.
 - **Value history** (#112, decision `docs/decisions/value-history.md`): the
-  server writes one row a day to `D:\services\dataalue-history.json` (kept
+  server writes one row a day to `D:\services\data\value-history.json` (kept
   forever, in the nightly data zip); read via `GET /api/value-history` (sync
   token). #117 (the chart) reads it. #110 "Since you last looked" is a
   device-local key `cardlens:v1:last-look:v1`.
