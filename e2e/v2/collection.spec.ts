@@ -430,4 +430,11 @@ test.describe("collection @visual", () => {
     // the last of them is still settling when the default 5s runs out.
     await expect(page.getByRole("main")).toHaveScreenshot("collection-empty.png", { timeout: 20000 });
   });
+
+  test("an empty owned view", async ({ page }) => {
+    await openV2(page, "/owned", { seed: "empty" });
+    await expect(page.getByTestId("collection-summary")).toHaveText("Nothing tracked yet");
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-owned-empty.png", { timeout: 20000 });
+  });
 });
