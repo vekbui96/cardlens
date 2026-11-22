@@ -88,7 +88,7 @@ afterEach(() => {
 });
 
 describe("every printing, each markable on its own", () => {
-  it("shows one row per printing with its own price, and n/a where there is none", async () => {
+  it("shows one row per printing with its own price, and Unpriced where there is none", async () => {
     stubPrintings();
     render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
 
@@ -103,7 +103,7 @@ describe("every printing, each markable on its own", () => {
     // Priced by neither source. A blank here would read as loading forever and
     // $0.00 would read as free, so it says so in words.
     const pokeball = screen.getByRole("button", { name: /Poké Ball Reverse/ });
-    expect(pokeball).toHaveAccessibleName(/n\/a/);
+    expect(pokeball).toHaveAccessibleName(/Unpriced/);
     expect(pokeball).not.toHaveAccessibleName(/\$0\.00/);
   });
 

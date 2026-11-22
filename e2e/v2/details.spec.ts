@@ -66,7 +66,7 @@ test.describe("everything about this printing", () => {
     await expect(page.getByText("Special Illustration Rare")).toBeVisible();
   });
 
-  test("lists every printing with its own price, and n/a where there is none", async ({ page }) => {
+  test("lists every printing with its own price, and Unpriced where there is none", async ({ page }) => {
     await servePrintings(page);
     await openV2(page, CARD);
 
@@ -78,7 +78,7 @@ test.describe("everything about this printing", () => {
 
     // A blank would read as loading forever and $0.00 would read as free.
     const pokeball = page.getByRole("button", { name: /Poké Ball Reverse/ });
-    await expect(pokeball).toHaveAccessibleName(/n\/a/);
+    await expect(pokeball).toHaveAccessibleName(/Unpriced/);
     await expect(pokeball).not.toHaveAccessibleName(/\$0\.00/);
   });
 

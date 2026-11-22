@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { CardArt, Chip, Money, Panel, RailHost, Row, Sheet, Stack, cx } from "../../primitives/index.ts";
+import {
+  CardArt,
+  Chip,
+  Money,
+  Panel,
+  RailHost,
+  Row,
+  Sheet,
+  Stack,
+  UNPRICED,
+  cx,
+} from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useBinderValue } from "../../../hooks/useBinderValue.ts";
 import { cardSlotsOf } from "../../../models/binderValue.ts";
@@ -477,7 +488,7 @@ export function BinderScreen({ binderId }: { binderId: string }) {
             are unpriced beside it is what keeps it from reading as the whole
             answer — stamps and promos price at nothing, and a binder of them
             would otherwise look worthless rather than unmeasured. */}
-        <Money value={value.total} loading={value.isLoading} absentLabel="Unpriced" />
+        <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />
         {!value.isLoading && value.unpriced > 0 ? ` (${value.unpriced} unpriced)` : ""}
       </p>
       {toGet ? (

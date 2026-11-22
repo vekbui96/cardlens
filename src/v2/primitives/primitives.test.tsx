@@ -2,7 +2,7 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Card, CardArt, Chip, Field, Meter, Money, Panel, Select } from "./index.ts";
+import { Card, CardArt, Chip, Field, Meter, Money, Panel, Select, UNPRICED } from "./index.ts";
 
 /**
  * These cover the decisions, not the markup.
@@ -40,6 +40,12 @@ describe("Money", () => {
   it("takes a screen's own word for absent", () => {
     render(<Money value={undefined} absentLabel="Not for sale" />);
     expect(screen.getByText("Not for sale")).toBeInTheDocument();
+  });
+
+  it("has one shared word for a card with no price", () => {
+    render(<Money value={undefined} absentLabel={UNPRICED} />);
+    expect(UNPRICED).toBe("Unpriced");
+    expect(screen.getByText("Unpriced")).toBeInTheDocument();
   });
 });
 

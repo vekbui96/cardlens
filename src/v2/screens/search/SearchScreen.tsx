@@ -20,6 +20,7 @@ import {
   Row,
   ScreenReaderOnly,
   Stack,
+  UNPRICED,
   cx,
 } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
@@ -363,7 +364,7 @@ function ResultTile({
       <span className={styles.set}>{card.setName}</span>
       <span className={styles.meta}>
         <span className={styles.number}>#{formatCollector(card.collectorNumber)}</span>
-        <Money value={card.marketPrice} absentLabel="n/a" />
+        <Money value={card.marketPrice} absentLabel={UNPRICED} />
       </span>
     </Card>
   );
