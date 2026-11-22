@@ -403,7 +403,8 @@ function Write-StoreFileAtomic {
     $dir = Split-Path -Parent $Path; if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $tmp = "$Path.tmp"
     [IO.File]::WriteAllText($tmp, $Text, $script:Utf8)
-    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($tmp, $Path, $null) } else { [IO.File]::Move($tmp, $Path) }
+    # [NullString]::Value: PowerShell would pass $null as "" (not a legal backup path) to File.Replace
+    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($tmp, $Path, [NullString]::Value) } else { [IO.File]::Move($tmp, $Path) }
 }
 function Read-ProductCursors { param($Paths)
     try { if (Test-Path -LiteralPath $Paths.Cursors) { return (ConvertTo-ProductCursors ([IO.File]::ReadAllText($Paths.Cursors) | ConvertFrom-Json)) } } catch { }
@@ -464,12 +465,14 @@ function Invoke-DecisionCollector {
             }
         }
         $cand += @(ConvertFrom-IssueComments -Comments $veComments -Owner $Owner -Marker $Marker -Titles $titles -LabelsOf $labelsOf -Source "$Repo#")
-        # 3. approved open issues edited after their approval (GraphQL: lastEditedAt + the approval events)
+        # 3. approved open issues edited after their approval (GraphQL: lastEditedAt + the approval events). No quoted
+        # literals in the query: Windows PowerShell 5.1 strips double quotes from native arguments.
         try {
-            $q = 'query($o:String!,$r:String!){repository(owner:$o,name:$r){issues(states:OPEN,labels:["approved"],first:50){nodes{number title url lastEditedAt labels(first:20){nodes{name}} timelineItems(itemTypes:[LABELED_EVENT],last:20){nodes{... on LabeledEvent{createdAt label{name} actor{login}}}}}}}}'
+            $q = 'query($o:String!,$r:String!){repository(owner:$o,name:$r){issues(states:OPEN,first:100){nodes{number title url lastEditedAt labels(first:20){nodes{name}} timelineItems(itemTypes:[LABELED_EVENT],last:20){nodes{... on LabeledEvent{createdAt label{name} actor{login}}}}}}}}'
             $parts = $Repo -split '/', 2
             $g = & $GhJson @('api', 'graphql', '-f', "query=$q", '-F', "o=$($parts[0])", '-F', "r=$($parts[1])")
-            $cand += @(ConvertFrom-EditedIssues -Issues @($g.data.repository.issues.nodes) -Owner $Owner)
+            $appr = @(@($g.data.repository.issues.nodes) | Where-Object { $_ -and @(@($_.labels.nodes) | ForEach-Object { "$($_.name)" }) -contains 'approved' })
+            $cand += @(ConvertFrom-EditedIssues -Issues $appr -Owner $Owner)
         } catch { $res.Errors += "edits: $_" }
         # 4. Ve's replies on the ops hub's digest issues ("confirm p-xxxxxx" / "no p-xxxxxx")
         $dSince = $cur.digestCommentsSince; if (-not $dSince) { $dSince = ConvertTo-IsoUtc ($NowUtc.AddDays(-14)) }

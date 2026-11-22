@@ -90,10 +90,15 @@ try {
     $r2 = Invoke-DecisionCollector -Paths $paths -Owner $O -Marker $mk -GhJson $stub -NowUtc $now.AddMinutes(3)
     Check (-not $r2.Ran -and $script:calls.Count -eq $n1) 'a fresh cursor asks GitHub nothing'
     $r3 = Invoke-DecisionCollector -Paths $paths -Owner $O -Marker $mk -GhJson $stub -NowUtc $now.AddMinutes(30)
-    Check ($r3.Ran -and $r3.New.Count -eq 0 -and @(Read-Decisions $paths).Count -eq $all.Count) "a second pass over the same data adds nothing (idempotent: $($r3.Reason))"
+    Check ($r3.Ran -and @($r3.Errors).Count -eq 0 -and $r3.Reason -notmatch 'failed' -and $r3.New.Count -eq 0 -and @(Read-Decisions $paths).Count -eq $all.Count -and (Read-ProductCursors $paths).lastCollectedUtc -eq '2026-11-22T12:30:00Z') "a second pass over the same data adds nothing (idempotent: $($r3.Reason))"
     $bad = Invoke-DecisionCollector -Paths $paths -Owner $O -Marker $mk -GhJson { param($A) throw 'gh down' } -Force -NowUtc $now.AddMinutes(60)
     Check ($bad.Reason -match 'collector failed' -and @(Read-Decisions $paths).Count -eq $all.Count) 'gh failing: logged, nothing written, never throws'
 } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+
+# saving over existing files works (atomic replace)
+$tmp2 = Join-Path ([IO.Path]::GetTempPath()) ("ps-test-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+try { $p2 = Get-ProductStorePaths -Dir $tmp2; Save-Preferences $p2 (New-Preferences); $np = New-Preferences; $np.updatedUtc = 'x'; Save-Preferences $p2 $np
+    Check ((Read-Preferences $p2).updatedUtc -eq 'x' -and -not (Test-Path "$($p2.Preferences).tmp")) 'preferences saved over an existing file (atomic replace, no temp left)' } finally { Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue }
 
 # ---- preferences: validation of the memory agent's changes --------------------------------------------------------
 $dec = @{}
