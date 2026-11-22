@@ -59,8 +59,22 @@ export function ValuePanel({
     >
       <Stack gap={3}>
         <Row gap={3} align="baseline" wrap>
+          {/*
+            While the first prices are on their way, a block the height of the
+            total holds its place, so the number lands without moving anything
+            below it. Never a zero, never a guess.
+          */}
           <span className={styles.total}>
-            <Money value={total} loading={summary.loading} />
+            {summary.loading ? (
+              <span
+                className={styles.totalSkeleton}
+                role="img"
+                aria-label="Pricing your collection"
+                data-testid="home-total-skeleton"
+              />
+            ) : (
+              <Money value={total} />
+            )}
           </span>
           {/*
             A percentage, not an amount: the movement series is Cardmarket EUR

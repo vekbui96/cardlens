@@ -1,4 +1,5 @@
 import { settledKey } from "./settledKey.ts";
+import { countRateLimited } from "./rateLimit.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { buildPrintingIndex, printingEur, type SetPrintingIndex } from "../models/printingIndex.ts";
@@ -65,6 +66,10 @@ export interface CollectionValueResult extends CollectionValue {
    * making, and the total never became honest about what it could not include.
    */
   unaskable: number;
+  /** Sets whose latest printings request was a 429 (see hooks/rateLimit.ts). */
+  rateLimited: number;
+  /** Of those, how many are still being retried. */
+  retrying: number;
   /**
    * Portfolio movement from Cardmarket's EUR averages, as a percentage.
    *
@@ -116,7 +121,7 @@ export function useCollectionValue(
     }),
   });
 
-  return useMemo(() => {
+  const base = useMemo(() => {
     const prices = new Map<string, SetPrintingIndex | null>();
     let pending = 0;
     let failed = 0;
@@ -156,4 +161,13 @@ export function useCollectionValue(
     return { ...value, pending, failed, unaskable, movement };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queries is a new array each render; its data is what matters
   }, [rows, setIds, catalogPrices, settledKey(queries)]);
+
+  /*
+   * Outside the memo above on purpose: a 429 with its retry still to come
+   * moves neither `dataUpdatedAt` nor `errorUpdatedAt`, so `settledKey` cannot
+   * see it. Counted on every render (a loop over a handful of sets) and merged
+   * only when a count changes, so the result keeps its identity otherwise.
+   */
+  const { limited: rateLimited, retrying } = countRateLimited(queries);
+  return useMemo(() => ({ ...base, rateLimited, retrying }), [base, rateLimited, retrying]);
 }

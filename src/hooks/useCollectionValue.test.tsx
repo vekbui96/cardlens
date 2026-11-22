@@ -136,4 +136,25 @@ describe("useCollectionValue pricing status", () => {
     expect(result.current.unaskable).toBe(0);
     expect(result.current.failed).toBe(0);
   });
+
+  it("reports a 429 as rate limited while its retry is still out (#161)", async () => {
+    // First answer a 429, then the retry never answers: held mid-retry.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve(new Response('{"error":"rate_limited"}', { status: 429 }));
+        return new Promise<Response>(() => {});
+      }),
+    );
+    const { result } = renderHook(() => useCollectionValue(ROWS, { base2: "Base Set 2" }), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() => expect(result.current.rateLimited).toBe(1));
+    expect(result.current.retrying).toBe(1);
+    expect(result.current.pending).toBe(1);
+    expect(result.current.priced).toBe(0);
+  });
 });
