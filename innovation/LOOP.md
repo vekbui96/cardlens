@@ -138,7 +138,12 @@ its slices; closing the slice or the spec also stops it; Ve can still add `appro
 held, edited or otherwise refused slice. The runner posts ONE comment on each slice the first time it is
 auto-approved ("Auto-approved via spec #N ... Comment `/hold` to stop.") and builds newly opened
 auto-approved slices in the same run when MaxBuilds, time and the plan budget allow. An auto-approved slice
-that fails gets no automatic retry: it waits for Ve (who removes `loop:failed` to rebuild it). You never add
+that fails gets no automatic retry: it waits for Ve (who removes `loop:failed` to rebuild it). **A slice
+whose earlier slice of the same spec is open and Manual / needs Ve is never started, even with its own
+`approved`** (gate-rules.ps1 `Get-SliceWaitDecision`): the runner skips it before any session, leaves its
+labels alone (no `loop:failed`), posts ONE "Waiting on slice k (#N, Manual)" comment and builds it in the
+first run after the blocking slices are closed; if you are ever handed such a slice anyway, stop without
+building or failing it (`LOOP-ISSUE-END <n> skipped`) and say which Manual slice it waits on. You never add
 `approved` and never comment `/hold`. The runner keeps a "## Spec progress" checklist comment on the spec
 (you never edit it) and closes the spec once every slice is deployed or closed. A spec is never built:
 `check-approval.ps1` refuses it.

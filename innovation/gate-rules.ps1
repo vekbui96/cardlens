@@ -15,6 +15,7 @@
   Get-ProposalSlots   how many proposals await review, and how many may still be opened (the ONE cap rule)?
   Get-SpecPlan        an approved spec's slices: opened, still to open, done? (Format-SpecProgress: its checklist)
   Get-ViaSpecDecision is a slice of an approved spec buildable without its own `approved` (auto-approved)?
+  Get-SliceWaitDecision  does a slice wait on an open Manual earlier slice of its spec (skipped, never failed)?
   Get-RetryDecision   may an approved issue with loop:failed get its one automatic retry?
   Get-PrecheckDecision  does this run have anything to do at all, before claude is started?
   Get-PlanBudgetVerdict / Test-BudgetAllowsModel / Split-BuildableByBudget  the ops hub's plan-budget
@@ -435,6 +436,70 @@ function Format-ViaSpecNotice {
     param([int]$Spec, [string]$ApprovedAt, [string]$Who = 'the owner', [string]$Marker = '<!-- innovation-loop -->')
     $d = "$ApprovedAt"; try { $d = ([datetime]$ApprovedAt).ToUniversalTime().ToString('yyyy-MM-dd') } catch { }
     return "$Marker`n$($script:ViaSpecMarker)`nAuto-approved via spec #$Spec (approved by $Who on $d). Comment ``/hold`` to stop.`n"
+}
+
+# Waiting on a Manual earlier slice. A slice (any issue whose body says "Part of #<spec> (slice <k> of <m>)")
+# whose EARLIER slices of the same spec include one that is still open and marked Manual / needs Ve is not
+# built, whether it is approved by its own `approved` label or via the spec: the loop cannot build the
+# Manual slice, so the later one would only be refused on scope or lack the data it needs (#117 before
+# #111 / #112). The runner skips it before any claude session ($0), leaves its labels alone (never
+# loop:failed), posts at most ONE comment on it (Format-SliceWaitNotice) and builds it in the first run after
+# the blocking slices are closed. An earlier slice that is open and NOT Manual keeps the existing behaviour
+# (a label-approved slice builds; an auto-approved one waits by Get-ViaSpecDecision rule 3).
+# $Issue: the slice (number, body). $Issues: loop:proposal issues, open AND closed (number, state, labels,
+# body, author/user). Only issues opened by -Owner with the loop -Marker and a slice link to the same spec
+# count as its earlier slices. Returns Linked, Waiting, Spec, K, Blockers (K, Issue; in slice order), Reason.
+$script:SliceWaitMarker = '<!-- innovation-loop:waiting-on-slice -->'
+function Get-SliceWaitDecision {
+    param($Issue, [object[]]$Issues, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $link = Get-SliceLink -Body "$($Issue.body)"
+    if (-not $link) { return [pscustomobject]@{ Linked = $false; Waiting = $false; Spec = 0; K = 0; Blockers = @(); Reason = '' } }
+    $blockers = @()
+    foreach ($i in @($Issues | Where-Object { $_ })) {
+        if ([int]$i.number -eq [int]$Issue.number) { continue }
+        if ("$($i.state)" -notmatch '^(?i)open$') { continue }
+        if ((Get-IssueAuthor $i) -ne $Owner) { continue }
+        if (-not "$($i.body)".Contains($Marker)) { continue }
+        $lk = Get-SliceLink -Body "$($i.body)"
+        if (-not $lk -or $lk.Spec -ne $link.Spec -or $lk.K -ge $link.K) { continue }
+        if ("$($i.body)" -notmatch $script:ManualRx) { continue }
+        $blockers += [pscustomobject]@{ K = [int]$lk.K; Issue = [int]$i.number }
+    }
+    $blockers = @($blockers | Sort-Object K, Issue)
+    $reason = ''
+    if ($blockers.Count -gt 0) { $reason = "waiting on $(Format-SliceWaitList $blockers) of spec #$($link.Spec); it builds once $(if ($blockers.Count -eq 1) { 'that slice is' } else { 'those slices are' }) closed" }
+    return [pscustomobject]@{ Linked = $true; Waiting = ($blockers.Count -gt 0); Spec = $link.Spec; K = $link.K; Blockers = $blockers; Reason = $reason }
+}
+
+# "slice 2 (#111, Manual)" / "slices 2 (#111, Manual) and 3 (#112, Manual)". Blockers: K and Issue (or k / issue).
+function Format-SliceWaitList {
+    param([object[]]$Blockers)
+    $b = @($Blockers | Where-Object { $_ } | ForEach-Object {
+            $k = $_.K; if ($null -eq $k) { $k = $_.k }; $n = $_.Issue; if ($null -eq $n) { $n = $_.issue }
+            "$k (#$n, Manual)" })
+    if ($b.Count -eq 0) { return '' }
+    if ($b.Count -eq 1) { return "slice $($b[0])" }
+    return "slices $(($b[0..($b.Count - 2)]) -join ', ') and $($b[-1])"
+}
+
+# The ONE comment the runner posts on a slice that waits on a Manual earlier slice.
+function Format-SliceWaitNotice {
+    param([object[]]$Blockers, [string]$Marker = '<!-- innovation-loop -->')
+    $one = (@($Blockers | Where-Object { $_ }).Count -eq 1)
+    return "$Marker`n$($script:SliceWaitMarker)`nWaiting on $(Format-SliceWaitList $Blockers). It will build once $(if ($one) { 'that slice is' } else { 'those slices are' }) closed.`n"
+}
+
+# Has the runner already posted its waiting notice on this slice (a comment by -Owner with both markers)?
+function Test-SliceWaitNoticed {
+    param([object[]]$Comments, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    return (@($Comments | Where-Object { $_ -and "$($_.user.login)" -eq $Owner -and "$($_.body)".Contains($Marker) -and "$($_.body)".Contains($script:SliceWaitMarker) }).Count -gt 0)
+}
+
+# Which waiting slices get the notice now: those the queue says are not noticed yet (check-approval.ps1 -List
+# `waitingOnSlice`, noticed = false) and not already posted by this runner process ($Posted: issue -> $true).
+function Select-SliceWaitNotices {
+    param([object[]]$Waiting, [hashtable]$Posted = @{})
+    return @($Waiting | Where-Object { $_ -and -not $_.noticed -and -not $Posted.ContainsKey([int]$_.issue) })
 }
 
 # ==================================================================================================

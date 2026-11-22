@@ -564,6 +564,7 @@ function Publish-LoopRunData {
         [string]$LoopHome = '',
         [string]$Waiting = '',   # 'Failed, waiting on Ve: #n (reason)' line (run-loop.ps1), appended to every comment
         [hashtable]$Approvals = @{},   # build issue -> 'label' | 'via-spec #<spec>' (run-loop.ps1); via-spec is noted
+        [object[]]$WaitingOnSlice = @(),   # slices skipped as waiting-on-slice (run-loop.ps1 Get-SliceWaitRunData), recorded in run data
         [int]$MaxIssues = 6, [int]$MaxProposals = 5,
         [switch]$NoPost
     )
@@ -588,7 +589,7 @@ function Publish-LoopRunData {
                 totals = $t | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 overhead = $data.Overhead | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
-                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting
+                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting; waitingOnSlice = @($WaitingOnSlice | Where-Object { $_ })
                 approvals = @(if ($Approvals) { @($Approvals.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; approval = "$($Approvals[$_])" } }) })
                 sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))

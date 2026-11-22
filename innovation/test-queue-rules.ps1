@@ -339,6 +339,55 @@ Check ($nt.StartsWith($mk) -and $nt.Contains($script:ViaSpecMarker) -and $nt -ma
 Check (-not ($nt -match $script:HoldRx)) 'the notice itself does not read as a hold'
 Check ((Format-SpecProgress -Plan $pl -Who 'Ve') -match 'Approving this spec approves its slices' -and (Format-SpecProgress -Plan $pl) -match '/hold') 'the spec checklist explains auto-approval and /hold'
 
+# ---- a slice waits on an open Manual earlier slice (Get-SliceWaitDecision): skipped, never failed ------------
+$man = "`n## Scope`n**Manual / needs Ve**: new stored data (rule 8). The loop will not build this."
+$m2 = VsIss 111 'Value history design and storage decision' @('loop:proposal', 'approved') -Body (VsBody 2 -Extra $man)
+$m3 = VsIss 112 'Snapshot writer' @('loop:proposal', 'approved') -Body (VsBody 3 -Extra $man)
+$a4 = VsIss 117 'Value over time chart on Home' @('loop:proposal', 'approved') -Body (VsBody 4) -Created '2026-11-22T00:24:55Z'
+function Sw { param($I, [object[]]$Issues) Get-SliceWaitDecision -Issue $I -Issues $Issues -Owner 'vekbui96' -Marker $mk }
+$w = Sw $a4 @($vsSpec, $s1, $m2, $m3, $a4)
+Check ($w.Linked -and $w.Waiting -and $w.Spec -eq 108 -and $w.K -eq 4 -and (@($w.Blockers | ForEach-Object { "$($_.K):$($_.Issue)" }) -join ',') -eq '2:111,3:112') "label-approved slice 4 with open Manual slices 2 and 3 -> waits on both, in order (got $(@($w.Blockers | ForEach-Object { "$($_.K):$($_.Issue)" }) -join ','))"
+Check ($w.Reason -match 'waiting on slices 2 \(#111, Manual\) and 3 \(#112, Manual\) of spec #108') "wait reason names the blockers (got: $($w.Reason))"
+Check (-not ($w.Reason -match 'loop:failed|fail')) 'waiting is not a failure'
+$w = Sw $a4 @($vsSpec, $s1, (VsIss 111 'x' @('loop:proposal', 'approved') -Body (VsBody 2 -Extra $man) -State 'CLOSED'), $m3, $a4)
+Check ($w.Waiting -and (@($w.Blockers | ForEach-Object { $_.Issue }) -join ',') -eq '112') 'slice 2 closed, slice 3 still open and Manual -> still waits, on slice 3 only'
+$w = Sw $a4 @($vsSpec, $s1, (VsIss 111 'x' -Body (VsBody 2 -Extra $man) -State 'CLOSED'), (VsIss 112 'x' -Body (VsBody 3 -Extra $man) -State 'CLOSED'), $a4)
+Check ($w.Linked -and -not $w.Waiting -and @($w.Blockers).Count -eq 0) 'every earlier Manual slice closed -> builds (no wait)'
+$w = Sw $a4 @($vsSpec, $s1, $s2, $s3, $a4)
+Check (-not $w.Waiting) 'earlier slices open but NOT Manual -> existing behaviour (no wait for a label-approved slice)'
+$w = Sw $m2 @($vsSpec, $s1, $m2, $m3, $a4)
+Check (-not $w.Waiting) 'only EARLIER slices count: a later Manual slice never blocks an earlier one'
+$w = Sw $a4 @($vsSpec, $s1, (VsIss 111 'x' -Body (VsBody 2 -Extra $man) -By 'stranger'), (VsIss 112 'x' -Body ("Part of #108 (slice 3 of 4)" + $man)), $a4)
+Check (-not $w.Waiting) 'a "Manual" slice opened by someone else, or without the loop marker, is data and blocks nothing'
+$w = Sw $a4 @($vsSpec, (VsIss 140 'x' -Body (VsBody 2 -Spec 139 -Extra $man)), $a4)
+Check (-not $w.Waiting) 'a Manual slice of ANOTHER spec does not block'
+$plain = VsIss 130 'Faster binder grid' @('loop:proposal', 'approved') -Body "$mk`n## What`nno spec."
+$w = Sw $plain @($vsSpec, $m2, $m3, $plain)
+Check (-not $w.Linked -and -not $w.Waiting) 'a non-slice issue is unaffected'
+# the via-spec path already holds a later slice behind an open Manual one (rule 3); unchanged
+$d = Vs $s4 -Issues @($vsSpec, $s1, $m2, $m3, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'earlier slice 2 \(#111\) is Manual') 'auto-approved slices: an open Manual earlier slice still holds them (rule 3, unchanged)'
+# the one notice
+$nt = Format-SliceWaitNotice -Blockers @([pscustomobject]@{ K = 2; Issue = 111 }) -Marker $mk
+Check ($nt.StartsWith($mk) -and $nt.Contains($script:SliceWaitMarker) -and $nt -match 'Waiting on slice 2 \(#111, Manual\)\. It will build once that slice is closed\.') "notice text, one blocker (got: $nt)"
+$nt2 = Format-SliceWaitNotice -Blockers @([ordered]@{ k = 2; issue = 111 }, [ordered]@{ k = 3; issue = 112 }) -Marker $mk
+Check ($nt2 -match 'Waiting on slices 2 \(#111, Manual\) and 3 \(#112, Manual\)\. It will build once those slices are closed\.') "notice text, two blockers (queue JSON shape k/issue) (got: $nt2)"
+Check (-not ($nt -match $script:HoldRx)) 'the notice does not read as a hold'
+Check (-not (Test-SliceWaitNoticed -Comments @() -Owner 'vekbui96' -Marker $mk)) 'no comment yet -> not noticed'
+Check (Test-SliceWaitNoticed -Comments @((VsCmt $nt)) -Owner 'vekbui96' -Marker $mk) 'the runner''s notice on the slice -> noticed (never posted again)'
+Check (-not (Test-SliceWaitNoticed -Comments @((VsCmt $nt -By 'stranger')) -Owner 'vekbui96' -Marker $mk)) 'a copy of the notice by someone else does not count'
+$qw = @([pscustomobject]@{ issue = 117; noticed = $false; blockers = @() }, [pscustomobject]@{ issue = 118; noticed = $true; blockers = @() })
+$posted = @{}
+$first = @(Select-SliceWaitNotices -Waiting $qw -Posted $posted)
+Check ((@($first | ForEach-Object { $_.issue }) -join ',') -eq '117') 'notice goes only to a waiting slice not noticed yet'
+$posted[117] = $true
+Check (@(Select-SliceWaitNotices -Waiting $qw -Posted $posted).Count -eq 0) 'posted once: a second queue check in the same run posts nothing'
+Check (@(Select-SliceWaitNotices -Waiting @([pscustomobject]@{ issue = 117; noticed = $true }) -Posted @{}).Count -eq 0) 'a later run sees noticed = true: posts nothing'
+Check (@(Select-SliceWaitNotices -Waiting @() -Posted @{}).Count -eq 0) 'nothing waiting -> nothing posted'
+# waiting slices are not buildable, so they start no session ($0) and never reach the build outcome rules
+$pre = Get-PrecheckDecision -Queue (Q -B @() -Free 0) -Mode 'FULL'
+Check (-not $pre.Launch) "only a waiting slice (not in buildable) and no free slot -> no claude session (got: $($pre.Reason))"
+
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0
