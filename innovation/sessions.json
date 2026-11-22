@@ -45,11 +45,11 @@
     "logKeepDays": 30,
     "digestMaxIssues": 150,
     "digestDeployedDays": 3,
-    "productStore": false,
+    "productStore": true,
     "productCollectMinutes": 10,
-    "memoryAgent": false,
+    "memoryAgent": true,
     "memoryMinDecisions": 5,
     "memoryEveryDays": 7,
-    "requestIntake": false
+    "requestIntake": true
   }
 }
