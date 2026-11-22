@@ -99,7 +99,7 @@ function Test-Issue {
     param([int]$Number, [switch]$AsSpec)
     $res = [ordered]@{ issue = $Number; buildable = $false; reasons = @(); approvedBy = $null; approvedAt = $null; adjustments = @()
         failed = $false; retry = $false; failure = ''; retryReason = ''; waitingReason = ''; labels = @(); spec = $false
-        approval = 'label'; viaSpec = 0; viaSpecNoticed = $false; viaSpecReasons = @() }
+        approval = 'label'; viaSpec = 0; viaSpecNoticed = $false; viaSpecReasons = @(); waitingOnSlice = $null }
     $i = Get-GhJson @('api', "repos/$Repo/issues/$Number")
     $labels = @($i.labels | ForEach-Object { $_.name })
     $res.labels = $labels
@@ -179,6 +179,18 @@ function Test-Issue {
             if ($rd.Retry) { $res.retry = $true; $res.retryReason = $rd.Reason }
             else { $res.reasons += "has label loop:failed ($($rd.Reason))"; $res.waitingReason = $rd.Reason }
         }
+        # otherwise buildable, but a slice whose earlier slice of the same spec is open and Manual waits for it
+        # (gate-rules.ps1 Get-SliceWaitDecision): skipped by the runner, labels untouched, one notice. Not for
+        # -InProgress (merge-pr.ps1): a build that already started is not stopped by this rule.
+        if (-not $InProgress -and $res.reasons.Count -eq 0 -and (Get-SliceLink -Body "$($i.body)")) {
+            $wd = Get-SliceWaitDecision -Issue $i -Issues (Get-AllProposals) -Owner $Owner -Marker $script:Marker
+            if ($wd.Waiting) {
+                $res.reasons += $wd.Reason
+                $res.waitingOnSlice = [ordered]@{ issue = $Number; spec = [int]$wd.Spec; k = [int]$wd.K
+                    blockers = @($wd.Blockers | ForEach-Object { [ordered]@{ k = $_.K; issue = $_.Issue } })
+                    noticed = [bool](Test-SliceWaitNoticed -Comments $comments -Owner $Owner -Marker $script:Marker) }
+            }
+        }
     }
     $res.buildable = ($res.reasons.Count -eq 0)
     return $res
@@ -223,7 +235,8 @@ function Get-Queue {
     foreach ($o in @(@($approved) + @($candidates) | Sort-Object { [datetime]$_.createdAt })) { $results += (Test-Issue -Number $o.number) }
     $ok = @($results | Where-Object { $_.buildable })
     $via = @($results | Where-Object { $_.approval -eq 'via-spec' })
-    $waiting = @($results | Where-Object { $_.failed -and -not $_.buildable } | ForEach-Object {
+    $waitSlice = @($results | Where-Object { $_.waitingOnSlice } | ForEach-Object { $_.waitingOnSlice })
+    $waiting = @($results | Where-Object { $_.failed -and -not $_.buildable -and -not $_.waitingOnSlice } | ForEach-Object {
             $why = $_.waitingReason; if (-not $why) { $why = ($_.reasons -join '; ') }
             [ordered]@{ issue = $_.issue; reason = $why } })
     $labels = [ordered]@{}; foreach ($r in $ok) { $labels["$($r.issue)"] = @($r.labels) }
@@ -250,6 +263,7 @@ function Get-Queue {
         specs        = @($specs)
         slicesToOpen = @($toOpen)
         waitingOnVe  = @($waiting)
+        waitingOnSlice = @($waitSlice)
         checked      = $results
     }
 }
