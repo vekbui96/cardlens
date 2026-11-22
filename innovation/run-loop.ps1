@@ -198,7 +198,7 @@ function Get-DailyCap {
 }
 function Add-DailyCount {
     param([string]$Kind)
-    if ($DryRun) { return }
+    if ($DryRun -and -not $AgentsDryRun) { return }   # -AgentsDryRun sessions really run: they count
     try {
         $st = Add-DailyLaunch -State (Read-DailyState) -Kind $Kind
         [IO.File]::WriteAllText($script:DailyPath, ($st | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))

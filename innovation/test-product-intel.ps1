@@ -33,8 +33,8 @@ Check (@((ConvertTo-Workflows ([pscustomobject]@{ workflows = [pscustomobject]@{
 # ---- metrics -----------------------------------------------------------------------------------------------------
 $sum = [pscustomobject]@{ rates = [pscustomobject]@{ syncFailureRate = 0.0435; homePriceCoverage = 0.9189; syncRuns = 46; screenViewShares = [pscustomobject]@{ home = 0.2 }; avgBatchSize = 1 } }
 $rt = Get-MetricRates $sum
-Check ((@($rt.Keys) -join ',') -eq 'syncFailureRate,homePriceCoverage,avgBatchSize') "only scalar rates in 0..1 are kept (got $(@($rt.Keys) -join ','))"
-$old = [pscustomobject]@{ syncFailureRate = 0.04; homePriceCoverage = 0.70; avgBatchSize = 1 }
+Check ((@($rt.Keys) -join ',') -eq 'syncFailureRate,homePriceCoverage') "only rates in 0..1 are kept, not counts or share maps (got $(@($rt.Keys) -join ','))"
+$old = [pscustomobject]@{ syncFailureRate = 0.04; homePriceCoverage = 0.70 }
 $dl = @(Get-MetricDeltas -Old $old -New $rt -Points 10)
 Check (@($dl | Where-Object { $_.Moved } | ForEach-Object { $_.Key }) -join ',' -eq 'homePriceCoverage') 'a 22-point move is past 10 points; 0.4 points is not'
 Check (@(Get-MetricDeltas -Old $null -New $rt -Points 10).Count -eq 0) 'no snapshot yet: no delta, no move'

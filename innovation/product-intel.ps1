@@ -99,13 +99,15 @@ function Get-ChangedWorkflows {
 }
 
 # ---- metrics (GET /api/metrics/summary, read by the runner) ---------------------------------------------------
-# The scalar rates of a summary (rates.* numbers in 0..1; nested share maps and counts are left out).
+# The scalar rates of a summary: rates.* named like a rate (...Rate, ...Share, ...Coverage) with a value in 0..1.
+# Counts that happen to be 0 or 1 today (avgBatchSize, syncDroppedRows) and nested share maps are left out.
 function Get-MetricRates {
     param($Summary)
     $r = [ordered]@{}
     if ($null -eq $Summary -or $null -eq $Summary.rates) { return $r }
     foreach ($p in $Summary.rates.PSObject.Properties) {
         $v = 0.0
+        if ($p.Name -notmatch '(Rate|Share|Coverage)$') { continue }
         if ($p.Value -is [string] -or $p.Value -is [Management.Automation.PSCustomObject] -or $p.Value -is [array]) { continue }
         if (-not [double]::TryParse("$($p.Value)", [Globalization.NumberStyles]::Float, $script:IntelInv, [ref]$v)) { continue }
         if ($v -lt 0 -or $v -gt 1) { continue }
