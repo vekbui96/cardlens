@@ -14,6 +14,7 @@ import {
   CardArt,
   Chip,
   ErrorNotice,
+  failedOrRetrying,
   Field,
   Grid,
   Money,
@@ -170,10 +171,10 @@ export function SearchScreen({ query }: SearchScreenProps) {
 
       {query === "" ? (
         <Idle recents={recentSearches} onPick={run} onClear={clearRecentSearches} />
+      ) : failedOrRetrying(search) ? (
+        <CatalogFailure query={query} retrying={search.isFetching} onRetry={() => void search.refetch()} />
       ) : search.isLoading ? (
         <Searching query={query} />
-      ) : search.isError ? (
-        <CatalogFailure query={query} retrying={search.isFetching} onRetry={() => void search.refetch()} />
       ) : cards.length === 0 ? (
         <NoMatches query={query} />
       ) : (

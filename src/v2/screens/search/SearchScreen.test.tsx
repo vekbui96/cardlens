@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CatalogProvider, RepositoriesProvider } from "../../../app/contexts.tsx";
@@ -31,6 +31,21 @@ class CountingProvider extends MockPokemonProvider {
 }
 
 /** Fails the first `failures` attempts, then behaves. A burst, not an outage. */
+/** Fails `failures` times, then never answers: a retry that is still in flight. */
+class FailThenHangProvider extends MockPokemonProvider {
+  attempts = 0;
+
+  constructor(private readonly failures: number) {
+    super();
+  }
+
+  override async searchCards(): Promise<PokemonCardSummary[]> {
+    this.attempts += 1;
+    if (this.attempts <= this.failures) throw new ProviderError("burst", "network");
+    return new Promise<PokemonCardSummary[]>(() => {});
+  }
+}
+
 class FlakyProvider extends MockPokemonProvider {
   attempts = 0;
 
@@ -199,6 +214,41 @@ describe("a flaky catalog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(await screen.findByRole("heading", { name: /cards for “charizard”/i })).toBeInTheDocument();
+  });
+});
+
+describe("retrying a failed search", () => {
+  it("keeps the notice and focus on the button while the retry is in flight", async () => {
+    // React Query resets a data-less query to pending on refetch; branching on
+    // isError alone swapped the notice for the skeleton and dropped focus.
+    const provider = new FailThenHangProvider(2);
+    render(<SearchScreen query="charizard" />, { wrapper: harness(provider) });
+
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    await userEvent.click(retry);
+
+    const busy = await screen.findByRole("button", { name: "Trying again…" });
+    expect(busy).toBe(retry);
+    expect(busy).toHaveFocus();
+    expect(busy).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText("Searching the card catalog")).not.toBeInTheDocument();
+  });
+
+  it("announces the failure again when the retry fails too", async () => {
+    // Initial try + the hook's own retry, then Try again + its retry: four failures.
+    const provider = new FlakyProvider(4);
+    render(<SearchScreen query="charizard" />, { wrapper: harness(provider) });
+
+    await screen.findByRole("button", { name: "Try again" });
+    const first = screen.getByRole("alert");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(provider.attempts).toBe(4));
+    await screen.findByRole("button", { name: "Try again" });
+    const second = screen.getByRole("alert");
+    expect(second).not.toBe(first);
+    expect(second).toHaveTextContent(/the card catalog did not answer/i);
+    expect(screen.getByRole("button", { name: "Try again" })).toHaveFocus();
   });
 });
 
