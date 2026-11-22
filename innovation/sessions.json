@@ -1,5 +1,5 @@
 {
-  "_readme": "Ve's file: the model, turn cap, time limit, USD cap and daily cap of each kind of claude session (run-loop.ps1 starts one session per job). Edit by hand; the loop only reads it. Missing or empty values fall back to the defaults in gate-rules.ps1 ($SessionDefaults, $LoopOptionDefaults). A build uses build.smallModel when its issue carries one of build.smallLabels, else build.model. maxBudgetUsd is passed to claude as --max-budget-usd (0 = no cap); a build on a model that is not Opus uses build.smallMaxBudgetUsd. A session stopped by its USD cap mid-build is failure class max-budget (retried once, like max-turns). maxPerDay: at most this many sessions of the kind start per local day across all runs (0 = no cap; counts in <LOOP_HOME>\\state\\daily-sessions.json). options: proposeIssueDigest (the runner lists the issues once into the proposal header), compactPrompts (build-only LOOP.md blocks left out of proposal/review prompts), logKeepDays (prune old logs at run start; rundata.json and run-<id>.log kept; 0 = never), digestMaxIssues, digestDeployedDays. intake: the session that plans one of your loop:request issues (your requests' sessions are not counted against the build/propose daily caps; intake has its own maxPerDay). memory: the tool-less Haiku memory agent (its JSON is validated by the runner). options.productStore (decision collector, D:\\hub\\state\\product\\cardlens), options.memoryAgent (preferences; needs productStore) and options.requestIntake (your loop:request issues) switch Phase 1 on; productCollectMinutes, memoryMinDecisions, memoryEveryDays tune them. options.designSkills lets build, proposal and review sessions use the pinned design aids under D:\\loop-tools (impeccable engine: context / shot / detect; ui-ux-pro-max search.py) and adds LOOP.md section 9; the runner re-hashes the engine every run and turns the feature off on a mismatch (the taste skill is never available to the loop). run-loop.ps1 -Model / -MaxTurns override every session for one run (-Model never applies to memory).",
+  "_readme": "Ve's file: the model, turn cap, time limit, USD cap and daily cap of each kind of claude session (run-loop.ps1 starts one session per job). Edit by hand; the loop only reads it. Missing or empty values fall back to the defaults in gate-rules.ps1 ($SessionDefaults, $LoopOptionDefaults). A build uses build.smallModel when its issue carries one of build.smallLabels, else build.model. maxBudgetUsd is passed to claude as --max-budget-usd (0 = no cap); a build on a model that is not Opus uses build.smallMaxBudgetUsd. A session stopped by its USD cap mid-build is failure class max-budget (retried once, like max-turns). maxPerDay: at most this many sessions of the kind start per local day across all runs (0 = no cap; counts in <LOOP_HOME>\\state\\daily-sessions.json). options: proposeIssueDigest (the runner lists the issues once into the proposal header), compactPrompts (build-only LOOP.md blocks left out of proposal/review prompts), logKeepDays (prune old logs at run start; rundata.json and run-<id>.log kept; 0 = never), digestMaxIssues, digestDeployedDays. intake: the session that plans one of your loop:request issues (your requests' sessions are not counted against the build/propose daily caps; intake has its own maxPerDay). memory: the tool-less Haiku memory agent (its JSON is validated by the runner). options.productStore (decision collector, D:\\hub\\state\\product\\cardlens), options.memoryAgent (preferences; needs productStore) and options.requestIntake (your loop:request issues) switch Phase 1 on; productCollectMinutes, memoryMinDecisions, memoryEveryDays tune them. options.designSkills lets build, proposal and review sessions use the pinned design aids under D:\\loop-tools (impeccable engine: context / shot / detect; ui-ux-pro-max search.py) and adds LOOP.md section 9; the runner re-hashes the engine every run and turns the feature off on a mismatch (the taste skill is never available to the loop). run-loop.ps1 -Model / -MaxTurns override every session for one run (-Model never applies to memory). Phase 2: options.observerPm (needs productStore) splits Phase B into observe (the Observer: runs only when a file of a workflow in innovation/workflows.json changed since the last observation, or a 7-day metrics rate moved by observeMetricPoints percentage points; read-only, findings JSON validated by the runner) and pm (the product manager, in place of propose: runs only when there are new findings, decisions, research or slices since its last run AND a proposal slot is free; every issue it opens cites a finding or decision). Idle days start neither. With observerPm off, propose runs as before.",
   "build": {
     "model": "claude-opus-5-5",
     "smallModel": "claude-sonnet-5-5",
@@ -39,6 +39,21 @@
     "maxBudgetUsd": 0.1,
     "maxPerDay": 2
   },
+  "observe": {
+    "model": "claude-sonnet-5-5",
+    "maxTurns": 30,
+    "timeoutMinutes": 15,
+    "maxBudgetUsd": 0.6,
+    "maxPerDay": 2
+  },
+  "pm": {
+    "model": "claude-sonnet-5-5",
+    "maxTurns": 80,
+    "timeoutMinutes": 45,
+    "minMinutes": 15,
+    "maxBudgetUsd": 0.75,
+    "maxPerDay": 4
+  },
   "options": {
     "proposeIssueDigest": true,
     "compactPrompts": true,
@@ -51,6 +66,8 @@
     "memoryMinDecisions": 5,
     "memoryEveryDays": 7,
     "requestIntake": true,
-    "designSkills": true
+    "designSkills": true,
+    "observerPm": false,
+    "observeMetricPoints": 10
   }
 }

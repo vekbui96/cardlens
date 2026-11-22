@@ -2,7 +2,7 @@
 // Each case spawns guard.mjs with the hook JSON on stdin, exactly as Claude Code does.
 /* global process, console */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -621,8 +621,111 @@ const designDeny = [
 // with the flag off (no env var), every engine and search.py call is refused
 const designOffDeny = [ps(`${E} context`), ps(`${PY} 'tap target' --domain ux`)];
 
+// Phase 2: the Observer (MODE=OBSERVE) reads and reports; no GitHub writes, no innovation script, file writes
+// only in WORK. The PM (MODE=PM) is a proposal session whose every issue cites a known finding / decision id
+// (state\pm-refs.json, written by the runner); a dry run (NO_GH_WRITES=1) refuses every GitHub write.
+const observeEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "OBSERVE", INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1" };
+const observeAllow = [
+  ps(`git -C "${C}" log --oneline 0123abc..4567def`),
+  ps(`git -C "${C}" diff 0123abc..4567def -- src/v2/screens/home/HomeScreen.tsx`),
+  { tool_name: "Read", tool_input: { file_path: `${C}\\src\\v2\\screens\\home\\HomeScreen.tsx` } },
+  { tool_name: "Grep", tool_input: { pattern: "ErrorNotice", path: `${C}\\src` } },
+  { tool_name: "WebFetch", tool_input: { url: "https://vekbui96.github.io/cardlens/" } },
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=7`),
+  ps(`gh issue view 212 -R vekbui96/cardlens --json title,body`),
+  ps(`gh pr list -R vekbui96/cardlens --state merged --limit 5`),
+  { tool_name: "Write", tool_input: { file_path: `${W}\\observe-notes.md`, content: "notes" } },
+  ps(`New-Item -ItemType Directory "${W}\\shots-home"`),
+  ps(`${E} shot https://vekbui96.github.io/cardlens/ --viewport 390x844 --out "${W}\\shots-home"`),
+  ps(`${E} detect --json "${C}\\src\\v2\\screens\\home"`),
+];
+const observeDeny = [
+  // no GitHub writes of any kind
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${W}\\p.md"`),
+  ps(`gh issue comment 212 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh issue edit 212 -R vekbui96/cardlens --add-label loop:failed`),
+  ps(`gh issue close 212 -R vekbui96/cardlens`),
+  ps(`gh pr create -R vekbui96/cardlens --head loop/212-x --body-file "${W}\\b.md"`),
+  ps(`gh pr comment 40 -R vekbui96/cardlens --body-file "${W}\\b.md"`),
+  ps(`gh api -X POST repos/vekbui96/cardlens/issues/212/comments -f body=x`),
+  ps(`gh label create x -R vekbui96/cardlens`),
+  // no innovation script (not even check-approval)
+  ps(`${S}\\check-approval.ps1 -List`),
+  ps(`${S}\\progress.ps1 -Issue 12 -Step plan`),
+  // file writes only in WORK: not the clone, not artifacts, not the store
+  { tool_name: "Write", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, content: "x" } },
+  { tool_name: "Edit", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, old_string: "a", new_string: "b" } },
+  { tool_name: "Write", tool_input: { file_path: `${HOME}\\artifacts\\x.png`, content: "x" } },
+  { tool_name: "Write", tool_input: { file_path: "D:\\hub\\state\\product\\cardlens\\findings.jsonl", content: "{}" } },
+  ps(`New-Item -ItemType File "${C}\\notes.md"`),
+  ps(`Remove-Item "${C}\\src\\app\\App.tsx"`),
+  ps(`${E} shot https://vekbui96.github.io/cardlens/ --out "${HOME}\\artifacts\\shots"`),
+  // and nothing a build does
+  ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
+  ps(`git -C "${C}" push origin loop/12-x`),
+];
+const pmHome = mkdtempSync(path.join(os.tmpdir(), "guard-pm-"));
+mkdirSync(path.join(pmHome, "state"), { recursive: true });
+writeFileSync(
+  path.join(pmHome, "state", "pm-refs.json"),
+  JSON.stringify({ ids: ["f-0123abcd", "d-0123456789"], specs: [150] }),
+  "utf8",
+);
+const pmEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "PM", INNOVATION_LOOP_CARDLENS_HOME: pmHome };
+const pmBody = (name, text) => {
+  const p = path.join(pmHome, name);
+  writeFileSync(p, text, "utf8");
+  return p;
+};
+const citesFinding = pmBody("f.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: f-0123abcd -->\n");
+const citesDecision = pmBody("d.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: d-0123456789 f-99999999 -->\n");
+const citesSpec = pmBody("s.md", "<!-- innovation-loop -->\nPart of #150 (slice 2 of 3)\n## What\nx\n<!-- loop-refs: spec-150 -->\n");
+const citesNothing = pmBody("n.md", "<!-- innovation-loop -->\n## What\nx\n");
+const citesUnknown = pmBody("u.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: f-99999999 d-9999999999 -->\n");
+const citesOtherSpec = pmBody("o.md", "<!-- innovation-loop -->\n## What\nx\n<!-- loop-refs: spec-151 -->\n");
+const create = (f, extra = "") =>
+  ps(`gh issue create -R vekbui96/cardlens --title "Home: x" --label loop:proposal ${extra}--body-file "${f}"`);
+const pmAllow = [
+  create(citesFinding),
+  create(citesDecision, "--label size:small "),
+  create(citesSpec),
+  create(citesFinding, "--label loop:spec "),
+  ps(`gh issue view 150 -R vekbui96/cardlens --json title,body,comments`),
+  ps(`${S}\\check-approval.ps1 -Slots`),
+];
+const pmDeny = [
+  create(citesNothing),
+  create(citesUnknown),
+  create(citesOtherSpec),
+  create(pmBody("missing-dir\\x.md".replace("\\", "-"), "") + "-gone"),
+  // labels: only today's set
+  create(citesFinding, "--label approved "),
+  create(citesFinding, "--label loop:deployed "),
+  create(citesFinding, "--label loop:product-review "),
+  create(citesFinding, "--label area:web "),
+  ps(`gh issue edit 150 -R vekbui96/cardlens --add-label loop:proposal`),
+  ps(`gh issue comment 150 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
+];
+// the PM fails closed without the runner's id list
+const pmNoRefsEnv = { ...pmEnv, INNOVATION_LOOP_CARDLENS_HOME: mkdtempSync(path.join(os.tmpdir(), "guard-pm0-")) };
+const dryEnv = { ...pmEnv, INNOVATION_LOOP_CARDLENS_NO_GH_WRITES: "1" };
+const dryDeny = [
+  create(citesFinding),
+  ps(`gh issue comment 150 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh pr create -R vekbui96/cardlens --head loop/12-x --body-file "${W}\\b.md"`),
+];
+const dryAllow = [ps(`gh issue view 150 -R vekbui96/cardlens --json title,body`)];
+
 let failures = 0;
 for (const [name, e, list, want] of [
+  ["observe", observeEnv, observeAllow, 0],
+  ["observe", observeEnv, observeDeny, 2],
+  ["pm", pmEnv, pmAllow, 0],
+  ["pm", pmEnv, pmDeny, 2],
+  ["pm (no pm-refs.json)", pmNoRefsEnv, [create(citesFinding)], 2],
+  ["pm (dry run)", dryEnv, dryDeny, 2],
+  ["pm (dry run)", dryEnv, dryAllow, 0],
   ["design", designEnv, designAllow, 0],
   ["design (propose)", designProposeEnv, designAllow, 0],
   ["design", designEnv, designDeny, 2],
@@ -701,6 +804,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill, ${observeAllow.length + observeDeny.length} observer, ${pmAllow.length + pmDeny.length + dryAllow.length + dryDeny.length + 1} pm and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);

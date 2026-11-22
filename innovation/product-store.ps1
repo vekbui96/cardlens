@@ -7,7 +7,8 @@
 .DESCRIPTION
   GitHub stays the source for proposals and approvals; FOCUS.md and PRODUCT.md stay Ve's. The store holds:
   - cursors.json     {schema, lastEventId, commentsSince, digestCommentsSince, lastCollectedUtc,
-                      lastObservedCommit (Phase 2), research {expiresUtc} (Phase 4), memory {lastRunUtc, lastDecisionId}}
+                      lastObservedCommit (Phase 2), research {expiresUtc} (Phase 4), memory {lastRunUtc, lastDecisionId},
+                      observe {lastRunUtc, metrics} and pm {lastRunUtc} (Phase 2, product-intel.ps1)}
   - decisions.jsonl  append-only, ONE writer: the deterministic collector below (no AI). Each record:
                       {id, ts, kind, issue, labels, gist, link} (+ pref / verdict for preference replies).
                       kinds: approve, unapprove, reject (closed without loop:deployed), hold, comment (Ve's comment
@@ -50,7 +51,8 @@ function ConvertTo-IsoUtc { param($T) if ($null -eq $T -or "$T" -eq '') { return
 # ---- cursors ------------------------------------------------------------------------------------------------
 function New-ProductCursors {
     return [ordered]@{ schema = $script:ProductSchema; lastEventId = [long]0; commentsSince = ''; digestCommentsSince = ''; lastCollectedUtc = ''
-        lastObservedCommit = ''; research = [ordered]@{ expiresUtc = '' }; memory = [ordered]@{ lastRunUtc = ''; lastDecisionId = '' } }
+        lastObservedCommit = ''; research = [ordered]@{ expiresUtc = '' }; memory = [ordered]@{ lastRunUtc = ''; lastDecisionId = '' }
+        observe = [ordered]@{ lastRunUtc = ''; metrics = $null }; pm = [ordered]@{ lastRunUtc = '' } }
 }
 # A parsed cursors.json (or $null / garbage / another schema) -> a complete cursors object (defaults filled in).
 function ConvertTo-ProductCursors {
@@ -61,6 +63,12 @@ function ConvertTo-ProductCursors {
     $id = [long]0; if ([long]::TryParse("$($Json.lastEventId)", [ref]$id) -and $id -gt 0) { $c.lastEventId = $id }
     if ($Json.research -and $Json.research.expiresUtc) { $c.research.expiresUtc = "$($Json.research.expiresUtc)" }
     if ($Json.memory) { foreach ($k in 'lastRunUtc', 'lastDecisionId') { if ($Json.memory.$k) { $c.memory[$k] = "$($Json.memory.$k)" } } }
+    # Phase 2 (product-intel.ps1): the Observer's last run and metrics snapshot, the PM's last run
+    if ($Json.PSObject.Properties.Name -contains 'observe' -and $Json.observe) {
+        if ($Json.observe.lastRunUtc) { $c.observe.lastRunUtc = "$($Json.observe.lastRunUtc)" }
+        if ($Json.observe.metrics -is [Management.Automation.PSCustomObject]) { $m = [ordered]@{}; foreach ($p in $Json.observe.metrics.PSObject.Properties) { $d = 0.0; if ([double]::TryParse("$($p.Value)", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$d)) { $m[$p.Name] = $d } }; $c.observe.metrics = $m }
+    }
+    if ($Json.PSObject.Properties.Name -contains 'pm' -and $Json.pm -and $Json.pm.lastRunUtc) { $c.pm.lastRunUtc = "$($Json.pm.lastRunUtc)" }
     return $c
 }
 # Is the collector due? Stale when it never ran or ran more than -MinMinutes ago.

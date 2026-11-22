@@ -29,9 +29,19 @@ const REPO = "vekbui96/cardlens";
 // INTAKE plans ONE of Ve's loop:request issues (INNOVATION_LOOP_CARDLENS_REQUEST = its number): read-only
 // research plus opening proposals/specs that say "From request #N", and commenting on / adding loop:needs-info
 // or loop:declined to that one request. MEMORY (the memory agent) has no tools at all.
+// OBSERVE (Phase 2, the Observer) is read-only research with NO GitHub writes, no innovation script and file writes
+// only in WORK; it reports findings as JSON that the runner validates. PM (Phase 2, the product manager) is PROPOSE
+// plus one rule: every issue it opens cites a known finding / decision id in a <!-- loop-refs: ... --> line (the ids
+// the runner wrote to <HOME>\state\pm-refs.json before the session). INNOVATION_LOOP_CARDLENS_NO_GH_WRITES=1
+// (run-loop -DryRun -AgentsDryRun) refuses every GitHub write in any mode.
 const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpperCase();
 const INTAKE = MODE === "INTAKE";
-const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY", "INTAKE"].includes(MODE);
+const OBSERVE = MODE === "OBSERVE";
+const PM = MODE === "PM";
+const NO_GH_WRITES = process.env.INNOVATION_LOOP_CARDLENS_NO_GH_WRITES === "1";
+const READ_ONLY = ["PRODUCT_REVIEW", "PROPOSE", "PROPOSE_ONLY", "INTAKE", "OBSERVE", "PM"].includes(MODE);
+// keep identical to product-intel.ps1 $script:LoopRefsRx
+const LOOP_REFS = /<!--\s*loop-refs:\s*([^>]*?)\s*-->/g;
 const REQUEST = String(process.env.INNOVATION_LOOP_CARDLENS_REQUEST || "").trim();
 const MARKER = "<!-- innovation-loop -->";
 
@@ -219,6 +229,8 @@ function checkDesignCommand(c, isPy) {
         continue;
       }
       if (t === "--out" && rest[i + 1] && inWork(rest[i + 1].v)) {
+        if (OBSERVE && !norm(rest[i + 1].v).startsWith(HOME + "\\work"))
+          block(`the Observer's screenshots go to a folder in ${HOME}\\work`);
         out = true;
         i++;
         continue;
@@ -262,6 +274,41 @@ function checkDesignCommand(c, isPy) {
   );
 }
 
+// ---- PM: every issue it opens cites a known finding or decision ------------------------------------------
+// The runner writes <HOME>\state\pm-refs.json ({ids: [f-..., d-...], specs: [n]}) before the PM session; the
+// session cannot write there (writes: clone / WORK / artifacts only). A slice cites spec-<n> for a spec in `specs`.
+function checkPmRefs(c) {
+  const bf = (c.match(/--body-file\s+("([^"]+)"|'([^']+)'|(\S+))/i) || []).slice(2).find(Boolean);
+  let text = "";
+  try {
+    text = readFileSync(String(bf || ""), "utf8");
+  } catch {
+    block("the PM's issue body file could not be read (failing closed)");
+  }
+  let refs;
+  try {
+    refs = JSON.parse(readFileSync(HOME + "\\state\\pm-refs.json", "utf8").replace(/^﻿/, ""));
+  } catch {
+    block("the runner's list of citable ids (state\\pm-refs.json) is missing (failing closed)");
+  }
+  const ids = new Set((refs.ids || []).map(String));
+  const specs = new Set((refs.specs || []).map((n) => String(n)));
+  const cited = [...text.matchAll(LOOP_REFS)].flatMap((m) => m[1].split(/[\s,]+/).filter(Boolean));
+  if (cited.length === 0)
+    block(
+      "every PM issue cites what it acts on: add a last line <!-- loop-refs: f-xxxxxxxx d-xxxxxxxxxx --> (section 11)",
+    );
+  const ok = cited.some(
+    (r) =>
+      (/^(f-[0-9a-f]{8}|d-[0-9a-f]{10})$/.test(r) && ids.has(r)) ||
+      (/^spec-\d+$/.test(r) && specs.has(r.slice(5))),
+  );
+  if (!ok)
+    block(
+      `loop-refs cites no known finding or decision (${cited.slice(0, 4).join(" ")}); use ids from OPEN_FINDINGS / RECENT_DECISIONS, or spec-<n> for a slice`,
+    );
+}
+
 // ---- file tools --------------------------------------------------------------------------------
 if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].includes(tool)) {
   const p = ti.file_path || ti.path || ti.notebook_path || "";
@@ -274,6 +321,8 @@ if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].inclu
     const inWork = n.startsWith(HOME + "\\work\\") || n.startsWith(HOME + "\\artifacts\\");
     if (!inClone && !inWork)
       block(`writes are only allowed in the loop clone (${CLONE}) and ${HOME}\\work / artifacts`);
+    if (OBSERVE && !n.startsWith(HOME + "\\work\\"))
+      block(`the Observer writes files only in ${HOME}\\work (it reports findings; it changes nothing)`);
     if (inClone) {
       const rel = n.slice(CLONE.length + 1).replace(/\\/g, "/");
       if (rel === ".git" || rel.startsWith(".git/")) block("do not edit .git directly");
@@ -365,6 +414,21 @@ if (tool === "Bash" || tool === "PowerShell") {
       .slice(1)
       .map((x) => (x || "").toLowerCase());
     const [g1, g2] = sub;
+    if (OBSERVE) {
+      // the Observer reads GitHub at most; it never writes (no issue / PR / label / comment of any kind)
+      const readOnlyGh =
+        (["issue", "pr"].includes(g1) && ["view", "list", "diff", "status", "checks"].includes(g2)) ||
+        (g1 === "run" && ["list", "view"].includes(g2)) ||
+        g1 === "api";
+      if (!readOnlyGh)
+        block(`the Observer never writes to GitHub (gh ${g1} ${g2 || ""} refused); report findings in your JSON`);
+    }
+    if (
+      NO_GH_WRITES &&
+      ((["issue", "pr"].includes(g1) && !["view", "list", "diff", "status", "checks"].includes(g2)) ||
+        g1 === "label")
+    )
+      block(`dry run: no GitHub writes (gh ${g1} ${g2 || ""}); list what you would open in your JSON (wouldOpen)`);
     const named =
       new RegExp(`(-R|--repo)\\s+["']?${REPO}\\b`, "i").test(c) ||
       new RegExp(`repos/${REPO}\\b`, "i").test(c);
@@ -517,6 +581,7 @@ if (tool === "Bash" || tool === "PowerShell") {
           if (!REQUEST || link !== REQUEST)
             block(`an issue from request #${REQUEST || "?"} must say "From request #${REQUEST || "?"}"`);
         }
+        if (PM) checkPmRefs(c);
       }
       if (INTAKE && g2 === "comment") {
         const num = (c.match(/gh(?:\.exe)?["']?\s+issue\s+comment\s+["']?#?(\d+)\b/i) || [])[1];
@@ -706,6 +771,8 @@ if (tool === "Bash" || tool === "PowerShell") {
         block(
           `${s} is not a script the session may run (run-loop, install-task, lib and the elevated scripts are off limits)`,
         );
+      if (OBSERVE)
+        block(`the Observer runs no innovation script (${s}); the runner gave it what it needs`);
       if (READ_ONLY && !/\\check-approval\.ps1$/.test(f))
         block(
           `proposal and review sessions are read-only: ${s} builds, merges or deploys and is not allowed in this session`,
@@ -725,6 +792,8 @@ if (tool === "Bash" || tool === "PowerShell") {
     if (paths.length === 0)
       block("file-changing commands must use absolute paths (inside the loop clone or WORK)");
     for (const p of paths) {
+      if (OBSERVE && !(p.startsWith(HOME + "\\work\\") || p === HOME + "\\work"))
+        block(`the Observer changes files only in ${HOME}\\work (saw ${p})`);
       const ok =
         p.startsWith(CLONE + "\\") ||
         p.startsWith(HOME + "\\work\\") ||

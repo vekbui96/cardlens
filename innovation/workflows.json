@@ -1,0 +1,53 @@
+{
+  "_readme": "The runner's map of user workflows to the files that implement them (Phase 2 coordinator, product-intel.ps1). A change to origin/main since cursors.lastObservedCommit that touches a file matched here makes the Observer session run for that workflow; changes outside every workflow only move the cursor. Globs are repo-relative with forward slashes: ** = any depth, * = within one folder. A file may belong to several workflows. Read by run-loop.ps1 only (never by a session as instructions); edit by hand through a PR (innovation/ is a protected path for the loop).",
+  "workflows": {
+    "home": {
+      "title": "Home (value, movers, progress)",
+      "globs": ["src/v2/screens/home/**", "src/web/home/**", "src/features/home/**", "server/valueHistory.ts", "server/catalogPrices.ts"]
+    },
+    "collection": {
+      "title": "Collection / My cards",
+      "globs": ["src/v2/screens/collection/**", "src/web/collection/**", "src/features/collection/**", "src/features/favorites/**", "src/v2/screens/details/**", "src/features/card-details/**"]
+    },
+    "set": {
+      "title": "Set screen (cards of one set, finish lines, missing list)",
+      "globs": ["src/v2/screens/set/**", "src/web/sets/**", "src/features/sets/**", "server/setInformation.ts", "server/catalogSetsStore.ts"]
+    },
+    "wantlist": {
+      "title": "Want list",
+      "globs": ["src/v2/screens/wantlist/**"]
+    },
+    "search": {
+      "title": "Search and results",
+      "globs": ["src/v2/screens/search/**", "src/features/search/**", "src/features/results/**", "src/features/popular/**", "src/features/recent/**", "src/services/search/**", "src/services/cardNameIndex.ts", "server/catalogNames.ts", "server/catalogParams.ts"]
+    },
+    "scan": {
+      "title": "Scan (web camera and photo)",
+      "globs": ["src/v2/screens/scan/**", "src/web/scan/**", "src/scan/**", "server/recognition.ts", "server/mault.ts", "server/cardIndexLookup.ts"]
+    },
+    "binders": {
+      "title": "Binders (shelf, binder pages, trade binders)",
+      "globs": ["src/v2/screens/binder/**", "src/v2/screens/binders/**", "src/web/binders/**", "src/web/trade/**", "src/v2/screens/share/**", "src/storage/binders.ts", "server/binderStore.ts", "server/binderImages.ts", "server/shareStore.ts"]
+    },
+    "sealed": {
+      "title": "Sealed products",
+      "globs": ["src/v2/screens/sealed/**", "src/web/collection/WebSealedScreen.*", "server/sealedStore.ts"]
+    },
+    "target": {
+      "title": "Target stock screen",
+      "globs": ["src/v2/screens/target/**", "src/web/target/**", "server/targetBot.ts"]
+    },
+    "settings-sync": {
+      "title": "Settings / Sync (token, devices, sync status)",
+      "globs": ["src/services/sync/**", "src/services/companion/**", "src/services/companionApi.ts", "src/pages/CompanionPage.*", "src/storage/repositories.ts", "server/collectionStore.ts", "server/sessionStore.ts"]
+    },
+    "onboarding": {
+      "title": "Onboarding and empty states",
+      "globs": ["src/v2/screens/home/Empty*", "src/v2/screens/home/emptySyncLine.*", "src/v2/screens/collection/EmptyCollection*", "src/v2/primitives/errorNotice.*"]
+    },
+    "shell": {
+      "title": "App shell, navigation and shared primitives (every screen)",
+      "globs": ["src/v2/shell/**", "src/v2/V2App.tsx", "src/v2/V2Router.tsx", "src/v2/primitives/**", "src/v2/tokens.css", "src/web/shell/**", "src/app/**", "src/styles/**", "index.html"]
+    }
+  }
+}
