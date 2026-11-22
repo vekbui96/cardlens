@@ -35,6 +35,22 @@ describe("EmptyHome connect action", () => {
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
 
+  it("says why nothing arrived when offline, idle or the token was refused", () => {
+    const { unmount } = render(<EmptyHome syncStatus={status("offline")} onConnect={() => {}} />);
+    expect(screen.getByRole("status").textContent).toMatch(/You're offline/);
+    unmount();
+    const idle = render(<EmptyHome syncStatus={status("idle")} onConnect={() => {}} />);
+    expect(screen.getByRole("status").textContent).toMatch(/Can't reach the CardLens server/);
+    idle.unmount();
+    render(<EmptyHome syncStatus={status("bad-token")} onConnect={() => {}} />);
+    expect(screen.getByRole("status").textContent).toMatch(/token was refused/);
+  });
+
+  it.each(["off", "syncing", "disabled"] as const)("shows no sync line when sync is %s", (state) => {
+    render(<EmptyHome syncStatus={status(state)} onConnect={() => {}} />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("keeps the two original actions", () => {
     render(<EmptyHome syncStatus={status("off")} onConnect={() => {}} />);
     expect(screen.getByRole("link", { name: /Browse sets/ })).toBeTruthy();
