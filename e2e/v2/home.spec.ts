@@ -337,6 +337,28 @@ test.describe("home @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("home-progress.png", { fullPage: true });
   });
+
+  /**
+   * The stats line counts finished sets (#130). The seeded `ex2` card is number
+   * 6, so a one-card set makes it complete; the other seeded sets have no known
+   * size, so they are not counted.
+   */
+  test("counts finished sets in the stats line", async ({ page }) => {
+    await page.addInitScript(() => {
+      const sets = [{ id: "ex2", name: "Sandstorm", total: 1, printedTotal: 1 }];
+      localStorage.setItem(
+        "cardlens:v1:cache:sets:v3",
+        JSON.stringify({ all: { value: sets, storedAt: Date.now() } }),
+      );
+    });
+    await openV2(page, "/", { seed: "numbered" });
+    await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
+    const link = page.getByRole("link", { name: "1 complete: see the Completed group" });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", /#\/sets$/);
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-complete-sets.png", { fullPage: true });
+  });
 });
 
 /**

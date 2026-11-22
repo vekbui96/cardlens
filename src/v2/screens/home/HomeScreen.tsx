@@ -1,6 +1,6 @@
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
-import { continueTarget, topProgress } from "../../../features/home/continueSet.ts";
+import { completeSetCount, continueTarget, topProgress } from "../../../features/home/continueSet.ts";
 import { useConnectDevice } from "../../../hooks/useConnectDevice.ts";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
@@ -125,6 +125,7 @@ export function HomeScreen() {
     return { ...row, finish, finishLine: finishLineText(finish) };
   });
   const setCount = Object.keys(ownedCountsBySet).length;
+  const completeCount = completeSetCount(ownedCountsBySet, sets, ownedNumbersBySet);
 
   return (
     <Stack gap={5}>
@@ -137,6 +138,20 @@ export function HomeScreen() {
           <span className={styles.statNumber}>{totalFinishesOwned.toLocaleString()}</span> printings ·{" "}
           <span className={styles.statNumber}>{setCount.toLocaleString()}</span>{" "}
           {setCount === 1 ? "set" : "sets"}
+          {/* Only once the set list has loaded, so the figure never jumps in wrong. */}
+          {completeCount > 0 ? (
+            <>
+              {" "}
+              ·{" "}
+              <a
+                className={styles.statLink}
+                href={`#${screenToPath({ name: "sets" })}`}
+                aria-label={`${completeCount} complete: see the Completed group`}
+              >
+                <span className={styles.statNumber}>{completeCount.toLocaleString()}</span> complete
+              </a>
+            </>
+          ) : null}
         </p>
       </header>
 

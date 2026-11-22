@@ -60,6 +60,34 @@ export function continueTarget(
 }
 
 /**
+ * How many owned sets are finished, by the rule My cards > Sets uses for its
+ * Completed group (`groupSets`): any tier other than "none" from `setTiers`.
+ * A set whose size is unknown, or that is not in the list, is not counted, and
+ * neither is anything before the list has loaded.
+ */
+export function completeSetCount(
+  countsBySet: Record<string, number>,
+  sets: PokemonSet[] | undefined,
+  numbersBySet: OwnedNumbers = {},
+): number {
+  if (!sets) return 0;
+  let count = 0;
+  for (const set of sets) {
+    const owned = countsBySet[set.id] ?? 0;
+    if (owned <= 0) continue;
+    const tiers = setTiers(
+      {
+        ...(set.total ? { total: set.total } : {}),
+        ...(set.printedTotal ? { printedTotal: set.printedTotal } : {}),
+      },
+      ownedIn(set.id, numbersBySet, owned),
+    );
+    if (tiers.tier !== "none") count += 1;
+  }
+  return count;
+}
+
+/**
  * Sets closest to complete first — only those whose size is known.
  *
  * "Closest" is the BASE tier where a set has one, because this list answers
