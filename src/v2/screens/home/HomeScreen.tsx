@@ -8,7 +8,7 @@ import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { countBinder, type Binder } from "../../../models/binderLayout.ts";
 import { printingsCache } from "../../../storage/caches.ts";
-import { homeFinishLine } from "./finishLine.ts";
+import { finishLineText, homeFinishParts } from "./finishLine.ts";
 import { Card, Panel, Stack } from "../../primitives/index.ts";
 import { EmptyHome } from "./EmptyHome.tsx";
 import { GrowthChart } from "./GrowthChart.tsx";
@@ -114,15 +114,13 @@ export function HomeScreen() {
     // A cache read, never a request: a set whose printings this device has not
     // stored yet shows the count alone.
     const owned = ownedNumbersBySet[row.setId];
-    return {
-      ...row,
-      finishLine: homeFinishLine({
-        cards: row.cards,
-        total: row.total,
-        ownedNumbers: owned && owned.length === row.cards ? owned : null,
-        byNumber: printingsCache.get(row.setId)?.value.byNumber ?? null,
-      }),
-    };
+    const finish = homeFinishParts({
+      cards: row.cards,
+      total: row.total,
+      ownedNumbers: owned && owned.length === row.cards ? owned : null,
+      byNumber: printingsCache.get(row.setId)?.value.byNumber ?? null,
+    });
+    return { ...row, finish, finishLine: finishLineText(finish) };
   });
   const setCount = Object.keys(ownedCountsBySet).length;
 
