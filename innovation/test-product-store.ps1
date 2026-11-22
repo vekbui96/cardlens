@@ -45,6 +45,23 @@ Check ($pr[0].pref -eq 'p-abc123' -and $pr[0].verdict -eq 'confirm' -and $pr[1].
 Check ($cd[-1].gist -eq 'Bigger badge | Heading') "first line skips HTML comments and drops heading hashes ($($cd[-1].gist))"
 $dg = @(ConvertFrom-IssueComments -Comments @((Cm 7 'Looks fine overall' -Repo 'vekbui96/ops-hub'), (Cm 8 'yes p-abc123' -Repo 'vekbui96/ops-hub')) -Owner $O -Marker $mk -PrefRepliesOnly -Source 'hub#')
 Check ($dg.Count -eq 1 -and $dg[0].verdict -eq 'confirm') 'digest issues: only preference replies are recorded ("yes" = confirm)'
+# Ve's interactive agents post as vekbui96 with <!-- claude-agent -->: never a decision (nor a hold / preference reply);
+# comments on pull requests are not product decisions either
+$ag = @(ConvertFrom-IssueComments -Owner $O -Marker $mk -Comments @((Cm 20 "<!-- claude-agent -->`nUnblocked for a rebuild."), (Cm 21 "<!-- claude-agent -->`n/hold"), (Cm 22 "<!-- claude-agent -->`nconfirm p-abc123"),
+        (Cm 23 "$mk`n<!-- claude-agent -->`nquoted both"), (Cm 24 'Added: ASCII-only JSON' -N 184 | ForEach-Object { $_.html_url = 'https://github.com/vekbui96/cardlens/pull/184#issuecomment-24'; $_ }), (Cm 25 'Real Ve words')))
+Check ($ag.Count -eq 1 -and $ag[0].gist -match 'Real Ve words') "agent-marked and PR comments are never recorded (got $(@($ag | ForEach-Object { $_.gist }) -join ' / '))"
+
+# ---- retro-tags: ignore records ----------------------------------------------------------------------------------
+$base = @((New-DecisionRecord 'comment' 'a' '2026-11-22T10:00:00Z' 12 @() 'T' 'agent text'), (New-DecisionRecord 'approve' 'b' '2026-11-22T10:01:00Z' 12 @() 'T' ''))
+$ig = New-DecisionIgnore -Target $base[0].id -Reason 'agent comment (Unblocked), not Ve' -Issue 12 -Ts '2026-11-22T22:00:00Z'
+Check ($ig.kind -eq 'ignore' -and $ig.target -eq $base[0].id -and $ig.id -match '^d-[0-9a-f]{10}$' -and $ig.id -eq (New-DecisionIgnore -Target $base[0].id -Reason 'other' -Ts '2026-11-23T00:00:00Z').id) 'ignore record: deterministic id per target (re-adding is a no-op)'
+$act = @(Select-ActiveDecisions -Decisions @($base + $ig))
+Check ($act.Count -eq 1 -and $act[0].kind -eq 'approve') 'ignored decision and the ignore record itself are dropped'
+$act2 = @(Select-ActiveDecisions -Decisions @($base[0]) -All @($base + $ig))
+Check ($act2.Count -eq 0) 'an ignore record later in the file still retracts an earlier slice of decisions'
+$bad = $false; try { [void](New-DecisionIgnore -Target 'p-123456' -Reason 'x') } catch { $bad = $true }
+Check $bad 'an ignore record targets a decision id only'
+Check ($script:DecisionKinds -contains 'ignore') 'ignore is a known decision kind'
 
 # ---- edits after approval ---------------------------------------------------------------------------------------
 $tl = { param([string]$At, [string]$By = $O) [pscustomobject]@{ createdAt = $At; label = [pscustomobject]@{ name = 'approved' }; actor = (U $By) } }

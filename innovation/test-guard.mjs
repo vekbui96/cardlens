@@ -120,6 +120,10 @@ const allow = [
   },
   ps(`Invoke-RestMethod "https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=30"`),
   ps(`Invoke-RestMethod "http://127.0.0.1:8787/api/metrics/summary?days=7"`),
+  // the bare form LOOP.md hard rule 10 teaches: shape output with a pipe into a formatting cmdlet
+  ps(
+    `Invoke-RestMethod "https://server-pc.tail0e4194.ts.net:8443/api/metrics/summary?days=30" | ConvertTo-Json -Depth 6`,
+  ),
 ];
 const deny = [
   // comments are never edited by the session (only progress.ps1, marker-checked, edits its own comment)

@@ -13,6 +13,11 @@
                       kinds: approve, unapprove, reject (closed without loop:deployed), hold, comment (Ve's comment
                       without the loop marker), edit-after-approval, request (a loop:request filed by Ve),
                       preference-reply (Ve's "confirm p-xxxxxx" / "no p-xxxxxx" on an ops-hub digest or a repo issue).
+                      Comments carrying `<!-- claude-agent -->` (Ve's interactive agents posting as vekbui96) and
+                      comments on pull requests are never recorded.
+                      ignore {id, ts, kind: ignore, target: d-..., gist: why}: an operator's retro-tag (New-DecisionIgnore,
+                      appended, never rewritten) that removes the target from everything that reads decisions
+                      (Select-ActiveDecisions: the memory agent's input and preference evidence).
   - preferences.json {schema, updatedUtc, items:[{id, statement, status: confirmed|inferred, evidence, confidence,
                       firstSeen, lastSeen}], rejected:[{id, statement, at, by}]}
   Agents never write the store. The memory agent's JSON output is validated here (Test-PreferenceChanges) and
@@ -25,7 +30,7 @@
 $script:ProductStoreDir = 'D:\hub\state\product\cardlens'
 $script:ProductSchema = 1
 $script:HubRepo = 'vekbui96/ops-hub'
-$script:DecisionKinds = @('approve', 'unapprove', 'reject', 'hold', 'comment', 'edit-after-approval', 'request', 'preference-reply')
+$script:DecisionKinds = @('approve', 'unapprove', 'reject', 'hold', 'comment', 'edit-after-approval', 'request', 'preference-reply', 'ignore')
 # decision kinds whose text Ve wrote himself: the only decisions that can confirm a preference
 $script:VeWrittenKinds = @('comment', 'hold', 'request', 'preference-reply')
 $script:PrefReplyRx = '(?im)^[ \t>*_-]*(confirm|yes|no)[ \t:]+(p-[0-9a-f]{6})\b'
@@ -124,8 +129,9 @@ function ConvertFrom-IssueComments {
     $out = @()
     foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
         if ("$($c.user.login)" -ne $Owner) { continue }
-        $b = "$($c.body)"; if ($b.Contains($Marker)) { continue }
-        $n = 0; $m = [regex]::Match("$($c.issue_url)", '/issues/(\d+)$'); if ($m.Success) { $n = [int]$m.Groups[1].Value }
+        $b = "$($c.body)"; if ($b.Contains($Marker) -or (Test-AgentComment $c)) { continue }
+        if ("$($c.html_url)" -match '/pull/\d+') { continue }
+        $n = 0; $m =[regex]::Match("$($c.issue_url)", '/issues/(\d+)$'); if ($m.Success) { $n = [int]$m.Groups[1].Value }
         $title = ''; if ($Titles.ContainsKey($n)) { $title = "$($Titles[$n])" }
         $labels = @(); if ($LabelsOf.ContainsKey($n)) { $labels = @($LabelsOf[$n]) }
         $key = "$Source$($c.id)"
@@ -169,6 +175,24 @@ function Select-NewDecisions {
         $seen["$($d.id)"] = $true; $out += $d
     }
     return @($out)
+}
+
+# An ignore record for decision -Target (append it with Add-Decisions; the file is never rewritten). Deterministic id,
+# so adding the same retro-tag twice is a no-op through Select-NewDecisions.
+function New-DecisionIgnore {
+    param([string]$Target, [string]$Reason, [int]$Issue = 0, $Ts = [datetime]::UtcNow)
+    if ("$Target" -notmatch '^d-[0-9a-f]{10}$') { throw "not a decision id: $Target" }
+    $rec = New-DecisionRecord 'ignore' $Target $Ts $Issue @() '' $Reason ''
+    $rec['target'] = $Target
+    return $rec
+}
+# Decisions with the ignore records and every decision they target removed. -All: the whole file (an ignore record
+# may come after its target); defaults to -Decisions.
+function Select-ActiveDecisions {
+    param([object[]]$Decisions = @(), [object[]]$All = $null)
+    if ($null -eq $All) { $All = $Decisions }
+    $ign = @{}; foreach ($d in @($All | Where-Object { $_ -and "$($_.kind)" -eq 'ignore' -and $_.target })) { $ign["$($d.target)"] = $true }
+    return @($Decisions | Where-Object { $_ -and "$($_.kind)" -ne 'ignore' -and -not $ign.ContainsKey("$($_.id)") })
 }
 
 # ---- preferences (pure) -------------------------------------------------------------------------------------
@@ -457,7 +481,7 @@ function Invoke-DecisionCollector {
             $comments += $batch; $page++
         } while ($batch.Count -eq 100 -and $page -le 5)
         $newSince = $since; foreach ($c in $comments) { $u = ConvertTo-IsoUtc $c.updated_at; if ($u -gt $newSince) { $newSince = $u } }
-        $veComments = @($comments | Where-Object { "$($_.user.login)" -eq $Owner -and -not "$($_.body)".Contains($Marker) })
+        $veComments = @($comments | Where-Object { "$($_.user.login)" -eq $Owner -and -not "$($_.body)".Contains($Marker) -and -not (Test-AgentComment $_) -and "$($_.html_url)" -notmatch '/pull/\d+' })
         $titles = @{}; $labelsOf = @{}
         if ($veComments.Count -gt 0) {
             foreach ($i in @(& $GhJson @('issue', 'list', '-R', $Repo, '--state', 'all', '--limit', '500', '--json', 'number,title,labels') | ForEach-Object { $_ } | Where-Object { $_ })) {

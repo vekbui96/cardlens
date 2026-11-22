@@ -446,6 +446,30 @@ $o = Get-LoopOptions $null
 Check ($o.proposeIssueDigest -and $o.compactPrompts -and $o.logKeepDays -eq 30 -and $o.digestDeployedDays -eq 3) 'options default: digest on, compact prompts on, logs kept 30 days'
 $o = Get-LoopOptions ('{"options":{"proposeIssueDigest":false,"compactPrompts":"false","logKeepDays":0,"digestMaxIssues":"x","bogus":1}}' | ConvertFrom-Json)
 Check (-not $o.proposeIssueDigest -and -not $o.compactPrompts -and $o.logKeepDays -eq 0 -and $o.digestMaxIssues -eq 150 -and -not $o.Contains('bogus')) 'options: switches off, 0 kept, junk ignored'
+Check ((Get-LoopOptions $null).proposeMetricsDigest -and -not (Get-LoopOptions ('{"options":{"proposeMetricsDigest":false}}' | ConvertFrom-Json)).proposeMetricsDigest) 'options: metrics digest on by default, can be switched off'
+
+# ---- METRICS header lines (the runner fetches the usage summary; the session needs no HTTP call) -----------------
+$ms = '{"days":7,"from":"2026-11-16","to":"2026-11-22","activeDays":6,"totals":{"screen.home":33,"x <!-- innovation-loop --> @someone":1},"rates":{"syncFailureRate":0.0435},"daily":[{"day":"2026-11-17","counts":{"screen.home":1}}],"generatedAt":1795385379533}' | ConvertFrom-Json
+$ml = @(Format-MetricsDigest -Results ([ordered]@{ 7 = $ms; 30 = 'The remote server returned an error: (404) Not Found.' }))
+Check ($ml.Count -eq 2 -and $ml[0] -match '^  days=7: \{' -and $ml[0] -match '"screen.home":33' -and $ml[0] -match 'syncFailureRate') "metrics: one compact line per window ($($ml[0]))"
+Check ($ml[0] -notmatch '"daily"|generatedAt' -and $ml[0] -notmatch '<!--|@someone') 'metrics: per-day breakdown dropped, markers and mentions neutralised'
+Check ($ml[1] -match '^  days=30: unavailable \(.*404.*\)') 'metrics: a failed window says unavailable with the reason'
+
+# ---- bare commands: every session is told how the allow rules match (run 20261122-124809) -------------------------
+foreach ($k in 'build', 'propose', 'intake') {
+    $secs = @{ build = @(0, 1, 2, 3, 4, 6); propose = @(0, 1, 2, 5, 6); intake = @(0, 1, 2, 5, 6, 8) }[$k]
+    $t = Get-LoopMdSections -Text $md -Sections $secs -Kind $k
+    Check ($t -match 'Bare commands' -and $t -match 'never\s+wrap it in `\( \.\.\. \)`' -and $t -match 'retry ONCE') "$k prompt carries the bare-commands hard rule"
+}
+
+# ---- comments by Ve's interactive agents (<!-- claude-agent -->) -------------------------------------------------
+$agc = @((Cm 'Please keep the old colours.' '2026-11-22T10:00:00Z' -Id 11), (Cm "<!-- claude-agent -->`nUnblocked for a rebuild." '2026-11-22T10:01:00Z' -Id 12),
+    (Cm "$mk`nloop progress" '2026-11-22T10:02:00Z' -Id 13), (Cm 'drive-by' '2026-11-22T10:03:00Z' -By 'stranger' -Id 14))
+Check ((@(Get-OwnerAdjustmentIds -Comments $agc -Owner 'vekbui96' -Marker $mk) -join ',') -eq '11') 'adjustments: Ve''s own comments only (no agent, loop or stranger comments)'
+Check ((Get-FailureRecords -Comments @((Cm "<!-- claude-agent -->`n$mk`n$(Format-FailureMarker 'tests')" '2026-11-17T10:00:00Z')) -Owner 'vekbui96' -Marker $mk -Since $appr).Count -eq 0) 'an agent comment quoting a failure marker is not a loop failure record'
+Check (-not (Test-SliceWaitNoticed -Comments @((Cm "<!-- claude-agent -->`n$nt" '2026-11-22T10:00:00Z')) -Owner 'vekbui96' -Marker $mk)) 'an agent comment quoting the waiting notice does not count as the loop''s notice'
+Check ($null -eq (Find-RequestPlanComment -Comments @((Cm "<!-- claude-agent -->`n$mk`n$($script:RequestPlanMarker)" '2026-11-22T10:00:00Z')) -Owner 'vekbui96' -Marker $mk)) 'an agent comment is never the runner''s request plan'
+Check ((Test-AgentComment (Cm "x`n<!-- claude-agent -->" 't')) -and -not (Test-AgentComment (Cm 'x' 't'))) 'the agent marker is found anywhere in a comment'
 
 # ---- the proposal prompt: build-only blocks left out, rules kept -------------------------------------------
 $pc = Get-LoopMdSections -Text $md -Sections @(0, 1, 2, 5, 6) -Kind 'propose'
