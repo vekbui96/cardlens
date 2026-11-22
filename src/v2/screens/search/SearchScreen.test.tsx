@@ -141,6 +141,45 @@ describe("results", () => {
   });
 });
 
+/** Three same-named cards with known prices, one of them unpriced. */
+class PricedProvider extends MockPokemonProvider {
+  override async searchCards(): Promise<PokemonCardSummary[]> {
+    const base = { name: "Charizard", setName: "Base", imageSmall: "" } as const;
+    return [
+      { ...base, id: "p-cheap", collectorNumber: "1", marketPrice: 2 },
+      { ...base, id: "p-none", collectorNumber: "2" },
+      { ...base, id: "p-chase", collectorNumber: "3", marketPrice: 300 },
+    ] as PokemonCardSummary[];
+  }
+}
+
+describe("sorting results", () => {
+  const order = () => screen.getAllByRole("link", { name: /charizard/i }).map((a) => a.getAttribute("href"));
+
+  it("reorders the tiles by price, unpriced last, and a new query resets it", async () => {
+    render(<Routed />, { wrapper: harness(new PricedProvider()) });
+    await userEvent.type(input(), "charizard");
+    await userEvent.click(submit());
+    await screen.findAllByRole("link", { name: /charizard/i });
+
+    const best = order();
+    expect(best[0]).toMatch(/p-cheap/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Price: high to low" }));
+    expect(order().map((h) => /p-\w+/.exec(h ?? "")?.[0])).toEqual(["p-chase", "p-cheap", "p-none"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Price: low to high" }));
+    expect(order().map((h) => /p-\w+/.exec(h ?? "")?.[0])).toEqual(["p-cheap", "p-chase", "p-none"]);
+
+    await userEvent.clear(input());
+    await userEvent.type(input(), "pikachu");
+    await userEvent.click(submit());
+    await screen.findByRole("heading", { name: /cards for “pikachu”/i });
+    expect(screen.getByRole("button", { name: "Best match" })).toHaveAttribute("aria-pressed", "true");
+    expect(order()[0]).toMatch(/p-cheap/);
+  });
+});
+
 describe("a flaky catalog", () => {
   it("blames the catalog, not the query, and retrying actually works", async () => {
     // Two failures, because the hook already retries once on its own — so the

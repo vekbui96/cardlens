@@ -25,6 +25,7 @@ import {
 } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { recallScroll, rememberScroll } from "./scrollMemory.ts";
+import { SEARCH_SORTS, sortCards, type SearchSort } from "./sortCards.ts";
 import styles from "./SearchScreen.module.css";
 
 /**
@@ -175,7 +176,7 @@ export function SearchScreen({ query }: SearchScreenProps) {
       ) : cards.length === 0 ? (
         <NoMatches query={query} />
       ) : (
-        <Results query={query} cards={cards} onOpen={openCard} />
+        <Results key={query} query={query} cards={cards} onOpen={openCard} />
       )}
     </Stack>
   );
@@ -312,18 +313,34 @@ function Results({
   cards: PokemonCardSummary[];
   onOpen: (cardId: string, summary?: PokemonCardSummary) => void;
 }) {
+  // Component state only: Results is keyed by query, so a new search resets it.
+  const [sort, setSort] = useState<SearchSort>("best");
+  const sorted = useMemo(() => sortCards(cards, sort), [cards, sort]);
   return (
     <Stack gap={3}>
       <h2 className={styles.heading}>
         {cards.length} {cards.length === 1 ? "card" : "cards"} for “{query}”
       </h2>
+      <div className={styles.sort} role="group" aria-label="Sort">
+        <span className={styles.sortLabel}>Sort</span>
+        {SEARCH_SORTS.map((s) => (
+          <Chip
+            key={s.id}
+            pressed={sort === s.id}
+            tone={sort === s.id ? "accent" : "default"}
+            onPress={() => setSort(s.id)}
+          >
+            {s.label}
+          </Chip>
+        ))}
+      </div>
       {cards.length >= FULL_SEARCH_LIMIT ? (
         // A full page back is indistinguishable from a complete answer, so say
         // which one this is rather than implying the catalog stops there.
         <p className={styles.hint}>That is the first page — add a word to narrow it.</p>
       ) : null}
       <Grid min="pocket" gap={3}>
-        {cards.map((card) => (
+        {sorted.map((card) => (
           <ResultTile key={card.id} card={card} onOpen={onOpen} />
         ))}
       </Grid>
