@@ -9,7 +9,8 @@ import { Row, Stack, cx } from "../../primitives/index.ts";
 import { OwnedView } from "./OwnedView.tsx";
 import { SetsView } from "./SetsView.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
-import { groupSets, summaryLine, type SetSortKey } from "./setGroups.ts";
+import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
+import { groupSets, setWorths, summaryLine, type SetSortKey } from "./setGroups.ts";
 import styles from "./collection.module.css";
 
 /**
@@ -53,9 +54,13 @@ export function CollectionScreen() {
 
   const mode = screen.name === "owned" ? "owned" : "sets";
 
+  // The same hook the Value panel reads: no extra request.
+  const { bySet, pending } = useLibraryValue();
+  const worths = useMemo(() => setWorths(bySet, pending), [bySet, pending]);
+
   const groups = useMemo(
-    () => groupSets(data ?? [], ownedCountsBySet, ownedNumbersBySet, query, sort),
-    [data, ownedCountsBySet, ownedNumbersBySet, query, sort],
+    () => groupSets(data ?? [], ownedCountsBySet, ownedNumbersBySet, query, sort, worths),
+    [data, ownedCountsBySet, ownedNumbersBySet, query, sort, worths],
   );
 
   /**

@@ -74,6 +74,25 @@ describe("a set row", () => {
   });
 });
 
+describe("a set row's worth", () => {
+  it("shows what the set is worth, and the same words in the accessible name", () => {
+    const row = { ...model(OBF, held(10)), worth: { state: "priced" as const, value: 212 } };
+    render(<SetRow row={row} />);
+    expect(screen.getByTestId("set-worth")).toHaveTextContent("about $212.00");
+    expect(rowLabel(row)).toMatch(/, about \$212\.00$/);
+  });
+
+  it("says unpriced, never a zero amount", () => {
+    render(<SetRow row={{ ...model(OBF, held(10)), worth: { state: "unpriced" } }} />);
+    expect(screen.getByTestId("set-worth")).toHaveTextContent("unpriced");
+  });
+
+  it("has no worth line for a set that is not started", () => {
+    render(<SetRow row={{ set: OBF, tiers: setTiers({ total: 230, printedTotal: 197 }, 0), owned: 0 }} />);
+    expect(screen.queryByTestId("set-worth")).not.toBeInTheDocument();
+  });
+});
+
 describe("the accessible name", () => {
   it("spells both tiers out, because the visible row abbreviates them", () => {
     expect(rowLabel(model(OBF, held(100, 20)))).toBe(

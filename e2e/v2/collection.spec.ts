@@ -170,9 +170,11 @@ test.describe("progress through a set", () => {
     await expect(row.getByText("2/230", { exact: true })).toBeVisible();
 
     // And the same two figures reach a screen reader, spelled out.
+    // The set's worth ("about $X", "pricing" or "unpriced") may follow; which one
+    // depends on how far the price lookups have got, so it is not pinned here.
     await expect(row).toHaveAttribute(
       "aria-label",
-      "Obsidian Flames, base set 1 of 197, master set 2 of 230",
+      /^Obsidian Flames, base set 1 of 197, master set 2 of 230(, (about \$[\d,.]+|pricing|unpriced))?$/,
     );
   });
 
@@ -372,9 +374,10 @@ test.describe("layout", () => {
     for (const b of boxes) {
       expect(b.w).toBeLessThanOrEqual(500);
       // 44px is a thumb, which a pointer does not need; 72 is where a row stops
-      // being a row and starts being a card.
+      // being a row and starts being a card. A started row carries one more line
+      // for the set's worth, hence 88 rather than the old 72.
       expect(b.h).toBeGreaterThanOrEqual(44);
-      expect(b.h).toBeLessThanOrEqual(72);
+      expect(b.h).toBeLessThanOrEqual(88);
     }
   });
 

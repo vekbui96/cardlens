@@ -344,6 +344,13 @@
   min-width: 0;
 }
 
+.setWorth {
+  grid-column: 2;
+  font-size: var(--v2-fs-tiny);
+  line-height: var(--v2-lh-tight);
+  color: var(--v2-fg-muted);
+}
+
 .tierLine {
   display: flex;
   align-items: center;
