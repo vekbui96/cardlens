@@ -398,6 +398,14 @@
   white-space: nowrap;
 }
 
+.moverFigures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .moverPct {
   font-variant-numeric: tabular-nums;
   font-weight: var(--v2-fw-bold);
