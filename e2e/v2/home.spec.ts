@@ -221,6 +221,14 @@ test.describe("biggest movers", () => {
 });
 
 test.describe("home @visual", () => {
+  test("empty first-run state", async ({ page }) => {
+    await openV2(page, "/", { seed: "empty" });
+    await expect(page.getByRole("heading", { name: "Nothing tracked yet", level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-empty.png", { fullPage: true });
+  });
+
   test("movers: owned cards with Cardmarket averages", async ({ page }) => {
     await seedMovers(page);
     await openV2(page, "/");

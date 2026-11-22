@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
-import { useTextEntry } from "../../../app/TextEntryProvider.tsx";
+import { useConnectDevice } from "../../../hooks/useConnectDevice.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { syncLine } from "../../../features/collection/syncLine.ts";
@@ -44,16 +44,9 @@ import styles from "./collection.module.css";
  */
 export function CollectionScreen() {
   const { screen, push } = useNavigation();
-  const {
-    collection,
-    ownedCountsBySet,
-    ownedNumbersBySet,
-    totalFinishesOwned,
-    syncStatus,
-    syncNow,
-    setSyncToken,
-  } = useLibrary();
-  const { provider: textProvider } = useTextEntry();
+  const { collection, ownedCountsBySet, ownedNumbersBySet, totalFinishesOwned, syncStatus, syncNow } =
+    useLibrary();
+  const connectDevice = useConnectDevice();
   const { data, isLoading, isError, refetch } = useSets();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SetSortKey>("recent");
@@ -74,11 +67,7 @@ export function CollectionScreen() {
    */
   const onSync = async () => {
     if (syncStatus.state === "off" || syncStatus.state === "bad-token") {
-      const token = await textProvider.requestInput({
-        title: "Sync token",
-        placeholder: "paste from the server .env",
-      });
-      if (token) setSyncToken(token);
+      await connectDevice();
       return;
     }
     if (syncStatus.state === "disabled") return; // nothing the device can fix
