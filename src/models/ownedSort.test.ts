@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { filterOwned, sortOwned, topByValue, totalOf, type OwnedPrintingRow } from "./ownedSort.ts";
+import {
+  filterOwned,
+  sortOwned,
+  topByValue,
+  totalOf,
+  weekChange,
+  type OwnedPrintingRow,
+} from "./ownedSort.ts";
 
 const row = (over: Partial<OwnedPrintingRow> = {}): OwnedPrintingRow => ({
   cardId: "me5-1",
@@ -71,6 +78,45 @@ describe("sortOwned", () => {
     const before = ids(rows);
     sortOwned(rows, "price");
     expect(ids(rows)).toEqual(before);
+  });
+});
+
+describe("sortOwned by biggest change", () => {
+  const eur = (avg1: number, avg7: number) => ({ avg1, avg7, avg30: avg7 });
+  const nums = (rows: OwnedPrintingRow[]) => rows.map((r) => r.collectorNumber);
+
+  it("ranks by absolute week-on-week percent, risers and fallers together", () => {
+    const rows = [
+      row({ collectorNumber: "1", eur: eur(11, 10) }), // +10%
+      row({ collectorNumber: "2", eur: eur(7, 10) }), // -30%
+      row({ collectorNumber: "3", eur: eur(12, 10) }), // +20%
+    ];
+    expect(nums(sortOwned(rows, "change"))).toEqual(["2", "3", "1"]);
+  });
+
+  it("sorts rows with no averages, or under the floor, last", () => {
+    const rows = [
+      row({ collectorNumber: "1" }),
+      row({ collectorNumber: "2", eur: eur(0.03, 0.02) }), // +50% of a cent: not a move
+      row({ collectorNumber: "3", eur: eur(1.1, 1) }),
+    ];
+    expect(nums(sortOwned(rows, "change"))).toEqual(["3", "1", "2"]);
+  });
+
+  it("breaks ties by set and collector number", () => {
+    const rows = [
+      row({ collectorNumber: "2", eur: eur(11, 10) }),
+      row({ collectorNumber: "1", eur: eur(11, 10) }),
+    ];
+    expect(nums(sortOwned(rows, "change"))).toEqual(["1", "2"]);
+  });
+});
+
+describe("weekChange", () => {
+  it("is the percent for a qualifying row and undefined otherwise", () => {
+    expect(weekChange(row({ eur: { avg1: 12, avg7: 10, avg30: 10 } }))).toBeCloseTo(20);
+    expect(weekChange(row({ eur: { avg1: 0.5, avg7: 0.4, avg30: 0.4 } }))).toBeUndefined();
+    expect(weekChange(row({}))).toBeUndefined();
   });
 });
 

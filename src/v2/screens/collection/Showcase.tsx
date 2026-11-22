@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { finishLabel } from "../../../models/finishes.ts";
-import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
+import { formatPct } from "../../../models/movement.ts";
+import { weekChange, type OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { CardArt, Money, Stack, cx } from "../../primitives/index.ts";
 import styles from "./collection.module.css";
 
@@ -8,6 +9,8 @@ interface ShowcaseProps {
   rows: OwnedPrintingRow[];
   /** Open the full card. Absent means the stage is display-only. */
   onOpen?: (row: OwnedPrintingRow) => void;
+  /** Show each printing's week-on-week percent beside its price (Biggest change sort). */
+  showChange?: boolean;
 }
 
 /**
@@ -36,7 +39,7 @@ interface ShowcaseProps {
  * which card is staged, and lifting it would make every keystroke a re-render
  * of the whole list.
  */
-export function Showcase({ rows, onOpen }: ShowcaseProps) {
+export function Showcase({ rows, onOpen, showChange = false }: ShowcaseProps) {
   const [index, setIndex] = useState(0);
   const strip = useRef<HTMLDivElement>(null);
   const items = useRef<(HTMLButtonElement | null)[]>([]);
@@ -121,6 +124,9 @@ export function Showcase({ rows, onOpen }: ShowcaseProps) {
           </p>
           <p className={styles.stagePrice}>
             <Money value={current.price} absentLabel="No price upstream" />
+            {showChange && weekChange(current) !== undefined ? (
+              <span className={styles.ownedChange}>{formatPct(weekChange(current) as number)}</span>
+            ) : null}
           </p>
           {onOpen ? (
             <p>
@@ -164,6 +170,9 @@ export function Showcase({ rows, onOpen }: ShowcaseProps) {
             <span className={styles.thumbName}>{row.name}</span>
             <span className={styles.thumbPrice}>
               <Money value={row.price} absentLabel="—" />
+              {showChange && weekChange(row) !== undefined ? (
+                <span className={styles.ownedChange}>{formatPct(weekChange(row) as number)}</span>
+              ) : null}
             </span>
           </button>
         ))}

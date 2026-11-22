@@ -1,6 +1,6 @@
 import { byCollectorNumber } from "../integrations/pokemon/sort.ts";
 import { compareFinishes } from "./finishes.ts";
-import type { EurAverages } from "./movement.ts";
+import { weekChangePct, type EurAverages } from "./movement.ts";
 
 /** One printing you hold, flattened out of the collection for listing. */
 export interface OwnedPrintingRow {
@@ -28,7 +28,15 @@ export const OWNED_SORTS = [
   { key: "set", label: "Set & number" },
 ] as const;
 
-export type OwnedSortKey = (typeof OWNED_SORTS)[number]["key"];
+/** The phone/desktop v2 screen also offers a movement sort; v1 keeps `OWNED_SORTS`. */
+export const OWNED_SORTS_V2 = [...OWNED_SORTS, { key: "change", label: "Biggest change" }] as const;
+
+export type OwnedSortKey = (typeof OWNED_SORTS_V2)[number]["key"];
+
+/** Week-on-week percent for a row, undefined when it has no honest figure. */
+export function weekChange(row: OwnedPrintingRow): number | undefined {
+  return weekChangePct(row.eur);
+}
 
 /**
  * Order a list of held printings.
@@ -57,6 +65,12 @@ export function sortOwned(rows: OwnedPrintingRow[], key: OwnedSortKey): OwnedPri
     added: (a, b) => b.at - a.at || bySetThenNumber(a, b),
     name: (a, b) => a.name.localeCompare(b.name) || bySetThenNumber(a, b),
     set: bySetThenNumber,
+    change: (a, b) => {
+      const ca = weekChange(a);
+      const cb = weekChange(b);
+      if ((ca === undefined) !== (cb === undefined)) return ca === undefined ? 1 : -1;
+      return Math.abs(cb ?? 0) - Math.abs(ca ?? 0) || bySetThenNumber(a, b);
+    },
   };
 
   return [...rows].sort(compare[key]);

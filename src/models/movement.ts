@@ -126,6 +126,17 @@ export function topMovers<T extends { eur?: EurAverages }>(rows: T[], window: Mo
   };
 }
 
+/**
+ * One printing's week-on-week change in percent (avg1 against avg7), or
+ * undefined when it has no averages or either is under `MOVER_FLOOR_EUR`.
+ * The same floor as `topMovers`, so a rounding step never reads as a move.
+ */
+export function weekChangePct(eur: EurAverages | undefined): number | undefined {
+  if (!eur) return undefined;
+  if (!(eur.avg1 >= MOVER_FLOOR_EUR) || !(eur.avg7 >= MOVER_FLOOR_EUR)) return undefined;
+  return pct(eur.avg1, eur.avg7);
+}
+
 /** "+3.2%" / "−1.8%" / "0.0%". Uses a real minus sign, not a hyphen. */
 export function formatPct(value: number): string {
   const rounded = Math.abs(value) < 0.05 ? 0 : value;
