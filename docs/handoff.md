@@ -35,19 +35,22 @@ diary (that is what made the old file 63 KB).
   forever, in the nightly data zip); read via `GET /api/value-history` (sync
   token). #117 (the chart) reads it. #110 "Since you last looked" is a
   device-local key `cardlens:v1:last-look:v1`.
+- **Biggest movers** (#102) is live on v2 Home; a 7-day / 30-day switch (#121)
+  is proposed.
 - **Usage metrics** are counts only, `GET /api/metrics/summary?days=N`; events
   in `src/models/metricsEvents.ts`.
 - **Innovation loop** (`innovation/`, daily, its own ideas only) proposes issues,
   and builds and deploys them once Ve adds `approved`. Never edit `innovation/` or
-  add `approved` as part of other work.
+  add `approved` as part of other work. It reads the ops hub's plan budget
+  (`D:\hub\state\plan-budget.json`), auto-approves slices of an approved spec
+  (`/hold` vetoes), and holds up to 5 proposals for review. The hub's dashboard
+  (https://server-pc.tail0e4194.ts.net:8444/, tailnet only) ranks them.
 
 ## Waiting on Ve
 
 - **PR #63** (scan review: price each printing and the batch total) is open.
 - **Loop issues #85 and #96** are `approved` + `loop:failed`: both were built,
   merged, then reverted. Remove `loop:failed` to retry them, or close them.
-- **`innovation/PRODUCT.md` metric edits** were drafted but not applied (it's
-  Ve's file).
 - **Real phone photos** for a Mault check on real captures:
   `D:\services\mault-trial\photos` (current numbers come from synthetic images).
 
@@ -60,6 +63,9 @@ diary (that is what made the old file 63 KB).
   Pokémon EN cards synced).
 - **A fresh device gets bursts of 429s on Home**, probably the printings rate
   limit across ~87 sets. Not yet fixed.
+- **Value chart #117** is approved and queued for the loop. Spec slices marked
+  Manual are done as direct requests; later slices fail until they ship (#117
+  failed twice on 2026-11-21 before #112 existed).
 - **Riftbound / a second game** is a data-model project (`docs/adding-new-games.md`),
   not started.
 
@@ -71,3 +77,6 @@ diary (that is what made the old file 63 KB).
 - Never let Mault alone file a card. It leaked same-art reprints on the eval
   (`src/scan/cameraMault.ts`).
 - Collection data is an OR-Set: write tombstones, never delete files.
+- Auto-approving loop proposals by score was refused by Claude Code's safety
+  check as removing oversight (2026-11-21). The agreed alternative is the hub's
+  "Ready to approve" shortlist. Don't rebuild it.

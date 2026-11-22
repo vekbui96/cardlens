@@ -110,6 +110,9 @@ fine, and server-first scanning looks like a recognition regression. Check
 - **Never hardcode the server's LAN IP — always `ssh server-pc`.** The DHCP lease has moved three times (`.41` → `.42` → `.54`, measured 2026-08-19). Every command in this file and in `docs/runbook.md` used to read `ssh vebui@192.168.86.41`; once the lease moved they all timed out against a perfectly healthy box, which is indistinguishable from an outage and cost a full triage pass to rule out. The `server-pc` alias in `~/.ssh/config` supplies the user and resolves `server-pc.lan`, which has survived all three moves. A DHCP reservation on the router is the real fix; until then, an IP written down anywhere is a latent false alarm.
 - Published via Tailscale Funnel: `https://server-pc.tail0e4194.ts.net` (:8080) and `:8443` (:8787).
 - **NordVPN on the laptop blocks Tailscale**, which makes `ts.net` names resolve to the tailnet IP and time out. Test external reachability with `curl --resolve <host>:<port>:199.38.181.54`.
+- PowerShell 5.1: a `gh --jq` filter containing quotes, spaces or `\(…)` gets
+  split into stray arguments ("unknown argument"). Use
+  `--json <fields> | ConvertFrom-Json` and format in PowerShell instead.
 - PowerShell 5.1: native stderr under `$ErrorActionPreference='Stop'` becomes a terminating `NativeCommandError`; `Start-Process -PassThru` leaves `ExitCode` null until `WaitForExit()`.
 
 ## Mault (photo identification)
