@@ -47,13 +47,37 @@
 
 /* --- Header --------------------------------------------------------------- */
 
+/*
+ * Two rows on a phone, one on a desktop.
+ *
+ * The single row did not fit below 1000px. Brand, seven links, the sync line
+ * and the version switch need roughly 600px; at 390 the strip scrolled, but the
+ * switch could not shrink, so it was pushed 30px past the viewport and the
+ * whole PAGE scrolled sideways (`scrollWidth` 420 on a 390px iPhone, 367 at
+ * 320). So on a phone the header is a fixed two-row grid: brand, sync and the
+ * switch on top; the navigation gets the full width underneath, where it can
+ * still scroll if a narrow screen needs it. Both rows are fixed heights, so the
+ * header never changes height under the content (which is what a WRAPPING bar
+ * would do), and `--v2-header-offset` grows by exactly the second row so
+ * anything sticky below the header still clears it.
+ */
+.shell {
+  --v2-nav-row: var(--v2-space-7);
+  --v2-header-offset: calc(var(--v2-header-h) + var(--v2-nav-row) + var(--v2-safe-top));
+}
+
 .header {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: var(--v2-header-h) var(--v2-nav-row);
+  grid-template-areas:
+    "brand end"
+    "nav nav";
   align-items: center;
-  gap: var(--v2-space-4);
+  column-gap: var(--v2-space-4);
   /*
    * The surface runs up under a notched phone's status bar; the row itself
    * starts below it. Sides likewise keep the gutter clear of a landscape notch.
@@ -67,6 +91,7 @@
 }
 
 .brand {
+  grid-area: brand;
   font-size: var(--v2-fs-heading);
   font-weight: var(--v2-fw-bold);
   letter-spacing: -0.01em;
@@ -80,36 +105,64 @@
 }
 
 /*
- * The nav scrolls sideways on a phone rather than wrapping to a second row.
- * A wrapping bar changes the header's height, which moves the content under it
- * on the one screen width where there is least of it to spare.
+ * The phone's navigation row: full bleed, so the strip runs to both screen
+ * edges and a link cut off at the edge reads as "scroll for more" rather than
+ * as a layout bug. The gutter moves inside it as padding, so the first link
+ * still lines up with the brand above.
+ *
+ * It scrolls sideways rather than wrapping, for the same fixed-height reason as
+ * the header. The fade at either end appears only when there IS more that way
+ * (`data-more`, set by the shell from the scroll position), and the current
+ * entry is scrolled into view on every navigation, so the page you are on is
+ * never one of the hidden ones.
  */
 .nav {
+  grid-area: nav;
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: var(--v2-space-1);
-  flex: 1 1 auto;
-  /*
-   * A FLOOR, not `0`.
-   *
-   * With `min-width: 0` the nav was the only flex child allowed to shrink —
-   * the brand and the header's right-hand side were both `flex: none` — so at
-   * 390px a longer sync label ("Sync: token rejected") squeezed it to zero
-   * width and the entire navigation vanished. It was still in the DOM, which
-   * is why it took an e2e failure rather than a glance to find: the element
-   * resolved, and was simply not visible.
-   */
-  min-width: var(--v2-space-7);
+  margin-left: calc(-1 * (var(--v2-gutter) + var(--v2-safe-left)));
+  margin-right: calc(-1 * (var(--v2-gutter) + var(--v2-safe-right)));
+  padding-left: calc(var(--v2-gutter) + var(--v2-safe-left) - var(--v2-space-3));
+  padding-right: calc(var(--v2-gutter) + var(--v2-safe-right) - var(--v2-space-3));
+  min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
+  --fade: var(--v2-space-6);
+  /*
+   * A link scrolled into view (keyboard focus, `scrollIntoView`) stops clear of
+   * the fade instead of flush with the screen edge, half dissolved.
+   */
+  scroll-padding-inline: var(--fade);
 }
 
 .nav::-webkit-scrollbar {
   display: none;
 }
 
+.nav[data-more="end"] {
+  mask-image: linear-gradient(to right, black calc(100% - var(--fade)), transparent);
+}
+
+.nav[data-more="start"] {
+  mask-image: linear-gradient(to left, black calc(100% - var(--fade)), transparent);
+}
+
+.nav[data-more="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--fade),
+    black calc(100% - var(--fade)),
+    transparent
+  );
+}
+
 .navLink {
   display: inline-flex;
+  flex: none;
   align-items: center;
   padding: var(--v2-space-2) var(--v2-space-3);
   border-radius: var(--v2-radius-sm);
@@ -142,10 +195,11 @@
  * a broken v2, so it is the last thing that may be squeezed away.
  */
 .headerEnd {
+  grid-area: end;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--v2-space-2);
-  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -154,6 +208,46 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * The desktop: one row, exactly as it was. Brand, a navigation strip that takes
+ * the slack, then sync and the switch.
+ */
+@media (min-width: 1000px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .shell {
+    --v2-header-offset: calc(var(--v2-header-h) + var(--v2-safe-top));
+  }
+
+  .header {
+    display: flex;
+    gap: var(--v2-space-4);
+  }
+
+  .nav {
+    flex: 1 1 auto;
+    align-self: auto;
+    margin: var(--v2-space-0);
+    padding: var(--v2-space-0);
+    /*
+     * A FLOOR, not `0`.
+     *
+     * With `min-width: 0` the nav was the only flex child allowed to shrink —
+     * the brand and the header's right-hand side were both `flex: none` — so a
+     * longer sync label ("Sync: token rejected") squeezed it to zero width and
+     * the entire navigation vanished. It was still in the DOM, which is why it
+     * took an e2e failure rather than a glance to find.
+     */
+    min-width: var(--v2-space-7);
+  }
+
+  .nav[data-more] {
+    mask-image: none;
+  }
+
+  .headerEnd {
+    flex: 0 1 auto;
+  }
 }
 
 /* --- Content -------------------------------------------------------------- */
@@ -203,6 +297,35 @@
 .switchOptionActive {
   background: var(--v2-accent);
   color: var(--v2-on-accent);
+}
+
+/*
+ * A finger-sized switch on a phone. Each option was 31x23 — the one control
+ * that gets someone out of a broken v2 was the smallest target on the page. The
+ * pill keeps its look; its options simply fill it at the tap size.
+ */
+.switch {
+  flex: none;
+  padding: var(--v2-space-0);
+  gap: var(--v2-space-0);
+}
+
+.switchOption {
+  min-width: var(--v2-tap);
+  min-height: var(--v2-tap);
+}
+
+/* The desktop keeps the compact pill it always had: a pointer, not a finger. */
+@media (min-width: 1000px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .switch {
+    padding: var(--v2-space-1);
+    gap: var(--v2-space-1);
+  }
+
+  .switchOption {
+    min-width: auto;
+    min-height: auto;
+  }
 }
 
 /* --- Loading / error ------------------------------------------------------ */

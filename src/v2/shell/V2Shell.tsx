@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigation } from "../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../app/screenUrl.ts";
@@ -52,6 +52,7 @@ export function V2Shell({ children, version }: V2ShellProps) {
   const { screen, push } = useNavigation();
   const { syncStatus } = useLibrary();
   const sync = syncLine(syncStatus);
+  const nav = useNavStrip(screen);
 
   return (
     <div className={styles.shell}>
@@ -68,7 +69,12 @@ export function V2Shell({ children, version }: V2ShellProps) {
           Card<span className={styles.brandMark}>Lens</span>
         </a>
 
-        <nav className={styles.nav} aria-label="Main">
+        <nav
+          className={styles.nav}
+          aria-label="Main"
+          ref={nav.ref}
+          {...(nav.more ? { "data-more": nav.more } : {})}
+        >
           {DESTINATIONS.map((d) => {
             const current = isCurrent(screen, d);
             return (
@@ -112,6 +118,76 @@ export function V2Shell({ children, version }: V2ShellProps) {
       </main>
     </div>
   );
+}
+
+type More = "start" | "end" | "both" | null;
+
+/**
+ * The phone's navigation strip scrolls sideways when the links do not fit, so
+ * it has to say so and must never hide the page you are on.
+ *
+ * - `more` names the side(s) with links out of view, which the stylesheet turns
+ *   into an edge fade. `null` when everything fits (and on the desktop, where
+ *   the row never scrolls), so a strip with nothing hidden is not faded.
+ * - On every navigation the current entry is brought into view. Without it a
+ *   deep link to `#/target` at 320px lit up a tab that was off-screen.
+ *
+ * `scrollLeft` is set directly rather than with `scrollIntoView`, which would
+ * also scroll the PAGE to reveal a link that is merely sideways of the viewport.
+ */
+function useNavStrip(screen: Screen) {
+  const ref = useRef<HTMLElement>(null);
+  const [more, setMore] = useState<More>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      const start = el.scrollLeft > 1;
+      const end = el.scrollLeft < max - 1;
+      setMore(start && end ? "both" : start ? "start" : end ? "end" : null);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const reveal = () => {
+      const el = ref.current;
+      const link = el?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!el || !link || el.scrollWidth <= el.clientWidth) return;
+      const strip = el.getBoundingClientRect();
+      const box = link.getBoundingClientRect();
+      // Keep a fade's width clear on either side, so the current entry is never
+      // the one dissolving into the edge.
+      const margin = 32;
+      if (box.left < strip.left + margin) el.scrollLeft -= strip.left + margin - box.left;
+      else if (box.right > strip.right - margin) el.scrollLeft += box.right - (strip.right - margin);
+    };
+    reveal();
+    // Again once the web font is in: the links widen when it swaps in, which
+    // left `#/target` at 390px scrolled to 72 of 91 and its tab half hidden.
+    // A content-only width change fires neither `scroll` nor the observer, so
+    // the fade is recomputed here too.
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (!live) return;
+      reveal();
+      ref.current?.dispatchEvent(new Event("scroll"));
+    });
+    return () => {
+      live = false;
+    };
+  }, [screen.name]);
+
+  return { ref, more };
 }
 
 function isCurrent(screen: Screen, d: Destination): boolean {
