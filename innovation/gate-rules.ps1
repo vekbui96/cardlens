@@ -619,7 +619,9 @@ function Get-DesignSkillsSetup {
     $allow = @("PowerShell($e context)", "PowerShell($e context *)", "PowerShell($e shot *)", "PowerShell($e detect *)", "PowerShell(python $($p.Search) *)")
     $vars = [ordered]@{
         INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS = '1'; IMPECCABLE_BIN = $e; IMPECCABLE_SKILL_DIR = $p.Impeccable
-        IMPECCABLE_NO_TELEMETRY = '1'; DO_NOT_TRACK = '1'; IMPECCABLE_NO_UPDATE_CHECK = '1'; IMPECCABLE_NO_STALENESS_CHECK = '1'
+        # never DO_NOT_TRACK: claude reads it too and then offers no PowerShell tool at all (runs 20261122-133356 to
+        # -143708 had no shell); IMPECCABLE_NO_TELEMETRY already keeps the engine quiet
+        IMPECCABLE_NO_TELEMETRY = '1'; IMPECCABLE_NO_UPDATE_CHECK = '1'; IMPECCABLE_NO_STALENESS_CHECK = '1'
         IMPECCABLE_HOOK_DISABLED = '1'; PYTHONDONTWRITEBYTECODE = '1'
     }
     return [pscustomobject]@{ Ok = $true; Reason = 'on'; Allow = $allow; Env = $vars; PathPrepend = $p.PythonDir }
