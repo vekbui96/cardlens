@@ -1,6 +1,7 @@
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { continueTarget, topProgress } from "../../../features/home/continueSet.ts";
+import { useConnectDevice } from "../../../hooks/useConnectDevice.ts";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
 import { useHomeLoadMetric } from "../../../hooks/useHomeLoadMetric.ts";
 import { useSinceLastLooked } from "../../../hooks/useSinceLastLooked.ts";
@@ -68,6 +69,7 @@ export function HomeScreen() {
     binders,
     syncStatus,
   } = useLibrary();
+  const connectDevice = useConnectDevice();
   const { data: sets } = useSets();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
@@ -93,7 +95,7 @@ export function HomeScreen() {
     return (
       <Stack gap={5}>
         {notice ? <SyncNotice label={notice.label} detail={notice.detail} /> : null}
-        <EmptyHome />
+        <EmptyHome syncStatus={syncStatus} onConnect={() => void connectDevice()} />
       </Stack>
     );
   }
