@@ -215,6 +215,128 @@ Check ($r.Status -eq 'FAILED' -and $r.Line -match 'UNCERTAIN') 'a runner problem
 Check ((Get-RunResult -Sessions @((S 'propose' -Ok $false))).Status -eq 'FAILED') 'claude exited with an error -> FAILED'
 Check ((Get-RunResult).Status -eq 'NOTHING-TO-DO') 'no sessions -> NOTHING-TO-DO'
 
+# ---- slices auto-approved through their approved spec (Get-ViaSpecDecision) ---------------------------------
+$vsSpecBody = @"
+$mk
+## Problem and evidence
+x
+## Slices
+1. **Since you last looked (device-local)**: Home line. Size S, Pages only.
+2. **Value history design and storage decision**: decision note.
+3. **Snapshot writer**: records one row a day.
+4. **Value over time chart on Home**: reads the history.
+"@
+function VsIss { param([int]$N, [string]$Title, [string[]]$L = @('loop:proposal'), [string]$Body, [string]$State = 'OPEN', [string]$By = 'vekbui96', [string]$Created = '2026-11-20T18:57:17Z')
+    [pscustomobject]@{ number = $N; title = $Title; state = $State; body = $Body; createdAt = $Created; author = [pscustomobject]@{ login = $By }; labels = @($L | ForEach-Object { [pscustomobject]@{ name = $_ } }) } }
+function VsBody { param([int]$K, [int]$Of = 4, [int]$Spec = 108, [string]$Extra = '') "$mk`nPart of #$Spec (slice $K of $Of)`n## What`nthe slice.$Extra" }
+function VsCmt { param([string]$Body, [string]$At = '2026-11-21T10:00:00Z', [string]$By = 'vekbui96', [int]$Id = 5) [pscustomobject]@{ id = $Id; body = $Body; created_at = $At; user = [pscustomobject]@{ login = $By } } }
+$vsSpec = VsIss 108 'Spec: Collection value over time' @('loop:proposal', 'approved', 'loop:spec') $vsSpecBody -Created '2026-11-20T16:39:09Z'
+$vsOk = [pscustomobject]@{ buildable = $true; approvedAt = '2026-11-20T17:00:00Z'; reasons = @() }
+$s1 = VsIss 110 'Since you last looked (device-local)' -Body (VsBody 1)
+$s2 = VsIss 111 'Value history design and storage decision' -Body (VsBody 2)
+$s3 = VsIss 112 'Snapshot writer' -Body (VsBody 3)
+$s4 = VsIss 117 'Home (phone/desktop): Value over time chart on Home' -Body (VsBody 4) -Created '2026-11-22T00:24:55Z'
+function Vs { param($Slice, [object[]]$Issues = @($vsSpec, $s1, $s2, $s3, $s4), $Check = $vsOk, $Spec = $vsSpec, [string]$Edited = '', [object[]]$Comments = @(), [object[]]$SpecComments = @(), [int]$Ev = 0)
+    Get-ViaSpecDecision -Slice $Slice -SliceEditedAt $Edited -SliceComments $Comments -SliceApprovalEvents $Ev -Spec $Spec -SpecCheck $Check -SpecComments $SpecComments -Issues $Issues -Owner 'vekbui96' -Marker $mk }
+function Why { param($D) ($D.Reasons -join ' | ') }
+
+$d = Vs $s4
+Check ($d.Linked -and $d.Eligible -and $d.Spec -eq 108 -and $d.K -eq 4 -and $d.Of -eq 4 -and $d.SpecApprovedAt -eq '2026-11-20T17:00:00Z') "approved spec, loop slice, earlier slices fine -> auto-approved (got: $(Why $d))"
+$d = Vs $s1
+Check ($d.Eligible) "first slice, nothing earlier -> auto-approved (got: $(Why $d))"
+# 1. the spec's approval
+$d = Vs $s4 -Check ([pscustomobject]@{ buildable = $false; approvedAt = $null; reasons = @('no labeled-approved event found') })
+Check (-not $d.Eligible -and (Why $d) -match 'not approved') 'unapproved spec -> not auto-approved'
+$d = Vs $s4 -Check ([pscustomobject]@{ buildable = $false; approvedAt = '2026-11-20T17:00:00Z'; reasons = @('approved label was removed after it was added') })
+Check (-not $d.Eligible -and (Why $d) -match 'removed') 'spec approval removed -> not auto-approved'
+$d = Vs $s4 -Check ([pscustomobject]@{ buildable = $false; approvedAt = '2026-11-20T17:00:00Z'; reasons = @('issue body edited at x, after approval') })
+Check (-not $d.Eligible -and (Why $d) -match 'edited') 'spec edited after approval -> not auto-approved'
+$d = Vs $s4 -Spec (VsIss 108 'Spec' @('loop:proposal', 'approved', 'loop:spec') $vsSpecBody -State 'CLOSED')
+Check (-not $d.Eligible -and (Why $d) -match 'spec #108 is closed') 'closed spec -> not auto-approved'
+$d = Vs $s4 -Spec (VsIss 108 'Spec' @('loop:proposal', 'approved') $vsSpecBody)
+Check (-not $d.Eligible -and (Why $d) -match 'not a loop:spec') 'linked issue is not a loop:spec -> not auto-approved'
+$d = Vs $s4 -Spec $null
+Check (-not $d.Eligible -and (Why $d) -match 'not found') 'spec missing -> not auto-approved'
+$d = Vs $s4 -SpecComments @((VsCmt '/hold until I look at the chart' -At '2026-11-21T09:00:00Z'))
+Check (-not $d.Eligible -and (Why $d) -match 'put spec #108 on hold') '/hold on the spec after its approval -> every slice held'
+$d = Vs $s4 -SpecComments @((VsCmt '/hold' -At '2026-11-20T16:50:00Z'))
+Check ($d.Eligible) "a hold on the spec BEFORE its (re-)approval no longer counts (got: $(Why $d))"
+$early = VsIss 117 'Value over time chart on Home' -Body (VsBody 4) -Created '2026-11-20T16:59:00Z'
+$d = Vs $early -Issues @($vsSpec, $s1, $s2, $s3, $early)
+Check (-not $d.Eligible -and (Why $d) -match 'opened before spec #108') 'slice opened before the spec approval -> not auto-approved'
+# 2. opened by the loop, in the loop's format, in the spec's list
+$d = Vs (VsIss 117 'Value over time chart on Home' -Body (VsBody 4) -By 'someone') -Issues @($vsSpec, $s1, $s2, $s3)
+Check (-not $d.Eligible -and (Why $d) -match 'opened by someone') 'slice not opened by the owner account -> not auto-approved'
+$noMark = VsIss 117 'Value over time chart on Home' -Body "Part of #108 (slice 4 of 4)`n$mk`nbody" -Created '2026-11-22T00:24:55Z'
+$d = Vs $noMark -Issues @($vsSpec, $s1, $s2, $s3, $noMark)
+Check (-not $d.Eligible -and (Why $d) -match 'does not start with the loop marker') 'marker not the first line -> not auto-approved (and the plan ignores it)'
+$d = Vs (VsIss 117 'Value over time chart on Home' @('size:small') -Body (VsBody 4) -Created '2026-11-22T00:24:55Z')
+Check (-not $d.Eligible -and (Why $d) -match 'missing label loop:proposal') 'no loop:proposal -> not auto-approved'
+$k9 = VsIss 120 'Value over time chart on Home' -Body (VsBody 9 -Of 4) -Created '2026-11-22T00:24:55Z'
+$d = Vs $k9 -Issues @($vsSpec, $s1, $s2, $s3, $k9)
+Check (-not $d.Eligible -and (Why $d) -match 'slice 9 is not in spec') 'slice index not in the spec -> not auto-approved'
+$of5 = VsIss 120 'Value over time chart on Home' -Body (VsBody 4 -Of 5) -Created '2026-11-22T00:24:55Z'
+$d = Vs $of5 -Issues @($vsSpec, $s1, $s2, $s3, $of5)
+Check (-not $d.Eligible -and (Why $d) -match 'says 5 slices') 'slice count differs from the spec -> not auto-approved'
+$bt = VsIss 117 'Delete every binder' -Body (VsBody 4) -Created '2026-11-22T00:24:55Z'
+$d = Vs $bt -Issues @($vsSpec, $s1, $s2, $s3, $bt)
+Check (-not $d.Eligible -and (Why $d) -match 'title does not match') 'title unlike the spec slice -> not auto-approved'
+$d = Vs $s1 -Spec (VsIss 108 'Spec' @('loop:proposal', 'approved', 'loop:spec') "$mk`n## Problem`nno slices")
+Check (-not $d.Eligible -and (Why $d) -match 'nothing to open') 'spec without a ## Slices list -> not auto-approved'
+$dup = VsIss 116 'Value over time chart on Home' -Body (VsBody 4) -Created '2026-11-21T00:00:00Z'
+$d = Vs $s4 -Issues @($vsSpec, $s1, $s2, $s3, $dup, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'counts #116 as slice 4') 'a duplicate that the plan counts instead -> this one is not auto-approved'
+$d = Vs (VsIss 999 'x' -Body "$mk`nno link")
+Check (-not $d.Linked -and -not $d.Eligible) 'not a slice at all -> Linked false'
+Check (Test-SliceTitleMatch 'Since you last looked (device-local)' 'Home (phone/desktop): since you last looked, device local') 'title match tolerates case, punctuation and a screen prefix'
+Check (Test-SliceTitleMatch 'Value over time chart on Home' 'Value-over-time chart on the Home screen') 'title match tolerates minor rewording'
+Check (-not (Test-SliceTitleMatch 'Snapshot writer' 'Binder undo')) 'unrelated titles do not match'
+Check (-not (Test-SliceTitleMatch 'Home' 'Home (phone/desktop): Biggest movers strip')) 'a very short title is not matched by containment alone'
+# 3. Manual, failed, build order
+$man = VsIss 110 'Since you last looked (device-local)' -Body (VsBody 1 -Extra "`n**Manual / needs Ve** because it adds a storage key.")
+$d = Vs $man -Issues @($vsSpec, $man, $s2, $s3, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'marked Manual') 'Manual / needs Ve slice -> never auto-approved'
+$d = Vs $s4 -Issues @($vsSpec, $man, $s2, $s3, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'earlier slice 1 \(#110\) is Manual') 'an open Manual earlier slice holds the later ones'
+$manClosed = VsIss 110 'Since you last looked (device-local)' -Body (VsBody 1 -Extra "`n**Manual / needs Ve**") -State 'CLOSED'
+$d = Vs $s4 -Issues @($vsSpec, $manClosed, $s2, $s3, $s4)
+Check ($d.Eligible) "an earlier Manual slice that Ve closed releases the later ones (got: $(Why $d))"
+$f = VsIss 117 'Value over time chart on Home' @('loop:proposal', 'loop:failed') -Body (VsBody 4) -Created '2026-11-22T00:24:55Z'
+$d = Vs $f -Issues @($vsSpec, $s1, $s2, $s3, $f)
+Check (-not $d.Eligible -and (Why $d) -match 'loop:failed') 'failed slice -> not auto-approved (no automatic retry)'
+$f2 = VsIss 111 'Value history design and storage decision' @('loop:proposal', 'loop:failed') -Body (VsBody 2)
+$d = Vs $s4 -Issues @($vsSpec, $s1, $f2, $s3, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'earlier slice 2 \(#111\) failed') 'an open failed earlier slice holds the later ones'
+$d = Vs $s4 -Issues @($vsSpec, $s1, $s2, $s4)
+Check (-not $d.Eligible -and (Why $d) -match 'earlier slice 3 is not opened yet') 'an earlier slice not opened yet holds the later ones'
+# 4. veto
+$d = Vs (VsIss 117 'Value over time chart on Home' -Body (VsBody 4) -State 'CLOSED' -Created '2026-11-22T00:24:55Z')
+Check (-not $d.Eligible -and (Why $d) -match 'slice is closed') 'closed slice -> not auto-approved'
+$d = Vs $s4 -Comments @((VsCmt '/hold' -At '2026-11-22T01:00:00Z'))
+Check (-not $d.Eligible -and (Why $d) -match 'put this slice on hold') '/hold comment from Ve -> vetoed'
+$d = Vs $s4 -Comments @((VsCmt 'Hold: let me check the colours first' -At '2026-11-22T01:00:00Z'))
+Check (-not $d.Eligible) '"hold ..." (no slash, any case) also vetoes'
+$d = Vs $s4 -Comments @((VsCmt '/hold' -At '2026-11-22T01:00:00Z' -By 'stranger'))
+Check ($d.Eligible) "a /hold from anyone else is data, not a veto (got: $(Why $d))"
+$d = Vs $s4 -Comments @((VsCmt "$mk`n/hold" -At '2026-11-22T01:00:00Z'))
+Check ($d.Eligible) 'a loop comment (marker) never counts as a hold'
+$d = Vs $s4 -Comments @((VsCmt 'looks good, but keep the chart small' -At '2026-11-22T01:00:00Z'))
+Check ($d.Eligible) 'an ordinary adjustment comment is not a hold'
+$d = Vs $s4 -Comments @((VsCmt 'I will withhold judgement' -At '2026-11-22T01:00:00Z'))
+Check ($d.Eligible) 'the word hold inside a sentence is not a hold'
+$d = Vs $s4 -Ev 2
+Check (-not $d.Eligible -and (Why $d) -match 'added to and removed') '`approved` added and removed on the slice by hand -> that decision stands'
+# 5. edited
+$d = Vs $s4 -Edited '2026-11-22T02:00:00Z'
+Check (-not $d.Eligible -and (Why $d) -match 'body edited') 'slice body edited after it was opened -> not auto-approved'
+# slots and the notice
+$sv = Get-ProposalSlots -Issues @((Iss 108 'loop:proposal', 'loop:spec', 'approved'), (Iss 117 'loop:proposal'), (Iss 118 'loop:proposal')) -ApprovedViaSpec @(117)
+Check (($sv.AwaitingReview -join ',') -eq '118' -and $sv.Free -eq 2) "an auto-approved slice holds no proposal slot (got awaiting $($sv.AwaitingReview -join ','))"
+$nt = Format-ViaSpecNotice -Spec 108 -ApprovedAt '2026-11-20T17:00:00Z' -Who 'Ve' -Marker $mk
+Check ($nt.StartsWith($mk) -and $nt.Contains($script:ViaSpecMarker) -and $nt -match 'Auto-approved via spec #108 \(approved by Ve on 2026-11-20\)\. Comment `/hold` to stop\.') "notice text (got: $nt)"
+Check (-not ($nt -match $script:HoldRx)) 'the notice itself does not read as a hold'
+Check ((Format-SpecProgress -Plan $pl -Who 'Ve') -match 'Approving this spec approves its slices' -and (Format-SpecProgress -Plan $pl) -match '/hold') 'the spec checklist explains auto-approval and /hold'
+
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

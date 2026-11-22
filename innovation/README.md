@@ -54,7 +54,8 @@ job keeps each one's context small: on 2026-11-16 one long session doing two bui
 
 **Proposal slots (one rule everywhere).** A proposal holds one of the **3** slots while it awaits your
 review: open, `loop:proposal`, and neither `approved` nor `loop:failed`. A spec awaiting review is one
-proposal (one slot); its slices take slots as they are opened, ahead of new ideas; at most one unapproved
+proposal (one slot); its slices take slots as they are opened, ahead of new ideas (an auto-approved slice
+takes none; the watcher's literal copy of the rule still counts it, so its refill is only more cautious); at most one unapproved
 spec is open at a time. Approved work is your build queue and does not block new ideas; failed issues are
 listed instead (below). The loop (`check-approval.ps1 -Slots`, `gate-rules.ps1 Get-ProposalSlots`) and the
 approval watcher's refill trigger count the same way (the watcher's `$Loops` entry carries `Cap = 3`).
@@ -66,8 +67,15 @@ appear as Manual / needs Ve and never shipped. Now the loop may open a `loop:spe
 gestures only) and on the web, a success metric with a baseline and a target, risks and what is out of
 scope, and 3-5 independently shippable slices, each sized like a normal proposal. Approve it like any
 proposal. The loop never builds the spec itself (`check-approval.ps1` refuses it); its next proposal
-sessions open the slices, in order, as normal proposals starting `Part of #<spec> (slice <k> of <m>)`,
-and you approve those one by one. The runner keeps a "## Spec progress" checklist comment on the spec
+sessions open the slices, in order, as normal proposals starting `Part of #<spec> (slice <k> of <m>)`.
+**Approving the spec approves its slices** (since 2026-11-21): the loop builds each slice it opens without
+its own `approved`, in order, unless the slice is marked Manual / needs Ve, failed, was edited, or you held
+it (see "Approving"). `check-approval.ps1` reports such a slice as `approval: via-spec #<spec>`
+(`gate-rules.ps1 Get-ViaSpecDecision` has the full rule and `test-queue-rules.ps1` its cases); the runner
+posts one "Auto-approved via spec #N (approved by Ve on <date>). Comment `/hold` to stop." comment on it,
+builds newly opened slices in the same run when MaxBuilds, time and the plan budget allow (otherwise the
+next daily or refill run), and the run summary and Run data say `approval: via-spec #N`. The approval
+watcher needs no change: approving the spec starts a run like any approval. The runner keeps a "## Spec progress" checklist comment on the spec
 (edited in place) and closes the spec when every slice is deployed or closed. Editing the spec's body after
 approving it stops the slicing until you re-approve, as with any proposal.
 
@@ -166,6 +174,13 @@ as before. It steers proposals only; it never widens what the loop may build or 
   scanner gate constants (`phash.ts` + `judge.py`), `/api/target/*`, sync merge/validation rules, cache
   version bumps, secrets / `.env` / NSSM env, Funnel, CORS. `merge-pr.ps1` refuses PRs touching them.
 - To reject: close the issue. The loop will not propose it again.
+- **Slices of a spec you approved** need no `approved` of their own (see "Specs"). To **veto** one, comment
+  `/hold` on it (any comment of yours starting with `/hold` or `hold`); a `/hold` on the spec (after you
+  approved it) holds every slice. Closing the slice or the spec also stops it. Adding then removing
+  `approved` on a slice, or editing its body, also takes it out of auto-approval. To build a held or edited
+  slice after all, add `approved` to it by hand. An earlier slice that is still open and failed or Manual
+  holds the later ones until you close it. An auto-approved slice that fails is not retried automatically:
+  remove `loop:failed` to rebuild it, or close it.
 
 ## What you see on an issue it builds
 

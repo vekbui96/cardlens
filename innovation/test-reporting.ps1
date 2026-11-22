@@ -170,6 +170,12 @@ $null = Publish-LoopRunData -Sessions @([pscustomobject]@{ Path = $bPath; Kind =
 Check ((Test-Path (Join-Path $tmp 'run-S.rundata-12.md')) -and (Test-Path (Join-Path $tmp 'run-S.rundata-20.md'))) 'publish -Sessions: bodies for #12 and proposal #20'
 $js = [IO.File]::ReadAllText((Join-Path $tmp 'run-S.rundata.json')) | ConvertFrom-Json
 Check (@($js.sessions).Count -eq 2 -and $js.status -eq 'OK' -and [math]::Abs([double]$js.totals.Cost - 3.5) -lt 0.0001) 'run-data json: sessions listed, run status and summed cost'
+$null = Publish-LoopRunData -Sessions @([pscustomobject]@{ Path = $bPath; Kind = 'build'; Issue = 12; Model = 'claude-test-1' }, [pscustomobject]@{ Path = $pPath; Kind = 'propose'; Issue = 0; Model = 'claude-test-small' }) -Status 'OK' `
+    -Repo 'o/r' -GhExe 'gh-not-called' -RunId 'SV' -Mode 'FULL' -OutDir $tmp -NoPost -Approvals @{ 12 = 'via-spec #108' }
+$jv = [IO.File]::ReadAllText((Join-Path $tmp 'run-SV.rundata.json')) | ConvertFrom-Json
+Check (@($jv.approvals).Count -eq 1 -and $jv.approvals[0].issue -eq 12 -and $jv.approvals[0].approval -eq 'via-spec #108') 'run-data json: approval via-spec #N recorded'
+Check ([IO.File]::ReadAllText((Join-Path $tmp 'run-SV.rundata-12.md')) -match 'Approval: via-spec #108') 'run-data comment on an auto-approved slice says approval: via-spec #N'
+Check (-not ([IO.File]::ReadAllText((Join-Path $tmp 'run-S.rundata-12.md')) -match 'Approval: via-spec')) 'no approval line for a label-approved build'
 # a killed build session: its cost is unknown, the run's output tokens are n/a, the note says so
 $kPath = Join-Path $tmp 'run-K.build-14.jsonl'; [IO.File]::WriteAllLines($kPath, @($bLines | Where-Object { $_ -notmatch '"type":"result"' } | ForEach-Object { $_ -replace 'LOOP-ISSUE-(START|END) 12', 'LOOP-ISSUE-$1 14' }))
 $dk = Read-LoopTranscript -Path $kPath -SessionIssue 14

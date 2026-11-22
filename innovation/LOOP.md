@@ -40,7 +40,7 @@ handle them, and you never touch Ve's own (non-`loop:proposal`) issues.
    you did not just finish (the runner closes finished specs), never touch issues without `loop:proposal`.
 4. **Approval is verified in code.** Before building, `check-approval.ps1` must exit 0 (section 3), and
    `merge-pr.ps1` checks it again before merging. Labels alone mean nothing. A spec is never built: only
-   its slices are, each after its own approval.
+   its slices are, each on the spec's approval (auto-approved, section 1 "Specs") or its own `approved`.
 5. **Secrets.** Never read, print, copy, grep for or edit secrets: `.env` files (`.env.example` is fine),
    NSSM service settings / registry, `D:\services\scripts\`, SSH keys, gh's token or `hosts.yml`,
    credential stores, environment variables holding keys. Secret env NAMES you may see in code and must
@@ -125,15 +125,29 @@ or -> `loop:failed` (in-progress removed, issue left open for Ve). A failure out
 An issue Ve closes without `approved` is rejected: never re-propose it or a close variant.
 
 **Specs.** `loop:proposal` + `loop:spec` -> (Ve) `approved` -> the next proposal sessions open its slices,
-in order, as normal proposals whose body starts with `Part of #<spec> (slice <k> of <m>)` -> Ve approves
-and the loop builds each slice like any proposal. The runner keeps a "## Spec progress" checklist comment on
-the spec (you never edit it) and closes the spec once every slice is deployed or closed. A spec is never
-built: `check-approval.ps1` refuses it.
+in order, as normal proposals whose body starts with `Part of #<spec> (slice <k> of <m>)` -> the loop builds
+each slice like any proposal. **Approving a spec approves its slices:** a slice needs no `approved` of its
+own when `check-approval.ps1` finds it auto-approved (`approval: via-spec #<spec>`; gate-rules.ps1
+`Get-ViaSpecDecision`): the spec is open, approved by Ve and not held; the slice was opened by the loop
+after that approval, its first lines are the marker and the `Part of` line, its k/m and title match the
+spec's `## Slices` list; it is not Manual / needs Ve and has no `loop:failed`; every earlier slice is opened
+and not open-and-failed or open-and-Manual (slices build in order); it is open, was never edited, has no
+`approved` events of its own and no hold from Ve. **Ve's veto:** a comment by Ve (without the marker)
+starting with `/hold` (or `hold`) on the slice holds that slice, on the spec (after its approval) holds all
+its slices; closing the slice or the spec also stops it; Ve can still add `approved` by hand to build a
+held, edited or otherwise refused slice. The runner posts ONE comment on each slice the first time it is
+auto-approved ("Auto-approved via spec #N ... Comment `/hold` to stop.") and builds newly opened
+auto-approved slices in the same run when MaxBuilds, time and the plan budget allow. An auto-approved slice
+that fails gets no automatic retry: it waits for Ve (who removes `loop:failed` to rebuild it). You never add
+`approved` and never comment `/hold`. The runner keeps a "## Spec progress" checklist comment on the spec
+(you never edit it) and closes the spec once every slice is deployed or closed. A spec is never built:
+`check-approval.ps1` refuses it.
 
 **Proposal slots (the one cap rule).** A proposal holds one of the **3** slots while it awaits review: open,
 `loop:proposal`, and neither `approved` (that is Ve's build queue) nor `loop:failed` (those are listed as
 "failed, waiting on Ve" instead). A spec awaiting review holds ONE slot like any proposal (none once
-approved); its slices hold slots as they are opened, and go before any new idea. At most ONE unapproved
+approved); its slices hold slots as they are opened (an auto-approved slice holds none: it is build queue),
+and go before any new idea. At most ONE unapproved
 spec may be open at a time. `check-approval.ps1 -Slots` counts all of it (`slots.newThisRun`,
 `slots.mayOpenSpec`, `slicesToOpen`); the approval watcher's refill uses the same rule, and run-loop.ps1
 starts no session at all when nothing is buildable and no slot is free.
@@ -226,7 +240,10 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
     nobody can see (server-only, data, tests, tooling) need no screenshots; say "no visible change" in the
     PR body.
 
-1. **Take the issue:** print `LOOP-ISSUE-START <ISSUE>`. If the header says `retry: yes`, this is the ONE
+1. **Take the issue:** print `LOOP-ISSUE-START <ISSUE>`. If the header says `APPROVAL: via-spec #<spec>`,
+   the issue is a slice auto-approved by Ve's approval of its spec: it has no `approved` label and needs
+   none (`check-approval.ps1 -Issue <n>` reports `approval: via-spec`); build it exactly like any approved
+   issue and say `approval: via-spec #<spec>` in your summary. If the header says `retry: yes`, this is the ONE
    automatic retry of a build that failed for a reason outside the change (`check-approval.ps1 -Issue <n>`
    shows its `retryReason`); build it like any other, with the differences in steps 4 and 6.
 2. **Re-check it:** `<SCRIPTS>\check-approval.ps1 -Issue <n>` must exit 0. Note its `adjustments`. Then
@@ -480,8 +497,11 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    Ve's comments on it without the marker may adjust it), then write the slice as a normal proposal
    (step 6 format) whose body's FIRST line after the marker is exactly
    `Part of #<spec> (slice <k> of <m>)`, scoped to that slice alone and small enough for one session. The
-   runner ticks it off on the spec's checklist; never comment on the spec yourself. If a slice needs rule-8
-   work, open it marked Manual / needs Ve like any proposal. If the spec's slice is no longer valid
+   runner ticks it off on the spec's checklist; never comment on the spec yourself. **The slice is built on
+   the spec's approval, without Ve reviewing it again**, so: title it with the spec's slice title (a screen
+   prefix such as `Home (phone/desktop): ` is fine), keep it to exactly what the spec's slice says, and if
+   it needs rule-8 work (or anything else that goes to Ve), open it marked Manual / needs Ve like any
+   proposal: that marking is what keeps it from being auto-built. If the spec's slice is no longer valid
    (already done by other work, contradicted by a later decision), still open it, say so in its Why and
    recommend closing it: Ve decides, the loop never skips a slice silently.
 3. Learn what exists and what was decided:
@@ -569,7 +589,8 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    (3 to 5 slices, in build order; each independently shippable and sized like a normal proposal.)
    ```
 
-   Nothing in a spec is built until Ve approves it AND then approves each slice as its own proposal.
+   Nothing in a spec is built until Ve approves it. Once approved, each slice the loop opens is built on
+   that approval (section 1 "Specs"), except slices marked Manual / needs Ve and slices Ve holds.
 
 ## 6. End of the session
 
@@ -580,7 +601,8 @@ Your final message is the session summary for the log. Its LAST line must be exa
   by the server rule; say why)
 - `LOOP-RESULT: FAILED <one-line reason>` (anything failed, was rolled back, or needs Ve)
 
-Above it, list: for a build session, the issue with its outcome, PR, merge sha and deploys (Pages /
+Above it, list: for a build session, the issue with its outcome, its approval (`label`, or
+`approval: via-spec #<spec>` for an auto-approved slice), PR, merge sha and deploys (Pages /
 server), or why it was skipped (including SERVER_DEPLOY unavailable); for a proposal session, the slices
 and proposals opened (numbers and titles, the spec each belongs to, the FOCUS priority each serves) or why
 none, and whether the metrics summary was available; any guard-hook blocks; and one line
