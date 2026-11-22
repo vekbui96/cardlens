@@ -84,6 +84,7 @@ export function SealedScreen() {
           title="The set list could not be read"
           body="Sealed prices are looked up by set name, so the catalog has to answer before any price can be asked for. Nothing is wrong with your collection."
           onRetry={() => void sets.refetch()}
+          announce="alert"
         />
       ) : null}
 
@@ -94,6 +95,7 @@ export function SealedScreen() {
           title="No sealed prices right now"
           body={`None of your ${setCount} ${setCount === 1 ? "set" : "sets"} came back with a sealed product. Promos, tins and subsets are never sold in packs, so for those this is the right answer — but a price source that cannot be reached looks the same from here.`}
           onRetry={() => void queryClient.invalidateQueries({ queryKey: ["sealed"] })}
+          announce="status"
         />
       ) : null}
 
@@ -235,11 +237,22 @@ function Loading({ count }: { count: number }) {
 }
 
 /** A state that says what could not be read, and offers the retry for it. */
-function Problem({ title, body, onRetry }: { title: string; body: string; onRetry: () => void }) {
+function Problem({
+  title,
+  body,
+  onRetry,
+  announce,
+}: {
+  title: string;
+  body: string;
+  onRetry: () => void;
+  /** A failure is an alert; an empty answer that may or may not be one is a polite status. */
+  announce: "alert" | "status";
+}) {
   return (
     <Panel title={title} tone="raised">
       <Stack gap={3}>
-        <p>{body}</p>
+        <p role={announce}>{body}</p>
         <Row gap={2}>
           <Chip onPress={onRetry}>Try again</Chip>
         </Row>

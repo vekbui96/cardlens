@@ -37,7 +37,7 @@ export function ShareGone({ onRetry }: { onRetry?: () => void }) {
   return (
     <Panel title="This link doesn't work" headingLevel={2} tone="raised">
       <Stack gap={3}>
-        <p>
+        <p role="alert">
           It may have been turned off by whoever sent it, or it may never have been a link at all. Either way
           there is nothing here to show you.
         </p>

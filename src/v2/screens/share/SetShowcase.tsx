@@ -52,7 +52,7 @@ export function SetShowcase({ setId, setName, owned, live = false, updatedAt }: 
       {view.isError && cards.length === 0 ? (
         <Panel title="The card list could not be reached" headingLevel={2}>
           <Stack gap={3}>
-            <p>
+            <p role="alert">
               The set this link points at could not be loaded, so there is nothing to lay the marks against.
               Nothing is wrong with the link.
             </p>
