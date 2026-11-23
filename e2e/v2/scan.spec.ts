@@ -638,6 +638,15 @@ test.describe("scan @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("scan-idle.png");
   });
 
+  test("the card index could not load", async ({ page }) => {
+    await page.route("**/card-index/**", (route) => route.fulfill({ status: 500, body: "no" }));
+    await openScan(page);
+    await expect(page.getByText("The card index could not load")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("scan-index-failed.png");
+  });
+
   test("a batch waiting on a decision", async ({ page }) => {
     await connectDevice(page);
     const printings: string[] = [];

@@ -138,4 +138,12 @@ test.describe("share @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("trade.png", { timeout: 20000 });
   });
+
+  test("a link that does not work", async ({ page }) => {
+    await serveShare(page, { error: "not_found" }, 404);
+    await openV2(page, "/live/revoked");
+    await expect(page.getByText("This link doesn't work")).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("share-gone.png");
+  });
 });

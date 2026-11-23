@@ -264,6 +264,16 @@ test.describe("set cards @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("set-cards.png");
   });
 
+  test("a set the catalog cannot reach", async ({ page }) => {
+    // A mock-catalog set with the catalog failing: the screen's error state.
+    await openV2(page, "/set/sv3/Obsidian%20Flames", { sim: "fail" });
+    await expect(page.getByRole("heading", { name: "The card catalog could not be reached" })).toBeVisible({
+      timeout: 20000,
+    });
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("set-cards-error.png");
+  });
+
   test("the v1 web set screen filter bar", async ({ page }) => {
     // The v1 web shell (`?v=1&ui=web`), which v2's screen does not cover: its
     // filter bar (rarity chips, Missing only, By value, Share) is what this shows.
