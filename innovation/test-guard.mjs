@@ -674,6 +674,68 @@ const observeDeny = [
   ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
   ps(`git -C "${C}" push origin loop/12-x`),
 ];
+// Phase 3: QA (MODE=QA) and the UX reviewer (MODE=UX): the Observer's posture plus screenshots in ARTIFACTS; no gh at
+// all, no innovation script, GET only to the live site and the public API routes, never a token, never the clone.
+const A = `${HOME}\\artifacts`;
+const qaEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "QA", INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1" };
+const uxEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "UX", INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1" };
+const qaUxAllow = [
+  ps(
+    `${E} shot "https://vekbui96.github.io/cardlens/#/wantlist" --viewport 390x844 --out "${A}\\qa\\20261123-090500-177\\ac1"`,
+  ),
+  ps(
+    `${E} shot https://vekbui96.github.io/cardlens/ --viewport 390x844,1440x900 --out "${A}\\ux\\20261123-090500-177\\home"`,
+  ),
+  ps(`${E} detect --json https://vekbui96.github.io/cardlens/`),
+  { tool_name: "Read", tool_input: { file_path: `${A}\\qa\\20261123-090500-177\\ac1\\390x844.png` } },
+  { tool_name: "Read", tool_input: { file_path: `${C}\\src\\v2\\screens\\wantlist\\WantList.tsx` } },
+  { tool_name: "WebFetch", tool_input: { url: "https://vekbui96.github.io/cardlens/#/wantlist" } },
+  { tool_name: "WebFetch", tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/health" } },
+  ps(`Invoke-WebRequest https://vekbui96.github.io/cardlens/ -UseBasicParsing`),
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/catalog/sets`),
+  ps(`git -C "${C}" show 0123456789abcdef0123456789abcdef01234567 --stat`),
+  ps(`git -C "${C}" diff 0123abc^1 0123abc -- src/v2/screens/home/HomeScreen.tsx`),
+  { tool_name: "Write", tool_input: { file_path: `${W}\\qa-notes.md`, content: "notes" } },
+  ps(`New-Item -ItemType Directory "${A}\\qa\\20261123-090500-177\\ac2"`),
+];
+const qaUxDeny = [
+  // no gh at all, not even reads (the runner gave it the issue, the diff and the criteria), and no GitHub writes
+  ps(`gh issue view 177 -R vekbui96/cardlens --json comments`),
+  ps(`gh issue comment 177 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`gh issue create -R vekbui96/cardlens --title x --label loop:proposal --body-file "${W}\\p.md"`),
+  ps(`gh api repos/vekbui96/cardlens/issues/177`),
+  // never roll back, never deploy, never any innovation script
+  ps(`${S}\\rollback.ps1 -Issue 177 -MergeSha 0123456789abcdef0123456789abcdef01234567 -RevertOnly`),
+  ps(`${S}\\deploy.ps1 -Issue 177 -MergeSha 0123456789abcdef0123456789abcdef01234567 -ExpectString x`),
+  ps(`${S}\\check-approval.ps1 -List`),
+  // no mutating HTTP, no token, no sync / collection route, not the local server or the recognition service
+  ps(`Invoke-RestMethod -Method Post https://server-pc.tail0e4194.ts.net:8443/api/collection/merge`),
+  ps(`Invoke-RestMethod -Method Delete https://server-pc.tail0e4194.ts.net:8443/api/binders/x`),
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/collection -Headers @{a=1}`),
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/sync?token=abc`),
+  ps(`Invoke-RestMethod http://127.0.0.1:8787/api/health`),
+  ps(`Invoke-RestMethod http://127.0.0.1:8200/health`),
+  { tool_name: "WebFetch", tool_input: { url: "https://vekbui96.github.io/cardlens/?token=abc" } },
+  { tool_name: "WebFetch", tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/collection" } },
+  // no browser automation (Playwright is not allowlisted, and the guard refuses it)
+  ps(`npx playwright test e2e/wantlist.spec.ts`),
+  ps(`playwright screenshot https://vekbui96.github.io/cardlens/ "${A}\\x.png"`),
+  // writes: never the clone or the store
+  { tool_name: "Write", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, content: "x" } },
+  {
+    tool_name: "Edit",
+    tool_input: { file_path: `${C}\\src\\app\\App.tsx`, old_string: "a", new_string: "b" },
+  },
+  ps(`New-Item -ItemType File "${C}\\notes.md"`),
+  {
+    tool_name: "Write",
+    tool_input: { file_path: "D:\\hub\\state\\product\\cardlens\\qa.jsonl", content: "{}" },
+  },
+  // and nothing a build does
+  ps(`git -C "${C}" commit -F "${W}\\m.txt"`),
+  ps(`git -C "${C}" push origin loop/12-x`),
+  ps(`git -C "${C}" checkout -b loop/12-x origin/main`),
+];
 const pmHome = mkdtempSync(path.join(os.tmpdir(), "guard-pm-"));
 mkdirSync(path.join(pmHome, "state"), { recursive: true });
 writeFileSync(
@@ -745,6 +807,10 @@ let failures = 0;
 for (const [name, e, list, want] of [
   ["observe", observeEnv, observeAllow, 0],
   ["observe", observeEnv, observeDeny, 2],
+  ["qa", qaEnv, qaUxAllow, 0],
+  ["qa", qaEnv, qaUxDeny, 2],
+  ["ux", uxEnv, qaUxAllow, 0],
+  ["ux", uxEnv, qaUxDeny, 2],
   ["pm", pmEnv, pmAllow, 0],
   ["pm", pmEnv, pmDeny, 2],
   ["pm (no pm-refs.json)", pmNoRefsEnv, [create(citesFinding)], 2],
@@ -828,6 +894,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill, ${observeAllow.length + observeDeny.length} observer, ${pmAllow.length + pmDeny.length + dryAllow.length + dryDeny.length + 1} pm and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill, ${observeAllow.length + observeDeny.length} observer, ${(qaUxAllow.length + qaUxDeny.length) * 2} qa/ux, ${pmAllow.length + pmDeny.length + dryAllow.length + dryDeny.length + 1} pm and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);

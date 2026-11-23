@@ -52,7 +52,8 @@ function ConvertTo-IsoUtc { param($T) if ($null -eq $T -or "$T" -eq '') { return
 function New-ProductCursors {
     return [ordered]@{ schema = $script:ProductSchema; lastEventId = [long]0; commentsSince = ''; digestCommentsSince = ''; lastCollectedUtc = ''
         lastObservedCommit = ''; research = [ordered]@{ expiresUtc = '' }; memory = [ordered]@{ lastRunUtc = ''; lastDecisionId = '' }
-        observe = [ordered]@{ lastRunUtc = ''; metrics = $null }; pm = [ordered]@{ lastRunUtc = '' } }
+        observe = [ordered]@{ lastRunUtc = ''; metrics = $null }; pm = [ordered]@{ lastRunUtc = '' }
+        qa = [ordered]@{ lastRunUtc = ''; done = [ordered]@{}; pending = @() }; ux = [ordered]@{ lastRunUtc = ''; done = [ordered]@{}; workflows = [ordered]@{}; lastSampleUtc = '' } }
 }
 # A parsed cursors.json (or $null / garbage / another schema) -> a complete cursors object (defaults filled in).
 function ConvertTo-ProductCursors {
@@ -69,6 +70,20 @@ function ConvertTo-ProductCursors {
         if ($Json.observe.metrics -is [Management.Automation.PSCustomObject]) { $m = [ordered]@{}; foreach ($p in $Json.observe.metrics.PSObject.Properties) { $d = 0.0; if ([double]::TryParse("$($p.Value)", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$d)) { $m[$p.Name] = $d } }; $c.observe.metrics = $m }
     }
     if ($Json.PSObject.Properties.Name -contains 'pm' -and $Json.pm -and $Json.pm.lastRunUtc) { $c.pm.lastRunUtc = "$($Json.pm.lastRunUtc)" }
+    # Phase 3 (product-qa.ps1): QA / UX cursors: last runs, reviewed commits (sha -> ts), pending deploys, workflow reviews
+    $map = { param($o) $m = [ordered]@{}; if ($o -is [Management.Automation.PSCustomObject]) { foreach ($p in $o.PSObject.Properties) { if ("$($p.Value)") { $m[$p.Name] = "$($p.Value)" } } }; $m }
+    if ($Json.PSObject.Properties.Name -contains 'qa' -and $Json.qa) {
+        if ($Json.qa.lastRunUtc) { $c.qa.lastRunUtc = "$($Json.qa.lastRunUtc)" }
+        $c.qa.done = & $map $Json.qa.done
+        $c.qa.pending = @(@($Json.qa.pending) | Where-Object { $_ -and "$($_.sha)" -match '^[0-9a-f]{7,40}$' } | ForEach-Object {
+                [ordered]@{ issue = [int]$_.issue; sha = "$($_.sha)"; ts = "$($_.ts)"; ui = [bool]$_.ui; workflows = @(@($_.workflows) | Where-Object { $_ } | ForEach-Object { "$_" }) } })
+    }
+    if ($Json.PSObject.Properties.Name -contains 'ux' -and $Json.ux) {
+        if ($Json.ux.lastRunUtc) { $c.ux.lastRunUtc = "$($Json.ux.lastRunUtc)" }
+        if ($Json.ux.lastSampleUtc) { $c.ux.lastSampleUtc = "$($Json.ux.lastSampleUtc)" }
+        $c.ux.done = & $map $Json.ux.done
+        $c.ux.workflows = & $map $Json.ux.workflows
+    }
     return $c
 }
 # Is the collector due? Stale when it never ran or ran more than -MinMinutes ago.
@@ -398,7 +413,7 @@ function ConvertFrom-MemoryOutput {
     return [pscustomobject]@{ Changes = @($j.changes | Where-Object { $null -ne $_ }); Error = '' }
 }
 function Format-MemoryPrompt {
-    param([object[]]$Decisions = @(), $Prefs, [string[]]$FocusLines = @(), [string[]]$ProductLines = @())
+    param([object[]]$Decisions = @(), $Prefs, [string[]]$FocusLines = @(), [string[]]$ProductLines = @(), [object[]]$Lessons = @())
     $pf = Format-PreferencesForPrompt $Prefs
     $num = { param([string[]]$L, [string]$F) $o = @(); for ($i = 0; $i -lt $L.Count; $i++) { $t = "$($L[$i])"; if ($t.Trim() -and $t.Trim() -notmatch '^<!--') { $o += "${F}:$($i + 1): $(ConvertTo-SafeLine $t 160)" } }; $o }
     $s = @()
@@ -418,6 +433,12 @@ function Format-MemoryPrompt {
     $s += ''
     $s += 'NEW DECISIONS (oldest first; kind, issue, gist):'
     foreach ($d in @($Decisions | Select-Object -Last 60)) { $s += "- $($d.id) $($d.ts) $($d.kind) #$($d.issue): $(ConvertTo-SafeLine "$($d.gist)" 200)" }
+    # Phase 3: lessons from QA of the live site (product-qa.ps1). Input only: never evidence, never a preference by themselves
+    if (@($Lessons).Count -gt 0) {
+        $s += ''
+        $s += 'QA LESSONS (what QA of the live site noticed after recent deploys; NOT Ve''s decisions: context only, never evidence, never a preference by themselves):'
+        foreach ($l in @($Lessons)) { $s += "- #$($l.issue) $($l.ts): $(ConvertTo-SafeLine "$($l.lesson)" 200)" }
+    }
     $s += ''
     $s += 'FOCUS.md (Ve''s, numbered):'; $s += @(& $num $FocusLines 'FOCUS.md' | Select-Object -First 120)
     $s += ''

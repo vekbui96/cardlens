@@ -356,8 +356,10 @@ function Merge-LoopRunData {
         foreach ($n in $d.Notes) { [void]$notes.Add("$label session: $n") }
         foreach ($c in $d.CreatedIssues) { if (-not $created.Contains($c)) { [void]$created.Add($c) } }
         foreach ($c in $d.TouchedIssues) { if (-not $touched.Contains($c)) { [void]$touched.Add($c) } }
-        # Agent: which agent the session was (build | propose | review | intake | observe | pm); the hub ledger reads it
-        $rows += [pscustomobject]@{ Kind = "$($s.Kind)"; Agent = "$($s.Kind)"; Issue = [int]$s.Issue; Model = "$($s.Model)"; Status = $d.Status; HasResult = $d.HasResult
+        # Agent: which agent the session was (build | propose | review | intake | observe | pm | qa | ux); the hub ledger
+        # reads it. About: the issue a QA / UX session looked at (its cost stays out of that issue's build part)
+        $about = 0; if ($s.PSObject.Properties.Name -contains 'About' -and $s.About) { $about = [int]$s.About }
+        $rows += [pscustomobject]@{ Kind = "$($s.Kind)"; Agent = "$($s.Kind)"; Issue = $(if ($about) { $about } else { [int]$s.Issue }); Model = "$($s.Model)"; Status = $d.Status; HasResult = $d.HasResult
             Turns = $d.Totals.Turns; Input = $d.Totals.Input; Output = $d.Totals.Output; CacheRead = $d.Totals.CacheRead; CacheWrite = $d.Totals.CacheWrite
             Cost = $d.Totals.Cost; HasCost = $d.Totals.HasCost; Start = $d.Totals.Start; End = $d.Totals.End; Models = @($d.Totals.Models) }
     }
@@ -378,7 +380,7 @@ function Format-RunDataSessions {
     param($Data)
     $rows = @(); if ($Data.PSObject.Properties.Name -contains 'Sessions') { $rows = @($Data.Sessions) }
     if ($rows.Count -eq 0) { return '' }
-    $names = @{ build = 'build'; propose = 'proposals'; review = 'product review'; observe = 'observer'; pm = 'product manager'; intake = 'intake' }
+    $names = @{ build = 'build'; propose = 'proposals'; review = 'product review'; observe = 'observer'; pm = 'product manager'; intake = 'intake'; qa = 'QA'; ux = 'UX review' }
     $txt = @($rows | ForEach-Object {
             $n = $names["$($_.Kind)"]; if (-not $n) { $n = "$($_.Kind)" }; if ($_.Issue) { $n += " #$($_.Issue)" }
             $c = 'cost n/a'; if ($_.HasCost) { $c = '$' + ([double]$_.Cost).ToString('0.00', $script:RunDataInv) }
@@ -538,6 +540,12 @@ function Format-RunDataProposalComment {
     return "$Marker`n$($script:RunDataMarker)`n$line`n"
 }
 
+# The QA / UX comment on an issue deployed by an earlier run (Phase 3): the loop marker, the run-data marker, the line.
+function Format-RunDataQaComment {
+    param([string]$Line, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->')
+    return "$Marker`n$($script:RunDataMarker)`n## Run data: QA`n`nRun ``$RunId`` ($Mode, started by: $Trigger) checked this deployed change on the live site.`n`n$Line`n"
+}
+
 # ---- posting -------------------------------------------------------------------------------------
 function Invoke-RunDataGh {
     param([string]$GhExe, [string[]]$GhArgs)
@@ -566,6 +574,7 @@ function Publish-LoopRunData {
         [string]$Waiting = '',   # 'Failed, waiting on Ve: #n (reason)' line (run-loop.ps1), appended to every comment
         [hashtable]$Approvals = @{},   # build issue -> 'label' | 'via-spec #<spec>' (run-loop.ps1); via-spec is noted
         [object[]]$WaitingOnSlice = @(),   # slices skipped as waiting-on-slice (run-loop.ps1 Get-SliceWaitRunData), recorded in run data
+        [hashtable]$QaLines = @{},   # Phase 3: issue -> QA verdict / UX review line(s) (product-qa.ps1); appended to its comment, or posted alone
         [int]$MaxIssues = 6, [int]$MaxProposals = 5,
         [switch]$NoPost
     )
@@ -573,7 +582,7 @@ function Publish-LoopRunData {
     try {
         if (@($Sessions).Count -gt 0) {
             $parsed = @($Sessions | Where-Object { $_ -and $_.Path -and (Test-Path -LiteralPath $_.Path) } | ForEach-Object {
-                    [pscustomobject]@{ Kind = $_.Kind; Issue = [int]$_.Issue; Model = $_.Model; Data = (Read-LoopTranscript -Path $_.Path -SessionIssue ([int]$_.Issue)) } })
+                    [pscustomobject]@{ Kind = $_.Kind; Issue = [int]$_.Issue; Model = $_.Model; About = $(if ($_.PSObject.Properties.Name -contains 'About') { [int]$_.About } else { 0 }); Data = (Read-LoopTranscript -Path $_.Path -SessionIssue ([int]$_.Issue)) } })
             $data = Merge-LoopRunData -Sessions $parsed -Status $Status
             if (-not $OutDir) { $OutDir = Split-Path -Parent (@($Sessions)[0].Path) }
         } else {
@@ -592,6 +601,7 @@ function Publish-LoopRunData {
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
                 createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting; waitingOnSlice = @($WaitingOnSlice | Where-Object { $_ })
                 approvals = @(if ($Approvals) { @($Approvals.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; approval = "$($Approvals[$_])" } }) })
+                qa = @(if ($QaLines) { @($QaLines.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; line = "$($QaLines[$_])" } }) })
                 sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Agent, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
             [IO.File]::WriteAllText("$base.json", ($summary | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         } catch { Write-RunDataLog "run data: could not write $base.json: $_" 'WARN' }
@@ -617,7 +627,13 @@ function Publish-LoopRunData {
             $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
             $cb = Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting
             if ($Approvals -and $Approvals.ContainsKey([int]$tg.Issue) -and "$($Approvals[[int]$tg.Issue])" -like 'via-spec*') { $cb = $cb.TrimEnd() + "`n`nApproval: $($Approvals[[int]$tg.Issue]) (auto-approved by the spec's approval; no ``approved`` label of its own)`n" }
+            if ($QaLines -and $QaLines.ContainsKey([int]$tg.Issue)) { $cb = $cb.TrimEnd() + "`n`n$($QaLines[[int]$tg.Issue])`n" }
             [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = $cb })
+        }
+        # a QA / UX verdict for an issue built in an earlier run: a short comment of its own
+        foreach ($k in @(if ($QaLines) { @($QaLines.Keys | Sort-Object) })) {
+            if (@($jobs | Where-Object { [int]$_.Issue -eq [int]$k }).Count) { continue }
+            [void]$jobs.Add([pscustomobject]@{ Issue = [int]$k; Body = (Format-RunDataQaComment -Line "$($QaLines[$k])" -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker) })
         }
         foreach ($n in $proposals) { [void]$jobs.Add([pscustomobject]@{ Issue = $n; Body = (Format-RunDataProposalComment -Data $data -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Waiting $Waiting) }) }
         if ($jobs.Count -eq 0) { Write-RunDataLog 'run data: no issue to post on'; return 0 }
