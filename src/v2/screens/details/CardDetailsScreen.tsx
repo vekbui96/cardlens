@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
 import type { Finish } from "../../../models/finishes.ts";
 import { finishLabel } from "../../../models/finishes.ts";
@@ -132,6 +132,26 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
     if (cardName) document.title = `${cardName} · CardLens`;
   }, [cardName]);
 
+  /*
+   * The row flips at once (the library updates synchronously), and a short line
+   * says what happened. A save that throws writes nothing, so the row is simply
+   * left as it was and the notice says so.
+   */
+  const [markResult, setMarkResult] = useState<{
+    kind: "marked" | "unmarked" | "failed";
+    finish: Finish;
+  } | null>(null);
+  const mark = (finish: Finish) => {
+    if (!card) return;
+    const wasHeld = held.includes(finish);
+    try {
+      toggleOwned(cardId, finish, setId, card.collectorNumber);
+      setMarkResult({ kind: wasHeld ? "unmarked" : "marked", finish });
+    } catch {
+      setMarkResult({ kind: "failed", finish });
+    }
+  };
+
   if (!card) {
     return failedOrRetrying(details) ? (
       <ErrorNotice
@@ -243,10 +263,23 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
                     owned={held.includes(finish)}
                     price={priceOf(finish)}
                     pricePending={printings.isLoading}
-                    onToggle={() => toggleOwned(cardId, finish, setId, card.collectorNumber)}
+                    onToggle={() => mark(finish)}
                   />
                 ))}
               </Stack>
+              {markResult?.kind === "failed" ? (
+                <ErrorNotice
+                  stillWorks="Nothing was changed: the printing is still as it was."
+                  onRetry={() => mark(markResult.finish)}
+                >
+                  {finishLabel(markResult.finish)} could not be saved on this device.
+                </ErrorNotice>
+              ) : null}
+              <p className={styles.confirm} role="status">
+                {markResult && markResult.kind !== "failed"
+                  ? `${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`
+                  : ""}
+              </p>
             </>
           )}
         </Stack>

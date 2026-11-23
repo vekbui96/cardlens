@@ -127,6 +127,17 @@
   max-width: 62ch;
 }
 
+/* Always mounted so the live region announces; empty it takes no space. */
+.confirm {
+  margin: var(--v2-space-0);
+  color: var(--v2-accent-strong);
+  font-size: var(--v2-fs-small);
+}
+
+.confirm:empty {
+  display: none;
+}
+
 .note {
   margin: var(--v2-space-0);
   color: var(--v2-warn);

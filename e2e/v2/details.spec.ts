@@ -144,6 +144,15 @@ test.describe("details @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("card-details.png");
   });
 
+  test("a marked printing looks like itself", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, CARD);
+    await page.getByRole("button", { name: /^Normal/ }).click();
+    await expect(page.getByRole("button", { name: /^Normal Owned/ })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("card-details-marked.png");
+  });
+
   test("the printing-list failure looks like itself", async ({ page }) => {
     await servePrintings(page, { failFirst: 99 });
     await openV2(page, CARD);
