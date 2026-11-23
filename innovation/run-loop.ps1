@@ -46,15 +46,18 @@
   check-approval.ps1 -List output instead of the live queue.
 .PARAMETER MaxBuilds
   At most this many approved issues are built per run, one session each, strictly one after another
-  (default 2; 1 = one issue per run). At most one server deploy per run.
+  (default 4; 1 = one issue per run). At most one server deploy per run; any failure or rollback ends Phase A.
 .PARAMETER SecondBuildMinMinutes
-  Minutes that must remain before the run's deadline (start + TimeoutMinutes) to start a second build
-  session (default 120: one build has taken ~60-75 min and can reach ~110 with a CI fix round).
+  (alias NextBuildMinMinutes) Minutes that must remain before the run's deadline (start + TimeoutMinutes) to start
+  each build after the first (default 100: a build takes ~60-75 min, ~110 with a CI fix round; a session's limit is
+  cut to what is left and LOOP.md section 3 step 9 stops before the merge when time runs short). With the 360-min
+  run, four builds of up to ~85 min each fit.
 .PARAMETER MaxTurns
   Overrides every session's turn cap (sessions.json: build 150, propose 80, review 120). 0 = use sessions.json.
 .PARAMETER TimeoutMinutes
-  The whole run's time limit; every session's own limit (sessions.json timeoutMinutes) is cut to what is
-  left of it.
+  The whole run's time limit (default 360); every session's own limit (sessions.json timeoutMinutes) is cut to what is
+  left of it. Cut further to end 30 min inside the scheduled task's ExecutionTimeLimit (gate-rules.ps1
+  Get-RunTimeBudget; install-task.ps1 sets 7 h).
 .PARAMETER Model
   Overrides every session's model (sessions.json). Empty = use sessions.json.
 .PARAMETER IgnoreBudget
@@ -82,11 +85,11 @@ param(
     [switch]$DryRun,
     # Only check the elevated deploy task: installed, copy current, and a selftest round trip from THIS (non-elevated) process.
     [switch]$SelfTest,
-    [ValidateRange(1, 2)]
-    [int]$MaxBuilds = 2,
-    [int]$SecondBuildMinMinutes = 120,
+    [ValidateRange(1, 6)]
+    [int]$MaxBuilds = 4,
+    [Alias('NextBuildMinMinutes')][int]$SecondBuildMinMinutes = 100,
     [int]$MaxTurns = 0,
-    [int]$TimeoutMinutes = 240,
+    [int]$TimeoutMinutes = 360,
     [string]$Model = '',
     # with -DryRun only: plan from this saved check-approval.ps1 -List output instead of GitHub's live queue
     [string]$QueueFile = '',
@@ -114,6 +117,15 @@ try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { 
 $ScriptsDir = (Resolve-Path $PSScriptRoot).Path
 $RunStart = Get-Date
 $RunId = $RunStart.ToString('yyyyMMdd-HHmmss')
+# the run must end inside the scheduled task's ExecutionTimeLimit, or Task Scheduler kills it mid-session
+$taskLimitMin = 0
+try {
+    $tn = 'innovation-loop-cardlens'; if ($ProductReview) { $tn = 'innovation-loop-cardlens-review' }
+    $tl = "$((Get-ScheduledTask -TaskName $tn -ErrorAction Stop).Settings.ExecutionTimeLimit)"
+    if ($tl -and $tl -ne 'PT0S') { $taskLimitMin = [Xml.XmlConvert]::ToTimeSpan($tl).TotalMinutes }
+} catch { }
+$TimeBudget = Get-RunTimeBudget -Requested $TimeoutMinutes -TaskLimitMinutes $taskLimitMin
+$TimeoutMinutes = $TimeBudget.Minutes
 $Deadline = $RunStart.AddMinutes($TimeoutMinutes)
 Initialize-LoopDirs
 $script:LogFile = Join-Path $script:LoopHome "logs\run-$RunId.log"
@@ -130,11 +142,12 @@ $Cfg = Get-SessionConfig $sessionsJson
 $Opts = Get-LoopOptions $sessionsJson   # run-wide switches (sessions.json "options"; safe defaults in gate-rules.ps1)
 foreach ($k in 'build', 'propose', 'review', 'observe', 'pm', 'qa', 'ux') { if ($MaxTurns -gt 0) { $Cfg[$k].maxTurns = $MaxTurns } }
 $usd = { param([double]$v) if ($v -gt 0) { '$' + (Format-BudgetUsd $v) } else { 'none' } }
-$cfgLine = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm', 'qa', 'ux' | ForEach-Object { $c = $Cfg[$_]; $m = "$($c.model)"; if ($_ -eq 'build') { $m += " (small: $($c.smallModel) for $(@($c.smallLabels) -join '/'))" }
+$cfgLine = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm', 'qa', 'ux' | ForEach-Object { $c = $Cfg[$_]; $m = "$($c.model)"; if ($_ -eq 'build') { $m += " (opus: $($c.opusModel) for $(@($c.opusLabels) -join '/'), server deploys, retry of a failed non-Opus build; small: $($c.smallModel) for $(@($c.smallLabels) -join '/'))" }
         $b = & $usd (Get-SessionBudget -Kind $_ -Model "$($c.model)" -Config $Cfg)
         if ($_ -eq 'build') { $b = "opus $b, other $(& $usd (Get-SessionBudget -Kind 'build' -Model "$($c.smallModel)" -Config $Cfg))" }
         "$_=$m turns=$($c.maxTurns) timeout=$($c.timeoutMinutes)m maxBudgetUsd=$b maxPerDay=$(if ([int]$c.maxPerDay -gt 0) { $c.maxPerDay } else { 'none' })" }) -join '; '
 Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun maxBuilds=$MaxBuilds scripts=$ScriptsDir"
+Write-Log "time: run budget $($TimeBudget.Reason); each build after the first needs $SecondBuildMinMinutes min left"
 Write-Log "sessions: $cfgLine$(if ($Model) { "; -Model $Model overrides all" })"
 Write-Log "options: $(@($Opts.Keys | ForEach-Object { "$_=$($Opts[$_])" }) -join ' ')"
 
@@ -154,7 +167,7 @@ if ($SelfTest) {
 
 # ---- lock ---------------------------------------------------------------------------------
 $lockPath = Join-Path $script:LoopHome 'lock\run.lock'
-$staleAfter = [TimeSpan]::FromMinutes($TimeoutMinutes + 30)
+$staleAfter = [TimeSpan]::FromMinutes($TimeoutMinutes + 30)   # the effective budget (Get-RunTimeBudget)
 function Get-Lock {
     try {
         $fs = [IO.File]::Open($lockPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
@@ -368,7 +381,18 @@ function Split-QueueByBudget {
     param($Q, [string]$Verdict)
     $b = @($Q.buildable | Where-Object { $null -ne $_ })
     $lo = @{}; foreach ($n in $b) { $lo[[int]$n] = @(Get-QueueLabels $Q ([int]$n)) }
-    return (Split-BuildableByBudget -Buildable $b -LabelsOf $lo -Config $Cfg -Override $Model -Verdict $Verdict)
+    return (Split-BuildableByBudget -Buildable $b -LabelsOf $lo -Config $Cfg -Override $Model -Verdict $Verdict -OpusRetry (Get-QueueInts $Q 'opusRetry') -ServerDeploy (Get-QueueInts $Q 'serverDeploy'))
+}
+# An issue-number list of the queue (check-approval.ps1 -List), @() when absent (an older queue file).
+function Get-QueueInts {
+    param($Q, [string]$Name)
+    if ($null -eq $Q -or -not ($Q.PSObject.Properties.Name -contains $Name)) { return @() }
+    return @($Q.$Name | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
+}
+# The model of the build session for #$Issue and why (gate-rules.ps1 Get-BuildModelChoice).
+function Get-QueueBuildModel {
+    param($Q, [int]$Issue, [string]$Override = $Model)
+    return (Get-BuildModelChoice -Labels @(Get-QueueLabels $Q $Issue) -Config $Cfg -Override $Override -OpusRetry ((Get-QueueInts $Q 'opusRetry') -contains $Issue) -ServerDeploy ((Get-QueueInts $Q 'serverDeploy') -contains $Issue))
 }
 function Format-Deferred {
     param([object[]]$Deferred, [string]$Verdict)
@@ -380,7 +404,7 @@ function Format-Deferred {
 # marker (gate-rules.ps1 Get-UnfinishedFailure: timeout / max-turns are retried once; anything merged in
 # that session is not). Never throws.
 function Close-UnfinishedIssues {
-    param([int[]]$Issues, [string]$EndClass, [datetime]$Since, [int]$LimitMinutes)
+    param([int[]]$Issues, [string]$EndClass, [datetime]$Since, [int]$LimitMinutes, [string]$SessionModel = '')
     $closed = @()
     foreach ($n in @($Issues | Where-Object { $_ -gt 0 } | Sort-Object -Unique)) {
         try {
@@ -391,7 +415,7 @@ function Close-UnfinishedIssues {
             $rec = Read-State "merge-$n"
             if ($rec -and $rec.mergedUtc -and ([datetime]$rec.mergedUtc).ToUniversalTime() -ge $Since.ToUniversalTime()) { $mergeSha = "$($rec.mergeSha)" }
             $f = Get-UnfinishedFailure -EndClass $EndClass -MergeSha $mergeSha -TimeoutMinutes $LimitMinutes -Who 'Ve'
-            $body = "$($script:Marker)`n$(Format-FailureMarker -Class $f.Class -Outcome 'failed')`n## Synopsis`n`n$($f.Synopsis)`n`n## Details`n`n" +
+            $body = "$($script:Marker)`n$(Format-FailureMarker -Class $f.Class -Outcome 'failed' -Model $SessionModel)`n## Synopsis`n`n$($f.Synopsis)`n`n## Details`n`n" +
                 "Run ``$RunId`` ended its build session with ``$EndClass`` while this issue still carried loop:in-progress. Failure class ``$($f.Class)``: $(Get-FailureDescription $f.Class). " +
                 "Posted by run-loop.ps1 after the session stopped; see logs\run-$RunId.log and the session transcript.`n"
             $bp = Join-Path $script:LoopHome "work\unfinished-$RunId-$n.md"
@@ -1509,14 +1533,16 @@ try {
             $labels = Get-QueueLabels $q $n
             $approvalOf[$n] = Get-QueueApproval $q $n
             if ($approvalOf[$n] -ne 'label') { Write-Log "Phase A: #$n approval: $($approvalOf[$n])" }
-            $sm = Get-SessionModel -Kind 'build' -Labels $labels -Config $Cfg -Override $Model
+            $bm = Get-QueueBuildModel $q $n
+            $sm = $bm.Model
+            Write-Log "Phase A: #$n model $sm ($($bm.Why))"
             $minutes = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
             $sessDeadline = (Get-Date).AddMinutes($minutes)
             $sha = $mainSha; if ($built.Count -gt 0 -and -not $DryRun) { $sha = Reset-Clone; try { $liveHead = Get-LiveHead } catch { } }
             $builtLine = @($built | ForEach-Object { "#$($_.Issue) $($_.Outcome)" }) -join ', '
             $pp = New-SessionPrompt -Kind 'build' -Issue $n -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -SessionDeadline $sessDeadline -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine
             if ($DryRun) {
-                Write-Log "DRY RUN plan: build session #$n model=$sm (labels: $($labels -join ',')) maxTurns=$($Cfg.build.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg)) daily=($($capD.Reason)) prompt=$pp"
+                Write-Log "DRY RUN plan: build session #$n model=$sm ($($bm.Why); labels: $($labels -join ',')) maxTurns=$($Cfg.build.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg)) daily=($($capD.Reason)) prompt=$pp"
                 $built += [pscustomobject]@{ Issue = $n; Outcome = 'deployed' }; $simMinutes += 75   # assume it deploys in ~75 min, to show the plan
                 continue
             }
@@ -1528,7 +1554,7 @@ try {
             }
             # finalise this issue: a progress comment left mid-build, an issue left loop:in-progress
             try { $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe -Issue $n); if ($ended.Count -gt 0) { Write-Log "progress comment of #$n left mid-build, marked as ended" 'WARN' } } catch { Write-Log "progress finalisation of #${n}: $_" 'WARN' }
-            $closed = @(Close-UnfinishedIssues -Issues @($n) -EndClass $s.EndClass -Since $s.Start -LimitMinutes $minutes)
+            $closed = @(Close-UnfinishedIssues -Issues @($n) -EndClass $s.EndClass -Since $s.Start -LimitMinutes $minutes -SessionModel $sm)
             $markerOutcome = ''
             try { $part = @((Read-LoopTranscript -Path $s.Path -SessionIssue $n).Parts | Where-Object { $_.Issue -eq $n }); if ($part.Count -gt 0) { $markerOutcome = "$($part[0].Outcome)" } } catch { }
             $lbl = @(); try { $lbl = @((Get-GhJson @('api', "repos/$($script:Repo)/issues/$n")).labels | ForEach-Object { $_.name }) } catch { Write-Log "cannot read #$n labels: $_" 'WARN' }
@@ -1716,6 +1742,29 @@ try {
             if ($upd.Count -gt 0) { Write-Log "spec progress: $(if ($DryRun) { 'would update (dry run, written to state\spec only)' } else { 'updated' }) #$($upd -join ', #')" }
         }
     } catch { Write-Log "spec progress skipped: $_" 'WARN' }
+    # the queue drain (gate-rules.ps1 New-DrainState / Get-DrainDecision): what is still buildable after this FULL run,
+    # read by the approval watcher (as data) to start the next run while approved work is left. Not on a dry run; a
+    # queue check that fails leaves the previous file (whose run was already drained): no drain, fail closed.
+    if ($mode -eq 'FULL' -and -not $DryRun) {
+        try {
+            # Get-Variable: under StrictMode 1 a variable a precheck exit never set must not throw here
+            $gv = { param([string]$N) Get-Variable -Name $N -ValueOnly -ErrorAction SilentlyContinue }
+            $dq = & $gv 'finalQueue'; if (-not $dq) { $dq = & $gv 'queue' }
+            if ($dq -and ($dq.PSObject.Properties.Name -contains 'buildable')) {
+                $dPath = Join-Path $script:LoopHome 'state\drain.json'
+                $prevD = $null; try { if (Test-Path -LiteralPath $dPath -PathType Leaf) { $prevD = [IO.File]::ReadAllText($dPath) | ConvertFrom-Json } } catch { }
+                $db = @(Get-QueueInts $dq 'buildable')
+                $dOpus = @($db | Where-Object { (Get-QueueBuildModel $dq ([int]$_) '').Opus })
+                $dBuilt = @(& $gv 'built' | Where-Object { $_ })
+                $dRes = & $gv 'res'; $dStatus = 'FAILED'; if ($dRes) { $dStatus = "$($dRes.Status)" } elseif ((& $gv 'exitCode') -eq 0) { $dStatus = 'NOTHING-TO-DO' }
+                $dCap = ''; $dc = Get-DailyCap 'build'; if (-not $dc.Allowed) { $dCap = $dc.Reason }
+                $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
+                    -RolledBack (@($dBuilt | Where-Object { $_.Outcome -eq 'rolled-back' }).Count -gt 0) -NeedsVe (@($problems | Where-Object { "$_" -match 'UNCERTAIN' }).Count -gt 0) -BuildCapped $dCap -Previous $prevD
+                [IO.File]::WriteAllText($dPath, ($ds | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+                Write-Log "drain state: $(@($db).Count) buildable after this run [$(@($db | ForEach-Object { "#$_" }) -join ' ')], $(@($dOpus).Count) need Opus, progress $($ds.progress)"
+            }
+        } catch { Write-Log "drain state not written: $_" 'WARN' }
+    }
     Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
     Write-Log "exit $exitCode"
 }

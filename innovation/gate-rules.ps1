@@ -21,7 +21,10 @@
   Get-PlanBudgetVerdict / Test-BudgetAllowsModel / Split-BuildableByBudget  the ops hub's plan-budget
                       verdict (normal | no-opus | hold; fails open) and which sessions it lets start
   Get-LoopMdSections / Get-SessionConfig / Get-SessionModel  one session per job: its prompt, model, caps
+  Get-BuildModelChoice / Test-ProposalNeedsServer  Sonnet or Opus for one build (Opus: model:opus, server, retry)
+  Get-RunTimeBudget   the run's minutes, kept inside the scheduled task's ExecutionTimeLimit
   Get-NextBuildDecision  may the runner start another build session?
+  Get-DrainDecision / New-DrainState  the approval watcher's queue drain (literal copy in the watcher)
   Get-BuildOutcome / Get-DeployCertainty  how did a build session end; did it leave the deploy state certain?
   Get-RunResult       the run's LOOP-RESULT over all its sessions
   Format-WaitCiLine / Get-CiLogTail  wait-ci.ps1's result line and log tail
@@ -550,9 +553,12 @@ function Get-LoopMdSections {
 # caps, daily session caps). maxBudgetUsd is passed to claude as --max-budget-usd (0 = no cap); a build on a
 # model that is not Opus uses build.smallMaxBudgetUsd instead (Get-SessionBudget). maxPerDay: at most this
 # many sessions of the kind are started per local day across all runs (0 = no cap; Get-DailyCapDecision).
+# Builds run on build.model (Sonnet, Ve's decision of 2026-11-23) and switch to build.opusModel only for the cases in
+# Get-BuildModelChoice: an opusLabels label (model:opus), a proposal whose "What deploys" names the server, or the
+# automatic retry of a non-Opus failure caused by the change (Get-RetryDecision Opus).
 $script:SessionDefaults = [ordered]@{
-    build   = [ordered]@{ model = 'claude-opus-5-5'; smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only'); maxTurns = 150; timeoutMinutes = 150
-        maxBudgetUsd = 8; smallMaxBudgetUsd = 2.5; maxPerDay = 8 }
+    build   = [ordered]@{ model = 'claude-sonnet-5-5'; opusModel = 'claude-opus-5-5'; opusLabels = @('model:opus'); smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only')
+        maxTurns = 150; timeoutMinutes = 150; maxBudgetUsd = 8; smallMaxBudgetUsd = 4; maxPerDay = 8 }
     propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
     review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60; maxBudgetUsd = 4; maxPerDay = 1 }
     # Ve's requests (options.requestIntake): one intake session per request that needs planning
@@ -807,22 +813,72 @@ function Get-SessionConfig {
     return $cfg
 }
 
-# The model for a session. -Override (run-loop -Model) wins. A build uses build.smallModel when the issue
-# carries one of build.smallLabels (size:small, test-only), else build.model.
+# The model for a session. -Override (run-loop -Model) wins. A build: Get-BuildModelChoice.
 function Get-SessionModel {
-    param([string]$Kind, [string[]]$Labels = @(), $Config, [string]$Override = '')
+    param([string]$Kind, [string[]]$Labels = @(), $Config, [string]$Override = '', [bool]$OpusRetry = $false, [bool]$ServerDeploy = $false)
     if ($Override) { return $Override }
-    $c = $Config[$Kind]
-    if ($Kind -eq 'build' -and $c.smallModel -and @($Labels | Where-Object { @($c.smallLabels) -contains $_ }).Count -gt 0) { return "$($c.smallModel)" }
-    return "$($c.model)"
+    if ($Kind -eq 'build') { return (Get-BuildModelChoice -Labels $Labels -Config $Config -OpusRetry $OpusRetry -ServerDeploy $ServerDeploy).Model }
+    return "$($Config[$Kind].model)"
+}
+
+# The model of one build session and why (Ve's rule of 2026-11-23: builds on Sonnet, Opus only when needed), first match:
+#   1. -Override (run-loop -Model)
+#   2. a build.opusLabels label on the issue (model:opus; Ve adds it before approving)      -> build.opusModel
+#   3. the ONE automatic retry of a non-Opus build that failed because of the change
+#      (check-approval.ps1 -List `opusRetry`, gate-rules.ps1 Get-RetryDecision .Opus)          -> build.opusModel
+#   4. the proposal says up front that it deploys the server ("## What deploys": Pages + server;
+#      check-approval.ps1 -List `serverDeploy`, Test-ProposalNeedsServer)                       -> build.opusModel
+#   5. a build.smallLabels label (size:small, test-only)                                       -> build.smallModel
+#   6. otherwise build.model (Sonnet)
+# The plan budget's no-opus verdict defers only the builds this returns an Opus model for (Split-BuildableByBudget).
+function Get-BuildModelChoice {
+    param([string[]]$Labels = @(), $Config, [string]$Override = '', [bool]$OpusRetry = $false, [bool]$ServerDeploy = $false)
+    $c = $Config['build']
+    $mk = { param([string]$M, [string]$Why) [pscustomobject]@{ Model = $M; Why = $Why; Opus = ($M.Trim() -eq '' -or $M -match 'opus') } }
+    if ($Override) { return (& $mk $Override '-Model override') }
+    $opus = "$($c.opusModel)"; if (-not $opus) { $opus = 'claude-opus-5-5' }
+    $ol = @($Labels | Where-Object { @($c.opusLabels) -contains $_ })
+    if ($ol.Count -gt 0) { return (& $mk $opus "label $($ol[0])") }
+    if ($OpusRetry) { return (& $mk $opus 'automatic retry of a non-Opus build that failed on the change') }
+    if ($ServerDeploy) { return (& $mk $opus 'the proposal deploys the server') }
+    $sl = @($Labels | Where-Object { @($c.smallLabels) -contains $_ })
+    if ($c.smallModel -and $sl.Count -gt 0) { return (& $mk "$($c.smallModel)" "label $($sl[0])") }
+    return (& $mk "$($c.model)" 'default build model')
+}
+
+# Does the proposal say up front that the change deploys the server? Its "## What deploys" section (LOOP.md section 5
+# proposal format: "Pages only" OR "Pages + server (files: ...)"). "Pages only" anywhere in it = no; else any mention
+# of the server = yes; no such section = no (unknown up front: the build decides, LOOP.md section 3).
+function Test-ProposalNeedsServer {
+    param([string]$Body = '')
+    $m = [regex]::Match("$Body", '(?ms)^\s*##\s*What deploys\s*$(.*?)(?=^\s*##\s|\z)')
+    if (-not $m.Success) { return $false }
+    $t = $m.Groups[1].Value
+    if ($t -match '(?i)\bpages\s+only\b') { return $false }
+    return ($t -match '(?i)\bserver\b')
+}
+
+# The run's time budget: the requested minutes (run-loop -TimeoutMinutes), cut so the run ends at least -MarginMinutes
+# before the scheduled task's ExecutionTimeLimit (Task Scheduler kills the task there, mid-session). -TaskLimitMinutes
+# 0 = unknown (not readable): the request stands. Minutes + Reason.
+function Get-RunTimeBudget {
+    param([int]$Requested = 360, [double]$TaskLimitMinutes = 0, [int]$MarginMinutes = 30)
+    $mk = { param([int]$M, [string]$Why) [pscustomobject]@{ Minutes = $M; Reason = $Why } }
+    if ($TaskLimitMinutes -le 0) { return (& $mk $Requested "$Requested min (task time limit unknown)") }
+    $cap = [int][math]::Floor($TaskLimitMinutes - $MarginMinutes)
+    if ($cap -lt $Requested) { return (& $mk ([math]::Max(60, $cap)) "$([math]::Max(60, $cap)) min: cut from $Requested to stay $MarginMinutes min inside the task's $([int]$TaskLimitMinutes)-min ExecutionTimeLimit") }
+    return (& $mk $Requested "$Requested min (task limit $([int]$TaskLimitMinutes) min)")
 }
 
 # May the runner start another build session? $Done: the build sessions so far ({Issue; Outcome}, Outcome
 # deployed | skipped | failed | rolled-back | unknown). A skipped build (the server rule, or the approval no
 # longer valid) does not count toward MaxBuilds; any outcome but deployed or skipped ends Phase A.
+# The first build needs FirstBuildMinMinutes left, every later one SecondBuildMinMinutes (alias NextBuildMinMinutes;
+# default 100: a build takes ~60-75 min, a session's own limit is cut to what is left, and LOOP.md section 3 step 9
+# stops before the merge when time runs short). With the 360-min run: 4 builds of up to ~85 min each fit.
 function Get-NextBuildDecision {
-    param([int[]]$Buildable = @(), [object[]]$Done = @(), [int]$MaxBuilds = 2, [double]$RemainingMinutes = 0,
-        [int]$SecondBuildMinMinutes = 120, [int]$FirstBuildMinMinutes = 60, [int]$MaxSkips = 2)
+    param([int[]]$Buildable = @(), [object[]]$Done = @(), [int]$MaxBuilds = 4, [double]$RemainingMinutes = 0,
+        [Alias('NextBuildMinMinutes')][int]$SecondBuildMinMinutes = 100, [int]$FirstBuildMinMinutes = 60, [int]$MaxSkips = 2)
     $done = @($Done | Where-Object { $_ })
     $stop = { param([string]$Why) [pscustomobject]@{ Start = $false; Issue = 0; Reason = $Why } }
     $bad = @($done | Where-Object { $_.Outcome -notin @('deployed', 'skipped') })
@@ -957,13 +1013,21 @@ $script:ChangeFailures = [ordered]@{
     'session-ended' = 'the session stopped mid-build with work that needs a look (e.g. merged but not verified)'
     'other'         = 'other failure'
 }
-$script:FailureMarkerRx = '<!--\s*innovation-loop:failure\s+class=([a-z][a-z-]*)\s+outcome=([a-z][a-z-]*)\s*-->'
+# The marker may name the build's model (model=<id>, from the session's MODEL header line); markers without it (all
+# before 2026-11-23) never get the Opus retry of a change failure.
+$script:FailureMarkerRx = '<!--\s*innovation-loop:failure\s+class=([a-z][a-z-]*)\s+outcome=([a-z][a-z-]*)(?:\s+model=([A-Za-z0-9._\[\]-]+))?\s*-->'
+# A failure of a NON-Opus build in one of these classes is built once more on Opus (Get-RetryDecision .Opus): the change
+# itself may need the stronger model. Infrastructure classes (ci-infra, ci-timeout, gap-refused, deploy-unavailable,
+# out-of-time, timeout) are retried on the same model; guard-refused, scope, deploy-failed (rolled back) and
+# session-ended are never retried automatically.
+$script:OpusRetryClasses = @('tests', 'other', 'max-turns', 'max-budget')
 
 function Format-FailureMarker {
-    param([string]$Class, [string]$Outcome = 'failed')
+    param([string]$Class, [string]$Outcome = 'failed', [string]$Model = '')
     $c = "$Class".ToLowerInvariant(); if (-not ($script:RetryableFailures.Contains($c) -or $script:ChangeFailures.Contains($c))) { $c = 'other' }
     $o = "$Outcome".ToLowerInvariant(); if ($o -notin @('failed', 'rolled-back', 'skipped')) { $o = 'failed' }
-    return "<!-- innovation-loop:failure class=$c outcome=$o -->"
+    $m = ''; if ("$Model" -match '^[A-Za-z0-9._\[\]-]+$') { $m = " model=$Model" }
+    return "<!-- innovation-loop:failure class=$c outcome=$o$m -->"
 }
 
 # Failure markers in $Comments (issue comments API objects) written by -Owner with the loop -Marker, created
@@ -978,7 +1042,7 @@ function Get-FailureRecords {
         if ($sinceT -and ([datetime]$c.created_at) -le $sinceT) { continue }
         $m = [regex]::Match($b, $script:FailureMarkerRx)
         if (-not $m.Success) { continue }
-        $out += [pscustomobject]@{ Class = $m.Groups[1].Value; Outcome = $m.Groups[2].Value; At = $c.created_at; Id = $c.id }
+        $out += [pscustomobject]@{ Class = $m.Groups[1].Value; Outcome = $m.Groups[2].Value; Model = $m.Groups[3].Value; At = $c.created_at; Id = $c.id }
     }
     return @($out)
 }
@@ -990,16 +1054,20 @@ function Get-FailureDescription {
     return "unknown failure class '$Class'"
 }
 
-# May an approved issue carrying loop:failed be built again without the owner? Once, and only when the
-# latest failure since the approval was outside the change and nothing went live. Returns Failed (has
-# loop:failed), Retry, Class and Reason (for "failed, waiting on the owner: #n (<reason>)").
+# May an approved issue carrying loop:failed be built again without the owner? Once, and only when nothing
+# went live and the latest failure since the approval was either outside the change, or caused by the change on a
+# NON-Opus model in one of $OpusRetryClasses (then the retry runs on Opus: Opus = $true). Returns Failed (has
+# loop:failed), Retry, Opus, Class and Reason (for "failed, waiting on the owner: #n (<reason>)").
 function Get-RetryDecision {
     param([string[]]$Labels, [object[]]$Failures)
     $fs = @($Failures | Where-Object { $_ })
     $last = $null; if ($fs.Count -gt 0) { $last = $fs[$fs.Count - 1] }
     $class = ''; if ($last) { $class = "$($last.Class)" }
+    $model = ''; if ($last -and $last.PSObject.Properties.Name -contains 'Model') { $model = "$($last.Model)" }
+    $nonOpus = ($model -ne '' -and $model -notmatch 'opus')
+    $toOpus = ($nonOpus -and $script:OpusRetryClasses -contains $class)
     $failed = ($Labels -contains 'loop:failed')
-    $mk = { param([bool]$Retry, [string]$Why) [pscustomobject]@{ Failed = $failed; Retry = $Retry; Class = $class; Reason = $Why } }
+    $mk = { param([bool]$Retry, [string]$Why, [bool]$Opus = $false) [pscustomobject]@{ Failed = $failed; Retry = $Retry; Opus = $Opus; Class = $class; Reason = $Why } }
     if (-not $failed) { return (& $mk $false '') }
     if ($Labels -contains 'loop:retried') {
         $d = 'failed again after the one automatic retry'; if ($class) { $d = "${class}, after the one automatic retry: $(Get-FailureDescription $class)" }
@@ -1008,8 +1076,12 @@ function Get-RetryDecision {
     if (-not $last) { return (& $mk $false 'failure not classified (no failure marker); not retried automatically') }
     if ($fs.Count -gt 1) { return (& $mk $false "${class}, failed $($fs.Count) times since the approval: $(Get-FailureDescription $class)") }
     if ("$($last.Outcome)" -eq 'rolled-back') { return (& $mk $false "${class}, rolled back (something went live or main was reverted): $(Get-FailureDescription $class)") }
-    if (-not $script:RetryableFailures.Contains($class)) { return (& $mk $false "${class}: $(Get-FailureDescription $class)") }
-    return (& $mk $true "${class}: $(Get-FailureDescription $class); retried once automatically")
+    if ($script:RetryableFailures.Contains($class)) {
+        if ($toOpus) { return (& $mk $true "${class} on ${model}: $(Get-FailureDescription $class); retried once automatically, on Opus" $true) }
+        return (& $mk $true "${class}: $(Get-FailureDescription $class); retried once automatically")
+    }
+    if ($toOpus) { return (& $mk $true "${class} on ${model}: $(Get-FailureDescription $class); retried once automatically, on Opus" $true) }
+    return (& $mk $false "${class}: $(Get-FailureDescription $class)")
 }
 
 # ---- plan budget -------------------------------------------------------------------------------------
@@ -1068,12 +1140,13 @@ function Test-BudgetAllowsModel {
 # Phase A under the plan budget: which buildable issues may start now (Allowed, in queue order) and which wait
 # (Deferred: {Issue; Model}). A deferred issue stays approved and untouched: no label, no comment, no failure;
 # it is simply picked up by the first run whose verdict allows its model. $LabelsOf: issue number -> labels.
+# $OpusRetry / $ServerDeploy: the issues check-approval.ps1 -List names in `opusRetry` / `serverDeploy` (Get-BuildModelChoice).
 function Split-BuildableByBudget {
-    param([int[]]$Buildable = @(), [hashtable]$LabelsOf = @{}, $Config, [string]$Override = '', [string]$Verdict = 'normal')
+    param([int[]]$Buildable = @(), [hashtable]$LabelsOf = @{}, $Config, [string]$Override = '', [string]$Verdict = 'normal', [int[]]$OpusRetry = @(), [int[]]$ServerDeploy = @())
     $allowed = @(); $deferred = @()
     foreach ($n in @($Buildable | Where-Object { $null -ne $_ })) {
         $l = @(); if ($LabelsOf.ContainsKey([int]$n)) { $l = @($LabelsOf[[int]$n]) }
-        $m = Get-SessionModel -Kind 'build' -Labels $l -Config $Config -Override $Override
+        $m = Get-SessionModel -Kind 'build' -Labels $l -Config $Config -Override $Override -OpusRetry (@($OpusRetry) -contains [int]$n) -ServerDeploy (@($ServerDeploy) -contains [int]$n)
         if (Test-BudgetAllowsModel -Verdict $Verdict -Model $m) { $allowed += [int]$n } else { $deferred += [pscustomobject]@{ Issue = [int]$n; Model = $m } }
     }
     return [pscustomobject]@{ Allowed = @($allowed); Deferred = @($deferred) }
@@ -1230,6 +1303,79 @@ function Get-RequestPlanChildren {
     $m = [regex]::Match("$Body", $script:RequestChildrenRx)
     if (-not $m.Success) { return @() }
     return @($m.Groups[1].Value -split '[,\s]+' | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ })
+}
+
+# ==================================================================================================
+# Queue drain. The approval watcher starts a run on an approval, a request or a refill; approved work left over after a
+# run (MaxBuilds reached, time ran out, a deferred build) waited for the daily run. At the end of every FULL run the
+# runner writes <LOOP_HOME>\state\drain.json (New-DrainState: the queue as check-approval.ps1 -List saw it at the end,
+# with the builds that would need Opus, and the last runs' history); the watcher reads that file as DATA and asks
+# Get-DrainDecision whether to start the loop's task again. The watcher keeps a LITERAL COPY of Get-DrainDecision
+# (it runs from an admin-only folder and must not dot-source anything from a user-writable checkout; the loop's
+# test-queue-rules.ps1 checks that the two are identical). It decides nothing about safety: the run re-checks
+# every approval itself (a forged drain.json can at most start a run that finds nothing, $0).
+# ==================================================================================================
+
+# The drain.json record for this run. $Previous: the parsed earlier drain.json ($null = none); its history is kept
+# (newest last, at most $Keep runs including this one). $Buildable / $NeedsOpus: issue numbers; $Progress: builds
+# that ended loop:deployed in this run; $RolledBack: a build of this run was rolled back; $NeedsVe: the run stopped
+# on an uncertain deploy (DEPLOY STATE UNCERTAIN); $BuildCapped: the daily build cap's refusal ('' = not capped).
+function New-DrainState {
+    param([string]$RunId, [datetime]$EndedAt = (Get-Date), [string]$Result = '', [int[]]$Buildable = @(), [int[]]$NeedsOpus = @(),
+        [int]$Progress = 0, [bool]$RolledBack = $false, [bool]$NeedsVe = $false, [string]$BuildCapped = '', $Previous = $null, [int]$Keep = 6)
+    $b = @($Buildable | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
+    $head = 0; if ($b.Count -gt 0) { $head = $b[0] }
+    $h = @(); if ($Previous -and $Previous.PSObject.Properties.Name -contains 'history') { $h = @($Previous.history | Where-Object { $_ -and "$($_.runId)" -ne $RunId }) }
+    $h += [pscustomobject][ordered]@{ runId = $RunId; endedAt = $EndedAt.ToString('o'); head = $head; progress = $Progress; result = $Result; rolledBack = $RolledBack }
+    if ($h.Count -gt $Keep) { $h = @($h | Select-Object -Last $Keep) }
+    return [ordered]@{ schema = 1; runId = $RunId; endedAt = $EndedAt.ToString('o'); result = $Result; buildable = @($b); head = $head
+        needsOpus = @($NeedsOpus | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ }); progress = $Progress; rolledBack = $RolledBack; needsVe = $NeedsVe
+        buildCapped = $BuildCapped; history = @($h) }
+}
+
+# May the watcher start the loop's task to drain the queue now? $Drain: the parsed drain.json; $Running: the task is
+# running or a live run holds the loop's lock; $Verdict: the ops hub's plan-budget verdict; $Done: the watcher's
+# state keys (a drain key starts at most one run per finished run). Start + Key + Reason. In order:
+#   no drain state / nothing buildable / already drained after this run              -> no
+#   the last run stopped on an uncertain deploy (needsVe)                            -> no (Ve first)
+#   plan budget hold; no-opus while every buildable issue needs Opus                 -> no
+#   a run in progress                                                                -> no
+#   the last run ended less than $IdleMinutes ago                                    -> not yet
+#   the daily build cap was reached today                                            -> no
+#   the last run rolled a build back, or the last $FailRuns runs all had the same queue head and deployed nothing
+#   (failed, skipped or stopped)                                                     -> back off $BackoffMinutes after the last run
+#   otherwise                                                                        -> start
+function Get-DrainDecision {
+    param($Drain, [bool]$Running = $false, [string]$Verdict = 'normal', [datetime]$Now = (Get-Date), [string[]]$Done = @(), [string]$Repo = '',
+        [int]$IdleMinutes = 15, [int]$FailRuns = 2, [int]$BackoffMinutes = 120)
+    $mk = { param([bool]$S, [string]$K, [string]$Why) [pscustomobject]@{ Start = $S; Key = $K; Reason = $Why } }
+    if ($null -eq $Drain -or "$($Drain.schema)" -ne '1' -or -not "$($Drain.runId)") { return (& $mk $false '' 'no drain state') }
+    $key = "drain:${Repo}:$($Drain.runId)"
+    $b = @(@($Drain.buildable) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" })
+    if ($b.Count -eq 0) { return (& $mk $false '' "nothing buildable after run $($Drain.runId)") }
+    if (@($Done) -contains $key) { return (& $mk $false '' "already started a drain run after run $($Drain.runId)") }
+    if ("$($Drain.needsVe)" -eq 'True') { return (& $mk $false '' "run $($Drain.runId) stopped on an uncertain deploy: waiting for Ve") }
+    $v = "$Verdict".Trim().ToLowerInvariant()
+    if ($v -eq 'hold') { return (& $mk $false '' 'plan budget hold') }
+    $op = @(@($Drain.needsOpus) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" })
+    if ($v -eq 'no-opus' -and @($b | Where-Object { $op -notcontains $_ }).Count -eq 0) { return (& $mk $false '' 'plan budget no-opus and every buildable issue needs Opus') }
+    if ($Running) { return (& $mk $false '' 'a run is in progress') }
+    $toUtc = { param($x) if ($x -is [datetime]) { return $x.ToUniversalTime() }; $p = [datetime]::MinValue
+        if ([datetime]::TryParse("$x", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { return $p.ToUniversalTime() }; return $null }
+    $end = & $toUtc $Drain.endedAt
+    if ($null -eq $end) { return (& $mk $false '' 'drain state has no endedAt') }
+    $idle = ($Now.ToUniversalTime() - $end).TotalMinutes
+    if ($idle -lt $IdleMinutes) { return (& $mk $false '' "run $($Drain.runId) ended $([int]$idle) min ago (wait $IdleMinutes)") }
+    if ("$($Drain.buildCapped)" -and $end.ToLocalTime().Date -eq $Now.Date) { return (& $mk $false '' "daily build cap reached today ($($Drain.buildCapped))") }
+    $h = @(@($Drain.history) | Where-Object { $_ })
+    $last = @($h | Select-Object -Last $FailRuns)
+    $stuck = ($last.Count -ge $FailRuns -and @($last | Where-Object { "$($_.head)" -eq "$($b[0])" -and "$($_.progress)" -eq '0' }).Count -eq $last.Count)
+    if ("$($Drain.rolledBack)" -eq 'True' -or $stuck) {
+        $why = "the last $FailRuns runs had queue head #$($b[0]) and deployed nothing"; if ("$($Drain.rolledBack)" -eq 'True') { $why = "run $($Drain.runId) rolled a build back" }
+        if ($idle -lt $BackoffMinutes) { return (& $mk $false '' "backing off: $why; next try $([int]($BackoffMinutes - $idle)) min from now") }
+        return (& $mk $true $key "drain after back-off ($why): $($b.Count) buildable, head #$($b[0])")
+    }
+    return (& $mk $true $key "drain: $($b.Count) buildable approved issue(s) left after run $($Drain.runId) (head #$($b[0]))")
 }
 
 # Does a request need an intake session now? Returns NeedsIntake, Key (the approval watcher's once-key:

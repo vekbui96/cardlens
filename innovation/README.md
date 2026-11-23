@@ -160,11 +160,13 @@ job keeps each one's context small: on 2026-11-16 one long session doing two bui
    pushes to the same branch and waits again, at most 3 rounds, then leaves the PR open with `loop:failed`;
    a failure only in the known-flaky specs (bulk-mark timing, Target) may get one `ci-rerun.ps1` rerun. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
    everything back on failure. Success: `loop:deployed`, closed. Failure: `loop:failed`, comment, left open.
-   After a success the runner may start a second build session for the next approved issue
-   (`-MaxBuilds`, default 2), only if every build so far ended `loop:deployed` (a failure or rollback ends
-   Phase A; an issue skipped by the server rule does not count) and at least 120 minutes of the
-   240-minute run budget remain (`-SecondBuildMinMinutes`: a cycle has taken ~60-75 min, up to ~110 with a
-   CI fix round). **If a build session merged something whose deploy was neither verified nor rolled back
+   After a success the runner may start the next build session for the next approved issue, up to four per
+   run (`-MaxBuilds`, default 4), only if every build so far ended `loop:deployed` (a failure or rollback ends
+   Phase A; an issue skipped by the server rule does not count) and at least 100 minutes of the
+   360-minute run budget remain (`-SecondBuildMinMinutes`, alias `-NextBuildMinMinutes`: a cycle has taken
+   ~60-75 min, up to ~110 with a CI fix round; the session's own limit is cut to what is left and it will not
+   merge without enough time). Four builds of up to ~85 min fit. The run budget is cut to end 30 minutes inside
+   the scheduled task's ExecutionTimeLimit (7 h from install-task.ps1; the log's `time: run budget ...` line). **If a build session merged something whose deploy was neither verified nor rolled back
    and verified** (the session was killed mid-deploy, a rollback failed), the runner stops the whole run
    there: no next build, no proposals, `LOOP-RESULT: FAILED ... NEEDS VE`. **At most one server deploy per
    run**: an issue that needs the server waits for the next run if one already went out. A build session
@@ -206,18 +208,21 @@ approving it stops the slicing until you re-approve, as with any proposal.
 counts only; event names in `src/models/metricsEvents.ts`) as their baseline when the server has it; until
 it is deployed they say "not available yet". GET only: the guard refuses any other `/api/metrics` route.
 
-**Models and caps** ([`sessions.json`](sessions.json), yours). Build sessions run on Opus
-(`claude-opus-5-5`) by default and on Sonnet (`claude-sonnet-5-5`) when the issue carries `size:small` or
-`test-only` (the loop adds one when it opens a small or test-only proposal; add or remove it yourself
-before approving to choose). Proposal sessions and the weekly review run on Sonnet. Turn caps: 150 per
+**Models and caps** ([`sessions.json`](sessions.json), yours). Build sessions run on Sonnet
+(`claude-sonnet-5-5`, your decision of 2026-11-23) and on Opus (`build.opusModel`, `claude-opus-5-5`) only when:
+the issue carries `model:opus` (add it before approving to choose Opus), the proposal's "What deploys" says
+"Pages + server", or it is the one automatic retry of a Sonnet build that failed on the change (class `tests`,
+`other`, `max-turns` or `max-budget`; the failure marker records the model). `size:small` / `test-only` stay on
+Sonnet. The log says which and why (`Phase A: #n model ... (...)`; `gate-rules.ps1 Get-BuildModelChoice`).
+Proposal sessions and the weekly review run on Sonnet. Turn caps: 150 per
 build session, 80 for proposals, 120 for the review; time limits 150 / 45 / 60 minutes, each cut to what
-is left of the run's 240. `-Model` / `-MaxTurns` on run-loop.ps1 override every session for one run.
+is left of the run's 360. `-Model` / `-MaxTurns` on run-loop.ps1 override every session for one run.
 Claude Code's own small background calls (Haiku) are unchanged.
 
 **Spend caps** (`sessions.json`, yours; rules in `gate-rules.ps1`, tested in `test-queue-rules.ps1`):
 
 - **Per session, in USD:** `maxBudgetUsd` is passed to claude as `--max-budget-usd` (API-equivalent dollars,
-  as `claude -p` reports them). Defaults: build on Opus 8, build on any other model 2.50
+  as `claude -p` reports them). Defaults: build on Opus 8, build on any other model 4
   (`build.smallMaxBudgetUsd`), proposals 0.75, the review 4; 0 = no cap. A build stopped by its cap is failure
   class `max-budget`, retried once like `max-turns`.
 - **Per day, in sessions:** `maxPerDay` caps how many sessions of each kind start per local day across all
@@ -244,7 +249,7 @@ before every session the runner (never claude) reads `D:\hub\state\plan-budget.j
 every 15 min) and logs `budget: ...`:
 
 - `normal`: as always.
-- `no-opus`: no session on an Opus model (by `sessions.json`: a build without `size:small` / `test-only`).
+- `no-opus`: no session on an Opus model (only the Opus builds above: `model:opus`, server deploys, Opus retries).
   Those builds are deferred, not failed: they stay approved with no label or comment change and are built
   by the first run whose verdict allows it (the daily run, a refill run, or a new approval). Sonnet builds,
   proposals and the review still run.
@@ -254,8 +259,19 @@ hold (no claude session)`.
   `normal` with a WARN (fail open: the hub is optional, the plan's own limits are the backstop).
 - `run-loop.ps1 -IgnoreBudget` skips it for a supervised run (`-BudgetFile <path>` reads another file, for
   dry runs). The rules are `Get-PlanBudgetVerdict` / `Split-BuildableByBudget` in `gate-rules.ps1`, tested in
-  `test-gate-rules.ps1`. The approval watcher does not read the budget: a run it starts under `no-opus` /
-  `hold` ends in the $0 precheck.
+  `test-gate-rules.ps1`. The approval watcher reads the verdict only for its queue drain (below): no drain run
+  under `hold`, nor under `no-opus` when every buildable issue needs Opus.
+
+**Queue drain (the approval watcher).** A run ends with approved work left over when it reached MaxBuilds, ran
+out of time or deferred a build. At the end of every FULL run the runner writes
+`<LOOP_HOME>\state\drain.json` (what `check-approval.ps1 -List` still calls buildable, which of those need Opus,
+and the last runs' queue head and progress; log line `drain state: ...`). Every 10 minutes the watcher reads it
+as data and starts the task again (log `started innovation-loop-cardlens to drain the queue (...)`) when at
+least one approved issue (or an auto-approved slice / request issue) is buildable, no run holds the lock and the
+last run ended 15+ minutes ago. Never under `hold`, nor `no-opus` when every buildable issue needs Opus, nor after
+a run that stopped on an uncertain deploy; after a rollback, or when the last 2 runs had the same queue head and
+deployed nothing, it backs off 2 hours. At most one drain run per finished run. Rule: `Get-DrainDecision` in
+`gate-rules.ps1` (the watcher keeps a literal copy, checked by `test-queue-rules.ps1`).
 
 **Failed builds: one automatic retry, and never silent.** Every failure comment carries a hidden failure
 marker with a class (LOOP.md section 3, "Failure classes"). When the cause was outside the change (CI
@@ -263,7 +279,9 @@ infrastructure, CI timeout, the live-server gap refusal, the elevated task or it
 out of time, the run's time or turn limit), the next run builds it ONCE more: it swaps `loop:failed` for
 `loop:retried`, continues the open PR if there is one, and a second failure waits for you. A failure caused
 by the change (tests still failing after the fix rounds, a refusal of the PR's own diff, out of scope, a
-rolled-back deploy) is never retried automatically. If the session is killed mid-build (time limit, turn
+rolled-back deploy) is never retried automatically, with one exception: a build on Sonnet (or any non-Opus model)
+whose failure is `tests` or `other` (or `max-turns` / `max-budget`) gets its one retry on Opus. The marker names the
+build's model (`model=...`); markers without it never get that retry. If the session is killed mid-build (time limit, turn
 limit, USD cap), the runner marks the issue `loop:failed` itself (class `timeout` / `max-turns` / `max-budget`, retried once;
 anything already merged in that run is `session-ended` and waits for you). Failed issues no longer take a
 proposal slot, so the run summary and every Run data comment end with `Failed, waiting on Ve: #n
@@ -387,7 +405,7 @@ powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loo
 # weekly product review task (ELEVATED, asks for your password; leaves the daily task as it is):
 D:\projects\cardlens\innovation\install-task.ps1 -ProductReviewOnly          # -ReviewDay Sunday -ReviewAt 10:37 by default
 Enable-ScheduledTask  -TaskName innovation-loop-cardlens-review
-powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -MaxBuilds 1   # one build per run (old behaviour)
+powershell -ExecutionPolicy Bypass -File D:\projects\cardlens\innovation\run-loop.ps1 -MaxBuilds 1   # one build per run (default 4)
 ```
 
 For the scheduled task, use `install-task.ps1 -ExtraArgs '-MaxBuilds 1'`. Models, turn caps and time
