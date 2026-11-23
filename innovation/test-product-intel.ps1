@@ -201,14 +201,14 @@ Check ($obsMd -match '## 10\. Observer' -and $obsMd -notmatch '## 3\. Phase A' -
 $pmMd = Get-LoopMdSections -Text $md -Sections @(0, 1, 2, 5, 6, 11) -Kind 'pm'
 Check ($pmMd -match '## 11\. Product manager' -and $pmMd -match '## 5\. Phase B' -and $pmMd -notmatch '## 10\. Observer' -and $pmMd -match 'loop-refs') 'pm prompt: section 5 plus 11 (the loop-refs rule)'
 $cfg = Get-SessionConfig ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json)
-Check ($cfg.observe.model -match 'sonnet' -and [int]$cfg.observe.maxTurns -eq 30 -and [int]$cfg.observe.timeoutMinutes -eq 15 -and (Get-SessionBudget -Kind 'observe' -Model $cfg.observe.model -Config $cfg) -eq 0.6 -and [int]$cfg.observe.maxPerDay -eq 2) 'sessions.json observe: Sonnet, 30 turns, 15 min, $0.60, 2 a day'
-Check ($cfg.pm.model -match 'sonnet' -and [int]$cfg.pm.maxPerDay -gt 0 -and (Get-SessionBudget -Kind 'pm' -Model $cfg.pm.model -Config $cfg) -gt 0) 'sessions.json pm: Sonnet with a USD and daily cap'
+Check ($cfg.observe.model -match 'sonnet' -and [int]$cfg.observe.maxTurns -eq 30 -and [int]$cfg.observe.timeoutMinutes -eq 15 -and (Get-SessionBudget -Kind 'observe' -Model $cfg.observe.model -Config $cfg) -eq 0.6 -and [int]$cfg.observe.maxPerDay -ge 0) 'sessions.json observe: Sonnet, 30 turns, 15 min, $0.60 (daily cap is Ve''s choice, 0 = none)'
+Check ($cfg.pm.model -match 'sonnet' -and (Get-SessionBudget -Kind 'pm' -Model $cfg.pm.model -Config $cfg) -gt 0) 'sessions.json pm: Sonnet with a USD cap'
 Check ($script:DailyCapKinds -contains 'observe' -and $script:DailyCapKinds -contains 'pm') 'observe and pm are daily-capped kinds'
 $opts = Get-LoopOptions ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json)
 Check ($opts.Contains('observerPm') -and $opts.Contains('observeMetricPoints') -and (Get-LoopOptions $null).observerPm -eq $false) 'options.observerPm exists and defaults to off'
 $ds = Get-DesignSkillsSetup -Enabled $true -EngineHash $script:DesignSkillPaths.EngineSha256
 Check (-not $ds.Env.Contains('DO_NOT_TRACK')) 'design skills never set DO_NOT_TRACK (claude then offers no PowerShell tool)'
-$dc = Get-DailyCapDecision -Kind 'observe' -Counts ([ordered]@{ observe = 2 }) -Config $cfg
+$dc = Get-DailyCapDecision -Kind 'observe' -Counts ([ordered]@{ observe = 2 }) -Config (Get-SessionConfig (([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json) | ForEach-Object { foreach ($k in 'observe','pm','qa','ux','build','propose') { if ($_.$k) { $_.$k.maxPerDay = @{ observe = 2; pm = 4; qa = 8; ux = 3; build = 8; propose = 4 }[$k] } }; $_ }))
 Check (-not $dc.Allowed) 'the third observe session of a day is capped'
 
 # ---- store I/O (temp) -----------------------------------------------------------------------------------------

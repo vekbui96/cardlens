@@ -8,7 +8,7 @@
     "timeoutMinutes": 150,
     "maxBudgetUsd": 8,
     "smallMaxBudgetUsd": 2.5,
-    "maxPerDay": 8
+    "maxPerDay": 0
   },
   "propose": {
     "model": "claude-sonnet-5-5",
@@ -16,35 +16,35 @@
     "timeoutMinutes": 45,
     "minMinutes": 15,
     "maxBudgetUsd": 0.75,
-    "maxPerDay": 4
+    "maxPerDay": 0
   },
   "review": {
     "model": "claude-sonnet-5-5",
     "maxTurns": 120,
     "timeoutMinutes": 60,
     "maxBudgetUsd": 4,
-    "maxPerDay": 1
+    "maxPerDay": 0
   },
   "intake": {
     "model": "claude-sonnet-5-5",
     "maxTurns": 40,
     "timeoutMinutes": 20,
     "maxBudgetUsd": 0.75,
-    "maxPerDay": 6
+    "maxPerDay": 0
   },
   "memory": {
     "model": "claude-haiku-5-5",
     "maxTurns": 5,
     "timeoutMinutes": 5,
     "maxBudgetUsd": 0.1,
-    "maxPerDay": 2
+    "maxPerDay": 0
   },
   "observe": {
     "model": "claude-sonnet-5-5",
     "maxTurns": 30,
     "timeoutMinutes": 15,
     "maxBudgetUsd": 0.6,
-    "maxPerDay": 2
+    "maxPerDay": 0
   },
   "pm": {
     "model": "claude-sonnet-5-5",
@@ -52,7 +52,7 @@
     "timeoutMinutes": 45,
     "minMinutes": 15,
     "maxBudgetUsd": 0.75,
-    "maxPerDay": 4
+    "maxPerDay": 0
   },
   "qa": {
     "model": "claude-sonnet-5-5",
@@ -60,7 +60,7 @@
     "timeoutMinutes": 15,
     "minMinutes": 8,
     "maxBudgetUsd": 0.5,
-    "maxPerDay": 8
+    "maxPerDay": 0
   },
   "ux": {
     "model": "claude-sonnet-5-5",
@@ -68,7 +68,7 @@
     "timeoutMinutes": 15,
     "minMinutes": 8,
     "maxBudgetUsd": 0.5,
-    "maxPerDay": 3
+    "maxPerDay": 0
   },
   "options": {
     "proposeIssueDigest": true,

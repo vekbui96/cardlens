@@ -406,7 +406,7 @@ Check ((Get-SessionBudget -Kind 'propose' -Model 'x' -Config $cz) -eq 0) 'USD ca
 Check ((Format-BudgetUsd 2.5) -eq '2.50' -and (Format-BudgetUsd 8) -eq '8.00') 'budget formatted with a dot, two decimals'
 if (Test-Path $real) {
     $cr = Get-SessionConfig ([IO.File]::ReadAllText($real) | ConvertFrom-Json)
-    Check ((Get-SessionBudget -Kind 'build' -Model "$($cr.build.model)" -Config $cr) -gt 0 -and [int]$cr.build.maxPerDay -gt 0 -and [int]$cr.propose.maxPerDay -gt 0) 'the checked-in sessions.json sets USD and daily caps'
+    Check ((Get-SessionBudget -Kind 'build' -Model "$($cr.build.model)" -Config $cr) -gt 0 -and [int]$cr.build.maxPerDay -ge 0 -and [int]$cr.propose.maxPerDay -ge 0) 'the checked-in sessions.json sets USD caps (daily caps optional, 0 = none)'
 }
 
 # ---- spend caps: sessions per day -----------------------------------------------------------------------
