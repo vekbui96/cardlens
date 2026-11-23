@@ -193,14 +193,11 @@
   max-width: 70ch;
 }
 
-/* Colour is never the only carrier: both banners lead with a sentence saying
-   what happened, and both offer the action that fixes it. */
+/* Colour is never the only carrier: the banner leads with a sentence saying
+   what happened, and offers the actions that fix it. (A card index that did
+   not load is the shared ErrorNotice.) */
 .bannerError {
   border-color: var(--v2-error);
-}
-
-.bannerWarn {
-  border-color: var(--v2-warn);
 }
 
 /* --- Buttons -------------------------------------------------------------- */

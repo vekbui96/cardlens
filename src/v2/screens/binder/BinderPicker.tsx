@@ -1,8 +1,27 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useCardNameSuggestions } from "../../../hooks/useCardNameSuggestions.ts";
 import { useCombobox } from "../../../hooks/useCombobox.ts";
 import { NameSuggestList } from "../../../components/NameSuggestList.tsx";
-import { CardArt, Chip, Field, Row, ScreenReaderOnly, Select, Stack, cx } from "../../primitives/index.ts";
+import {
+  CardArt,
+  Chip,
+  ErrorNotice,
+  Field,
+  Row,
+  ScreenReaderOnly,
+  Select,
+  Stack,
+  cx,
+  failedOrRetrying,
+} from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../../app/contexts.tsx";
 import { useSets } from "../../../hooks/useSets.ts";
@@ -412,6 +431,23 @@ function AddImage({ onPlace }: { onPlace: (slot: BinderSlot | null) => void }) {
 
 /* --- The card lists ------------------------------------------------------- */
 
+/** A list that did not load, and its retry. A box, not a panel: it sits inside the picker. */
+export function PickerError({
+  children,
+  busy = false,
+  onRetry,
+}: {
+  children: ReactNode;
+  busy?: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <ErrorNotice busy={busy} onRetry={onRetry}>
+      {children}
+    </ErrorNotice>
+  );
+}
+
 function SetCards({
   view,
   ownedFinishes,
@@ -440,16 +476,7 @@ function SetCards({
     // The catalog fails in bursts, and a retry is the whole remedy — so it is
     // offered inline rather than as an apology.
     return (
-      <Stack gap={2}>
-        <p className={styles.error} role="alert">
-          Could not reach the card catalog.
-        </p>
-        <Row gap={2}>
-          <button type="button" className={styles.button} onClick={() => view.refetch()}>
-            Try again
-          </button>
-        </Row>
-      </Stack>
+      <PickerError onRetry={() => view.refetch()}>Could not reach the card catalog for this set.</PickerError>
     );
   }
 
@@ -524,24 +551,19 @@ function SearchResults({
   // Every printing of that Pokémon, not the top 40. "Where does my Charizard
   // go" is a question about the 108 that exist, and the one you mean is rarely
   // in the first handful.
-  const { data, isLoading, isError, refetch } = useCatalogSearch(query, undefined, { full: true });
+  const search = useCatalogSearch(query, undefined, { full: true });
+  const { data } = search;
 
-  if (isLoading) return <p className={styles.hint}>Searching…</p>;
-
-  if (isError) {
+  // Kept up while a retry runs, so Try again keeps focus and reads "Trying again…".
+  if (failedOrRetrying(search)) {
     return (
-      <Stack gap={2}>
-        <p className={styles.error} role="alert">
-          Search failed.
-        </p>
-        <Row gap={2}>
-          <button type="button" className={styles.button} onClick={() => refetch()}>
-            Try again
-          </button>
-        </Row>
-      </Stack>
+      <PickerError busy={search.isFetching} onRetry={() => void search.refetch()}>
+        Search failed. Nothing is wrong with what you typed; the catalog drops requests in bursts.
+      </PickerError>
     );
   }
+
+  if (search.isLoading) return <p className={styles.hint}>Searching…</p>;
 
   const results = data ?? [];
   if (results.length === 0) {

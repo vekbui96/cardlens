@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Chip, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import { Chip, ErrorNotice, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useRepositories } from "../../../app/contexts.tsx";
@@ -230,22 +230,7 @@ export function ScanScreen() {
       ) : null}
 
       {cards.state.status === "failed" ? (
-        <div className={cx(styles.banner, styles.bannerWarn)} role="status">
-          <Stack gap={3}>
-            <strong>The card index could not load.</strong>
-            <span>
-              {cards.state.error}.{" "}
-              {engine === "server"
-                ? "The server is the only recogniser, and there is nothing to fall back to if it stops answering."
-                : "Nothing on this device can identify a card. Connect this device in Settings to use the server."}
-            </span>
-            <Row gap={2}>
-              <button type="button" className={styles.secondary} onClick={cards.retry}>
-                Try again
-              </button>
-            </Row>
-          </Stack>
-        </div>
+        <CardIndexError error={cards.state.error} engine={engine} onRetry={cards.retry} />
       ) : null}
 
       <div className={styles.layout}>
@@ -484,6 +469,29 @@ export function ScanScreen() {
         {summary.total} captured, {summary.kept} ready to add, {summary.unsure} still undecided.
       </ScreenReaderOnly>
     </Stack>
+  );
+}
+
+/**
+ * The on-device card index did not load. Only how that is SAID lives here:
+ * which recogniser runs, and what falls back to what, is the screen's.
+ */
+export function CardIndexError({
+  error,
+  engine,
+  onRetry,
+}: {
+  error: string;
+  engine: "server" | "device";
+  onRetry: () => void;
+}) {
+  return (
+    <ErrorNotice title="The card index could not load" onRetry={onRetry}>
+      {error}.{" "}
+      {engine === "server"
+        ? "The server is the only recogniser, and there is nothing to fall back to if it stops answering."
+        : "Nothing on this device can identify a card. Connect this device in Settings to use the server."}
+    </ErrorNotice>
   );
 }
 

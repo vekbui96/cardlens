@@ -160,28 +160,6 @@
 
 /* --- Shared ---------------------------------------------------------------- */
 
-.button {
-  font-family: inherit;
-  font-size: var(--v2-fs-body);
-  font-weight: var(--v2-fw-medium);
-  min-height: var(--v2-tap);
-  padding: var(--v2-space-2) var(--v2-space-4);
-  border-radius: var(--v2-radius-sm);
-  border: var(--v2-border-w) solid var(--v2-border-strong);
-  background: var(--v2-surface-raised);
-  color: var(--v2-fg);
-  cursor: pointer;
-}
-
-.button:hover {
-  border-color: var(--v2-accent);
-}
-
-.button:focus-visible {
-  outline: var(--v2-focus-ring);
-  outline-offset: var(--v2-focus-offset);
-}
-
 .skeleton {
   display: flex;
   flex-direction: column;

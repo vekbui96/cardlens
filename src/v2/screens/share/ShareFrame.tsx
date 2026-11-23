@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Panel, Row, Stack } from "../../primitives/index.ts";
+import { ErrorNotice } from "../../primitives/index.ts";
 import { formatUpdated } from "../../../utils/format.ts";
 import styles from "./share.module.css";
 
@@ -33,23 +33,12 @@ export function ShareLoading({ what }: { what: string }) {
  * revoked id from one that never existed, and a page that did would tell a
  * stranger which ids were once real.
  */
-export function ShareGone({ onRetry }: { onRetry?: () => void }) {
+export function ShareGone({ onRetry }: { onRetry: () => void }) {
   return (
-    <Panel title="This link doesn't work" headingLevel={2} tone="raised">
-      <Stack gap={3}>
-        <p role="alert">
-          It may have been turned off by whoever sent it, or it may never have been a link at all. Either way
-          there is nothing here to show you.
-        </p>
-        {onRetry ? (
-          <Row gap={2}>
-            <button type="button" className={styles.button} onClick={onRetry}>
-              Try again
-            </button>
-          </Row>
-        ) : null}
-      </Stack>
-    </Panel>
+    <ErrorNotice title="This link doesn't work" onRetry={onRetry}>
+      It may have been turned off by whoever sent it, or it may never have been a link at all. Either way
+      there is nothing here to show you.
+    </ErrorNotice>
   );
 }
 

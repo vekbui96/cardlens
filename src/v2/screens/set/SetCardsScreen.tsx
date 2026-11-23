@@ -1,5 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import { Chip, Grid, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import {
+  Chip,
+  ErrorNotice,
+  Grid,
+  Meter,
+  Panel,
+  Row,
+  ScreenReaderOnly,
+  Stack,
+  cx,
+} from "../../primitives/index.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useSetView } from "../../../hooks/useSetView.ts";
 import { RARITY_FILTERS } from "../../../features/results/rarityFilters.ts";
@@ -181,24 +191,7 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
 
       {view.isLoading ? <PageSkeletons /> : null}
 
-      {view.isError ? (
-        <Panel title="The card catalog could not be reached" headingLevel={2} tone="raised">
-          <Stack gap={3}>
-            {/* Says what failed and offers the retry. It does not blame the
-                user: the catalog fails in bursts, roughly a quarter of the
-                time, and nothing they did caused it. */}
-            <p className={styles.prose} role="alert">
-              {setName} could not be loaded. Anything already marked is safe — the collection is held on this
-              device.
-            </p>
-            <Row gap={2}>
-              <Chip onPress={() => view.refetch()} tone="accent">
-                Try again
-              </Chip>
-            </Row>
-          </Stack>
-        </Panel>
-      ) : null}
+      {view.isError ? <SetCardsError setName={setName} onRetry={() => view.refetch()} /> : null}
 
       {settled && visible.length === 0 ? (
         <Panel
@@ -257,6 +250,23 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
         </div>
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * The set could not be loaded. Says what failed and offers the retry. It does
+ * not blame the user: the catalog fails in bursts, roughly a quarter of the
+ * time, and nothing they did caused it.
+ */
+export function SetCardsError({ setName, onRetry }: { setName: string; onRetry: () => void }) {
+  return (
+    <ErrorNotice
+      title="The card catalog could not be reached"
+      stillWorks="Anything already marked is safe — the collection is held on this device."
+      onRetry={onRetry}
+    >
+      {setName} could not be loaded.
+    </ErrorNotice>
   );
 }
 
