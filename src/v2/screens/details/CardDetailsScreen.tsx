@@ -16,6 +16,7 @@ import {
   CardArt,
   Chip,
   ErrorNotice,
+  failedOrRetrying,
   Money,
   Panel,
   Row,
@@ -84,6 +85,9 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
    * there is me05 — so this cannot run until the card has arrived.
    */
   const printings = useSetPrintings(setId, setName, Boolean(setName));
+  // Stays true through a retry, so the notice (and its focused button) is not
+  // swapped for the skeleton mid-press. See `failedOrRetrying`.
+  const printingsFailed = failedOrRetrying(printings);
 
   /*
    * The printed denominator ("223/197") needs the set's own record. This is the
@@ -122,7 +126,7 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
   }, [cardId, card, addRecentlyViewed]);
 
   if (!card) {
-    return details.isError ? (
+    return failedOrRetrying(details) ? (
       <ErrorNotice
         title="That card could not be loaded"
         stillWorks="Your collection and recent cards are still available."
@@ -193,7 +197,7 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
         }
       >
         <Stack gap={3}>
-          {printings.isError ? (
+          {printingsFailed ? (
             <PrintingsFailure
               retrying={printings.isFetching}
               onRetry={() => void printings.refetch()}
@@ -201,7 +205,7 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
             />
           ) : null}
 
-          {printings.isLoading && finishes.length === 0 ? (
+          {printings.isLoading && !printingsFailed && finishes.length === 0 ? (
             <LoadingPrintings />
           ) : finishes.length === 0 ? (
             <p className={styles.prose}>

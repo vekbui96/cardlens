@@ -11,6 +11,7 @@
 export { Stack, Row, Grid, ScreenReaderOnly, cx } from "./layout.tsx";
 export { Panel, Card } from "./surfaces.tsx";
 export { ErrorNotice } from "./errorNotice.tsx";
+export { failedOrRetrying } from "./queryFailure.ts";
 export { Field, type FieldProps } from "./field.tsx";
 export { Select, type SelectProps } from "./select.tsx";
 export { CardArt, type ArtDetail } from "./CardArt.tsx";

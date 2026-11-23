@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CatalogProvider, RepositoriesProvider } from "../../../app/contexts.tsx";
@@ -177,6 +177,24 @@ describe("a flaky printing list", () => {
     expect(await screen.findByRole("button", { name: /Poké Ball Reverse/ })).toBeInTheDocument();
     expect(screen.queryByText(/printing list could not be reached/i)).not.toBeInTheDocument();
     expect(stub.calls()).toBe(3);
+  });
+
+  it("keeps the notice up through a retry that fails again, and re-announces it", async () => {
+    // Initial try + the hook's own retry, then Try again + its retry.
+    const stub = stubPrintings({ failFirst: 4 });
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const retry = await screen.findByRole("button", { name: "Try again" }, { timeout: 3000 });
+    const first = screen.getByRole("alert");
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(stub.calls()).toBe(4));
+    expect(await screen.findByRole("button", { name: "Try again" })).toBe(retry);
+    expect(retry).toHaveFocus();
+    const second = screen.getByRole("alert");
+    expect(second).not.toBe(first);
+    expect(second).toHaveTextContent(/printing list could not be reached/i);
+    expect(screen.queryByText("Loading printings")).not.toBeInTheDocument();
   });
 
   it("falls back to the printings pricing implies, and warns that patterns are missing", async () => {
