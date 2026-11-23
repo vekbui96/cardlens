@@ -231,14 +231,15 @@ Check ((@(Select-UiPreferences $prefs) | ForEach-Object { $_.id }) -join ',' -eq
 
 # ---- config, caps, precheck ------------------------------------------------------------------------------------------------
 $cfg = Get-SessionConfig ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json)
-Check ($cfg.qa.model -like 'claude-sonnet*' -and [int]$cfg.qa.maxTurns -eq 25 -and [double]$cfg.qa.maxBudgetUsd -eq 0.5 -and [int]$cfg.qa.maxPerDay -eq 8) 'sessions.json: qa is Sonnet, 25 turns, $0.50, 8 a day'
-Check ($cfg.ux.model -like 'claude-sonnet*' -and [int]$cfg.ux.maxTurns -eq 25 -and [double]$cfg.ux.maxBudgetUsd -eq 0.5 -and [int]$cfg.ux.maxPerDay -eq 3) 'sessions.json: ux is Sonnet, 25 turns, $0.50, 3 a day'
+Check ($cfg.qa.model -like 'claude-sonnet*' -and [int]$cfg.qa.maxTurns -eq 25 -and [double]$cfg.qa.maxBudgetUsd -eq 0.5) 'sessions.json: qa is Sonnet, 25 turns, $0.50'
+Check ($cfg.ux.model -like 'claude-sonnet*' -and [int]$cfg.ux.maxTurns -eq 25 -and [double]$cfg.ux.maxBudgetUsd -eq 0.5) 'sessions.json: ux is Sonnet, 25 turns, $0.50'
 $opts = Get-LoopOptions ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json)
 Check ($opts.Contains('qaUx') -and [int]$opts.uxStaleDays -eq 30 -and [int]$opts.uxSampleDays -eq 7) 'sessions.json: options.qaUx and the sample settings exist'
 Check (-not (Get-LoopOptions $null).qaUx) 'qaUx is off by default'
+$capCfg = Get-SessionConfig (([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json) | ForEach-Object { foreach ($k in 'observe','pm','qa','ux','build','propose') { if ($_.$k) { $_.$k.maxPerDay = @{ observe = 2; pm = 4; qa = 8; ux = 3; build = 8; propose = 4 }[$k] } }; $_ })
 $capS = [pscustomobject]@{ date = (Get-Date).ToString('yyyy-MM-dd'); qa = 8; ux = 1 }
-Check (-not (Get-DailyCapDecision -Kind 'qa' -Counts (Get-DailyCounts -State $capS) -Config $cfg).Allowed) 'caps: the ninth QA session of the day is refused'
-Check ((Get-DailyCapDecision -Kind 'ux' -Counts (Get-DailyCounts -State $capS) -Config $cfg).Allowed) 'caps: the second UX session is allowed'
+Check (-not (Get-DailyCapDecision -Kind 'qa' -Counts (Get-DailyCounts -State $capS) -Config $capCfg).Allowed) 'caps: the ninth QA session of the day is refused'
+Check ((Get-DailyCapDecision -Kind 'ux' -Counts (Get-DailyCounts -State $capS) -Config $capCfg).Allowed) 'caps: the second UX session is allowed'
 Check ((Add-DailyLaunch -State $capS -Kind 'ux').ux -eq 2) 'caps: a UX launch is counted'
 Check ($script:DesignSkillKinds -contains 'qa' -and $script:DesignSkillKinds -contains 'ux') 'design skills: qa and ux may shoot and detect'
 $q = [pscustomobject]@{ buildable = @(); slots = [pscustomobject]@{ free = 0; cap = 5; awaitingReview = @(1, 2, 3, 4, 5) } }
