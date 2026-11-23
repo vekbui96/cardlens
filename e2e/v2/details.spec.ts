@@ -153,6 +153,15 @@ test.describe("details @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("card-details-marked.png");
   });
 
+  test("opened from search results looks like itself", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, "/search/charizard");
+    await page.getByRole("link", { name: /obsidian flames.*#223/i }).click();
+    await expect(page.getByRole("button", { name: /Poké Ball Reverse/ })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("card-details-from-search.png");
+  });
+
   test("the printing-list failure looks like itself", async ({ page }) => {
     await servePrintings(page, { failFirst: 99 });
     await openV2(page, CARD);
