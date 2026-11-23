@@ -442,4 +442,11 @@ test.describe("collection @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("collection-owned-empty.png", { timeout: 20000 });
   });
+
+  test("a set list that could not be loaded", async ({ page }) => {
+    await openV2(page, "/collection", { seed: "empty", sim: "fail" });
+    await expect(page.getByRole("heading", { name: "Sets could not be loaded" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-sets-error.png", { timeout: 20000 });
+  });
 });

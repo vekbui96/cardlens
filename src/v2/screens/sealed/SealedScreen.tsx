@@ -6,7 +6,7 @@ import { useSealed, type SealedRow } from "../../../hooks/useSealed.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { SEALED_KINDS } from "../../../models/sealed.ts";
 import { formatUpdated } from "../../../utils/format.ts";
-import { Chip, cx, Money, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
+import { Chip, cx, ErrorNotice, Money, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
 import styles from "./sealed.module.css";
 
 /**
@@ -84,7 +84,6 @@ export function SealedScreen() {
           title="The set list could not be read"
           body="Sealed prices are looked up by set name, so the catalog has to answer before any price can be asked for. Nothing is wrong with your collection."
           onRetry={() => void sets.refetch()}
-          announce="alert"
         />
       ) : null}
 
@@ -95,7 +94,6 @@ export function SealedScreen() {
           title="No sealed prices right now"
           body={`None of your ${setCount} ${setCount === 1 ? "set" : "sets"} came back with a sealed product. Promos, tins and subsets are never sold in packs, so for those this is the right answer — but a price source that cannot be reached looks the same from here.`}
           onRetry={() => void queryClient.invalidateQueries({ queryKey: ["sealed"] })}
-          announce="status"
         />
       ) : null}
 
@@ -237,26 +235,10 @@ function Loading({ count }: { count: number }) {
 }
 
 /** A state that says what could not be read, and offers the retry for it. */
-function Problem({
-  title,
-  body,
-  onRetry,
-  announce,
-}: {
-  title: string;
-  body: string;
-  onRetry: () => void;
-  /** A failure is an alert; an empty answer that may or may not be one is a polite status. */
-  announce: "alert" | "status";
-}) {
+function Problem({ title, body, onRetry }: { title: string; body: string; onRetry: () => void }) {
   return (
-    <Panel title={title} tone="raised">
-      <Stack gap={3}>
-        <p role={announce}>{body}</p>
-        <Row gap={2}>
-          <Chip onPress={onRetry}>Try again</Chip>
-        </Row>
-      </Stack>
-    </Panel>
+    <ErrorNotice title={title} onRetry={onRetry}>
+      {body}
+    </ErrorNotice>
   );
 }

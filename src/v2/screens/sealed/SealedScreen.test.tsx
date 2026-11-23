@@ -158,9 +158,9 @@ describe("with sets collected", () => {
     // The screen genuinely cannot tell "promos have no packs" from "the source
     // is down" — `useSealed` reports both as missing — so it says both.
     expect(screen.getByText(/cannot be reached looks the same/i)).toBeInTheDocument();
-    // Maybe a failure, maybe the right answer: a polite status, not an alert.
-    expect(screen.getByRole("status")).toHaveTextContent(/cannot be reached looks the same/i);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // The shared ErrorNotice: its message is announced as an alert and the retry sits outside it.
+    expect(screen.getByRole("alert")).toHaveTextContent(/cannot be reached looks the same/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Try again");
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 });

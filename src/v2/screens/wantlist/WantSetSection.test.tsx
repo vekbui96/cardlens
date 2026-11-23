@@ -87,7 +87,9 @@ describe("WantSetSection", () => {
     expect(screen.getByText("2 missing, about $2.50, 1 unpriced")).toBeTruthy();
     expect(onState).toHaveBeenCalledWith("bad", "error", null);
 
-    fireEvent.click(screen.getByRole("button", { name: "Try loading Broken Set again" }));
+    // The shared ErrorNotice: the message is an alert, the retry is its plain "Try again" button.
+    expect(screen.getByRole("alert")).toHaveTextContent("The other sets on your Want list are not affected.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(refetch).toHaveBeenCalled();
   });
 
