@@ -125,6 +125,13 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
     addRecentlyViewed(card);
   }, [cardId, card, addRecentlyViewed]);
 
+  // The tab names the card (web only: v2 never runs on the glasses). MetricsBoot
+  // sets the generic "Card" label first, being an earlier sibling, and this wins.
+  const cardName = card?.name;
+  useEffect(() => {
+    if (cardName) document.title = `${cardName} · CardLens`;
+  }, [cardName]);
+
   if (!card) {
     return failedOrRetrying(details) ? (
       <ErrorNotice
@@ -142,6 +149,8 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
   }
 
   const heldHere = finishes.filter((f) => held.includes(f)).length;
+  // One headline price: the first printing (list order) that has one.
+  const headlinePrice = finishes.map(priceOf).find((p) => p !== undefined);
 
   return (
     <Stack gap={5}>
@@ -163,6 +172,11 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
               </span>
             </p>
           </Stack>
+
+          <p className={styles.priceLine} data-testid="price-line">
+            <span className={styles.priceLabel}>Market price</span>
+            <Money value={headlinePrice} loading={printings.isLoading} absentLabel={UNPRICED} />
+          </p>
 
           <Row gap={2} wrap>
             {card.rarity ? <Chip>{card.rarity}</Chip> : null}

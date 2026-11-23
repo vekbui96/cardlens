@@ -61,7 +61,10 @@ function harness(repos = new Repositories()) {
  * own server, not pokemontcg.io — so it is stubbed here rather than mocked away,
  * which is what lets the failure test exercise the actual retry path.
  */
-function stubPrintings(options: { failFirst?: number } = {}) {
+function stubPrintings(options: { failFirst?: number; onlyUnpriced?: boolean } = {}) {
+  const payload = options.onlyUnpriced
+    ? { tcgdexSetId: "sv03", byNumber: { "223": [{ type: "reverse", foil: "pokeball" }] } }
+    : PRINTINGS;
   let calls = 0;
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -70,7 +73,7 @@ function stubPrintings(options: { failFirst?: number } = {}) {
     if (!url.includes("/api/printings/")) throw new TypeError("offline");
     calls += 1;
     if (calls <= (options.failFirst ?? 0)) throw new TypeError("network");
-    return new Response(JSON.stringify(PRINTINGS), {
+    return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -134,6 +137,37 @@ describe("every printing, each markable on its own", () => {
       "true",
     );
     expect(screen.getByRole("button", { name: /^Holofoil/ })).toHaveAccessibleName(/Not owned/);
+  });
+});
+
+describe("the details hierarchy", () => {
+  it("puts the art first, then one price line, then the printings", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const title = await screen.findByRole("heading", { name: "Charizard ex", level: 1 });
+    const line = await screen.findByTestId("price-line");
+    await waitFor(() => expect(line).toHaveTextContent("$1.50"));
+    const printings = screen.getByRole("heading", { name: "Printings" });
+    expect(title.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(printings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says Unpriced on the price line when no printing has a price", async () => {
+    stubPrintings({ onlyUnpriced: true });
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const line = await screen.findByTestId("price-line");
+    await waitFor(() => expect(line).toHaveTextContent("Unpriced"));
+    expect(line).not.toHaveTextContent("$0.00");
+  });
+
+  it("names the card in the tab title", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    await screen.findByRole("heading", { name: "Charizard ex", level: 1 });
+    await waitFor(() => expect(document.title).toBe("Charizard ex · CardLens"));
   });
 });
 
