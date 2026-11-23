@@ -4,11 +4,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CatalogProvider, RepositoriesProvider } from "../../../app/contexts.tsx";
-import { NavigationProvider } from "../../../app/NavigationProvider.tsx";
+import { NavigationProvider, useNavigation } from "../../../app/NavigationProvider.tsx";
 import { LibraryProvider, useLibrary } from "../../../app/LibraryProvider.tsx";
 import { MockPokemonProvider } from "../../../integrations/pokemon/index.ts";
 import { Repositories } from "../../../storage/repositories.ts";
 import { CardDetailsScreen } from "./CardDetailsScreen.tsx";
+import { rememberBrowseList } from "./browseList.ts";
 
 /**
  * `sv3-223` — Charizard ex, Obsidian Flames 223. Its pricing payload carries a
@@ -268,5 +269,44 @@ describe("a flaky printing list", () => {
     expect(await screen.findByRole("button", { name: /^Holofoil/ }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByText(/never reports pattern foils/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Poké Ball Reverse/ })).not.toBeInTheDocument();
+  });
+});
+
+/** The card the navigation names, as the router would render it. */
+function Routed({ initial }: { initial: string }) {
+  const { screen: current } = useNavigation();
+  const cardId = current.name === "details" ? current.cardId : initial;
+  return (
+    <>
+      <output data-testid="route">{cardId}</output>
+      <CardDetailsScreen cardId={cardId} />
+    </>
+  );
+}
+
+describe("next and previous card", () => {
+  it("steps through the list the card was opened from, and stops at its ends", async () => {
+    stubPrintings();
+    rememberBrowseList("Search results", [{ cardId: "sv3-125" }, { cardId: CARD_ID }]);
+    render(<Routed initial={CARD_ID} />, { wrapper: harness() });
+
+    expect(await screen.findByText(/2 of 2 · Search results/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next card" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Previous card" }));
+
+    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("sv3-125"));
+    expect(await screen.findByText(/1 of 2 · Search results/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous card" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next card" })).toBeEnabled();
+  });
+
+  it("draws no controls for a card opened from outside a list", async () => {
+    stubPrintings();
+    rememberBrowseList("Search results", [{ cardId: "sv3-125" }, { cardId: "sv3-1" }]);
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    await screen.findByRole("heading", { name: "Charizard ex", level: 1 });
+    expect(screen.queryByRole("button", { name: "Next card" })).not.toBeInTheDocument();
   });
 });

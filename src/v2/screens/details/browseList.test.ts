@@ -1,0 +1,78 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import type { PokemonCardSummary } from "../../../models/cards.ts";
+import { neighbours, readBrowseList, rememberBrowseList, swipeStep } from "./browseList.ts";
+
+beforeEach(() => {
+  sessionStorage.clear();
+});
+
+const list = (...cardIds: string[]) => ({ label: "Search results", cardIds });
+
+describe("neighbours", () => {
+  it("has no previous on the first card", () => {
+    expect(neighbours(list("a", "b", "c"), "a")).toEqual({
+      position: 1,
+      total: 3,
+      next: { cardId: "b" },
+    });
+  });
+
+  it("has no next on the last card", () => {
+    expect(neighbours(list("a", "b", "c"), "c")).toEqual({
+      position: 3,
+      total: 3,
+      previous: { cardId: "b" },
+    });
+  });
+
+  it("has both in the middle", () => {
+    expect(neighbours(list("a", "b", "c"), "b")).toEqual({
+      position: 2,
+      total: 3,
+      previous: { cardId: "a" },
+      next: { cardId: "c" },
+    });
+  });
+
+  it("is nothing for a card that is not in the list, a one-card list, or no list", () => {
+    expect(neighbours(list("a", "b"), "z")).toBeNull();
+    expect(neighbours(list("a"), "a")).toBeNull();
+    expect(neighbours(null, "a")).toBeNull();
+  });
+
+  it("counts a card held in two printings once", () => {
+    expect(neighbours(list("a", "a", "b"), "a")).toEqual({ position: 1, total: 2, next: { cardId: "b" } });
+  });
+});
+
+describe("remembering a list", () => {
+  it("round-trips through the session, without repeats", () => {
+    rememberBrowseList("Everything owned", [{ cardId: "a" }, { cardId: "a" }, { cardId: "b" }]);
+    expect(readBrowseList()).toEqual({ label: "Everything owned", cardIds: ["a", "b"] });
+  });
+
+  it("hands the tapped summary to the neighbour", () => {
+    const summary = { id: "b", name: "Bulbasaur" } as PokemonCardSummary;
+    rememberBrowseList("Search results", [{ cardId: "a" }, { cardId: "b", summary }]);
+    expect(neighbours(readBrowseList(), "a")?.next).toEqual({ cardId: "b", summary });
+  });
+
+  it("reads anything malformed as no list", () => {
+    sessionStorage.setItem("cardlens:v1:browse-list", "{not json");
+    expect(readBrowseList()).toBeNull();
+    sessionStorage.setItem("cardlens:v1:browse-list", JSON.stringify({ label: 3, cardIds: "a" }));
+    expect(readBrowseList()).toBeNull();
+  });
+});
+
+describe("swipeStep", () => {
+  it("steps next on a long leftward swipe and previous on a rightward one", () => {
+    expect(swipeStep(-80, 10)).toBe(1);
+    expect(swipeStep(80, -10)).toBe(-1);
+  });
+
+  it("ignores short or mostly-vertical movement", () => {
+    expect(swipeStep(-40, 0)).toBe(0);
+    expect(swipeStep(-80, 60)).toBe(0);
+  });
+});

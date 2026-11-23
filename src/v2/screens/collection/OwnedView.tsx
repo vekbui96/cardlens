@@ -16,6 +16,7 @@ import {
 import { Card, CardArt, Chip, Money, Panel, Row, Stack, UNPRICED } from "../../primitives/index.ts";
 import { EmptyStart } from "../home/EmptyStart.tsx";
 import { Showcase } from "./Showcase.tsx";
+import { rememberBrowseList } from "../details/browseList.ts";
 import styles from "./collection.module.css";
 
 const VIEWS = [
@@ -64,6 +65,14 @@ export function OwnedView() {
   const [view, setView] = useState<ViewKey>("showcase");
 
   const sorted = useMemo(() => sortOwned(rows, sort), [rows, sort]);
+  /** Open a card, remembering this list in its current sort for Next / Previous. */
+  const open = (cardId: string) => {
+    rememberBrowseList(
+      "Everything owned",
+      sorted.map((r) => ({ cardId: r.cardId })),
+    );
+    push({ name: "details", cardId });
+  };
   const { total, unpriced } = useMemo(() => totalOf(rows), [rows]);
 
   // The same empty state as Home and the set list (#165), with the same two ways in.
@@ -139,18 +148,14 @@ export function OwnedView() {
         </Row>
 
         {view === "showcase" ? (
-          <Showcase
-            rows={sorted}
-            showChange={sort === "change"}
-            onOpen={(row) => push({ name: "details", cardId: row.cardId })}
-          />
+          <Showcase rows={sorted} showChange={sort === "change"} onOpen={(row) => open(row.cardId)} />
         ) : (
           <ul className={styles.ownedGrid}>
             {sorted.map((row) => (
               <li key={`${row.cardId}|${row.finish}`}>
                 <Card
                   href={`#${screenToPath({ name: "details", cardId: row.cardId })}`}
-                  onPress={() => push({ name: "details", cardId: row.cardId })}
+                  onPress={() => open(row.cardId)}
                   pad={2}
                   label={`${row.name}, ${finishLabel(row.finish)}, ${row.setName} ${row.collectorNumber}`}
                 >
