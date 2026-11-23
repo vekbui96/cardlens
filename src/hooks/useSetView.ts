@@ -5,6 +5,7 @@ import { printingPrice, type SetPrintingIndex } from "../models/printingIndex.ts
 import type { Finish } from "../models/finishes.ts";
 import { byCollectorNumber } from "../integrations/pokemon/sort.ts";
 import { filterByRarity } from "../features/results/rarityFilters.ts";
+import { failedOrRetrying } from "../v2/primitives/queryFailure.ts";
 import { useSetCards } from "./useSets.ts";
 import { useSetInformation } from "./useSetInformation.ts";
 import { useSetPrintings } from "./useSetPrintings.ts";
@@ -27,6 +28,12 @@ export interface SetView {
   headlinePriceFor: (card: PokemonCardSummary) => number | undefined;
   isLoading: boolean;
   isError: boolean;
+  /**
+   * `isError`, or a retry of that failure is in flight. A screen that shows an
+   * ErrorNotice branches on this, not on `isError`, so Try again keeps the
+   * notice (and focus) instead of swapping in a skeleton.
+   */
+  failed: boolean;
   refetch: () => void;
 }
 
@@ -155,6 +162,7 @@ export function useSetView(
     // Only the fallback can put a screen in an error state — an aggregate
     // failure is not an error, it is the reason the fallback is running.
     isError: viaCatalog && fallback.isError,
+    failed: viaCatalog && failedOrRetrying(fallback),
     refetch: () => {
       if (viaCatalog) void fallback.refetch();
       else info.refetch();

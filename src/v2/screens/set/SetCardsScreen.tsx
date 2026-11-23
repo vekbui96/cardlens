@@ -103,7 +103,22 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
   const ownedPrintings = ownedFinishCountsBySet[setId] ?? 0;
   const masterTotal = view.masterTotal;
   const binderOrder = isBinderOrder(filters);
-  const settled = !view.isLoading && !view.isError;
+  const settled = !view.isLoading && !view.failed;
+
+  // A failed load shows the error and nothing else: "0 / 408 printings" and a
+  // row of filter chips over an error card read as real data about a set that
+  // never loaded. `failed` also holds while Try again retries, so the notice
+  // (and keyboard focus on its button) is not swapped for a skeleton.
+  if (view.failed) {
+    return (
+      <Stack gap={5}>
+        <SetSwitcher setId={setId} setName={setName} />
+        <div data-testid="set-cards-error-only">
+          <SetCardsError setName={setName} onRetry={() => view.refetch()} />
+        </div>
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap={5}>
@@ -190,8 +205,6 @@ export function SetCardsScreen({ setId, setName }: { setId: string; setName: str
       </Stack>
 
       {view.isLoading ? <PageSkeletons /> : null}
-
-      {view.isError ? <SetCardsError setName={setName} onRetry={() => view.refetch()} /> : null}
 
       {settled && visible.length === 0 ? (
         <Panel
