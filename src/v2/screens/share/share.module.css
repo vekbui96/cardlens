@@ -86,76 +86,123 @@
   margin: var(--v2-space-0);
 }
 
-/* --- The trade list -------------------------------------------------------- */
+/* --- The binder showcase --------------------------------------------------- */
 
-.tradeList {
+.hint {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.emptyText {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  max-width: 65ch;
+}
+
+/*
+ * Two large cards to a row on a phone: the art is the point of this page, and
+ * at 390px two columns is the most that still reads as a card rather than a
+ * thumbnail. Wider windows fit as many as keep that size.
+ */
+.showcaseGrid {
   list-style: none;
   margin: var(--v2-space-0);
   padding: var(--v2-space-0);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--v2-space-3);
+}
+
+@media (min-width: 700px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .showcaseGrid {
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--v2-pocket) * 1.4), 1fr));
+    gap: var(--v2-space-4);
+  }
+}
+
+.showcaseCard {
   display: flex;
   flex-direction: column;
   gap: var(--v2-space-1);
-}
-
-.tradeRow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "art name price"
-    "art meta price";
-  align-items: center;
-  gap: var(--v2-space-1) var(--v2-space-3);
   width: 100%;
   min-height: var(--v2-tap);
   padding: var(--v2-space-2);
-  border: var(--v2-border-w) solid transparent;
-  border-radius: var(--v2-radius-sm);
-  background: none;
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius);
+  background: var(--v2-surface);
   color: var(--v2-fg);
   font-family: inherit;
   text-align: start;
   cursor: pointer;
 }
 
-.tradeRow:hover {
+.showcaseCard:hover {
   background: var(--v2-surface-raised);
 }
 
-.tradeRow:focus-visible {
+.showcaseCard:focus-visible {
   outline: var(--v2-focus-ring);
   outline-offset: var(--v2-focus-offset);
 }
 
-/* The row whose pocket was just jumped to, so the two views stay tied. */
-.tradeRowLit {
-  border-color: var(--v2-accent);
-  background: var(--v2-accent-dim);
-}
-
-.tradeArt {
-  grid-area: art;
-  width: var(--v2-space-7);
-  flex: none;
-}
-
-.tradeName {
-  grid-area: name;
+.showcaseName {
+  margin-top: var(--v2-space-1);
+  font-size: var(--v2-fs-small);
   font-weight: var(--v2-fw-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tradeMeta {
-  grid-area: meta;
+.showcaseMeta {
+  margin: var(--v2-space-0);
   font-size: var(--v2-fs-tiny);
   color: var(--v2-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.tradePrice {
-  grid-area: price;
+.showcasePrice {
   font-size: var(--v2-fs-body);
+}
+
+/* --- One card, large ------------------------------------------------------- */
+
+.enlarged {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--v2-space-2);
+  text-align: center;
+}
+
+.enlargedArt {
+  width: 100%;
+  max-width: calc(var(--v2-pocket) * 2.4);
+}
+
+.enlargedName {
+  margin: var(--v2-space-2) var(--v2-space-0) var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+}
+
+.closeButton {
+  min-height: var(--v2-tap);
+  min-width: calc(var(--v2-tap) * 3);
+  margin-top: var(--v2-space-2);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border: var(--v2-border-w) solid var(--v2-border);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font-family: inherit;
+  font-size: var(--v2-fs-body);
+  cursor: pointer;
+}
+
+.closeButton:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
 }
 
 /* --- Shared ---------------------------------------------------------------- */

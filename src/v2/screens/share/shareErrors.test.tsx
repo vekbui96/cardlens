@@ -12,6 +12,8 @@ describe("share pages use the shared ErrorNotice", () => {
     const alert = screen.getByRole("alert");
     expect(within(alert).getByRole("heading", { name: "This link doesn't work" })).toBeInTheDocument();
     expect(alert).toHaveTextContent(/nothing here to show you/i);
+    // And what to do next, since the visitor cannot fix a dead link themselves.
+    expect(alert).toHaveTextContent("Ask whoever sent it for a new link.");
     expect(within(alert).queryByRole("button")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));

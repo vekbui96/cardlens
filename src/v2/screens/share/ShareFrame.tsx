@@ -37,7 +37,26 @@ export function ShareGone({ onRetry }: { onRetry: () => void }) {
   return (
     <ErrorNotice title="This link doesn't work" onRetry={onRetry}>
       It may have been turned off by whoever sent it, or it may never have been a link at all. Either way
-      there is nothing here to show you.
+      there is nothing here to show you. Ask whoever sent it for a new link.
+    </ErrorNotice>
+  );
+}
+
+/** True when the browser says there is no connection at all. */
+export function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/**
+ * The visitor has no connection, which says nothing about the link.
+ *
+ * Kept apart from `ShareGone` because the next step is different: a dead link
+ * needs a new one from the sender, an offline phone only needs a signal.
+ */
+export function ShareOffline({ onRetry }: { onRetry: () => void }) {
+  return (
+    <ErrorNotice title="You're offline" onRetry={onRetry}>
+      This page needs a connection to load the cards. Nothing is wrong with the link: reconnect and try again.
     </ErrorNotice>
   );
 }

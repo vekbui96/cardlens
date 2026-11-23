@@ -1,31 +1,49 @@
 import { useMemo, useState } from "react";
 import { useShare } from "./useShare.ts";
-import { ShareGone, ShareHeader, ShareLoading } from "./ShareFrame.tsx";
+import { ShareGone, ShareHeader, ShareLoading, ShareOffline, isOffline } from "./ShareFrame.tsx";
 import { BinderSpread } from "../binder/index.ts";
 import { useBinderValue } from "../../../hooks/useBinderValue.ts";
 import { countBinder, pageGroups, conditionLabel } from "../../../models/binderLayout.ts";
 import { pocketAddress } from "../../../models/binderPocket.ts";
 import { tradeRows, type TradeRow } from "../../../models/tradeShare.ts";
 import { finishLabel } from "../../../models/finishes.ts";
-import { CardArt, Chip, Money, Panel, Row, Stack, cx } from "../../primitives/index.ts";
+import { CardArt, Chip, Money, Panel, Row, Sheet, Stack, UNPRICED } from "../../primitives/index.ts";
 import styles from "./share.module.css";
 
 /**
- * Somebody's binder, offered.
+ * Somebody's binder, shown off: the page a visitor lands on from a binder link.
  *
- * A trade share is not a showcase with a price column. A showcase says what its
- * owner HAS; this says what they will GIVE UP, which is a different question
- * with a different answer, and the two are separate pages for that reason.
+ * Card first. A visitor came to LOOK at the cards, so the page leads with them
+ * large, two to a row on a phone, and a tap opens one bigger still. Prices ride
+ * along per copy, and a card nothing prices says "Unpriced" rather than a zero:
+ * "we do not know" is not "worthless".
  *
- * Two views of one binder, and each is for something. The spread is the MAP —
- * it is how the owner sees it, so "the Umbreon on page two" means the same
- * thing to both of you. The list is the DECISION — sorted by value, priced per
- * copy. They are bound by the POCKET ADDRESS, because the next thing that
- * happens after finding a card is asking for it by name.
+ * Two views of one binder, and each is for something. The grid is the
+ * SHOWCASE, sortable by value. The spread is the MAP — it is how the owner sees
+ * it, so "the Umbreon on page two" means the same thing to both of you. They
+ * are bound by the POCKET ADDRESS, because the next thing that happens after
+ * finding a card is asking for it by name. A trade binder says so in its
+ * header; the page is the same either way.
  *
  * No ownership is drawn. What the owner also keeps is their business, exactly
  * as excluded printings are on a shared set.
  */
+
+/** One stable key per pocket: a card can sit in two pockets of one binder. */
+function rowKey(row: TradeRow): string {
+  return `${row.slot.cardId}|${row.slot.finish}|${row.page - 1}:${row.pocket - 1}`;
+}
+
+/** Address, finish, then the stock facts that are not the default. */
+function rowMeta(row: TradeRow): string {
+  return [
+    `${pocketAddress(row.page, row.pocket - 1)} · ${finishLabel(row.slot.finish)}`,
+    row.copies > 1 ? `${row.copies} copies` : "",
+    row.slot.condition ? conditionLabel(row.slot.condition) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 type SortKey = "value" | "pocket" | "name";
 
@@ -59,7 +77,8 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
   const binder = share?.binder ?? null;
   const value = useBinderValue(binder);
   const [sort, setSort] = useState<SortKey>("value");
-  const [lit, setLit] = useState<string | null>(null);
+  /** The pocket whose card is open large, by `rowKey`. */
+  const [open, setOpen] = useState<string | null>(null);
 
   const rows = useMemo(() => (binder ? tradeRows(binder) : []), [binder]);
 
@@ -81,17 +100,12 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
   }, [rows, sort, value]);
 
   if (query.isLoading) return <ShareLoading what="this binder" />;
+  if (query.isError && isOffline()) return <ShareOffline onRetry={() => void query.refetch()} />;
   if (query.isError || !binder) return <ShareGone onRetry={() => void query.refetch()} />;
 
   const counts = countBinder(binder);
   const groups = pageGroups(binder.pages.length, binder.format);
-
-  /** Light the pocket a row names, and bring it into view. */
-  function jumpTo(row: TradeRow) {
-    const key = `${row.page - 1}:${row.pocket - 1}`;
-    setLit(key);
-    document.querySelector(`[data-pocket="${key}"]`)?.scrollIntoView({ block: "center" });
-  }
+  const enlarged = sorted.find((row) => rowKey(row) === open) ?? null;
 
   return (
     <Stack gap={5}>
@@ -99,64 +113,95 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
         title={binder.name}
         subtitle={
           <>
-            Offered for trade · <strong>{counts.cards}</strong> {counts.cards === 1 ? "card" : "cards"}
+            {binder.forTrade ? "Offered for trade" : "A shared binder"} · <strong>{counts.copies}</strong>{" "}
+            {counts.copies === 1 ? "card" : "cards"}
           </>
         }
         updatedAt={share?.at}
         aside={
           <span className={styles.total}>
-            <Money value={value.total} loading={value.isLoading} />
+            <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />
             {value.unpriced > 0 ? <span className={styles.unpriced}>{value.unpriced} unpriced</span> : null}
           </span>
         }
       />
 
-      <Panel title="What's on offer" headingLevel={2}>
-        <Stack gap={3}>
-          <Row gap={2} wrap>
-            {SORTS.map((s) => (
-              <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
-                {s.label}
-              </Chip>
-            ))}
-          </Row>
+      {sorted.length === 0 ? (
+        <Panel title="Nothing here yet" headingLevel={2}>
+          <p className={styles.emptyText}>
+            This binder has no cards in it yet. Ask whoever sent the link to add some and share it again; this
+            same link will show them.
+          </p>
+        </Panel>
+      ) : (
+        <Panel title="The cards" headingLevel={2}>
+          <Stack gap={3}>
+            <Row gap={2} wrap justify="space-between">
+              <p className={styles.hint}>Tap a card to see it larger</p>
+              <Row gap={2} wrap>
+                {SORTS.map((s) => (
+                  <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
+                    {s.label}
+                  </Chip>
+                ))}
+              </Row>
+            </Row>
 
-          <ul className={styles.tradeList} aria-label="Cards on offer">
-            {sorted.map((row) => {
-              const key = `${row.page - 1}:${row.pocket - 1}`;
-              return (
-                <li key={`${row.slot.cardId}|${row.slot.finish}|${key}`}>
-                  <button
-                    type="button"
-                    className={cx(styles.tradeRow, lit === key && styles.tradeRowLit)}
-                    onClick={() => jumpTo(row)}
-                  >
-                    <span className={styles.tradeArt} aria-hidden="true">
-                      <CardArt
-                        src={row.slot.imageSmall}
-                        name={row.slot.name ?? ""}
-                        detail="tile"
-                        decorative
+            <ul className={styles.showcaseGrid} aria-label="Cards in this binder">
+              {sorted.map((row, i) => (
+                <li key={rowKey(row)}>
+                  <button type="button" className={styles.showcaseCard} onClick={() => setOpen(rowKey(row))}>
+                    <CardArt
+                      src={row.slot.imageSmall}
+                      name={row.slot.name ?? ""}
+                      detail="pocket"
+                      decorative
+                      eager={i < 4}
+                    />
+                    <span className={styles.showcaseName}>{row.slot.name ?? "Card"}</span>
+                    {/* The address, which is how the two of you will name it. */}
+                    <span className={styles.showcaseMeta}>{rowMeta(row)}</span>
+                    <span className={styles.showcasePrice}>
+                      <Money
+                        value={value.priceFor(row.slot)}
+                        loading={value.isLoading}
+                        absentLabel={UNPRICED}
                       />
-                    </span>
-                    <span className={styles.tradeName}>{row.slot.name ?? "Card"}</span>
-                    <span className={styles.tradeMeta}>
-                      {/* The address, which is how the two of you will name it. */}
-                      {pocketAddress(row.page, row.pocket - 1)} · {finishLabel(row.slot.finish)}
-                      {row.copies > 1 ? ` · ${row.copies} copies` : ""}
-                      {row.slot.condition ? ` · ${conditionLabel(row.slot.condition)}` : ""}
-                    </span>
-                    <span className={styles.tradePrice}>
-                      <Money value={value.priceFor(row.slot)} loading={value.isLoading} />
                     </span>
                   </button>
                 </li>
-              );
-            })}
-          </ul>
-          {sorted.length === 0 ? <p>This binder is empty.</p> : null}
-        </Stack>
-      </Panel>
+              ))}
+            </ul>
+          </Stack>
+        </Panel>
+      )}
+
+      <Sheet open={enlarged !== null} onClose={() => setOpen(null)} label={enlarged?.slot.name ?? "Card"}>
+        {enlarged ? (
+          <div className={styles.enlarged}>
+            <div className={styles.enlargedArt}>
+              <CardArt
+                src={enlarged.slot.imageSmall}
+                name={enlarged.slot.name ?? "Card"}
+                detail="hero"
+                eager
+              />
+            </div>
+            <h2 className={styles.enlargedName}>{enlarged.slot.name ?? "Card"}</h2>
+            <p className={styles.showcaseMeta}>
+              Page {enlarged.page}, pocket {enlarged.pocket} · {finishLabel(enlarged.slot.finish)}
+              {enlarged.copies > 1 ? ` · ${enlarged.copies} copies` : ""}
+              {enlarged.slot.condition ? ` · ${conditionLabel(enlarged.slot.condition)}` : ""}
+            </p>
+            <span className={styles.showcasePrice}>
+              <Money value={value.priceFor(enlarged.slot)} loading={value.isLoading} absentLabel={UNPRICED} />
+            </span>
+            <button type="button" className={styles.closeButton} onClick={() => setOpen(null)}>
+              Close
+            </button>
+          </div>
+        ) : null}
+      </Sheet>
 
       <Panel title="As it is laid out" headingLevel={2}>
         <Stack gap={4}>
