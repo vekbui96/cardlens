@@ -630,3 +630,135 @@ button.pocket:hover {
   padding-bottom: 80vh;
   padding-bottom: 72dvh;
 }
+
+/* --- Show off ------------------------------------------------------------- */
+
+/*
+ * The whole screen, above the shell's sticky header (30) and the drag ghost
+ * (40). Three rows: the name and the way out, the card, the turner. The card
+ * row takes what is left, so the turner never moves as cards change.
+ */
+.showcase {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-4);
+  background: var(--v2-bg);
+  color: var(--v2-fg);
+}
+
+.showcase:focus {
+  outline: none;
+}
+
+.showHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v2-space-3);
+  min-width: 0;
+}
+
+.showTitle {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-heading);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * `pan-y` so a sideways swipe reaches the pointer handlers instead of being
+ * taken by the browser, while a vertical drag still scrolls a tall caption.
+ */
+.showStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.showFromRight {
+  animation: showFromRight var(--v2-dur) var(--v2-ease);
+}
+
+.showFromLeft {
+  animation: showFromLeft var(--v2-dur) var(--v2-ease);
+}
+
+@keyframes showFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(6%);
+  }
+}
+
+@keyframes showFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-6%);
+  }
+}
+
+.showFigure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--v2-space-3);
+  margin: var(--v2-space-0);
+  max-height: 100%;
+  width: 100%;
+}
+
+/*
+ * As large as the screen allows: the full width on a phone, and on a wide
+ * window as tall as the row leaves room for once the caption is under it.
+ */
+.showArt {
+  width: min(100%, calc(62vh * 5 / 7));
+  width: min(100%, calc(62dvh * 5 / 7));
+  border-radius: var(--v2-radius-sm);
+  box-shadow: var(--v2-shadow-lg);
+}
+
+.showCaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--v2-space-1);
+  text-align: center;
+  max-width: 100%;
+}
+
+.showName {
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  line-height: var(--v2-lh-tight);
+}
+
+.showPrice {
+  color: var(--v2-price);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.showFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v2-space-2);
+}
+
+.showEmpty {
+  align-self: center;
+  justify-self: center;
+  width: min(100%, 60ch);
+}

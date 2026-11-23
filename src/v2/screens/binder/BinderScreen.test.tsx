@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -425,5 +425,145 @@ describe("the request budget", () => {
     await user.click(screen.getByRole("button", { name: "Pocket 1, empty" }));
     await screen.findByRole("dialog", { name: "Cards" });
     await waitFor(() => expect(getCardsBySet).toHaveBeenCalled());
+  });
+});
+
+describe("show off", () => {
+  /** Cover + two pockets on page 1 + one on page 2: four cards to walk. */
+  function threePlusCover(): Binder {
+    let binder = emptyBinder(BINDER_ID, "Jolteon", "9", Date.now());
+    binder = placeSlot(binder, 0, 0, cardSlot(0), Date.now());
+    binder = placeSlot(binder, 0, 4, cardSlot(1), Date.now());
+    binder = placeSlot(binder, 1, 2, cardSlot(2), Date.now());
+    return save({ ...binder, cover: cardSlot(3) });
+  }
+
+  afterEach(() => {
+    document.title = "";
+  });
+
+  it("walks the binder one card at a time, by button and by arrow key, and stops at the ends", async () => {
+    threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    const view = screen.getByRole("dialog", { name: "Showcase: Jolteon" });
+    expect(within(view).getByText("Card 1 of 4")).toBeInTheDocument();
+    expect(within(view).getByRole("button", { name: "Previous card" })).toBeDisabled();
+
+    await user.click(within(view).getByRole("button", { name: "Next card" }));
+    expect(within(view).getByText("Card 2 of 4")).toBeInTheDocument();
+
+    await user.keyboard("{ArrowRight}{ArrowRight}");
+    expect(within(view).getByText("Card 4 of 4")).toBeInTheDocument();
+    expect(within(view).getByRole("button", { name: "Next card" })).toBeDisabled();
+
+    await user.keyboard("{ArrowRight}");
+    expect(within(view).getByText("Card 4 of 4")).toBeInTheDocument();
+
+    await user.keyboard("{ArrowLeft}");
+    expect(within(view).getByText("Card 3 of 4")).toBeInTheDocument();
+  });
+
+  it("names the tab while open, and closing puts focus and the title back", async () => {
+    threePlusCover();
+    document.title = "Binder · CardLens";
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const showOff = screen.getByRole("button", { name: "Show off" });
+    await user.click(showOff);
+    expect(document.title).toBe("Showcase · CardLens");
+
+    await user.click(screen.getByRole("button", { name: "Close showcase" }));
+    expect(screen.queryByRole("dialog", { name: /^Showcase/ })).not.toBeInTheDocument();
+    expect(showOff).toHaveFocus();
+    expect(document.title).toBe("Binder · CardLens");
+  });
+
+  it("closes on Escape, back to the button that opened it", async () => {
+    threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", { name: /^Showcase/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show off" })).toHaveFocus();
+  });
+
+  it("says a card with no price is unpriced, never $0", async () => {
+    threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    const view = screen.getByRole("dialog", { name: "Showcase: Jolteon" });
+
+    await waitFor(() => expect(within(view).getByText("Unpriced")).toBeInTheDocument());
+    expect(within(view).queryByText("$0.00")).not.toBeInTheDocument();
+  });
+
+  it("an empty binder says what to do next, and the way back closes the view", async () => {
+    save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    const view = screen.getByRole("dialog", { name: "Showcase: Jolteon" });
+    expect(within(view).getByRole("heading", { name: "Nothing to show off yet" })).toBeInTheDocument();
+    expect(within(view).queryByText(/^Card \d/)).not.toBeInTheDocument();
+
+    await user.click(within(view).getByRole("button", { name: "Back to the binder" }));
+    expect(screen.queryByRole("dialog", { name: /^Showcase/ })).not.toBeInTheDocument();
+  });
+
+  it("does not slide between cards when reduced motion is asked for", async () => {
+    threePlusCover();
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes("prefers-reduced-motion"),
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    await user.click(screen.getByRole("button", { name: "Next card" }));
+
+    expect(screen.getByTestId("showcase-stage")).toHaveAttribute("data-motion", "still");
+    vi.mocked(window.matchMedia).mockRestore();
+  });
+
+  it("slides between cards otherwise", async () => {
+    threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    await user.click(screen.getByRole("button", { name: "Next card" }));
+
+    expect(screen.getByTestId("showcase-stage")).toHaveAttribute("data-motion", "slide");
+  });
+
+  it("writes nothing: showing a binder off leaves it exactly as stored", async () => {
+    const binder = threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    await user.keyboard("{ArrowRight}{ArrowRight}{Escape}");
+
+    expect(stored()?.updatedAt).toBe(binder.updatedAt);
   });
 });

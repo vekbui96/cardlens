@@ -36,6 +36,7 @@ import { imageSlotSrc } from "../../../services/sync/binderImages.ts";
 import { BinderSpread } from "./BinderSpread.tsx";
 import { BinderPicker } from "./BinderPicker.tsx";
 import { BinderSettings } from "./BinderSettings.tsx";
+import { BinderShowcase } from "./BinderShowcase.tsx";
 import { applyDrop, applyPlace } from "./binderEdits.ts";
 import { useBinderDrag } from "./useBinderDrag.ts";
 import { useWideLayout } from "./useWideLayout.ts";
@@ -94,6 +95,10 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    * only pockets a card could ever be dragged between are the ones on screen.
    */
   const [spread, setSpread] = useState(0);
+
+  /** "Show off": the full-screen, one-card-at-a-time view. Local only. */
+  const [showingOff, setShowingOff] = useState(false);
+  const showOffRef = useRef<HTMLButtonElement | null>(null);
 
   // Priced per printing, ONE request per SET rather than per card. A binder
   // spans sets the way a set screen never does — the Riolu one touches thirty.
@@ -413,6 +418,18 @@ export function BinderScreen({ binderId }: { binderId: string }) {
           in Settings, because those are decided once and these are pressed
           constantly. */}
       <Row gap={2} wrap>
+        {/* First, because it is the one action here that is not editing. */}
+        <button
+          type="button"
+          ref={showOffRef}
+          className={styles.button}
+          onClick={() => {
+            setSelected(null);
+            setShowingOff(true);
+          }}
+        >
+          Show off
+        </button>
         <button
           type="button"
           className={styles.button}
@@ -495,6 +512,16 @@ export function BinderScreen({ binderId }: { binderId: string }) {
         <p className={styles.footnote} data-testid="binder-to-get">
           {stillToGetLine(toGet, value.isLoading)}
         </p>
+      ) : null}
+
+      {showingOff ? (
+        <BinderShowcase
+          binder={binder}
+          priceFor={value.priceFor}
+          pricesLoading={value.isLoading}
+          onClose={() => setShowingOff(false)}
+          returnFocus={showOffRef}
+        />
       ) : null}
 
       {/*
