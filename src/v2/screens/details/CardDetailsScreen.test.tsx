@@ -140,6 +140,34 @@ describe("every printing, each markable on its own", () => {
   });
 });
 
+describe("one tap, with feedback", () => {
+  it("confirms a mark and an unmark in words", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^Normal/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Marked as owned: Normal.");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Normal Owned/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Unmarked: Normal.");
+  });
+
+  it("leaves the row unmarked and says so when the save fails", async () => {
+    stubPrintings();
+    const repos = new Repositories();
+    vi.spyOn(repos, "toggleOwned").mockImplementation(() => {
+      throw new Error("quota");
+    });
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness(repos) });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^Normal/ }));
+
+    expect(await screen.findByText(/could not be saved/i)).toBeInTheDocument();
+    expect(screen.queryByText("Marked as owned: Normal.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Normal Not owned/ })).toBeInTheDocument();
+  });
+});
+
 describe("the details hierarchy", () => {
   it("puts the art first, then one price line, then the printings", async () => {
     stubPrintings();
