@@ -3,8 +3,8 @@ import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { finishLabel } from "../../../models/finishes.ts";
-import { formatPct } from "../../../models/movement.ts";
 import { csvFileName, ownedToCsv } from "../../../models/ownedCsv.ts";
+import { formatChange } from "../../../utils/format.ts";
 import {
   OWNED_SORTS_V2,
   sortOwned,
@@ -184,7 +184,7 @@ export function OwnedView() {
                       <Money value={row.price} absentLabel={UNPRICED} />
                       {sort === "change" && weekChange(row) !== undefined ? (
                         <span className={styles.ownedChange} data-testid="owned-change">
-                          {formatPct(weekChange(row) as number)}
+                          {formatChange(weekChange(row) as number)}
                         </span>
                       ) : null}
                     </span>

@@ -1,16 +1,10 @@
 import { useMemo, useState } from "react";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { finishLabel } from "../../../models/finishes.ts";
-import {
-  formatPct,
-  topMovers,
-  type Mover,
-  type MoverWindow,
-  type TopMovers,
-} from "../../../models/movement.ts";
+import { topMovers, type Mover, type MoverWindow, type TopMovers } from "../../../models/movement.ts";
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
-import { formatUsd } from "../../../utils/format.ts";
+import { formatChangeShort, formatUsd } from "../../../utils/format.ts";
 import { Card, Money, Panel, Stack } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
@@ -81,7 +75,8 @@ function Side({
       <h3 className={styles.resumeLabel}>{title}</h3>
       <ul className={styles.list}>
         {rows.map(({ row, pct }) => {
-          const change = `${formatPct(pct)} ${window}d`;
+          // The compact form: a row has no room for "over 30 days".
+          const change = formatChangeShort(pct, window);
           // USD price of the printing; absent (or zero) shows no amount, never $0.00.
           const priced = typeof row.price === "number" && row.price > 0;
           const amount = priced ? formatUsd(row.price) : "";

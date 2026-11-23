@@ -4,7 +4,7 @@ import { useSetPrintings } from "../../../hooks/useSetPrintings.ts";
 import { useSetView } from "../../../hooks/useSetView.ts";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
 import { finishLabel } from "../../../models/finishes.ts";
-import { formatUsd } from "../../../utils/format.ts";
+import { formatPrice } from "../../../utils/format.ts";
 import {
   Card,
   CardArt,
@@ -160,7 +160,7 @@ function WantRow({
     <Card
       href={`#${screenToPath({ name: "details", cardId })}`}
       pad={2}
-      label={`${name}, ${detail}, ${wanted.price === null ? UNPRICED : formatUsd(wanted.price)}`}
+      label={`${name}, ${detail}, ${formatPrice(wanted.price)}`}
     >
       <div className={styles.row}>
         <span className={styles.art}>

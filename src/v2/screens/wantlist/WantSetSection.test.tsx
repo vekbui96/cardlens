@@ -58,6 +58,10 @@ describe("WantSetSection", () => {
     expect(screen.getByText("2 missing, about $2.50, 1 unpriced")).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Bulbasaur/ }).getAttribute("href")).toBe("#/card/sv1-2");
     expect(screen.getByText("Unpriced")).toBeTruthy();
+    // The link reads the price the way the row shows it: "Unpriced", never "Unavailable".
+    expect(screen.getByRole("link", { name: /^Bulbasaur, .*\$2\.50$/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /, Unpriced$/ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Unavailable/ })).toBeNull();
     expect(onState).toHaveBeenLastCalledWith("sv1", "ready", expect.objectContaining({ missing: 2 }));
   });
 

@@ -418,7 +418,10 @@ test.describe("collection @visual", () => {
     // Movement needs MIN_HOLDINGS (25) printings with Cardmarket averages: the
     // 24 above plus one more. EUR 1.10 against 1.00 (7 days) and 1.05 (30 days)
     // on every one: +10.0% and +4.8%. The screen shows percent only.
-    const rows = [...OWNED, { cardId: "sv3-6", setId: "sv3", finish: "normal", number: "6", at: 1_700_000_100_000 }];
+    const rows = [
+      ...OWNED,
+      { cardId: "sv3-6", setId: "sv3", finish: "normal", number: "6", at: 1_700_000_100_000 },
+    ];
     await page.addInitScript(([key, owned]) => localStorage.setItem(key as string, JSON.stringify(owned)), [
       COLLECTION_KEY,
       rows,
@@ -443,9 +446,13 @@ test.describe("collection @visual", () => {
     await openV2(page, "/collection");
     // Only once all 25 are priced does the movement appear at all.
     await expect(page.getByRole("main")).toContainText("+10.0%");
+    // Written the way Home writes it.
+    await expect(page.getByRole("main")).toContainText("+10.0% over 7 days · +4.8% over 30 days");
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
-    await expect(page.getByRole("main")).toHaveScreenshot("collection-value-movement.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("collection-value-movement.png", {
+      timeout: 20000,
+    });
   });
 
   test("everything owned, on the showcase", async ({ page }) => {

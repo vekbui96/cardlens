@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { useLibraryValue } from "../../../hooks/useLibraryValue.ts";
-import { formatPct } from "../../../models/movement.ts";
+import { formatChange, formatChangeOver, formatWindow } from "../../../utils/format.ts";
 import { Money, Panel, Row, Stack, UNPRICED, cx } from "../../primitives/index.ts";
 import { foldValue, setLabel, TOP_SETS } from "./valueFold.ts";
 import styles from "./collection.module.css";
@@ -73,11 +73,11 @@ export function ValuePanel() {
           {value.movement.pct7 !== undefined ? (
             <span className={styles.movement}>
               <span className={value.movement.pct7 >= 0 ? styles.up : styles.down}>
-                {formatPct(value.movement.pct7)}
+                {formatChange(value.movement.pct7)}
               </span>
               <span className={styles.muted}>
-                {" past week"}
-                {value.movement.pct30 !== undefined ? ` · ${formatPct(value.movement.pct30)} past month` : ""}
+                {` ${formatWindow(7)}`}
+                {value.movement.pct30 !== undefined ? ` · ${formatChangeOver(value.movement.pct30, 30)}` : ""}
               </span>
             </span>
           ) : null}
