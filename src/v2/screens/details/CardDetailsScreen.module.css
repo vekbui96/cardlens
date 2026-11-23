@@ -39,6 +39,21 @@
   color: var(--v2-fg);
 }
 
+.priceLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--v2-space-2);
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+}
+
+.priceLabel {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+}
+
 .count {
   color: var(--v2-fg-muted);
   font-size: var(--v2-fs-small);
