@@ -1,7 +1,18 @@
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { EmptyStart } from "../home/EmptyStart.tsx";
 import type { SetTiers } from "../../../models/setCompletion.ts";
-import { Card, Chip, Field, Meter, Panel, Row, ScreenReaderOnly, Stack, cx } from "../../primitives/index.ts";
+import {
+  Card,
+  Chip,
+  ErrorNotice,
+  Field,
+  Meter,
+  Panel,
+  Row,
+  ScreenReaderOnly,
+  Stack,
+  cx,
+} from "../../primitives/index.ts";
 import {
   SET_SORTS,
   rowLabel,
@@ -86,22 +97,13 @@ export function SetsView({
       </div>
 
       {isError ? (
-        <Panel title="Sets could not be loaded" headingLevel={2} tone="raised">
-          <Stack gap={3}>
-            {/*
-              Says what could not be reached and offers the retry, without
-              blaming the reader. The catalog fails in bursts, and everything
-              already marked owned is still on the device — so this is a partial
-              outage worth naming, not a broken app.
-            */}
-            <p className={styles.muted} role="alert">
-              The set catalog did not answer. Anything you have already marked owned is safe on this device.
-            </p>
-            <button type="button" className={styles.button} onClick={onRetry}>
-              Try again
-            </button>
-          </Stack>
-        </Panel>
+        // Says what could not be reached and offers the retry, without
+        // blaming the reader. The catalog fails in bursts, and everything
+        // already marked owned is still on the device — so this is a partial
+        // outage worth naming, not a broken app.
+        <ErrorNotice title="Sets could not be loaded" headingLevel={2} onRetry={onRetry}>
+          The set catalog did not answer. Anything you have already marked owned is safe on this device.
+        </ErrorNotice>
       ) : null}
 
       {isLoading && shown === 0 ? <SetSkeletons /> : null}
@@ -131,14 +133,9 @@ export function SetsView({
       ) : null}
 
       {!isLoading && !isError && shown === 0 && !filteredToNothing ? (
-        <Panel title="No sets loaded" headingLevel={2}>
-          <Stack gap={3}>
-            <p className={styles.muted}>The catalog returned no sets. This is usually momentary.</p>
-            <button type="button" className={styles.button} onClick={onRetry}>
-              Try again
-            </button>
-          </Stack>
-        </Panel>
+        <ErrorNotice title="No sets loaded" headingLevel={2} onRetry={onRetry}>
+          The catalog returned no sets. This is usually momentary.
+        </ErrorNotice>
       ) : null}
     </Stack>
   );

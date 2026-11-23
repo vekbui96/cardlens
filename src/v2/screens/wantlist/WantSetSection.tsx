@@ -8,10 +8,9 @@ import { formatUsd } from "../../../utils/format.ts";
 import {
   Card,
   CardArt,
-  Chip,
+  ErrorNotice,
   Money,
   Panel,
-  Row,
   ScreenReaderOnly,
   Stack,
   UNPRICED,
@@ -95,23 +94,17 @@ export function WantSetSection({
 
   if (kind === "error") {
     return (
-      <Panel title={setName} headingLevel={2} tone="raised">
-        <Stack gap={3}>
-          <p className={styles.meta}>Could not load {setName}. The other sets are not affected.</p>
-          <Row gap={2}>
-            <Chip
-              tone="accent"
-              label={`Try loading ${setName} again`}
-              onPress={() => {
-                view.refetch();
-                if (printingsFailed) void printingsQuery.refetch();
-              }}
-            >
-              Try again
-            </Chip>
-          </Row>
-        </Stack>
-      </Panel>
+      <ErrorNotice
+        title={setName}
+        headingLevel={2}
+        stillWorks="The other sets on your Want list are not affected."
+        onRetry={() => {
+          view.refetch();
+          if (printingsFailed) void printingsQuery.refetch();
+        }}
+      >
+        Could not load {setName}.
+      </ErrorNotice>
     );
   }
 
