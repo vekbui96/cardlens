@@ -60,6 +60,55 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Next and previous card ------------------------------------------------ */
+
+/*
+ * Two buttons and the position between them. `minmax(0, 1fr)` so a long list
+ * label truncates instead of squeezing the buttons below the tap target.
+ */
+.browse {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.step {
+  min-height: var(--v2-tap);
+  min-width: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-pill);
+  border: var(--v2-border-w) solid var(--v2-border);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-small);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.step:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.step:disabled {
+  color: var(--v2-fg-dim);
+  background: transparent;
+  cursor: default;
+}
+
+.position {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- Facts ---------------------------------------------------------------- */
 
 .meta {

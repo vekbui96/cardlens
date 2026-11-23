@@ -117,6 +117,40 @@ test.describe("everything about this printing", () => {
   });
 });
 
+test.describe("next and previous card", () => {
+  test("steps through the search results, and Back returns to them", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, "/search/charizard");
+    const tiles = page.getByRole("link", { name: /#\d/ });
+    await expect(tiles).toHaveCount(5);
+    await tiles.first().click();
+
+    const previous = page.getByRole("button", { name: "Previous card" });
+    const next = page.getByRole("button", { name: "Next card" });
+    await expect(page.getByText("1 of 5 · Search results")).toBeVisible();
+    await expect(previous).toBeDisabled();
+    // A real tap target on both shells.
+    expect((await next.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    const firstUrl = page.url();
+    await next.click();
+    await expect(page.getByText("2 of 5 · Search results")).toBeVisible();
+    expect(page.url()).not.toBe(firstUrl);
+    await expect(previous).toBeEnabled();
+
+    // One Back, straight to the results — not to the card stepped past.
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: /for “charizard”/ })).toBeVisible();
+  });
+
+  test("a card opened by its link has no list to step through", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, CARD);
+    await expect(page.getByRole("heading", { level: 1, name: "Charizard ex" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Next card" })).toHaveCount(0);
+  });
+});
+
 test.describe("a flaky printing list", () => {
   test("a 500 shows a retry that works", async ({ page }) => {
     // Two failures, because the hook already retries once on its own — so the
@@ -151,6 +185,18 @@ test.describe("details @visual", () => {
     await expect(page.getByRole("button", { name: /^Normal Owned/ })).toBeVisible();
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("card-details-marked.png");
+  });
+
+  test("opened from search results looks like itself", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, "/search/charizard");
+    await page.getByRole("link", { name: /obsidian flames.*#223/i }).click();
+    await expect(page.getByRole("button", { name: /Poké Ball Reverse/ })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    // The viewport, not `main`: a full-height capture of main slides the sticky
+    // header over its top on the phone, which is exactly where this screen's
+    // previous / next bar sits.
+    await expect(page).toHaveScreenshot("card-details-from-search.png");
   });
 
   test("the printing-list failure looks like itself", async ({ page }) => {

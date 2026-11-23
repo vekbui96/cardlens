@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
 import type { Finish } from "../../../models/finishes.ts";
 import { finishLabel } from "../../../models/finishes.ts";
@@ -25,6 +25,7 @@ import {
   UNPRICED,
 } from "../../primitives/index.ts";
 import { printingsOf } from "./printings.ts";
+import { neighbours, readBrowseList, swipeStep, type BrowseEntry } from "./browseList.ts";
 import styles from "./CardDetailsScreen.module.css";
 
 /**
@@ -68,7 +69,82 @@ interface CardDetailsScreenProps {
   summary?: PokemonCardSummary;
 }
 
+/**
+ * ## Next and previous card
+ *
+ * A card opened from a list (Search results, Everything owned) can step to its
+ * neighbours in that list, by button or by a horizontal swipe on touch. A step
+ * REPLACES the history entry rather than pushing one, so Back goes straight to
+ * the list it came from — where Search puts its scroll back — instead of
+ * walking back through every card stepped past.
+ *
+ * The body is keyed by card id, so nothing from one card (the mark
+ * confirmation, the recently-viewed guard) carries over to the next.
+ */
 export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
+  const { replace } = useNavigation();
+  const { list, around } = useMemo(() => {
+    const remembered = readBrowseList();
+    return { list: remembered, around: neighbours(remembered, cardId) };
+  }, [cardId]);
+
+  const step = (to: BrowseEntry | undefined) => {
+    if (!to) return;
+    if (window.scrollY > 0) window.scrollTo(0, 0);
+    replace({ name: "details", cardId: to.cardId, ...(to.summary ? { summary: to.summary } : {}) });
+  };
+
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0];
+    touch.current = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
+  };
+  const onTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    const start = touch.current;
+    touch.current = null;
+    const t = e.changedTouches[0];
+    if (!start || !t || !around) return;
+    const dir = swipeStep(t.clientX - start.x, t.clientY - start.y);
+    if (dir === 1) step(around.next);
+    else if (dir === -1) step(around.previous);
+  };
+
+  if (!around || !list)
+    return <CardDetailsBody key={cardId} cardId={cardId} {...(summary ? { summary } : {})} />;
+
+  return (
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <Stack gap={4}>
+        <nav className={styles.browse} aria-label="Step through this list">
+          <button
+            type="button"
+            className={styles.step}
+            aria-label="Previous card"
+            disabled={!around.previous}
+            onClick={() => step(around.previous)}
+          >
+            Previous
+          </button>
+          <span className={styles.position}>
+            {around.position} of {around.total} · {list.label}
+          </span>
+          <button
+            type="button"
+            className={styles.step}
+            aria-label="Next card"
+            disabled={!around.next}
+            onClick={() => step(around.next)}
+          >
+            Next
+          </button>
+        </nav>
+        <CardDetailsBody key={cardId} cardId={cardId} {...(summary ? { summary } : {})} />
+      </Stack>
+    </div>
+  );
+}
+
+function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
   const { openResults } = useNavigation();
   const { isFavorite, toggleFavorite, ownedFinishes, toggleOwned, addRecentlyViewed } = useLibrary();
 

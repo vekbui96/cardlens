@@ -27,6 +27,7 @@ import {
 } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { recallScroll, rememberScroll } from "./scrollMemory.ts";
+import { rememberBrowseList } from "../details/browseList.ts";
 import { SEARCH_SORTS, sortCards, type SearchSort } from "./sortCards.ts";
 import styles from "./SearchScreen.module.css";
 
@@ -110,10 +111,15 @@ export function SearchScreen({ query }: SearchScreenProps) {
   const beforeLeaving = useScrollMemory(query, cards.length > 0);
 
   const openCard = useCallback(
-    (cardId: string, summary?: PokemonCardSummary) => {
+    (cardId: string, summary: PokemonCardSummary, shown: PokemonCardSummary[]) => {
       // Take the scroll position while the grid is still on screen — see
       // useScrollMemory for why after is too late.
       beforeLeaving();
+      // In the order on screen, so Next is the tile to the right of this one.
+      rememberBrowseList(
+        "Search results",
+        shown.map((c) => ({ cardId: c.id, summary: c })),
+      );
       openDetails(cardId, summary);
     },
     [beforeLeaving, openDetails],
@@ -309,7 +315,7 @@ function Results({
 }: {
   query: string;
   cards: PokemonCardSummary[];
-  onOpen: (cardId: string, summary?: PokemonCardSummary) => void;
+  onOpen: (cardId: string, summary: PokemonCardSummary, shown: PokemonCardSummary[]) => void;
 }) {
   // Component state only: Results is keyed by query, so a new search resets it.
   const [sort, setSort] = useState<SearchSort>("best");
@@ -339,7 +345,7 @@ function Results({
       ) : null}
       <Grid min="pocket" gap={3}>
         {sorted.map((card) => (
-          <ResultTile key={card.id} card={card} onOpen={onOpen} />
+          <ResultTile key={card.id} card={card} onOpen={(id, summary) => onOpen(id, summary, sorted)} />
         ))}
       </Grid>
     </Stack>
@@ -351,7 +357,7 @@ function ResultTile({
   onOpen,
 }: {
   card: PokemonCardSummary;
-  onOpen: (cardId: string, summary?: PokemonCardSummary) => void;
+  onOpen: (cardId: string, summary: PokemonCardSummary) => void;
 }) {
   return (
     /*
