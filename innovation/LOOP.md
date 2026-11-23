@@ -168,7 +168,8 @@ or -> `loop:failed` (in-progress removed, issue left open for Ve).
 
 A failure outside the change (see
 "Failure classes" in section 3) is retried ONCE by a later run: `loop:failed` -> `loop:retried` +
-`loop:in-progress` -> `loop:deployed`, or `loop:failed` again (then it waits for Ve).
+`loop:in-progress` -> `loop:deployed`, or `loop:failed` again (then it waits for Ve). So is a build on a non-Opus
+model (Sonnet) that failed on the change (`tests`, `other`, `max-turns`, `max-budget`): its one retry runs on Opus.
 <!-- /only -->
 
 An issue Ve closes without `approved` is rejected: never re-propose it or a close variant.
@@ -317,8 +318,10 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    the issue is a slice auto-approved by Ve's approval of its spec: it has no `approved` label and needs
    none (`check-approval.ps1 -Issue <n>` reports `approval: via-spec`); build it exactly like any approved
    issue and say `approval: via-spec #<spec>` in your summary. If the header says `retry: yes`, this is the ONE
-   automatic retry of a build that failed for a reason outside the change (`check-approval.ps1 -Issue <n>`
-   shows its `retryReason`); build it like any other, with the differences in steps 4 and 6.
+   automatic retry of a build that failed for a reason outside the change, or of a Sonnet build that failed on
+   the change (then this session runs on Opus; `check-approval.ps1 -Issue <n>` shows its `retryReason`): read
+   the last attempt's failure comment and PR first, and build it like any other, with the differences in steps
+   4 and 6.
 2. **Re-check it:** `<SCRIPTS>\check-approval.ps1 -Issue <n>` must exit 0. Note its `adjustments`. Then
    `progress.ps1 -Issue <n> -Stage approval -Status ok -Detail "approval verified"` (creates the progress
    comment). If it does not exit 0, print `LOOP-ISSUE-END <n> skipped` and end the session
@@ -517,8 +520,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 
     **Failure classes.** Every comment that adds `loop:failed` (the final failure comment, the step 3
     refusal, the step 9 out-of-time comment) has, as its SECOND line right after `<!-- innovation-loop -->`:
-    `<!-- innovation-loop:failure class=<class> outcome=<failed|rolled-back|skipped> -->`
-    (outcome = the LOOP-ISSUE-END outcome). The scripts read it to decide whether the next run may retry
+    `<!-- innovation-loop:failure class=<class> outcome=<failed|rolled-back|skipped> model=<MODEL> -->`
+    (outcome = the LOOP-ISSUE-END outcome; MODEL = the MODEL line of your header, verbatim: a Sonnet build that
+    failed on the change gets its one retry on Opus only when the marker names the model). The scripts read it to decide whether the next run may retry
     the issue once; pick the class from what the scripts told you, not from a guess:
     - outside the change (retried once automatically, unless the outcome is `rolled-back`):
       `ci-infra` (CI failed for infrastructure reasons: a runner/network/GitHub error, a required job
@@ -527,7 +531,8 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
       `gap-refused` (`MERGE-PR REFUSED` for protected paths in the GAP commits, not the PR's own diff),
       `deploy-unavailable` (the elevated task, its lock or its selftest unavailable: merge-pr refusing on
       it, or `deploy.ps1` exit 1 before anything changed), `out-of-time` (step 9).
-    - caused by the change (never retried automatically): `tests` (local gate or CI still failing after
+    - caused by the change (never retried automatically, except once on Opus after a non-Opus build: `tests`,
+      `other`): `tests` (local gate or CI still failing after
       the fix rounds), `guard-refused` (`MERGE-PR REFUSED` on the PR's own diff: protected path, secret,
       CORS or Target line; or a guard block on the change), `scope` (step 3), `deploy-failed` (deploy or
       verify failed and was rolled back), `other` (anything else; when unsure, `other`).

@@ -163,7 +163,7 @@ Check ((Get-LoopMdSections -Text "intro`n## 1. a`nA`n## 2. b`nB`n" -Sections @(2
 
 # ---- models, caps and limits (sessions.json) --------------------------------------------------------
 $cfg = Get-SessionConfig $null
-Check ($cfg.build.model -eq 'claude-opus-5-5' -and $cfg.build.smallModel -eq 'claude-sonnet-5-5' -and $cfg.propose.model -eq 'claude-sonnet-5-5' -and $cfg.review.model -eq 'claude-sonnet-5-5') 'defaults: builds on Opus, proposals and the review on Sonnet'
+Check ($cfg.build.model -eq 'claude-sonnet-5-5' -and $cfg.build.opusModel -eq 'claude-opus-5-5' -and (@($cfg.build.opusLabels) -join ',') -eq 'model:opus' -and $cfg.build.smallModel -eq 'claude-sonnet-5-5' -and $cfg.propose.model -eq 'claude-sonnet-5-5' -and $cfg.review.model -eq 'claude-sonnet-5-5') 'defaults: builds on Sonnet (Opus for model:opus), proposals and the review on Sonnet'
 Check ($cfg.build.maxTurns -eq 150 -and $cfg.propose.maxTurns -eq 80) 'defaults: 150 turns per build session, 80 for proposals'
 $cfg2 = Get-SessionConfig ('{"build":{"model":"m-big","maxTurns":120,"bogus":1},"propose":{"model":""}}' | ConvertFrom-Json)
 Check ($cfg2.build.model -eq 'm-big' -and $cfg2.build.maxTurns -eq 120 -and -not $cfg2.build.Contains('bogus') -and $cfg2.propose.model -eq 'claude-sonnet-5-5') 'sessions.json overrides known keys; unknown keys ignored; empty keeps the default'
@@ -172,7 +172,7 @@ if (Test-Path $real) {
     $cfg3 = Get-SessionConfig ([IO.File]::ReadAllText($real) | ConvertFrom-Json)
     Check ($cfg3.build.maxTurns -gt 0 -and $cfg3.propose.maxTurns -gt 0 -and $cfg3.build.model -and $cfg3.propose.model) 'the checked-in sessions.json parses'
 }
-Check ((Get-SessionModel -Kind 'build' -Labels @('loop:proposal', 'approved') -Config $cfg) -eq 'claude-opus-5-5') 'build model: Opus by default'
+Check ((Get-SessionModel -Kind 'build' -Labels @('loop:proposal', 'approved') -Config $cfg) -eq 'claude-sonnet-5-5') 'build model: Sonnet by default (2026-11-23)'
 Check ((Get-SessionModel -Kind 'build' -Labels @('loop:proposal', 'approved', 'size:small') -Config $cfg) -eq 'claude-sonnet-5-5') 'build model: size:small -> Sonnet'
 Check ((Get-SessionModel -Kind 'build' -Labels @('test-only') -Config $cfg) -eq 'claude-sonnet-5-5') 'build model: test-only -> Sonnet'
 Check ((Get-SessionModel -Kind 'propose' -Config $cfg) -eq 'claude-sonnet-5-5') 'proposal model: Sonnet'
@@ -184,7 +184,7 @@ $n = Get-NextBuildDecision -Buildable @(12, 14) -Done @() -MaxBuilds 2 -Remainin
 Check ($n.Start -and $n.Issue -eq 12) 'first build: the oldest buildable issue'
 $n = Get-NextBuildDecision -Buildable @(12, 14) -Done @(D 12 'deployed') -MaxBuilds 2 -RemainingMinutes 150
 Check ($n.Start -and $n.Issue -eq 14) 'after a deploy, with time left: the next issue'
-$n = Get-NextBuildDecision -Buildable @(14) -Done @(D 12 'deployed') -MaxBuilds 2 -RemainingMinutes 100
+$n = Get-NextBuildDecision -Buildable @(14) -Done @(D 12 'deployed') -MaxBuilds 2 -RemainingMinutes 90
 Check (-not $n.Start -and $n.Reason -match 'min left') 'second build needs SecondBuildMinMinutes'
 $n = Get-NextBuildDecision -Buildable @(14, 15) -Done @((D 12 'deployed'), (D 14 'deployed')) -MaxBuilds 2 -RemainingMinutes 200
 Check (-not $n.Start -and $n.Reason -match 'MaxBuilds') 'MaxBuilds reached'
@@ -198,6 +198,147 @@ $n = Get-NextBuildDecision -Buildable @(12, 14, 15) -Done @((D 12 'skipped'), (D
 Check (-not $n.Start -and $n.Reason -match 'skipped') 'at most 2 skips per run'
 Check (-not (Get-NextBuildDecision -Buildable @() -Done @() -RemainingMinutes 240).Start) 'nothing buildable -> no session'
 Check (-not (Get-NextBuildDecision -Buildable @(12) -Done @() -RemainingMinutes 30).Start) 'too little time for even the first build'
+# ---- four builds per run (2026-11-23): MaxBuilds 4, a 360-min run, 100 min left for each build after the first ------
+$n = Get-NextBuildDecision -Buildable @(1, 2, 3, 4, 5) -Done @() -RemainingMinutes 360
+Check ($n.Start -and $n.Reason -match 'of at most 4') "default MaxBuilds is 4 ($($n.Reason))"
+# simulate builds of 75 min (typical) and 85 min (slow) against the 360-min budget: all four start
+foreach ($len in 75, 85) {
+    $done = @(); $left = 360.0; $started = 0
+    while ($true) {
+        $n = Get-NextBuildDecision -Buildable @(1, 2, 3, 4, 5) -Done $done -RemainingMinutes $left
+        if (-not $n.Start) { break }
+        $started++; $done += (D $n.Issue 'deployed'); $left -= $len
+    }
+    Check ($started -eq 4 -and $n.Reason -match 'MaxBuilds \(4\) reached') "360-min run, builds of $len min: 4 builds, then MaxBuilds ($started started; $($n.Reason))"
+}
+$done = @(); $left = 360.0; $started = 0
+while ($true) { $n = Get-NextBuildDecision -Buildable @(1, 2, 3, 4, 5) -Done $done -RemainingMinutes $left; if (-not $n.Start) { break }; $started++; $done += (D $n.Issue 'deployed'); $left -= 110 }
+Check ($started -eq 3 -and $n.Reason -match 'min left') "builds of 110 min (CI fix rounds): the fourth is not started with $([int]$left) min left ($started started)"
+$n = Get-NextBuildDecision -Buildable @(1, 2, 3, 4) -Done @((D 1 'deployed'), (D 2 'deployed'), (D 3 'deployed')) -RemainingMinutes 99
+Check (-not $n.Start -and $n.Reason -match 'needs 100') 'a later build needs 100 min left'
+$n = Get-NextBuildDecision -Buildable @(1, 2, 3, 4) -Done @((D 1 'deployed'), (D 2 'rolled-back')) -RemainingMinutes 300
+Check (-not $n.Start -and $n.Reason -match 'rolled-back') 'a rollback still ends Phase A with time and builds left'
+$n = Get-NextBuildDecision -Buildable @(1, 2) -Done @(D 1 'deployed') -RemainingMinutes 130 -NextBuildMinMinutes 120
+Check ($n.Start) '-NextBuildMinMinutes is an alias of -SecondBuildMinMinutes'
+# the run budget stays inside the scheduled task's ExecutionTimeLimit
+$tb = Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 420
+Check ($tb.Minutes -eq 360) "7-h task limit: the full 360 min ($($tb.Reason))"
+$tb = Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 300
+Check ($tb.Minutes -eq 270 -and $tb.Reason -match 'cut') "5-h task limit (not yet reinstalled): cut to 270 ($($tb.Reason))"
+Check ((Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 0).Minutes -eq 360) 'task limit unknown: the request stands'
+Check ((Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 60).Minutes -eq 60) 'never below 60 min'
+$real = Join-Path $PSScriptRoot 'run-loop.ps1'
+$rl = [IO.File]::ReadAllText($real)
+Check ($rl -match '\[ValidateRange\(1, 6\)\]\s*\[int\]\$MaxBuilds = 4' -and $rl -match '\[int\]\$TimeoutMinutes = 360' -and $rl -match 'SecondBuildMinMinutes = 100') 'run-loop.ps1 defaults: MaxBuilds 4, 360 min, 100 min for later builds'
+$it = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'install-task.ps1'))
+Check ($it -match "-Daily -At \`$At\s*\n(?:\s*#.*\n)?\s*\`$settings = New-ScheduledTaskSettingsSet @settingsCommon -ExecutionTimeLimit \(New-TimeSpan -Hours 7\)") 'install-task.ps1 gives the daily task 7 h (360-min run + reporting)'
+
+# ---- the build model (2026-11-23: Sonnet by default, Opus only when needed) ---------------------------------------
+$bm = Get-BuildModelChoice -Labels @('loop:proposal', 'approved') -Config $cfg
+Check ($bm.Model -eq 'claude-sonnet-5-5' -and -not $bm.Opus) "plain approved issue -> Sonnet ($($bm.Why))"
+$bm = Get-BuildModelChoice -Labels @('loop:proposal', 'approved', 'model:opus') -Config $cfg
+Check ($bm.Model -eq 'claude-opus-5-5' -and $bm.Opus -and $bm.Why -match 'model:opus') "model:opus label -> Opus ($($bm.Why))"
+$bm = Get-BuildModelChoice -Labels @('loop:proposal', 'approved') -Config $cfg -ServerDeploy $true
+Check ($bm.Model -eq 'claude-opus-5-5' -and $bm.Why -match 'server') "proposal deploys the server -> Opus ($($bm.Why))"
+$bm = Get-BuildModelChoice -Labels @('loop:proposal', 'approved', 'loop:failed') -Config $cfg -OpusRetry $true
+Check ($bm.Model -eq 'claude-opus-5-5' -and $bm.Why -match 'retry') "retry of a failed Sonnet build -> Opus ($($bm.Why))"
+foreach ($sl in 'size:small', 'test-only') {
+    $bm = Get-BuildModelChoice -Labels @('approved', $sl) -Config $cfg
+    Check ($bm.Model -eq 'claude-sonnet-5-5' -and $bm.Why -match [regex]::Escape($sl)) "$sl stays on Sonnet"
+}
+Check ((Get-BuildModelChoice -Labels @('approved', 'size:small', 'model:opus') -Config $cfg).Opus) 'model:opus beats size:small (Ve chose Opus)'
+Check ((Get-BuildModelChoice -Labels @('approved', 'model:opus') -Config $cfg -Override 'x-model').Model -eq 'x-model') '-Model override beats model:opus'
+Check ((Get-SessionModel -Kind 'build' -Labels @('approved') -Config $cfg -ServerDeploy $true) -eq 'claude-opus-5-5') 'Get-SessionModel passes the server flag through'
+$cfgO = Get-SessionConfig ('{"build":{"opusModel":"claude-opus-9","opusLabels":["needs-opus"]}}' | ConvertFrom-Json)
+Check ((Get-BuildModelChoice -Labels @('needs-opus') -Config $cfgO).Model -eq 'claude-opus-9' -and -not (Get-BuildModelChoice -Labels @('model:opus') -Config $cfgO).Opus) 'sessions.json opusModel / opusLabels are honoured'
+$real = Join-Path $PSScriptRoot 'sessions.json'
+$cfgR = Get-SessionConfig ([IO.File]::ReadAllText($real) | ConvertFrom-Json)
+Check ($cfgR.build.model -match 'sonnet' -and $cfgR.build.opusModel -match 'opus' -and @($cfgR.build.opusLabels) -contains 'model:opus' -and [double]$cfgR.build.smallMaxBudgetUsd -eq 4) 'the checked-in sessions.json: builds on Sonnet, model:opus -> Opus, Sonnet build cap $4'
+Check ((Get-SessionBudget -Kind 'build' -Model (Get-BuildModelChoice -Labels @('approved') -Config $cfgR).Model -Config $cfgR) -eq 4 -and (Get-SessionBudget -Kind 'build' -Model (Get-BuildModelChoice -Labels @('model:opus') -Config $cfgR).Model -Config $cfgR) -eq 8) 'a Sonnet build is capped at $4, an Opus build at $8'
+# "What deploys" up front
+$pb = "<!-- innovation-loop -->`n## Problem and evidence`nx`n## What deploys`nPages + server (files: server/routes/prices.ts)`n## Glasses vs web`nweb"
+Check (Test-ProposalNeedsServer -Body $pb) 'What deploys: Pages + server -> server deploy known up front'
+Check (-not (Test-ProposalNeedsServer -Body ($pb -replace 'Pages \+ server \(files: server/routes/prices.ts\)', 'Pages only.'))) 'What deploys: Pages only -> no'
+Check (-not (Test-ProposalNeedsServer -Body ($pb -replace 'Pages \+ server \(files: server/routes/prices.ts\)', 'Pages only (no server change).'))) 'Pages only, even when it mentions the server -> no'
+Check (-not (Test-ProposalNeedsServer -Body "## Problem`nThe server is slow.`n## Risk`nnone")) 'no What deploys section -> unknown up front, no (a mention elsewhere does not count)'
+Check (-not (Test-ProposalNeedsServer -Body '')) 'empty body -> no'
+
+# ---- the Opus retry of a failed Sonnet build ----------------------------------------------------------------------
+function Frm { param([string]$Class, [string]$Model, [string]$Outcome = 'failed') [pscustomobject]@{ Class = $Class; Outcome = $Outcome; Model = $Model } }
+$Lf = @('loop:proposal', 'approved', 'loop:failed')
+foreach ($c in 'tests', 'other', 'max-turns', 'max-budget') {
+    $d = Get-RetryDecision -Labels $Lf -Failures @(Frm $c 'claude-sonnet-5-5')
+    Check ($d.Retry -and $d.Opus -and $d.Reason -match 'on Opus') "$c on Sonnet -> one retry on Opus ($($d.Reason))"
+    $d = Get-RetryDecision -Labels $Lf -Failures @(Frm $c 'claude-opus-5-5')
+    Check (-not $d.Opus) "$c on Opus -> no escalation"
+}
+Check (-not (Get-RetryDecision -Labels $Lf -Failures @(Frm 'tests' 'claude-opus-5-5')).Retry) 'tests on Opus -> waits for Ve, as before'
+Check (-not (Get-RetryDecision -Labels $Lf -Failures @(Frm 'tests' '')).Retry) 'tests with no model in the marker (old markers) -> waits for Ve'
+foreach ($c in 'ci-infra', 'ci-timeout', 'gap-refused', 'deploy-unavailable', 'out-of-time', 'timeout') {
+    $d = Get-RetryDecision -Labels $Lf -Failures @(Frm $c 'claude-sonnet-5-5')
+    Check ($d.Retry -and -not $d.Opus) "$c (infrastructure) on Sonnet -> retried on the same model"
+}
+foreach ($c in 'guard-refused', 'scope', 'session-ended') {
+    Check (-not (Get-RetryDecision -Labels $Lf -Failures @(Frm $c 'claude-sonnet-5-5')).Retry) "$c on Sonnet -> never retried"
+}
+Check (-not (Get-RetryDecision -Labels $Lf -Failures @(Frm 'tests' 'claude-sonnet-5-5' 'rolled-back')).Retry) 'rolled back on Sonnet -> no retry (something went live)'
+Check (-not (Get-RetryDecision -Labels ($Lf + 'loop:retried') -Failures @(Frm 'tests' 'claude-sonnet-5-5')).Retry) 'already retried -> no second retry'
+Check (-not (Get-RetryDecision -Labels $Lf -Failures @((Frm 'tests' 'claude-sonnet-5-5'), (Frm 'tests' 'claude-opus-5-5'))).Retry) 'failed again on Opus -> waits for Ve'
+# the marker round trip
+$mkr = Format-FailureMarker -Class 'tests' -Outcome 'failed' -Model 'claude-sonnet-5-5'
+Check ($mkr -eq '<!-- innovation-loop:failure class=tests outcome=failed model=claude-sonnet-5-5 -->') "marker names the model ($mkr)"
+Check ((Format-FailureMarker -Class 'tests' -Model 'bad model;x') -eq '<!-- innovation-loop:failure class=tests outcome=failed -->') 'an unsafe model string is left out'
+$frs = @(Get-FailureRecords -Comments @([pscustomobject]@{ id = 9; created_at = '2026-11-23T10:00:00Z'; user = [pscustomobject]@{ login = 'vekbui96' }; body = "$mk`n$mkr`n## Synopsis" }) -Owner 'vekbui96' -Marker $mk)
+Check ($frs.Count -eq 1 -and $frs[0].Model -eq 'claude-sonnet-5-5' -and $frs[0].Class -eq 'tests') 'Get-FailureRecords reads the model'
+$frs = @(Get-FailureRecords -Comments @([pscustomobject]@{ id = 9; created_at = '2026-11-23T10:00:00Z'; user = [pscustomobject]@{ login = 'vekbui96' }; body = "$mk`n<!-- innovation-loop:failure class=tests outcome=failed -->" }) -Owner 'vekbui96' -Marker $mk)
+Check ($frs.Count -eq 1 -and $frs[0].Model -eq '') 'an old marker without a model still parses'
+
+# ---- the queue drain (approval watcher) ---------------------------------------------------------------------------
+$now = [datetime]'2026-11-23T20:00:00'
+function Dr { param([int[]]$B = @(181, 192), [int[]]$Op = @(), [int]$Ago = 30, [object[]]$H = $null, [bool]$Rb = $false, [bool]$Ve = $false, [string]$Cap = '', [string]$Run = '20261123-150000', [int]$Prog = 1)
+    $end = $now.AddMinutes(-$Ago).ToString('o')
+    if ($null -eq $H) { $H = @([pscustomobject]@{ runId = $Run; endedAt = $end; head = $(if ($B.Count) { $B[0] } else { 0 }); progress = $Prog; result = 'OK'; rolledBack = $Rb }) }
+    ([ordered]@{ schema = 1; runId = $Run; endedAt = $end; result = 'OK'; buildable = @($B); head = $(if ($B.Count) { $B[0] } else { 0 }); needsOpus = @($Op); progress = $Prog; rolledBack = $Rb; needsVe = $Ve; buildCapped = $Cap; history = @($H) } | ConvertTo-Json -Depth 5 | ConvertFrom-Json) }
+$dd = Get-DrainDecision -Drain (Dr) -Now $now -Repo 'vekbui96/cardlens'
+Check ($dd.Start -and $dd.Key -eq 'drain:vekbui96/cardlens:20261123-150000') "buildable + idle -> start ($($dd.Reason))"
+Check (-not (Get-DrainDecision -Drain (Dr) -Now $now -Running $true).Start) 'a run holds the lock / task running -> no'
+Check (-not (Get-DrainDecision -Drain (Dr) -Now $now -Verdict 'hold').Start) 'plan budget hold -> no'
+Check (-not (Get-DrainDecision -Drain (Dr -Op @(181, 192)) -Now $now -Verdict 'no-opus').Start) 'no-opus and every buildable issue needs Opus -> no'
+Check ((Get-DrainDecision -Drain (Dr -Op @(181)) -Now $now -Verdict 'no-opus').Start) 'no-opus but a Sonnet build is buildable -> start'
+Check ((Get-DrainDecision -Drain (Dr -Op @(181, 192)) -Now $now -Verdict 'normal').Start) 'normal: Opus builds drain too'
+Check (-not (Get-DrainDecision -Drain (Dr -B @()) -Now $now).Start) 'nothing buildable -> no'
+Check (-not (Get-DrainDecision -Drain (Dr -Ago 5) -Now $now -IdleMinutes 15).Start) 'the last run ended 5 min ago -> not yet'
+Check ((Get-DrainDecision -Drain (Dr -Ago 16) -Now $now -IdleMinutes 15).Start) '16 min idle -> start'
+Check (-not (Get-DrainDecision -Drain (Dr) -Now $now -Repo 'r' -Done @('drain:r:20261123-150000')).Start) 'one drain run per finished run'
+Check (-not (Get-DrainDecision -Drain $null -Now $now).Start -and -not (Get-DrainDecision -Drain ([pscustomobject]@{ schema = 2; runId = 'x' }) -Now $now).Start) 'no / unknown drain state -> no'
+Check (-not (Get-DrainDecision -Drain (Dr -Ve $true) -Now $now).Start) 'uncertain deploy (needs Ve) -> never'
+Check (-not (Get-DrainDecision -Drain (Dr -Cap 'daily cap reached') -Now $now).Start) 'daily build cap reached today -> no'
+Check ((Get-DrainDecision -Drain (Dr -Cap 'daily cap reached' -Ago 1500) -Now $now).Start) 'capped yesterday -> start today'
+# repeated failure on the same queue head -> back off 2 h
+$stuckH = @([pscustomobject]@{ runId = 'a'; endedAt = $now.AddMinutes(-200).ToString('o'); head = 181; progress = 0; result = 'FAILED' },
+    [pscustomobject]@{ runId = '20261123-150000'; endedAt = $now.AddMinutes(-30).ToString('o'); head = 181; progress = 0; result = 'FAILED' })
+$dd = Get-DrainDecision -Drain (Dr -H $stuckH -Prog 0) -Now $now
+Check (-not $dd.Start -and $dd.Reason -match 'backing off') "2 runs, same head #181, nothing deployed -> back off ($($dd.Reason))"
+Check ((Get-DrainDecision -Drain (Dr -H $stuckH -Prog 0 -Ago 121) -Now $now).Start) 'after the 2-h back-off: one more try'
+$okH = @([pscustomobject]@{ runId = 'a'; endedAt = $now.AddMinutes(-200).ToString('o'); head = 181; progress = 0; result = 'FAILED' },
+    [pscustomobject]@{ runId = '20261123-150000'; endedAt = $now.AddMinutes(-30).ToString('o'); head = 181; progress = 2; result = 'OK' })
+Check ((Get-DrainDecision -Drain (Dr -H $okH) -Now $now).Start) 'the last run made progress -> no back-off'
+$movedH = @([pscustomobject]@{ runId = 'a'; endedAt = $now.AddMinutes(-200).ToString('o'); head = 175; progress = 0; result = 'FAILED' },
+    [pscustomobject]@{ runId = '20261123-150000'; endedAt = $now.AddMinutes(-30).ToString('o'); head = 181; progress = 0; result = 'FAILED' })
+Check ((Get-DrainDecision -Drain (Dr -H $movedH -Prog 0) -Now $now).Start) 'the head moved on (the failed one waits for Ve) -> no back-off'
+Check (-not (Get-DrainDecision -Drain (Dr -Rb $true) -Now $now).Start) 'the last run rolled a build back -> back off'
+Check ((Get-DrainDecision -Drain (Dr -Rb $true -Ago 130) -Now $now).Start) 'rollback, 2 h later -> one more try'
+# the record the runner writes
+$s1 = New-DrainState -RunId 'r1' -EndedAt $now.AddMinutes(-60) -Result 'OK' -Buildable @(181, 192, 193) -NeedsOpus @(193) -Progress 4
+Check ($s1.schema -eq 1 -and $s1.head -eq 181 -and (@($s1.buildable) -join ',') -eq '181,192,193' -and (@($s1.needsOpus) -join ',') -eq '193' -and @($s1.history).Count -eq 1) 'New-DrainState: the record'
+$prev = $s1 | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+$s2 = New-DrainState -RunId 'r2' -EndedAt $now.AddMinutes(-30) -Result 'FAILED' -Buildable @(181) -Progress 0 -Previous $prev
+Check (@($s2.history).Count -eq 2 -and $s2.history[1].runId -eq 'r2' -and $s2.history[0].runId -eq 'r1') 'history keeps the earlier runs, newest last'
+$p = $s2 | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+foreach ($k in 3..9) { $p = (New-DrainState -RunId "r$k" -Buildable @(1) -Previous $p) | ConvertTo-Json -Depth 5 | ConvertFrom-Json }
+Check (@($p.history).Count -eq 6) 'at most 6 runs of history'
+$rt = (New-DrainState -RunId 'x1' -EndedAt $now.AddMinutes(-20) -Buildable @(5) -Progress 1) | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+Check ((Get-DrainDecision -Drain $rt -Now $now -Repo 'r').Start) 'a JSON round trip of New-DrainState drains'
 
 # ---- how a build session ended -----------------------------------------------------------------------
 Check ((Get-BuildOutcome -Labels @('loop:proposal', 'approved', 'loop:deployed') -MarkerOutcome 'deployed') -eq 'deployed') 'deployed label -> deployed'
@@ -394,7 +535,7 @@ Check (-not $pre.Launch) "only a waiting slice (not in buildable) and no free sl
 # ---- spend caps: USD per session (--max-budget-usd) ---------------------------------------------------
 $cfg = Get-SessionConfig $null
 Check ((Get-SessionBudget -Kind 'build' -Model 'claude-opus-5-5' -Config $cfg) -eq 8) 'USD cap: Opus build 8'
-Check ((Get-SessionBudget -Kind 'build' -Model 'claude-sonnet-5-5' -Config $cfg) -eq 2.5) 'USD cap: Sonnet build 2.50 (smallMaxBudgetUsd)'
+Check ((Get-SessionBudget -Kind 'build' -Model 'claude-sonnet-5-5' -Config $cfg) -eq 4) 'USD cap: Sonnet build 4 (smallMaxBudgetUsd; the $3.21 Sonnet build would have hit 2.50)'
 Check ((Get-SessionBudget -Kind 'build' -Model '' -Config $cfg) -eq 8) "USD cap: claude's default model counts as Opus"
 Check ((Get-SessionBudget -Kind 'propose' -Model 'claude-sonnet-5-5' -Config $cfg) -eq 0.75) 'USD cap: proposals 0.75'
 Check ((Get-SessionBudget -Kind 'review' -Model 'claude-sonnet-5-5' -Config $cfg) -eq 4) 'USD cap: review 4'
@@ -587,6 +728,12 @@ if (Test-Path -LiteralPath $watchRef) {
         if ($fn) { ($fn.Extent.Text -replace '\s+', ' ').Trim() } else { '' } }
     $mine = & $fnText "$PSScriptRoot\gate-rules.ps1"; $theirs = & $fnText $watchRef
     Check ($theirs -and $mine -eq $theirs) 'the approval watcher''s copy of Get-RequestTriggerDecision matches gate-rules.ps1 (change both together)'
+    $fnD = { param([string]$File) $ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+        $fn = $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq 'Get-DrainDecision' }, $true) | Select-Object -First 1
+        if ($fn) { ($fn.Extent.Text -replace '\s+', ' ').Trim() } else { '' } }
+    $mineD = & $fnD "$PSScriptRoot\gate-rules.ps1"; $theirsD = & $fnD $watchRef
+    Check ($theirsD -and $mineD -eq $theirsD) 'the approval watcher''s copy of Get-DrainDecision matches gate-rules.ps1 (change both together)'
+    Check ([IO.File]::ReadAllText($watchRef) -match 'Drain = ''C:\\Users\\Ve Bui\\\.innovation-loop-cardlens\\state\\drain\.json''') 'the watcher''s cardlens entry names the drain file run-loop.ps1 writes'
 }
 
 # via-request approval: every condition

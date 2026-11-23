@@ -193,13 +193,17 @@ Check (-not (Test-BudgetAllowsModel 'no-opus' 'opus') -and -not (Test-BudgetAllo
 Check (-not (Test-BudgetAllowsModel 'no-opus' '')) 'no-opus: an empty model (claude default) counts as Opus'
 Check (-not (Test-BudgetAllowsModel 'hold' $son) -and -not (Test-BudgetAllowsModel 'hold' $opus)) 'hold: nothing'
 
-# verdict x session kind (sessions.json shape: builds Opus unless size:small / test-only; propose + review Sonnet)
+# verdict x session kind (sessions.json shape since 2026-11-23: builds on Sonnet; Opus only for model:opus, a server
+# deploy named in the proposal, or the Opus retry; propose + review Sonnet)
 $cfg = Get-SessionConfig $null
-$lo = @{ 12 = @('loop:proposal', 'approved'); 13 = @('loop:proposal', 'approved', 'size:small'); 14 = @('approved', 'test-only') }
+$lo = @{ 12 = @('loop:proposal', 'approved', 'model:opus'); 13 = @('loop:proposal', 'approved', 'size:small'); 14 = @('approved', 'test-only'); 15 = @('loop:proposal', 'approved')
+    16 = @('loop:proposal', 'approved'); 17 = @('loop:proposal', 'approved', 'loop:failed') }
 $sp = Split-BuildableByBudget -Buildable @(12, 13, 14) -LabelsOf $lo -Config $cfg -Verdict 'normal'
 Check ((@($sp.Allowed) -join ',') -eq '12,13,14' -and @($sp.Deferred).Count -eq 0) 'normal: every build allowed'
 $sp = Split-BuildableByBudget -Buildable @(12, 13, 14) -LabelsOf $lo -Config $cfg -Verdict 'no-opus'
-Check ((@($sp.Allowed) -join ',') -eq '13,14' -and (@($sp.Deferred | ForEach-Object { $_.Issue }) -join ',') -eq '12' -and $sp.Deferred[0].Model -eq $opus) 'no-opus: the Opus build is deferred, small/test-only builds run'
+Check ((@($sp.Allowed) -join ',') -eq '13,14' -and (@($sp.Deferred | ForEach-Object { $_.Issue }) -join ',') -eq '12' -and $sp.Deferred[0].Model -eq $opus) 'no-opus: the model:opus build is deferred, small/test-only builds run'
+$sp = Split-BuildableByBudget -Buildable @(15, 16, 17) -LabelsOf $lo -Config $cfg -Verdict 'no-opus' -ServerDeploy @(16) -OpusRetry @(17)
+Check ((@($sp.Allowed) -join ',') -eq '15' -and (@($sp.Deferred | ForEach-Object { $_.Issue }) -join ',') -eq '16,17') "no-opus: a plain build runs on Sonnet; the server build and the Opus retry wait (allowed $(@($sp.Allowed) -join ','))"
 $sp = Split-BuildableByBudget -Buildable @(12, 13) -LabelsOf $lo -Config $cfg -Verdict 'no-opus' -Override $son
 Check (@($sp.Deferred).Count -eq 0) 'no-opus + run-loop -Model sonnet: every build runs on Sonnet, nothing deferred'
 $sp = Split-BuildableByBudget -Buildable @(13) -LabelsOf $lo -Config $cfg -Verdict 'no-opus' -Override $opus
