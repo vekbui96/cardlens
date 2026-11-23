@@ -106,7 +106,7 @@ export function SetsView({
         </ErrorNotice>
       ) : null}
 
-      {isLoading && shown === 0 ? <SetSkeletons /> : null}
+      {isLoading && !isError && shown === 0 ? <SetSkeletons /> : null}
 
       {filteredToNothing ? (
         <Panel title="No set matches that" headingLevel={2}>

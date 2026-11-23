@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   CatalogProvider,
@@ -26,7 +27,7 @@ import { SealedScreen } from "./SealedScreen.tsx";
  * price is a fact about the price. Merging them into a dash would say neither.
  */
 
-function harness() {
+function harness(provider = new MockPokemonProvider({})) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retryDelay: 0, gcTime: 0 },
@@ -38,7 +39,7 @@ function harness() {
       <QueryClientProvider client={client}>
         <InputProvider value={{ adapter: new MockInputAdapter(), mock: new MockInputAdapter() }}>
           <RepositoriesProvider>
-            <CatalogProvider base={new MockPokemonProvider({})}>
+            <CatalogProvider base={provider}>
               <LayoutModeProvider mode="web">
                 <NavigationProvider>
                   <LibraryProvider>{children}</LibraryProvider>
@@ -147,6 +148,22 @@ describe("with sets collected", () => {
 
     expect(await screen.findByText(/1 of 2 sets priced/i)).toBeInTheDocument();
     expect(await screen.findByText(/no sealed product listed/i)).toBeInTheDocument();
+  });
+
+  it("keeps the set-list notice and its Try again button while the retry is in flight", async () => {
+    own("sv2-106", "sv2");
+    serve({});
+    const provider = new MockPokemonProvider({ failNetwork: true });
+    render(<SealedScreen />, { wrapper: harness(provider) });
+
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByRole("heading", { name: "The set list could not be read" })).toBeInTheDocument();
+    // A retry that never answers: the notice must stay, not give way to a skeleton.
+    provider.setBehavior({ latencyMs: 60_000 });
+    await userEvent.click(retry);
+
+    expect(screen.getByRole("heading", { name: "The set list could not be read" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   it("says plainly when nothing came back at all, and offers a retry", async () => {

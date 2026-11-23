@@ -5,7 +5,7 @@ import { useConnectDevice } from "../../../hooks/useConnectDevice.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { syncLine } from "../../../features/collection/syncLine.ts";
-import { Row, Stack, cx } from "../../primitives/index.ts";
+import { Row, Stack, cx, failedOrRetrying } from "../../primitives/index.ts";
 import { OwnedView } from "./OwnedView.tsx";
 import { SetsView } from "./SetsView.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
@@ -48,7 +48,11 @@ export function CollectionScreen() {
   const { collection, ownedCountsBySet, ownedNumbersBySet, totalFinishesOwned, syncStatus, syncNow } =
     useLibrary();
   const connectDevice = useConnectDevice();
-  const { data, isLoading, isError, refetch } = useSets();
+  const setsQuery = useSets();
+  const { data, isLoading, refetch } = setsQuery;
+  // Not `isError` alone: it goes false the moment Try again starts, which
+  // would swap the notice (and the focused button) for a skeleton.
+  const isError = failedOrRetrying(setsQuery);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SetSortKey>("recent");
 

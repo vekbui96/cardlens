@@ -6,7 +6,17 @@ import { useSealed, type SealedRow } from "../../../hooks/useSealed.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { SEALED_KINDS } from "../../../models/sealed.ts";
 import { formatUpdated } from "../../../utils/format.ts";
-import { Chip, cx, ErrorNotice, Money, Panel, Row, ScreenReaderOnly, Stack } from "../../primitives/index.ts";
+import {
+  Chip,
+  cx,
+  ErrorNotice,
+  failedOrRetrying,
+  Money,
+  Panel,
+  Row,
+  ScreenReaderOnly,
+  Stack,
+} from "../../primitives/index.ts";
 import styles from "./sealed.module.css";
 
 /**
@@ -64,7 +74,10 @@ export function SealedScreen() {
 
   const collected = setCount > 0;
   const settled = started && inFlight === 0;
-  const waiting = collected && !settled && !sets.isError;
+  // Not `isError` alone: it goes false the moment Try again starts, which would
+  // swap the notice (and the focused button) for the skeleton.
+  const setsFailed = failedOrRetrying(sets);
+  const waiting = collected && !settled && !setsFailed;
   const unpriced = Math.max(0, setCount - rows.length);
 
   return (
@@ -79,7 +92,7 @@ export function SealedScreen() {
       {/* The set list is what maps a collected set id to the name the price
           source is looked up by. Without it there is nothing to ask for, and
           saying "no sealed products" would blame the wrong thing entirely. */}
-      {collected && sets.isError && rows.length === 0 ? (
+      {collected && setsFailed && rows.length === 0 ? (
         <Problem
           title="The set list could not be read"
           body="Sealed prices are looked up by set name, so the catalog has to answer before any price can be asked for. Nothing is wrong with your collection."
@@ -89,7 +102,7 @@ export function SealedScreen() {
 
       {waiting && rows.length === 0 ? <Loading count={setCount} /> : null}
 
-      {settled && collected && rows.length === 0 && !sets.isError ? (
+      {settled && collected && rows.length === 0 && !setsFailed ? (
         <Problem
           title="No sealed prices right now"
           body={`None of your ${setCount} ${setCount === 1 ? "set" : "sets"} came back with a sealed product. Promos, tins and subsets are never sold in packs, so for those this is the right answer — but a price source that cannot be reached looks the same from here.`}
