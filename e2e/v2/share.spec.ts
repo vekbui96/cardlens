@@ -139,6 +139,21 @@ test.describe("share @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("trade.png", { timeout: 20000 });
   });
 
+  test("a card opened large on a trade page looks like itself", async ({ page }) => {
+    await serveShare(page, TRADE);
+    await openV2(page, "/trade/abc123");
+    await page
+      .getByRole("list", { name: "Cards in this binder" })
+      .getByRole("button", { name: /Jolteon/ })
+      .click();
+    const large = page.getByRole("dialog", { name: "Jolteon" });
+    await expect(large).toBeVisible();
+    // The way back sits under the card: bring it on screen, it is what this shows.
+    await large.getByRole("button").last().scrollIntoViewIfNeeded();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("trade-enlarged.png", { timeout: 20000 });
+  });
+
   test("a link that does not work", async ({ page }) => {
     await serveShare(page, { error: "not_found" }, 404);
     await openV2(page, "/live/revoked");
