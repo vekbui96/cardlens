@@ -93,6 +93,9 @@ param(
     [string]$Model = '',
     # with -DryRun only: plan from this saved check-approval.ps1 -List output instead of GitHub's live queue
     [string]$QueueFile = '',
+    # with -DryRun only: plan as if the scheduled task's ExecutionTimeLimit were this many minutes (e.g. 420 before the
+    # task is re-registered with 7 h), instead of reading it from the task
+    [int]$AssumeTaskLimitMinutes = 0,
     # the ops hub's plan budget (gate-rules.ps1 Get-PlanBudgetVerdict): -IgnoreBudget for supervised runs
     [switch]$IgnoreBudget,
     [string]$BudgetFile = '',
@@ -124,6 +127,7 @@ try {
     $tl = "$((Get-ScheduledTask -TaskName $tn -ErrorAction Stop).Settings.ExecutionTimeLimit)"
     if ($tl -and $tl -ne 'PT0S') { $taskLimitMin = [Xml.XmlConvert]::ToTimeSpan($tl).TotalMinutes }
 } catch { }
+if ($DryRun -and $AssumeTaskLimitMinutes -gt 0) { $taskLimitMin = $AssumeTaskLimitMinutes }
 $TimeBudget = Get-RunTimeBudget -Requested $TimeoutMinutes -TaskLimitMinutes $taskLimitMin
 $TimeoutMinutes = $TimeBudget.Minutes
 $Deadline = $RunStart.AddMinutes($TimeoutMinutes)
