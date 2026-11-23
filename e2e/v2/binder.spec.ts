@@ -559,7 +559,43 @@ function clearOfSheet(page: Page, address: string): Promise<boolean> {
   }, address);
 }
 
+test.describe("show off", () => {
+  test("walks the binder one large card at a time, and Close puts the binder back", async ({ page }) => {
+    await openBinder(page, "fx-full");
+    await page.getByRole("button", { name: "Show off" }).click();
+
+    const view = page.getByRole("dialog", { name: "Showcase: Jolteon" });
+    await expect(view).toBeVisible();
+    await expect(page).toHaveTitle("Showcase · CardLens");
+    // The cover plus 27 pockets, all full.
+    await expect(view.getByText("Card 1 of 28")).toBeVisible();
+
+    await view.getByRole("button", { name: "Next card" }).click();
+    await expect(view.getByText("Card 2 of 28")).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    await expect(view.getByText("Card 3 of 28")).toBeVisible();
+
+    // 44px targets, measured where layout is real.
+    const next = await view.getByRole("button", { name: "Next card" }).boundingBox();
+    expect(next?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    await view.getByRole("button", { name: "Close showcase" }).click();
+    await expect(view).toBeHidden();
+    await expect(page.getByRole("button", { name: "Show off" })).toBeFocused();
+    await expect(page).toHaveTitle("Binder · CardLens");
+  });
+});
+
 test.describe("binder @visual", () => {
+  test("the show-off view looks like itself", async ({ page }) => {
+    await openBinder(page, "fx-full");
+    await page.getByRole("button", { name: "Show off" }).click();
+    const view = page.getByRole("dialog", { name: "Showcase: Jolteon" });
+    await expect(view.getByText("Card 1 of 28")).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("binder-show-off.png");
+  });
+
   test("a full binder looks like itself", async ({ page }) => {
     await openBinder(page, "fx-full");
     await expect(page.getByRole("heading", { name: "Jolteon", level: 1 })).toBeVisible();
