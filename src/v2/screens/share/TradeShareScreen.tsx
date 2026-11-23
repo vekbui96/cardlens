@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShare } from "./useShare.ts";
 import { ShareGone, ShareHeader, ShareLoading, ShareOffline, isOffline } from "./ShareFrame.tsx";
 // The file, not the barrel: the barrel carries BinderScreen, which renders this
@@ -97,6 +97,27 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
   const [sort, setSort] = useState<SortKey>("value");
   /** The pocket whose card is open large, by `rowKey`. */
   const [open, setOpen] = useState<string | null>(null);
+  /** Each tile's button by `rowKey`, so closing can hand focus back to it. */
+  const tiles = useRef(new Map<string, HTMLButtonElement>());
+  const lastOpened = useRef<string | null>(null);
+
+  /**
+   * Closing the large card puts focus back on the tile that opened it.
+   *
+   * `Sheet` returns focus to whatever was focused before it opened, but iPhone
+   * Safari does not focus a button on tap, so that was the page itself and a
+   * visitor lost their place in the grid. Runs after `Sheet`'s own cleanup
+   * (React runs every effect cleanup before any new effect), so it wins.
+   */
+  useEffect(() => {
+    if (open !== null) {
+      lastOpened.current = open;
+      return;
+    }
+    const key = lastOpened.current;
+    lastOpened.current = null;
+    if (key) tiles.current.get(key)?.focus();
+  }, [open]);
 
   const rows = useMemo(() => tradeRows(binder), [binder]);
 
@@ -164,7 +185,15 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
             <ul className={styles.showcaseGrid} aria-label="Cards in this binder">
               {sorted.map((row, i) => (
                 <li key={rowKey(row)}>
-                  <button type="button" className={styles.showcaseCard} onClick={() => setOpen(rowKey(row))}>
+                  <button
+                    type="button"
+                    className={styles.showcaseCard}
+                    onClick={() => setOpen(rowKey(row))}
+                    ref={(el) => {
+                      if (el) tiles.current.set(rowKey(row), el);
+                      else tiles.current.delete(rowKey(row));
+                    }}
+                  >
                     <CardArt
                       src={row.slot.imageSmall}
                       name={row.slot.name ?? ""}
@@ -211,7 +240,7 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
               <Money value={value.priceFor(enlarged.slot)} loading={value.isLoading} absentLabel={UNPRICED} />
             </span>
             <button type="button" className={styles.closeButton} onClick={() => setOpen(null)}>
-              Close
+              Back to the cards
             </button>
           </div>
         ) : null}

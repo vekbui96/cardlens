@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -120,8 +120,42 @@ describe("TradeShareScreen, the binder showcase", () => {
     // Where it lives, so the visitor can ask for it by pocket.
     expect(within(dialog).getByText(/Page 1, pocket 5/)).toBeTruthy();
 
-    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await user.click(within(dialog).getByRole("button", { name: "Back to the cards" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /**
+   * iPhone Safari does not focus a button on tap, so "focus whatever was
+   * focused before" sent a visitor back to the top of the page. `fireEvent`
+   * clicks without focusing, which is exactly that tap.
+   */
+  it("hands focus back to the tapped card when the large card closes", async () => {
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    const grid = await screen.findByRole("list", { name: "Cards in this binder" });
+    const tile = within(grid).getByRole("button", { name: /Sylveon V/ });
+    fireEvent.click(tile);
+    const dialog = screen.getByRole("dialog", { name: "Sylveon V" });
+    expect(document.activeElement).not.toBe(tile);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back to the cards" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(tile);
+  });
+
+  it("Escape closes the large card and focus lands on the tapped card too", async () => {
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    const grid = await screen.findByRole("list", { name: "Cards in this binder" });
+    const tile = within(grid).getByRole("button", { name: /Espeon GX/ });
+    fireEvent.click(tile);
+    expect(screen.getByRole("dialog", { name: "Espeon GX" })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(tile);
   });
 
   it("says Unpriced for a card nothing prices, never a made-up zero", async () => {
