@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { useShare } from "./useShare.ts";
 import { ShareGone, ShareHeader, ShareLoading, ShareOffline, isOffline } from "./ShareFrame.tsx";
-import { BinderSpread } from "../binder/index.ts";
+// The file, not the barrel: the barrel carries BinderScreen, which renders this
+// page's view in its Share preview, and the barrel would make that a cycle.
+import { BinderSpread } from "../binder/BinderSpread.tsx";
 import { useBinderValue } from "../../../hooks/useBinderValue.ts";
-import { countBinder, pageGroups, conditionLabel } from "../../../models/binderLayout.ts";
+import { countBinder, pageGroups, conditionLabel, type Binder } from "../../../models/binderLayout.ts";
 import { pocketAddress } from "../../../models/binderPocket.ts";
 import { tradeRows, type TradeRow } from "../../../models/tradeShare.ts";
 import { finishLabel } from "../../../models/finishes.ts";
@@ -75,12 +77,28 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
   const query = useShare(shareId);
   const share = query.data?.kind === "binder" ? query.data : null;
   const binder = share?.binder ?? null;
+
+  if (query.isLoading) return <ShareLoading what="this binder" />;
+  if (query.isError && isOffline()) return <ShareOffline onRetry={() => void query.refetch()} />;
+  if (query.isError || !binder) return <ShareGone onRetry={() => void query.refetch()} />;
+
+  return <BinderShowcaseView binder={binder} updatedAt={share?.at} />;
+}
+
+/**
+ * The visitor's page for one binder, drawn from the binder itself.
+ *
+ * Split from the screen so the owner's Share preview (`SharePreview` on the v2
+ * Binder screen) renders exactly this — "what a visitor sees" is only true if
+ * it is the same component, not a lookalike that drifts.
+ */
+export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; updatedAt?: number }) {
   const value = useBinderValue(binder);
   const [sort, setSort] = useState<SortKey>("value");
   /** The pocket whose card is open large, by `rowKey`. */
   const [open, setOpen] = useState<string | null>(null);
 
-  const rows = useMemo(() => (binder ? tradeRows(binder) : []), [binder]);
+  const rows = useMemo(() => tradeRows(binder), [binder]);
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -99,10 +117,6 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
     });
   }, [rows, sort, value]);
 
-  if (query.isLoading) return <ShareLoading what="this binder" />;
-  if (query.isError && isOffline()) return <ShareOffline onRetry={() => void query.refetch()} />;
-  if (query.isError || !binder) return <ShareGone onRetry={() => void query.refetch()} />;
-
   const counts = countBinder(binder);
   const groups = pageGroups(binder.pages.length, binder.format);
   const enlarged = sorted.find((row) => rowKey(row) === open) ?? null;
@@ -117,7 +131,7 @@ export function TradeShareScreen({ shareId }: { shareId: string }) {
             {counts.copies === 1 ? "card" : "cards"}
           </>
         }
-        updatedAt={share?.at}
+        updatedAt={updatedAt}
         aside={
           <span className={styles.total}>
             <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />

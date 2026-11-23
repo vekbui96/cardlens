@@ -654,6 +654,48 @@ button.pocket:hover {
   outline: none;
 }
 
+/*
+ * The Share preview: the same full-screen cover as the showcase, but the body
+ * is a whole visitor page, so it scrolls under a head that stays put.
+ */
+.sharePreview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-4);
+  background: var(--v2-bg);
+  color: var(--v2-fg);
+}
+
+.sharePreview:focus {
+  outline: none;
+}
+
+.shareHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v2-space-3);
+  min-width: 0;
+}
+
+.shareActions {
+  display: flex;
+  gap: var(--v2-space-2);
+}
+
+.shareBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: var(--v2-border-w) solid var(--v2-border);
+  padding-top: var(--v2-space-4);
+}
+
 .showHead {
   display: flex;
   align-items: center;

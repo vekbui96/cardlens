@@ -37,6 +37,7 @@ import { BinderSpread } from "./BinderSpread.tsx";
 import { BinderPicker } from "./BinderPicker.tsx";
 import { BinderSettings } from "./BinderSettings.tsx";
 import { BinderShowcase } from "./BinderShowcase.tsx";
+import { SharePreview } from "./SharePreview.tsx";
 import { applyDrop, applyPlace } from "./binderEdits.ts";
 import { useBinderDrag } from "./useBinderDrag.ts";
 import { useWideLayout } from "./useWideLayout.ts";
@@ -99,6 +100,8 @@ export function BinderScreen({ binderId }: { binderId: string }) {
   /** "Show off": the full-screen, one-card-at-a-time view. Local only. */
   const [showingOff, setShowingOff] = useState(false);
   const showOffRef = useRef<HTMLButtonElement | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareRef = useRef<HTMLButtonElement | null>(null);
 
   // Priced per printing, ONE request per SET rather than per card. A binder
   // spans sets the way a set screen never does — the Riolu one touches thirty.
@@ -430,6 +433,18 @@ export function BinderScreen({ binderId }: { binderId: string }) {
         >
           Show off
         </button>
+        {/* Opens the visitor's page first; the link is only made from there. */}
+        <button
+          type="button"
+          ref={shareRef}
+          className={styles.button}
+          onClick={() => {
+            setSelected(null);
+            setSharing(true);
+          }}
+        >
+          Share
+        </button>
         <button
           type="button"
           className={styles.button}
@@ -522,6 +537,10 @@ export function BinderScreen({ binderId }: { binderId: string }) {
           onClose={() => setShowingOff(false)}
           returnFocus={showOffRef}
         />
+      ) : null}
+
+      {sharing ? (
+        <SharePreview binder={binder} onClose={() => setSharing(false)} returnFocus={shareRef} />
       ) : null}
 
       {/*
