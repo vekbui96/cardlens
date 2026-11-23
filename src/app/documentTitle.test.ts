@@ -19,6 +19,10 @@ describe("screenTitle", () => {
     expect(screenTitle("collection")).toBe("My cards · CardLens");
   });
 
+  it("names a shared binder for what a visitor sees: a showcase", () => {
+    expect(screenTitle("trade")).toBe("Showcase · CardLens");
+  });
+
   it("falls back to plain CardLens for anything unmapped", () => {
     expect(screenTitle("nope" as never)).toBe("CardLens");
   });
