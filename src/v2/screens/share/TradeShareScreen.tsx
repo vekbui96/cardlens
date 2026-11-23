@@ -255,6 +255,7 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
               pages={pages}
               owns={NOTHING_TO_FLAG}
               priceFor={value.priceFor}
+              absentLabel={UNPRICED}
               headingLevel={3}
               eager={i === 0}
               selected={null}

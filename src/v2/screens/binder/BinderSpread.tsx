@@ -54,6 +54,8 @@ export interface BinderSpreadProps {
    * blank where a price belongs reads as "still loading", forever.
    */
   priceFor?: ((slot: BinderSlot) => number | undefined) | undefined;
+  /** The screen's own word for a pocket nothing prices; defaults to "n/a". */
+  absentLabel?: string | undefined;
   /**
    * Render as a trade list rather than as a layout: pocket addresses, copies
    * and grade. A flag rather than a second component, so a pocket looks and
@@ -89,6 +91,7 @@ export function BinderSpread({
   pages,
   owns,
   priceFor,
+  absentLabel,
   trade = false,
   showCover,
   onSelect,
@@ -140,6 +143,7 @@ export function BinderSpread({
           page={page}
           owns={owns}
           priceFor={priceFor}
+          absentLabel={absentLabel}
           trade={trade}
           {...(onSelect ? { onSelect } : {})}
           {...(onSlotPointerDown ? { onSlotPointerDown } : {})}
@@ -161,6 +165,7 @@ interface PageProps {
   page: number;
   owns: (slot: BinderSlot) => boolean;
   priceFor?: ((slot: BinderSlot) => number | undefined) | undefined;
+  absentLabel?: string | undefined;
   trade: boolean;
   onSelect?: ((at: BinderAddress) => void) | undefined;
   onSlotPointerDown?: ((at: BinderAddress, slot: BinderSlot, event: ReactPointerEvent) => void) | undefined;
@@ -176,6 +181,7 @@ function Page({
   page,
   owns,
   priceFor,
+  absentLabel,
   trade,
   onSelect,
   onSlotPointerDown,
@@ -209,6 +215,7 @@ function Page({
                 pageNumber={pageNumber}
                 owns={owns}
                 priceFor={priceFor}
+                absentLabel={absentLabel}
                 trade={trade}
                 {...(onSelect ? { onSelect } : {})}
                 {...(onSlotPointerDown ? { onSlotPointerDown } : {})}
@@ -234,6 +241,7 @@ interface PocketProps {
   pageNumber: number;
   owns: (slot: BinderSlot) => boolean;
   priceFor?: ((slot: BinderSlot) => number | undefined) | undefined;
+  absentLabel?: string | undefined;
   trade: boolean;
   onSelect?: ((at: BinderAddress) => void) | undefined;
   onSlotPointerDown?: ((at: BinderAddress, slot: BinderSlot, event: ReactPointerEvent) => void) | undefined;
@@ -250,6 +258,7 @@ function Pocket({
   pageNumber,
   owns,
   priceFor,
+  absentLabel,
   trade,
   onSelect,
   onSlotPointerDown,
@@ -268,7 +277,11 @@ function Pocket({
     trade,
     price,
     priced: Boolean(priceFor),
+    absentLabel,
   });
+  // Only a screen that names the absence gets the muted treatment: the binder
+  // builder keeps its "n/a" exactly as it was.
+  const unpriced = absentLabel !== undefined && formatBinderPrice(price) === "n/a";
 
   const className = cx(
     styles.pocket,
@@ -293,8 +306,11 @@ function Pocket({
           copies stays as clean as one that has never been traded from. */}
       {stock ? <span className={cx(styles.mark, styles.stock)}>{stock}</span> : null}
       {slot && priceFor ? (
-        <span className={cx(styles.mark, styles.price, !held && styles.aboveTag)}>
-          {formatBinderPrice(price)}
+        <span
+          className={cx(styles.mark, styles.price, unpriced && styles.priceAbsent, !held && styles.aboveTag)}
+          data-unpriced={unpriced || undefined}
+        >
+          {formatBinderPrice(price, absentLabel)}
         </span>
       ) : null}
     </>

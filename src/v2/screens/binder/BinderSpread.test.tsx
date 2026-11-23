@@ -145,6 +145,24 @@ describe("prices and trade marks", () => {
     expect(screen.getByRole("img", { name: "Pocket 1, Jolteon, owned, n/a" })).toBeInTheDocument();
   });
 
+  it("uses the caller's own word for an unpriced pocket, never n/a", () => {
+    // The trade share page says "Unpriced" in its card list; the layout grid
+    // must say the same thing.
+    render(
+      <BinderSpread
+        binder={binder()}
+        pages={[0]}
+        owns={ownsEverything}
+        priceFor={() => undefined}
+        absentLabel="Unpriced"
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Pocket 1, Jolteon, owned, Unpriced" })).toBeInTheDocument();
+    expect(screen.getByText("Unpriced")).toHaveAttribute("data-unpriced");
+    expect(screen.queryByText("n/a")).not.toBeInTheDocument();
+  });
+
   it("shows no prices at all when the caller offers none", () => {
     render(<BinderSpread binder={binder()} pages={[0]} owns={ownsEverything} />);
     expect(screen.queryByText("n/a")).not.toBeInTheDocument();

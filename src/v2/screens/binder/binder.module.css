@@ -292,6 +292,11 @@ button.pocket:hover {
   color: var(--v2-price);
 }
 
+/* "Unpriced" is the absence of a price, not a price: muted, like Money's absent state. */
+.priceAbsent {
+  color: var(--v2-fg-muted);
+}
+
 /* Stacked above the tag when a pocket carries both. */
 .aboveTag {
   bottom: calc(var(--v2-space-5) - var(--v2-space-1));
