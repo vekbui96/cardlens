@@ -44,10 +44,9 @@ export function spokenStock(slot: BinderSlot): string {
   ].join("");
 }
 
-/** Compact enough for a pocket: "$12.34", "$1.2k", or "n/a". */ export function formatBinderPrice(
-  price: number | undefined,
-): string {
-  if (price === undefined || !Number.isFinite(price) || price <= 0) return "n/a";
+/** Compact enough for a pocket: "$12.34", "$1.2k", or `absent` ("n/a" unless a screen says otherwise). */
+export function formatBinderPrice(price: number | undefined, absent = "n/a"): string {
+  if (price === undefined || !Number.isFinite(price) || price <= 0) return absent;
   if (price >= 1000) return `$${(price / 1000).toFixed(price >= 10_000 ? 0 : 1)}k`;
   return `$${price.toFixed(price >= 100 ? 0 : 2)}`;
 }

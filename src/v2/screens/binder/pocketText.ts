@@ -41,6 +41,8 @@ export interface PocketLabelParts {
   price?: number | undefined;
   /** True when the screen shows prices at all. `undefined` price still says "n/a". */
   priced?: boolean;
+  /** The screen's own word for no price; defaults to "n/a". */
+  absentLabel?: string | undefined;
 }
 
 /**
@@ -57,13 +59,14 @@ export function pocketLabel({
   trade = false,
   price,
   priced = false,
+  absentLabel,
 }: PocketLabelParts): string {
   const where = `${trade ? `Page ${pageNumber}, ` : ""}Pocket ${index + 1}`;
   if (!slot) return `${where}, empty`;
 
   const what = slot.kind === "image" ? slotName(slot) : `${slotName(slot)}, ${held ? "owned" : "not owned"}`;
   const stock = trade ? spokenStock(slot) : "";
-  const money = priced ? `, ${formatBinderPrice(price)}` : "";
+  const money = priced ? `, ${formatBinderPrice(price, absentLabel)}` : "";
   return `${where}, ${what}${stock}${money}`;
 }
 
