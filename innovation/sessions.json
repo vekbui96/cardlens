@@ -85,7 +85,7 @@
     "designSkills": true,
     "observerPm": true,
     "observeMetricPoints": 10,
-    "qaUx": false,
+    "qaUx": true,
     "uxSampleDays": 7,
     "uxStaleDays": 30
   }
