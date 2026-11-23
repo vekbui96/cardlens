@@ -596,7 +596,7 @@ test.describe("when there is nothing to scan with", () => {
   test("says so when the card index cannot load, and offers a retry", async ({ page }) => {
     await page.route("**/card-index/**", (route) => route.fulfill({ status: 500, body: "no" }));
     await openScan(page);
-    await expect(page.getByText("The card index could not load.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "The card index could not load" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     // No server either, so the screen must not pretend it can identify anything.
     await expect(page.getByText(/Nothing on this device can identify a card/)).toBeVisible();

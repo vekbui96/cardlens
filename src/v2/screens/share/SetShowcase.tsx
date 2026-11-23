@@ -3,7 +3,7 @@ import { useSetView } from "../../../hooks/useSetView.ts";
 import { showcaseIndex, type ShowcasePrinting } from "../../../models/showcase.ts";
 import { finishLabel } from "../../../models/finishes.ts";
 import { formatCollector } from "../../../utils/format.ts";
-import { CardArt, Chip, Grid, Panel, Row, Stack, cx } from "../../primitives/index.ts";
+import { CardArt, Chip, ErrorNotice, Grid, Panel, Row, Stack, cx } from "../../primitives/index.ts";
 import { ShareHeader, ShareLoading } from "./ShareFrame.tsx";
 import styles from "./share.module.css";
 
@@ -49,21 +49,7 @@ export function SetShowcase({ setId, setName, owned, live = false, updatedAt }: 
         aside={live ? <Chip tone="accent">Live</Chip> : <Chip>Snapshot</Chip>}
       />
 
-      {view.isError && cards.length === 0 ? (
-        <Panel title="The card list could not be reached" headingLevel={2}>
-          <Stack gap={3}>
-            <p role="alert">
-              The set this link points at could not be loaded, so there is nothing to lay the marks against.
-              Nothing is wrong with the link.
-            </p>
-            <Row gap={2}>
-              <button type="button" className={styles.button} onClick={() => view.refetch()}>
-                Try again
-              </button>
-            </Row>
-          </Stack>
-        </Panel>
-      ) : null}
+      {view.isError && cards.length === 0 ? <ShowcaseError onRetry={() => view.refetch()} /> : null}
 
       <Grid min="pocket" gap={3}>
         {cards.map((card) => {
@@ -104,5 +90,15 @@ export function SetShowcase({ setId, setName, owned, live = false, updatedAt }: 
         </Panel>
       ) : null}
     </Stack>
+  );
+}
+
+/** The SET behind the link could not be loaded; the link itself is fine. */
+export function ShowcaseError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <ErrorNotice title="The card list could not be reached" onRetry={onRetry}>
+      The set this link points at could not be loaded, so there is nothing to lay the marks against. Nothing
+      is wrong with the link.
+    </ErrorNotice>
   );
 }
