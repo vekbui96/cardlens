@@ -586,7 +586,40 @@ test.describe("show off", () => {
   });
 });
 
+test.describe("share preview", () => {
+  test("Share shows what a visitor sees first, and Back puts the binder back", async ({ page }) => {
+    await openBinder(page, "fx-full");
+    const share = page.getByRole("button", { name: "Share", exact: true });
+    expect((await share.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await share.click();
+
+    const view = page.getByRole("dialog", { name: "What a visitor sees: Jolteon" });
+    await expect(view).toBeVisible();
+    await expect(view.getByRole("list", { name: "Cards in this binder" })).toBeVisible();
+    // Still the Binder screen: the tab is not renamed.
+    await expect(page).toHaveTitle("Binder · CardLens");
+
+    // No sync token in the e2e app: the shared error notice says what to do.
+    await view.getByRole("button", { name: "Copy link" }).click();
+    await expect(view.getByRole("alert")).toContainText("Connect this device to the server first");
+    await expect(view.getByRole("button", { name: "Try again" })).toBeVisible();
+
+    await view.getByRole("button", { name: "Back" }).click();
+    await expect(view).toBeHidden();
+    await expect(share).toBeFocused();
+  });
+});
+
 test.describe("binder @visual", () => {
+  test("the share preview looks like itself", async ({ page }) => {
+    await openBinder(page, "fx-full");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const view = page.getByRole("dialog", { name: "What a visitor sees: Jolteon" });
+    await expect(view.getByRole("list", { name: "Cards in this binder" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("binder-share-preview.png");
+  });
+
   test("the show-off view looks like itself", async ({ page }) => {
     await openBinder(page, "fx-full");
     await page.getByRole("button", { name: "Show off" }).click();
