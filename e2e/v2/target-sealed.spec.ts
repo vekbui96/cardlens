@@ -346,6 +346,13 @@ test.describe("target and sealed @visual", () => {
     await expect(page).toHaveScreenshot("sealed-prices.png", { fullPage: true });
   });
 
+  test("sealed on a fresh device", async ({ page }) => {
+    await openSealed(page);
+    await expect(page.getByRole("heading", { name: "Nothing collected yet" })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("sealed-empty.png", { fullPage: true });
+  });
+
   test("sealed prices that could not be read", async ({ page }) => {
     await withCollectedSet(page);
     await page.route("**/api/sealed/**", (route) => route.fulfill({ status: 502, body: "{}" }));
