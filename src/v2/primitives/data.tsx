@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import styles from "./primitives.module.css";
 import { cx } from "./layout.tsx";
-import { formatUsd, UNAVAILABLE } from "../../utils/format.ts";
+import { formatUsd, UNAVAILABLE, UNPRICED } from "../../utils/format.ts";
 
 type Vars = CSSProperties & Record<`--${string}`, string>;
 
@@ -101,8 +101,11 @@ export function Chip({ children, tone = "default", onPress, pressed, label }: Ch
 
 /* --- Money ---------------------------------------------------------------- */
 
-/** The one word for a card with no price; pass it as `absentLabel` on card and set prices. */
-export const UNPRICED = "Unpriced";
+/**
+ * The one word for a card with no price; pass it as `absentLabel` on card and
+ * set prices. Defined with the other shared formatters in utils/format.ts.
+ */
+export { UNPRICED };
 
 interface MoneyProps {
   /**

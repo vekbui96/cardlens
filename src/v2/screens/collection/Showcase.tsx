@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { finishLabel } from "../../../models/finishes.ts";
-import { formatPct } from "../../../models/movement.ts";
+import { formatChange } from "../../../utils/format.ts";
 import { weekChange, type OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { CardArt, Money, Stack, UNPRICED, cx } from "../../primitives/index.ts";
 import styles from "./collection.module.css";
@@ -125,7 +125,7 @@ export function Showcase({ rows, onOpen, showChange = false }: ShowcaseProps) {
           <p className={styles.stagePrice}>
             <Money value={current.price} absentLabel={UNPRICED} />
             {showChange && weekChange(current) !== undefined ? (
-              <span className={styles.ownedChange}>{formatPct(weekChange(current) as number)}</span>
+              <span className={styles.ownedChange}>{formatChange(weekChange(current) as number)}</span>
             ) : null}
           </p>
           {onOpen ? (
@@ -171,7 +171,7 @@ export function Showcase({ rows, onOpen, showChange = false }: ShowcaseProps) {
             <span className={styles.thumbPrice}>
               <Money value={row.price} absentLabel={UNPRICED} />
               {showChange && weekChange(row) !== undefined ? (
-                <span className={styles.ownedChange}>{formatPct(weekChange(row) as number)}</span>
+                <span className={styles.ownedChange}>{formatChange(weekChange(row) as number)}</span>
               ) : null}
             </span>
           </button>

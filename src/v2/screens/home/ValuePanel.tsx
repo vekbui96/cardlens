@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Chip, Money, Panel, Row, Stack, cx } from "../../primitives/index.ts";
-import { formatPct } from "../../../models/movement.ts";
+import { formatChangeOver } from "../../../utils/format.ts";
 import type { Movement } from "../../../models/movement.ts";
 import type { SinceLastLooked } from "../../../models/lastLook.ts";
 import { pricingSummary, type PricingInput } from "./homeSummary.ts";
@@ -82,7 +82,7 @@ export function ValuePanel({
             that can describe one with the other — see models/movement.ts. The
             sign carries the direction, so this needs no colour.
           */}
-          {movement.pct7 !== undefined ? <Chip>{formatPct(movement.pct7)} over 7 days</Chip> : null}
+          {movement.pct7 !== undefined ? <Chip>{formatChangeOver(movement.pct7, 7)}</Chip> : null}
         </Row>
 
         <p className={cx(styles.line, summary.warn && styles.lineWarn)}>{summary.line}</p>
