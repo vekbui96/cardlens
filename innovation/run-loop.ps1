@@ -93,6 +93,9 @@ param(
     [string]$Model = '',
     # with -DryRun only: plan from this saved check-approval.ps1 -List output instead of GitHub's live queue
     [string]$QueueFile = '',
+    # with -DryRun only: plan as if the scheduled task's ExecutionTimeLimit were this many minutes (e.g. 420 before the
+    # task is re-registered with 7 h), instead of reading it from the task
+    [int]$AssumeTaskLimitMinutes = 0,
     # the ops hub's plan budget (gate-rules.ps1 Get-PlanBudgetVerdict): -IgnoreBudget for supervised runs
     [switch]$IgnoreBudget,
     [string]$BudgetFile = '',
@@ -124,6 +127,7 @@ try {
     $tl = "$((Get-ScheduledTask -TaskName $tn -ErrorAction Stop).Settings.ExecutionTimeLimit)"
     if ($tl -and $tl -ne 'PT0S') { $taskLimitMin = [Xml.XmlConvert]::ToTimeSpan($tl).TotalMinutes }
 } catch { }
+if ($DryRun -and $AssumeTaskLimitMinutes -gt 0) { $taskLimitMin = $AssumeTaskLimitMinutes }
 $TimeBudget = Get-RunTimeBudget -Requested $TimeoutMinutes -TaskLimitMinutes $taskLimitMin
 $TimeoutMinutes = $TimeBudget.Minutes
 $Deadline = $RunStart.AddMinutes($TimeoutMinutes)
@@ -144,7 +148,7 @@ foreach ($k in 'build', 'propose', 'review', 'observe', 'pm', 'qa', 'ux') { if (
 $usd = { param([double]$v) if ($v -gt 0) { '$' + (Format-BudgetUsd $v) } else { 'none' } }
 $cfgLine = @('build', 'propose', 'review', 'intake', 'memory', 'observe', 'pm', 'qa', 'ux' | ForEach-Object { $c = $Cfg[$_]; $m = "$($c.model)"; if ($_ -eq 'build') { $m += " (opus: $($c.opusModel) for $(@($c.opusLabels) -join '/'), server deploys, retry of a failed non-Opus build; small: $($c.smallModel) for $(@($c.smallLabels) -join '/'))" }
         $b = & $usd (Get-SessionBudget -Kind $_ -Model "$($c.model)" -Config $Cfg)
-        if ($_ -eq 'build') { $b = "opus $b, other $(& $usd (Get-SessionBudget -Kind 'build' -Model "$($c.smallModel)" -Config $Cfg))" }
+        if ($_ -eq 'build') { $b = "opus $(& $usd (Get-SessionBudget -Kind 'build' -Model "$($c.opusModel)" -Config $Cfg)), other $b" }
         "$_=$m turns=$($c.maxTurns) timeout=$($c.timeoutMinutes)m maxBudgetUsd=$b maxPerDay=$(if ([int]$c.maxPerDay -gt 0) { $c.maxPerDay } else { 'none' })" }) -join '; '
 Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun maxBuilds=$MaxBuilds scripts=$ScriptsDir"
 Write-Log "time: run budget $($TimeBudget.Reason); each build after the first needs $SecondBuildMinMinutes min left"
