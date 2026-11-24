@@ -3,7 +3,7 @@
   "loop": "cardlens",
   "approval": "via-policy",
   "enabled": true,
-  "vetoHours": 6,
+  "vetoHours": 1,
   "includeSpecs": true,
   "exclude": ["server-deploy", "stored-data", "manual", "protected"],
   "setBy": "vekbui96",
