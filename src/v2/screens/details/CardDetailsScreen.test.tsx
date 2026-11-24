@@ -182,6 +182,32 @@ describe("the details hierarchy", () => {
     expect(line.compareDocumentPosition(printings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("names the printing the headline price belongs to", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const line = await screen.findByTestId("price-line");
+    await waitFor(() => expect(line).toHaveTextContent("Market price · Normal$1.50"));
+  });
+
+  it("prefers the priced printing the collector owns", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    await userEvent.click(await screen.findByRole("button", { name: /^Holofoil/ }));
+    const line = await screen.findByTestId("price-line");
+    await waitFor(() => expect(line).toHaveTextContent("Market price · Holofoil$58.42"));
+  });
+
+  it("skips an owned printing that has no price", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    await userEvent.click(await screen.findByRole("button", { name: /Poké Ball Reverse/ }));
+    const line = await screen.findByTestId("price-line");
+    await waitFor(() => expect(line).toHaveTextContent("Market price · Normal$1.50"));
+  });
+
   it("says Unpriced on the price line when no printing has a price", async () => {
     stubPrintings({ onlyUnpriced: true });
     render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
