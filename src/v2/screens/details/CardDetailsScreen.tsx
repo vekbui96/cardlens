@@ -357,9 +357,22 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
                 </ErrorNotice>
               ) : null}
               <p className={styles.confirm} role="status">
-                {markResult && markResult.kind !== "failed"
-                  ? `${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`
-                  : ""}
+                {markResult && markResult.kind !== "failed" ? (
+                  <>
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" />
+                    </svg>
+                    {`${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`}
+                  </>
+                ) : null}
               </p>
             </>
           )}
@@ -394,6 +407,17 @@ function PrintingRow({
       */}
       <span className={owned ? styles.owned : styles.notOwned}>{owned ? "Owned" : "Not owned"}</span>
       <Money value={price} loading={pricePending} absentLabel={UNPRICED} />
+      {/* Decorative: the row is the button and its name already says Owned / Not owned. */}
+      <span
+        className={owned ? styles.affordanceOwned : styles.affordance}
+        data-affordance="printing-affordance"
+        data-owned={owned ? "true" : "false"}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d={owned ? "M5 12.5l4.5 4.5L19 7.5" : "M12 5v14M5 12h14"} strokeLinecap="round" />
+        </svg>
+      </span>
     </Card>
   );
 }
