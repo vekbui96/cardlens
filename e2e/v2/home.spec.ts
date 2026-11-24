@@ -258,6 +258,17 @@ test.describe("home @visual", () => {
     await expect(page).toHaveScreenshot("home-movers.png", { fullPage: true });
   });
 
+  test("movers: prices still missing", async ({ page }) => {
+    await seedMovers(page);
+    // Printings never answer (a rate-limited upstream): the panel stays unsettled.
+    await page.route("**/api/printings/**", () => new Promise(() => {}));
+    await openV2(page, "/");
+    await expect(page.getByRole("heading", { name: "Biggest movers", level: 2 })).toBeVisible();
+    await expect(page.getByTestId("home-movers-skeleton")).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("home-movers-pending.png", { fullPage: true });
+  });
+
   test("movers: 30 days selected", async ({ page }) => {
     await seedMovers(page);
     await page.addInitScript(() => localStorage.setItem("cardlens:v1:movers-window", "30"));
