@@ -41,7 +41,11 @@ export function Meter({ value, label, detail, labelHidden = false }: MeterProps)
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className={cx(styles.meterFill, complete && styles.meterFillComplete)} style={vars} />
+        <div
+          className={cx(styles.meterFill, complete && styles.meterFillComplete)}
+          style={vars}
+          data-started={ratio > 0 ? "true" : "false"}
+        />
       </div>
       {labelHidden ? null : (
         <div className={styles.meterLabel}>

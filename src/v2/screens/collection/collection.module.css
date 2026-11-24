@@ -303,8 +303,9 @@
   flex: none;
 }
 
-.logoFallback {
-  width: 3.2em;
+.logoFallback.logoFallback {
+  width: 5ch;
+  height: 2.4em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -379,7 +380,7 @@
   gap: var(--v2-space-2);
   flex: 1 1 0;
   min-width: 0;
-  font-size: var(--v2-fs-tiny);
+  font-size: var(--v2-fs-small);
   line-height: var(--v2-lh-tight);
 }
 
@@ -387,7 +388,7 @@
   flex: none;
   font-weight: var(--v2-fw-bold);
   letter-spacing: 0.06em;
-  color: var(--v2-fg-dim);
+  color: var(--v2-fg-muted);
 }
 
 .tierWordDone {
@@ -397,6 +398,19 @@
 .tierBar {
   flex: 1 1 2ch;
   min-width: 2ch;
+}
+
+/*
+ * A bar with anything in it shows at least a 4px fill (1 of 73 is 1.4% of a
+ * 60px track: a sliver nobody sees), and the track is drawn at 3:1 against the
+ * card so the empty part of the bar is visible too.
+ */
+.tierBar [role="progressbar"] {
+  background: var(--v2-fg-dim);
+}
+
+.tierBar [data-started="true"] {
+  min-width: var(--v2-space-1);
 }
 
 .tierCount {
@@ -420,7 +434,7 @@
   min-width: 2ch;
   height: var(--v2-space-1);
   border-radius: var(--v2-radius-pill);
-  background: var(--v2-surface-sunken);
+  background: var(--v2-fg-dim);
 }
 
 .tierDone {
