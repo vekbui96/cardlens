@@ -7,6 +7,7 @@ import {
   Panel,
   Row,
   ScreenReaderOnly,
+  Skeleton,
   Stack,
   cx,
 } from "../../primitives/index.ts";
@@ -358,13 +359,13 @@ function Notices({
 function PageSkeletons() {
   return (
     <div className={styles.pages} aria-busy="true" aria-live="polite">
-      <ScreenReaderOnly>Loading set</ScreenReaderOnly>
+      <ScreenReaderOnly>Loading the set&apos;s cards</ScreenReaderOnly>
       {[1, 2].map((page) => (
         <Panel key={page}>
-          <div className={styles.skeletonBar} />
+          <Skeleton className={styles.skeletonBar} />
           <div className={styles.pocketGrid}>
             {Array.from({ length: BINDER_PAGE_SIZE }, (_, i) => (
-              <div key={i} className={styles.skeletonPocket} />
+              <Skeleton key={i} className={styles.skeletonPocket} />
             ))}
           </div>
         </Panel>
