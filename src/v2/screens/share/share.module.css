@@ -94,6 +94,25 @@
   color: var(--v2-fg-muted);
 }
 
+/*
+ * The sort chips, as pills a thumb can read: 14px labels, width fitted to the
+ * word, the 44px tap height of the shared chip kept. Scoped here so every other
+ * chip in the app stays as it is.
+ */
+.sortPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
+.sortPills button {
+  justify-content: center;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-4);
+  font-size: 14px; /* v2-tokens-allow: the issue asks for exactly 14px, between small (13) and body (15) */
+  line-height: var(--v2-lh-tight);
+}
+
 .emptyText {
   margin: var(--v2-space-0);
   color: var(--v2-fg-muted);

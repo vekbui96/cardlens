@@ -107,6 +107,20 @@ describe("TradeShareScreen, the binder showcase", () => {
     expect(within(grid).getAllByRole("button")).toHaveLength(3);
   });
 
+  it("offers Value, Pocket and Name as a labelled group of sort buttons with a pressed state", async () => {
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    await screen.findByRole("heading", { name: "Eeveelution wall", level: 1 });
+    const group = screen.getByRole("group", { name: "Sort cards" });
+    const chips = within(group).getAllByRole("button");
+    expect(chips.map((c) => c.textContent)).toEqual(["Value", "Pocket", "Name"]);
+    expect(within(group).getByRole("button", { name: "Value" }).getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(within(group).getByRole("button", { name: "Name" }));
+    expect(within(group).getByRole("button", { name: "Name" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(group).getByRole("button", { name: "Value" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("says the unpriced count in the same line as the card count, with no dangling separator", async () => {
     serve({ kind: "binder", binder: sharedBinder(), at: NOW });
     render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
