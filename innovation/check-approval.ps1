@@ -18,6 +18,15 @@
      issue is the loop's, open, not Manual, not loop:failed, never edited). Then `approval` is `via-request`,
      `viaRequest` the request number and the approval time is the plan comment's. A spec from a request is
      approved the same way (-Spec)
+   - OR it is APPROVED THROUGH VE'S STANDING POLICY (gate-rules.ps1 Get-ViaPolicyDecision; innovation/AUTONOMY.json,
+     set by Ve on 2026-11-23, read from this checkout): the loop's own proposal (or spec, with includeSpecs), not a
+     slice or a request's issue, no `approved` label, not Manual, not loop:failed, "What deploys" Pages only,
+     nothing about stored data, sync, the scanner gate, secrets, CORS, innovation/ or a protected path; not held,
+     closed or approved-and-removed by hand; the runner's notice comment posted and recorded in
+     <LOOP_HOME>\state\via-policy.json, the body unedited since, and the veto window over (plan budget not hold).
+     Then `approval` is `via-policy` and the approval time is the end of the veto window; while the window runs
+     `approval` is `via-policy (vetoes at <time>)` and the issue is not buildable yet. `viaPolicy` has the status
+     (off | not-applicable | ineligible | needs-notice | waiting | due | held | voided | closed) and the reasons
    - it is not a spec (loop:spec): a spec is never built itself; once approved, its slices are opened as
      normal proposals (built on the spec's approval, or each on its own `approved`)
    - it does not carry loop:failed, OR this is its ONE automatic retry: no loop:retried label, exactly one
@@ -57,7 +66,12 @@
   Ve's requests: `buildable` lists issues from a request first; `requestWork` (issue, request) are those,
   `specViaRequest` the specs approved through a request, `requests` every open loop:request (needsIntake: the
   runner starts an intake session; gate-rules.ps1 Get-RequestTriggerDecision) and `requestPlans` the planned
-  ones with each listed issue's state (the runner's checklist and synopsis). Request children hold no slot. -Slots prints the same without `checked` and always
+  ones with each listed issue's state (the runner's checklist and synopsis). Request children hold no slot.
+  Via-policy: `policy` (enabled, reason, vetoHours) and `viaPolicy` (every open candidate: issue, title, spec,
+  status, noticedAt, dueAt, commentId, buildable, reasons; the runner posts the notice for needs-notice and keeps
+  state\via-policy.json from it); issues due via policy hold no slot. -PolicyPreview (with -List) adds
+  `policyPreview`: what the policy would decide for EVERY open proposal if it had no `approved` label (read-only,
+  posts nothing). -Slots prints the same without `checked` and always
   exits 0 (Phase B's count). run-loop.ps1 runs -List before starting any session and skips the run when
   nothing is buildable and no slot is free.
 #>
@@ -68,7 +82,9 @@ param(
     [switch]$InProgress,
     [switch]$Spec,
     [switch]$List,
-    [switch]$Slots
+    [switch]$Slots,
+    # with -List: also what Ve's policy would decide for every open proposal without its `approved` label (dry run)
+    [switch]$PolicyPreview
 )
 # gh and git print UTF-8; read their output as UTF-8, not the console's OEM code page (a scheduled task's default),
 # which turned e.g. U+00B7 in Ve's request into two OEM characters. Never fatal.
@@ -82,6 +98,17 @@ $Repo = $script:Repo
 $script:Fetched = @{}        # issue number -> @{ Issue; Comments } (fetched once per process)
 $script:SpecChecks = @{}     # spec number -> Test-Issue -AsSpec result
 $script:AllProposals = $null # every loop:proposal issue, open and closed (spec plans, earlier slices)
+
+# Ve's standing approval policy (innovation/AUTONOMY.json, read from THIS checkout, never the clone) and the runner's
+# notice records (<LOOP_HOME>\state\via-policy.json, written only by run-loop.ps1). An unreadable state file turns the
+# policy off for this check (fail closed). The plan budget fails open to normal (its own rule); hold stops approvals.
+$script:Policy = Read-AutonomyPolicy -Path (Join-Path $PSScriptRoot $script:AutonomyFileName)
+$script:PolicyState = Read-ViaPolicyState -Path (Join-Path $script:LoopHome "state\$($script:ViaPolicyStateName)")
+if ($script:Policy.Enabled -and -not $script:PolicyState.Ok) {
+    $script:Policy = [pscustomobject]@{ Enabled = $false; VetoHours = 0; IncludeSpecs = $false; Exclude = @(); SetBy = ''; SetOn = ''; Reason = $script:PolicyState.Reason }
+}
+$script:BudgetVerdict = 'normal'
+try { $bt = $null; if (Test-Path -LiteralPath $script:PlanBudgetPath -PathType Leaf) { $bt = [IO.File]::ReadAllText($script:PlanBudgetPath) }; $script:BudgetVerdict = (Get-PlanBudgetVerdict -Text $bt).Verdict } catch { }
 
 function Get-AllProposals {
     if ($null -eq $script:AllProposals) {
@@ -109,8 +136,32 @@ function Test-ViaSpec {
     $spec = $null; $specComments = @()
     if ($script:Fetched.ContainsKey($sn)) { $spec = $script:Fetched[$sn].Issue; $specComments = @($script:Fetched[$sn].Comments) }
     $edited = Get-LastEditedAt -Number ([int]$Issue.number)
+    # a spec approved via Ve's policy: each slice must itself be covered by the policy (Pages only, no data, ...)
+    $viaPol = ($chk -and "$($chk.approval)" -eq 'via-policy')
     return (Get-ViaSpecDecision -Slice $Issue -SliceEditedAt $edited -SliceComments $Comments -SliceApprovalEvents $ApprovalEvents `
-            -Spec $spec -SpecCheck $chk -SpecComments $specComments -Issues (Get-AllProposals) -Owner $Owner -Marker $script:Marker)
+            -Spec $spec -SpecCheck $chk -SpecComments $specComments -Issues (Get-AllProposals) -Owner $Owner -Marker $script:Marker -PolicyScope $viaPol)
+}
+
+# An issue without `approved` that is not a slice or a request's issue: is it approved through Ve's standing policy?
+# (gate-rules.ps1 Get-ViaPolicyDecision). -Preview: as if it had no `approved` label and no approval events (dry run).
+function Test-ViaPolicy {
+    param($Issue, [object[]]$Comments, [int]$ApprovalEvents, [switch]$Preview)
+    $n = [int]$Issue.number
+    $rec = $null; if ($script:PolicyState.Issues.ContainsKey($n)) { $rec = $script:PolicyState.Issues[$n] }
+    $edited = Get-LastEditedAt -Number $n
+    $iss = $Issue
+    if ($Preview) {
+        $iss = $Issue | Select-Object *
+        $iss.labels = @(@($Issue.labels) | Where-Object { $_ -and "$(if ($_ -is [string]) { $_ } else { $_.name })" -ne 'approved' })
+        $ApprovalEvents = 0
+    }
+    return (Get-ViaPolicyDecision -Issue $iss -EditedAt $edited -Comments $Comments -ApprovalEvents $ApprovalEvents -Policy $script:Policy -Record $rec `
+            -Budget $script:BudgetVerdict -Owner $Owner -Marker $script:Marker)
+}
+function ConvertTo-ViaPolicyEntry {
+    param($Decision, $Issue, [bool]$Buildable = $false)
+    return [ordered]@{ issue = [int]$Issue.number; title = (ConvertTo-SafeLine "$($Issue.title)" 120); spec = [bool]$Decision.Spec; status = $Decision.Status
+        noticedAt = $Decision.NoticedAt; dueAt = $Decision.DueAt; commentId = [long]$Decision.CommentId; buildable = $Buildable; reasons = @($Decision.Reasons) }
 }
 
 # A request (its issue, lastEditedAt and comments), fetched once per process.
@@ -145,8 +196,9 @@ function Test-Issue {
     $res = [ordered]@{ issue = $Number; buildable = $false; reasons = @(); approvedBy = $null; approvedAt = $null; adjustments = @()
         failed = $false; retry = $false; opusRetry = $false; serverDeploy = $false; failure = ''; retryReason = ''; waitingReason = ''; labels = @(); spec = $false
         approval = 'label'; viaSpec = 0; viaSpecNoticed = $false; viaSpecReasons = @(); waitingOnSlice = $null
-        viaRequest = 0; requestOf = 0; viaRequestReasons = @() }
+        viaRequest = 0; requestOf = 0; viaRequestReasons = @(); viaPolicy = $null; title = '' }
     $i = Get-GhJson @('api', "repos/$Repo/issues/$Number")
+    $res.title = ConvertTo-SafeLine "$($i.title)" 120
     $labels = @($i.labels | ForEach-Object { $_.name })
     $res.labels = $labels
     $res.spec = ($labels -contains $script:SpecLabel)
@@ -187,17 +239,28 @@ function Test-Issue {
         if (-not $rl -and -not (Get-SliceLink -Body "$($i.body)")) { $rl = Test-ViaRequest -Issue $i -Comments $comments -ApprovalEvents $approvalEvents.Count }
         if ($rl -and $rl.Listed -and $rl.RequestValid) { $res.requestOf = [int]$rl.Request }
     }
-    $isVia = ($res.approval -eq 'via-spec' -or $res.approval -eq 'via-request')
+    # no `approved` of its own, not a slice, not a request's issue: approved through Ve's standing policy?
+    # (innovation/AUTONOMY.json; gate-rules.ps1 Get-ViaPolicyDecision)
+    $viaPol = $null
+    if (-not $via -and -not $viaReq -and $labels -notcontains 'approved' -and -not (Get-SliceLink -Body "$($i.body)") -and (Get-RequestLink -Body "$($i.body)") -le 0) {
+        $viaPol = Test-ViaPolicy -Issue $i -Comments $comments -ApprovalEvents $approvalEvents.Count
+        $res.viaPolicy = [ordered]@{ status = $viaPol.Status; noticedAt = $viaPol.NoticedAt; dueAt = $viaPol.DueAt; commentId = [long]$viaPol.CommentId; reasons = @($viaPol.Reasons) }
+        if ($viaPol.Eligible) { $res.approval = 'via-policy' }
+        elseif ($viaPol.Status -eq 'waiting') { $res.approval = "via-policy (vetoes at $(Format-ViaPolicyTime $viaPol.DueAt))" }
+    }
+    $isVia = ($res.approval -eq 'via-spec' -or $res.approval -eq 'via-request' -or $res.approval -eq 'via-policy')
 
     if ($i.PSObject.Properties.Name -contains 'pull_request' -and $i.pull_request) { $res.reasons += 'is a pull request' }
     if ($i.state -ne 'open') { $res.reasons += "state is $($i.state)" }
     if ($i.user.login -ne $Owner) { $res.reasons += "opened by $($i.user.login), not $Owner" }
     foreach ($need in 'loop:proposal', 'approved') {
         if ($need -eq 'approved' -and $isVia) { continue }
+        if ($need -eq 'approved' -and $viaPol -and $viaPol.Status -eq 'waiting') { $res.reasons += "approval: $($res.approval): $(@($viaPol.Reasons) -join '; ')"; continue }
         if ($labels -notcontains $need) { $res.reasons += "missing label $need" }
     }
     if ($via -and -not $isVia) { $res.reasons += "not auto-approved via spec #$($via.Spec): $(@($via.Reasons) -join '; ')" }
     if ($viaReq -and -not $isVia) { $res.reasons += "not approved via request #$($viaReq.Request): $(@($viaReq.Reasons) -join '; ')" }
+    if ($viaPol -and -not $isVia -and $viaPol.Status -notin @('waiting', 'not-applicable')) { $res.reasons += "not approved via Ve's policy ($($viaPol.Status)): $(@($viaPol.Reasons) -join '; ')" }
     if ($labels -contains 'loop:deployed') { $res.reasons += 'has label loop:deployed' }
     if ($AsSpec) {
         if (-not $res.spec) { $res.reasons += "missing label $($script:SpecLabel)" }
@@ -208,7 +271,12 @@ function Test-Issue {
         if ("$($i.body)" -match $script:ManualRx) { $res.reasons += 'proposal is flagged manual / needs Ve; the loop never builds it' }
     }
 
-    if ($isVia -and $res.approval -eq 'via-request') {
+    if ($isVia -and $res.approval -eq 'via-policy') {
+        # the approval is Ve's written policy, from the end of the veto window after the runner's notice (body
+        # unedited since the notice, no hold: checked inside Get-ViaPolicyDecision)
+        $res.approvedBy = $Owner
+        $res.approvedAt = $viaPol.DueAt
+    } elseif ($isVia -and $res.approval -eq 'via-request') {
         # the approval is Ve's request in "Build it" mode, from the moment the runner posted its plan (request and
         # child bodies unedited since, checked inside Get-ViaRequestDecision)
         $res.approvedBy = $Owner
@@ -246,6 +314,8 @@ function Test-Issue {
             $res.waitingReason = "auto-approved slice of spec #$($via.Spec) failed$(if ($rd.Class) { " ($($rd.Class))" }); no automatic retry: remove loop:failed to rebuild it, or close it"
         } elseif ($rd.Failed -and $viaReq -and $labels -notcontains 'approved') {
             $res.waitingReason = "issue from request #$($viaReq.Request) failed$(if ($rd.Class) { " ($($rd.Class))" }); no automatic retry: remove loop:failed to rebuild it, or close it"
+        } elseif ($rd.Failed -and $viaPol -and $labels -notcontains 'approved' -and $script:PolicyState.Issues.ContainsKey($Number)) {
+            $res.waitingReason = "approved via Ve's policy, then failed$(if ($rd.Class) { " ($($rd.Class))" }); no automatic retry: remove loop:failed to rebuild it, add ``approved``, or close it"
         } elseif ($rd.Failed) {
             if ($rd.Retry) { $res.retry = $true; $res.opusRetry = [bool]$rd.Opus; $res.retryReason = $rd.Reason }
             else { $res.reasons += "has label loop:failed ($($rd.Reason))"; $res.waitingReason = $rd.Reason }
@@ -308,14 +378,20 @@ function Get-Queue {
     $specs = @(); $toOpen = @(); $approvedSpecNums = @()
     # a spec counts here when it carries `approved`, or says "From request #N" (it may be approved via Ve's request;
     # Test-Issue -AsSpec decides)
-    $approvedSpecs = @($open | Where-Object { $l = Get-IssueLabelNames $_; ($l -contains $script:SpecLabel) -and (($l -contains 'approved') -or (Get-RequestLink -Body "$($_.body)") -gt 0) } | Sort-Object { [datetime]$_.createdAt })
+    # Via-policy candidates (Ve's standing policy, only while it is on): open proposals and specs without `approved`
+    # that are neither slices nor a request's issues
+    $policyOn = [bool]$script:Policy.Enabled
+    $isPolicyCand = { param($x) $l = Get-IssueLabelNames $x; $policyOn -and ($l -notcontains 'approved') -and -not (Get-SliceLink -Body "$($x.body)") -and (Get-RequestLink -Body "$($x.body)") -le 0 }
+    $approvedSpecs = @($open | Where-Object { $l = Get-IssueLabelNames $_; ($l -contains $script:SpecLabel) -and (($l -contains 'approved') -or (Get-RequestLink -Body "$($_.body)") -gt 0 -or (& $isPolicyCand $_)) } | Sort-Object { [datetime]$_.createdAt })
     $specViaRequest = @{}
+    $specPolicy = @()
     if ($approvedSpecs.Count -gt 0) {
         $all = Get-AllProposals
         foreach ($s in $approvedSpecs) {
             $chk = Test-Issue -Number $s.number -AsSpec
             $script:SpecChecks[[int]$s.number] = $chk
             if ($chk.approval -eq 'via-request') { $specViaRequest[[int]$s.number] = [int]$chk.viaRequest }
+            if ($chk.viaPolicy) { $specPolicy += [pscustomobject]@{ Check = $chk } }
             if (-not $chk.buildable -and (Get-IssueLabelNames $s) -notcontains 'approved') { continue }   # a request's spec still waiting (Plan first, held, ...)
             $body = @($all | Where-Object { [int]$_.number -eq [int]$s.number } | Select-Object -First 1)
             $entry = [ordered]@{ issue = [int]$s.number; approved = [bool]$chk.buildable; approvedAt = "$($chk.approvedAt)"; reasons = @($chk.reasons); of = 0; valid = $false; problem = ''; complete = $false; slices = @(); toOpen = @() }
@@ -341,7 +417,10 @@ function Get-Queue {
             $l = Get-IssueLabelNames $_
             ($l -notcontains 'approved') -and ($l -notcontains $script:SpecLabel) -and -not (Get-SliceLink -Body "$($_.body)") -and (Get-RequestLink -Body "$($_.body)") -gt 0 })
 
-    foreach ($o in @(@($approved) + @($candidates) + @($reqCandidates) | Sort-Object { [datetime]$_.createdAt })) { $results += (Test-Issue -Number $o.number) }
+    # open proposals without `approved` that may be approved through Ve's standing policy (specs were checked above)
+    $polCandidates = @($open | Where-Object { (& $isPolicyCand $_) -and (Get-IssueLabelNames $_) -notcontains $script:SpecLabel })
+
+    foreach ($o in @(@($approved) + @($candidates) + @($reqCandidates) + @($polCandidates) | Sort-Object { [datetime]$_.createdAt })) { $results += (Test-Issue -Number $o.number) }
     # Ve's requests go first: issues from a request (any approval), then everything else, each oldest first
     $ok = @(@($results | Where-Object { $_.buildable -and $_.requestOf -gt 0 }) + @($results | Where-Object { $_.buildable -and $_.requestOf -le 0 }))
     $via = @($results | Where-Object { $_.approval -eq 'via-spec' })
@@ -351,8 +430,13 @@ function Get-Queue {
             $why = $_.waitingReason; if (-not $why) { $why = ($_.reasons -join '; ') }
             [ordered]@{ issue = $_.issue; reason = $why } })
     $labels = [ordered]@{}; foreach ($r in $ok) { $labels["$($r.issue)"] = @($r.labels) }
-    $approvals = [ordered]@{}; foreach ($r in $ok) { $approvals["$($r.issue)"] = $(if ($r.approval -eq 'via-spec') { "via-spec #$($r.viaSpec)" } elseif ($r.approval -eq 'via-request') { "via-request #$($r.viaRequest)" } else { 'label' }) }
-    $slots = Get-ProposalSlots -Issues $open -ApprovedViaSpec @($via | ForEach-Object { [int]$_.issue }) -RequestChildren @(@($reqKids | ForEach-Object { [int]$_.issue }) + @($specViaRequest.Keys | ForEach-Object { [int]$_ }))
+    $approvals = [ordered]@{}; foreach ($r in $ok) { $approvals["$($r.issue)"] = $(if ($r.approval -eq 'via-spec') { "via-spec #$($r.viaSpec)" } elseif ($r.approval -eq 'via-request') { "via-request #$($r.viaRequest)" } elseif ($r.approval -eq 'via-policy') { 'via-policy' } else { 'label' }) }
+    # via-policy: every candidate checked (issues and specs), and the ones due (build queue: they hold no slot)
+    $polEntries = @(@($results | Where-Object { $_.viaPolicy -and $_.viaPolicy.status -ne 'not-applicable' }) + @($specPolicy | ForEach-Object { $_.Check } | Where-Object { $_.viaPolicy.status -ne 'not-applicable' }) | ForEach-Object {
+            [ordered]@{ issue = [int]$_.issue; title = $_.title; spec = [bool]$_.spec; status = $_.viaPolicy.status; noticedAt = $_.viaPolicy.noticedAt; dueAt = $_.viaPolicy.dueAt
+                commentId = [long]$_.viaPolicy.commentId; buildable = [bool]$_.buildable; reasons = @($_.viaPolicy.reasons) } })
+    $polDue = @($polEntries | Where-Object { $_.status -eq 'due' } | ForEach-Object { [int]$_.issue })
+    $slots = Get-ProposalSlots -Issues $open -ApprovedViaSpec @(@($via | ForEach-Object { [int]$_.issue }) + $polDue) -RequestChildren @(@($reqKids | ForEach-Object { [int]$_.issue }) + @($specViaRequest.Keys | ForEach-Object { [int]$_ }))
 
     # show auto-approved slices as such on the spec checklists
     foreach ($e in $specs) {
@@ -376,6 +460,9 @@ function Get-Queue {
         labels       = $labels
         approvals    = $approvals
         viaSpec      = @($via | ForEach-Object { [ordered]@{ issue = $_.issue; spec = $_.viaSpec; specApprovedAt = "$($_.approvedAt)"; buildable = [bool]$_.buildable; noticed = [bool]$_.viaSpecNoticed } })
+        policy       = [ordered]@{ enabled = [bool]$script:Policy.Enabled; reason = "$($script:Policy.Reason)"; vetoHours = $script:Policy.VetoHours; includeSpecs = [bool]$script:Policy.IncludeSpecs
+            setBy = "$($script:Policy.SetBy)"; setOn = "$($script:Policy.SetOn)"; stateOk = [bool]$script:PolicyState.Ok; budget = $script:BudgetVerdict }
+        viaPolicy    = @($polEntries)
         slots        = [ordered]@{ awaitingReview = @($slots.AwaitingReview); open = $slots.Open; cap = $slots.Cap; free = $slots.Free; newThisRun = $slots.NewThisRun
             specsAwaiting = @($slots.SpecsAwaiting); mayOpenSpec = $slots.MayOpenSpec }
         specs        = @($specs)
@@ -386,9 +473,29 @@ function Get-Queue {
     }
 }
 
+# -PolicyPreview: what Ve's policy would decide for EVERY open proposal (approved ones too, as if they had no
+# `approved` label and no approval events), with the policy's due time if the notice were posted now. Read-only.
+function Get-PolicyPreview {
+    $out = @()
+    $open = @(Get-GhJson @('issue', 'list', '-R', $Repo, '--state', 'open', '--label', 'loop:proposal', '--json', 'number,createdAt', '--limit', '100') | Where-Object { $_ } | Sort-Object { [int]$_.number })
+    foreach ($o in $open) {
+        $n = [int]$o.number
+        try {
+            $i = Get-GhJson @('api', "repos/$Repo/issues/$n")
+            $cs = @(Get-GhJson @('api', "repos/$Repo/issues/$n/comments?per_page=100"))
+            $d = Test-ViaPolicy -Issue $i -Comments $cs -ApprovalEvents 0 -Preview
+            $would = ''; if ($d.Status -eq 'needs-notice') { $would = ([datetime]::UtcNow.AddHours([double]$script:Policy.VetoHours)).ToString('o') }
+            $out += [ordered]@{ issue = $n; title = (ConvertTo-SafeLine "$($i.title)" 120); labels = @($i.labels | ForEach-Object { $_.name }); status = $d.Status
+                dueAt = $d.DueAt; wouldDueAt = $would; wouldDueLocal = $(if ($would) { Format-ViaPolicyTime $would } else { '' }); reasons = @($d.Reasons) }
+        } catch { $out += [ordered]@{ issue = $n; status = 'error'; reasons = @("$_") } }
+    }
+    return @($out)
+}
+
 try {
     if ($List -or $Slots) {
         $q = Get-Queue
+        if ($PolicyPreview) { $q.policyPreview = @(Get-PolicyPreview) }
         if ($Slots) { $q.Remove('checked') }
         Write-Output (ConvertTo-AsciiJson ($q | ConvertTo-Json -Depth 8 -Compress))
         if ($Slots -or $q.buildable.Count -gt 0) { exit 0 } else { exit 1 }

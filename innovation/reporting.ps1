@@ -629,6 +629,7 @@ function Publish-LoopRunData {
         foreach ($tg in $targets) {
             $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
             $cb = Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting -NeedsVe $NeedsVe
+            if ($Approvals -and $Approvals.ContainsKey([int]$tg.Issue) -and "$($Approvals[[int]$tg.Issue])" -eq 'via-policy') { $cb = $cb.TrimEnd() + "`n`nApproval: approved via Ve's standing policy (innovation/AUTONOMY.json) after its veto window; no ``approved`` label of its own`n" }
             if ($Approvals -and $Approvals.ContainsKey([int]$tg.Issue) -and "$($Approvals[[int]$tg.Issue])" -like 'via-spec*') { $cb = $cb.TrimEnd() + "`n`nApproval: $($Approvals[[int]$tg.Issue]) (auto-approved by the spec's approval; no ``approved`` label of its own)`n" }
             if ($QaLines -and $QaLines.ContainsKey([int]$tg.Issue)) { $cb = $cb.TrimEnd() + "`n`n$($QaLines[[int]$tg.Issue])`n" }
             [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = $cb })
@@ -704,7 +705,7 @@ function New-ProgressState {
     $st = [ordered]@{}
     foreach ($s in $Stages) { $st[$s] = [ordered]@{ status = 'pending'; start = $null; end = $null; detail = '' } }
     return [ordered]@{ issue = $Issue; runId = $RunId; repo = $Repo; commentId = [long]0; created = [DateTime]::UtcNow.ToString('o'); updated = $null
-        current = ''; outcome = ''; warning = ''; stages = $st }
+        current = ''; outcome = ''; warning = ''; approval = ''; stages = $st }
 }
 function Read-ProgressState {
     param([string]$Path)
@@ -714,7 +715,7 @@ function Read-ProgressState {
     $st = [ordered]@{}
     foreach ($p in $o.stages.PSObject.Properties) { $st[$p.Name] = [ordered]@{ status = "$($p.Value.status)"; start = $p.Value.start; end = $p.Value.end; detail = "$($p.Value.detail)" } }
     return [ordered]@{ issue = [int]$o.issue; runId = "$($o.runId)"; repo = "$($o.repo)"; commentId = [long]$o.commentId; created = $o.created; updated = $o.updated
-        current = "$($o.current)"; outcome = "$($o.outcome)"; warning = "$($o.warning)"; stages = $st }
+        current = "$($o.current)"; outcome = "$($o.outcome)"; warning = "$($o.warning)"; approval = "$(if ($o.PSObject.Properties.Name -contains 'approval') { $o.approval })"; stages = $st }
 }
 function Save-ProgressState {
     param([string]$Path, $State)
@@ -761,12 +762,25 @@ function Update-ProgressState {
     return $State
 }
 
+# The approval line at the top of a progress comment ('' for a label approval).
+function Format-ProgressApproval {
+    param([string]$Approval)
+    switch -regex ($Approval) {
+        '^via-policy' { return "Approval: approved via Ve's standing policy (innovation/AUTONOMY.json) after its veto window; no ``approved`` label of its own." }
+        '^via-spec' { return "Approval: $Approval (auto-approved by the spec's approval)." }
+        '^via-request' { return "Approval: $Approval (approved through Ve's request)." }
+    }
+    return ''
+}
+
 function Format-ProgressComment {
     param($State, [string]$Marker = '<!-- innovation-loop -->', [DateTime]$Now = [DateTime]::UtcNow)
     $Now = $Now.ToUniversalTime()
     $sb = New-Object Text.StringBuilder
     [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:ProgressMarker)
     [void]$sb.AppendLine('## Progress'); [void]$sb.AppendLine()
+    $apl = Format-ProgressApproval "$(if ($State.Contains('approval')) { $State.approval })"
+    if ($apl) { [void]$sb.AppendLine($apl); [void]$sb.AppendLine() }
     $stages = $State.stages
     $first = $null
     foreach ($k in $stages.Keys) { $s = ConvertTo-RunDataTime $stages[$k].start; if ($s -and (-not $first -or $s -lt $first)) { $first = $s } }
@@ -831,16 +845,20 @@ function Send-ProgressComment {
     } catch { Write-RunDataLog "progress: $_" 'WARN'; return $false }
 }
 
-# '' when $Repo#$Issue is an issue (not a PR) carrying loop:proposal and approved, else the reason.
-# Checked once, when the progress comment is first created.
+# '' when $Repo#$Issue is an issue (not a PR) carrying loop:proposal and approved, else the reason. -Approval: the
+# approval the runner recorded for this build (state\progress\<run>-<issue>.approval.txt): via-policy / via-spec /
+# via-request builds have no `approved` label of their own. Checked once, when the progress comment is first created.
 function Test-ProgressIssue {
-    param([string]$GhExe, [string]$Repo, [int]$Issue)
+    param([string]$GhExe, [string]$Repo, [int]$Issue, [string]$Approval = '')
     $v = Invoke-RunDataGh -GhExe $GhExe -GhArgs @('api', "repos/$Repo/issues/$Issue")
     if ($v.Code -ne 0) { return "cannot read $Repo#$Issue" }
     $i = $v.Output | ConvertFrom-Json
     if ($i.PSObject.Properties.Name -contains 'pull_request' -and $i.pull_request) { return "$Repo#$Issue is a pull request" }
     $labels = @($i.labels | ForEach-Object { $_.name })
-    foreach ($need in 'loop:proposal', 'approved') { if ($labels -notcontains $need) { return "$Repo#$Issue has no $need label" } }
+    foreach ($need in 'loop:proposal', 'approved') {
+        if ($need -eq 'approved' -and $Approval -match '^via-(policy|spec|request)\b') { continue }
+        if ($labels -notcontains $need) { return "$Repo#$Issue has no $need label" }
+    }
     return ''
 }
 
@@ -856,9 +874,12 @@ function Invoke-LoopProgress {
         $path = Join-Path $dir "$RunId-$Issue.json"
         $st = Read-ProgressState $path
         if (-not $st) {
-            $why = Test-ProgressIssue -GhExe $GhExe -Repo $Repo -Issue $Issue
+            $apf = Join-Path $dir "$RunId-$Issue.approval.txt"; $apv = ''
+            try { if (Test-Path -LiteralPath $apf -PathType Leaf) { $apv = ([IO.File]::ReadAllText($apf)).Trim() } } catch { }
+            $why = Test-ProgressIssue -GhExe $GhExe -Repo $Repo -Issue $Issue -Approval $apv
             if ($why) { Write-RunDataLog "progress: $why; not posting" 'WARN'; return $false }
             $st = New-ProgressState -Issue $Issue -RunId $RunId -Repo $Repo -Stages $Stages
+            $st.approval = $apv
         }
         if ($st.current -eq 'done') { Write-RunDataLog "progress: #$Issue is already done in this run; not changing it" 'WARN'; return $false }
         $st = Update-ProgressState -State $st -Stage $Stage -Status $Status -Detail $Detail -Outcome $Outcome

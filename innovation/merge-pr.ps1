@@ -6,7 +6,8 @@
   MERGE-PR CI-PENDING <state> | MERGE-PR CI-TIMEOUT <state>
 
 .DESCRIPTION
-  1. check-approval.ps1 -Issue <n> must pass (approved by vekbui96, not edited since, not flagged manual)
+  1. check-approval.ps1 -Issue <n> must pass (approved by vekbui96, not edited since, not flagged manual); an
+   issue approved via Ve's standing policy (innovation/AUTONOMY.json) is refused when the merge needs a server deploy
   2. the PR is open, base main, from a branch of this repo named loop/<issue>-<slug>, opened by vekbui96,
      and not a draft
   3. no changed file matches a protected path (lib.ps1 ProtectedPathPatterns: card index, scanner gate,
@@ -92,6 +93,13 @@ try {
     $base = Get-GitValue -Repo $script:Clone -Arguments @('merge-base', 'origin/main', $headSha)
     $plan = Get-ServerPlan -Repo $script:Clone -Target $headSha -OwnCommitsFrom $base
     Write-Log "server plan: liveHead=$($plan.LiveHead) needed=$($plan.ServerNeeded) files=$($plan.ServerFiles -join ',') foreign=$($plan.Foreign -join ',')"
+    # Ve's standing policy (innovation/AUTONOMY.json) covers Pages-only changes: a via-policy approval never takes a
+    # server deploy, its own or one riding along from the gap. Ve's `approved` label is needed for that.
+    $apJson = $null; try { $apJson = (@($ap | Where-Object { "$_".TrimStart().StartsWith('{') }) | Select-Object -Last 1) | ConvertFrom-Json } catch { }
+    if ($null -eq $apJson) { Refuse 'cannot read check-approval.ps1''s verdict (fail closed)' }
+    if ("$($apJson.approval)" -like 'via-policy*' -and $plan.ServerNeeded) {
+        Refuse "issue #$Issue is approved via Ve's standing policy, which covers Pages-only changes, but this merge needs a server deploy ($(@($plan.ServerFiles) -join ', ')): manual / needs Ve (Ve adds ``approved`` to build it with the server)"
+    }
     # $plan.Protected covers live HEAD..PR head. The PR's own files were checked in step 3 (strict). In the gap
     # (commits already on main that the live server lacks) only protected paths that change what the server
     # RUNS refuse; the rest is inert on server-pc and only listed (gate-rules.ps1 Get-GapDecision says why).
