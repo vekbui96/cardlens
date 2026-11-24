@@ -18,6 +18,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\preview-rules.ps1"
+. "$PSScriptRoot\resource-rules.ps1"   # BelowNormal: npm ci and vite (children inherit it) never compete with the services
+[void](Set-LowPriority)
 function Fail([string]$Why) { Write-Output "PREVIEW-BUILD FAILED $Why"; exit 1 }
 try {
     if (-not (Test-Path -LiteralPath (Join-Path $Dir 'package.json'))) { Fail "no package.json in $Dir" }

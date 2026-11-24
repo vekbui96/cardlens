@@ -1412,6 +1412,8 @@ function Invoke-PreviewRound {
         if ($crit.Source -eq 'none') { $out.Why = 'no acceptance criteria (Plan comment) and no How it would be tested'; return $out }
         $crit = [pscustomobject]@{ Source = $crit.Source; Criteria = @(ConvertTo-PreviewCriteria -Criteria @($crit.Criteria) -BaseUrl $pv.Url); Refused = @($crit.Refused) }
         $stat = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--stat=120', "origin/main...$($out.Sha)") -AllowFail -Quiet).Output | Where-Object { "$_".Trim() -and "$_" -notmatch '\|\s+Bin ' })
+        $rg = Get-PreviewQaResourceGate   # resource-rules.ps1 (item B): under 2 GB free RAM no QA session; gate unverified (busy)
+        if (-not $rg.Ok) { $out.Why = $rg.Why; Write-Log "preview #${Issue}: $($rg.Why)" 'WARN'; return $out }
         $q = Invoke-PreviewQaSession -Issue $Issue -Pr $Pr -Sha $out.Sha -Url $pv.Url -Port $pv.Port -Round $Round -Crit $crit -Scope $scope -DiffStat $stat -Title "$($iss.title)" -WfMap $wf
         $out.Qa = $q.Qa; $out.Shots = $q.Shots
         $fails = 0; $regs = 0; if ($q.Qa) { $fails = @($q.Qa.Criteria | Where-Object { $_.Result -eq 'fail' }).Count; $regs = @($q.Qa.Regressions).Count }

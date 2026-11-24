@@ -23,6 +23,7 @@ param([switch]$ShowSlots, [switch]$CleanupSlots)
 
 if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) { . "$PSScriptRoot\lib.ps1" }
 . "$PSScriptRoot\preview-rules.ps1"
+. "$PSScriptRoot\resource-rules.ps1"   # Get-PreviewQaResourceGate (no QA session under 2 GB free RAM), Set-LowPriority
 
 $script:PreviewDir = Join-Path $script:LoopHome 'preview'
 $script:PreviewStatePath = Join-Path $script:LoopHome 'state\previews.json'

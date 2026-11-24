@@ -47,6 +47,8 @@ param(
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\live-check.ps1"   # Get-NoVisibleStringDecision, Find-ModulesInSourceMaps (same rule as deploy.ps1)
 Start-ScriptLog "test-gate-$Issue-$Step"
+. "$PSScriptRoot\resource-rules.ps1"   # BelowNormal for this process and what it starts (npm ci, verify, vite build)
+if (-not (Set-LowPriority)) { Write-Log 'could not lower this process to BelowNormal; the gate runs at normal priority' 'WARN' }
 if (-not $RepoPath) { $RepoPath = $script:Clone }
 $failures = New-Object System.Collections.ArrayList
 $null = Clear-SecretEnv

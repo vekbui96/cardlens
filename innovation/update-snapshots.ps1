@@ -17,6 +17,7 @@
 [CmdletBinding()]
 param([string]$Issue = 'adhoc', [string]$RepoPath = '')
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\resource-rules.ps1"   # Set-LowPriority
 Start-ScriptLog "snapshots-$Issue"
 if (-not $RepoPath) { $RepoPath = $script:Clone }
 $null = Clear-SecretEnv
@@ -36,7 +37,15 @@ try {
     $savedConv = @{ MSYS_NO_PATHCONV = $env:MSYS_NO_PATHCONV; MSYS2_ARG_CONV_EXCL = $env:MSYS2_ARG_CONV_EXCL }
     $env:MSYS_NO_PATHCONV = '1'; $env:MSYS2_ARG_CONV_EXCL = '*'
     try {
-        $r = Invoke-Native -File $bash -Arguments @('scripts/snapshots-linux.sh') -WorkDir $full -AllowFail -Quiet
+        # one test browser at a time across the loops (browser-lock.mjs): the baselines run Playwright in the
+        # container, so they take the shared slot (wait up to 10 min). They are needed for the build, so a busy slot
+        # only delays them: after the wait they run anyway, logged. BelowNormal for this process tree (the docker
+        # client; the container itself runs in Docker's VM, whose priority Windows does not take from here).
+        Set-LowPriority
+        $lk = Invoke-Native -File $script:NodeExe -Arguments @("$PSScriptRoot\browser-lock.mjs", 'acquire', '--what', "docker baselines #$Issue", '--owner-pid', "$PID", '--hold-min', '20', '--wait-sec', '600', '--no-memory') -AllowFail -Quiet
+        if ($lk.Code -ne 0) { Write-Log "browser slot busy after 10 min, running the baselines anyway: $(@($lk.Output) | Select-Object -Last 1)" 'WARN' }
+        try { $r = Invoke-Native -File $bash -Arguments @('scripts/snapshots-linux.sh') -WorkDir $full -AllowFail -Quiet }
+        finally { if ($lk.Code -eq 0) { $null = Invoke-Native -File $script:NodeExe -Arguments @("$PSScriptRoot\browser-lock.mjs", 'release', '--owner-pid', "$PID") -AllowFail -Quiet } }
     } finally {
         foreach ($k in @($savedConv.Keys)) { if ($null -eq $savedConv[$k]) { Remove-Item -LiteralPath "env:$k" -ErrorAction SilentlyContinue } else { Set-Item -LiteralPath "env:$k" -Value $savedConv[$k] } }
     }

@@ -4,10 +4,11 @@
 //
 // usage: node smoke.mjs <repoPath> <url> [screenshot.png]
 // exit 0 = rendered, 1 = did not render / page error, 2 = could not run (no playwright-core / no browser)
-/* global process, console, document */
+/* global process, console, document, setTimeout, clearTimeout */
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { acquireBrowserSlot, setLowPriority } from "./browser-lock.mjs";
 
 const [repoPath, url, shot] = process.argv.slice(2);
 if (!repoPath || !url) {
@@ -40,6 +41,21 @@ if (!executablePath) {
   process.exit(2);
 }
 
+// One test browser at a time across the loops (browser-lock.mjs): BelowNormal priority (the browser inherits it),
+// skipped under 2 GB free RAM or when another loop's browser holds the slot past the wait. Skipped = exit 2 ("could
+// not run"): the callers treat the render check as unverified and rely on the served-bytes checks (fail-open).
+setLowPriority();
+const slot = await acquireBrowserSlot({ what: `smoke ${url}`, holdMinutes: 6, waitMs: 300000 });
+if (!slot.ok) {
+  console.error(`render check skipped, unverified (busy): ${slot.why}`);
+  process.exit(2);
+}
+// hard cap: one browser session never runs longer than 5 minutes
+const killer = setTimeout(() => {
+  console.error("smoke failed: timed out after 5 minutes");
+  slot.release();
+  process.exit(1);
+}, 300000);
 const browser = await chromium.launch({ executablePath, headless: true });
 const pageErrors = [];
 const consoleErrors = [];
@@ -89,4 +105,6 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
+  clearTimeout(killer);
+  slot.release();
 }
