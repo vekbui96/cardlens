@@ -81,6 +81,23 @@ describe("a set row", () => {
     expect(screen.queryByTestId("set-progress")).not.toBeInTheDocument();
   });
 
+  it("marks a bar with even a tiny share as started, so CSS can floor its fill at 4px", () => {
+    const big: PokemonSet = { id: "big", name: "Big", total: 500, printedTotal: 500 };
+    render(<SetRow row={model(big, held(1))} />);
+
+    const fills = screen.getAllByRole("progressbar").map((bar) => bar.firstElementChild);
+    expect(fills.length).toBeGreaterThan(0);
+    // 1/500 rounds to 0% in aria-valuenow, which is why the flag is not that.
+    for (const fill of fills) expect(fill).toHaveAttribute("data-started", "true");
+  });
+
+  it("does not mark an empty tier bar as started", () => {
+    render(<SetRow row={model(OBF, held(0, 1))} />);
+
+    const base = screen.getByRole("progressbar", { name: "Obsidian Flames base set" });
+    expect(base.firstElementChild).toHaveAttribute("data-started", "false");
+  });
+
   it("draws the set code in a placeholder when the logo is missing", () => {
     render(<SetRow row={model(OBF, held(3))} />);
     expect(screen.getByText("OBF")).toBeInTheDocument();
