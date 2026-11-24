@@ -285,30 +285,10 @@
   max-width: 20ch;
   margin-bottom: var(--v2-space-3);
   border-radius: var(--v2-radius-sm);
-  background: var(--v2-surface-raised);
-  animation: setShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
 }
 
+/* Same size as a real pocket, so the cards replace it without a jump. */
 .skeletonPocket {
   aspect-ratio: var(--v2-card-aspect);
   border-radius: var(--v2-radius-sm);
-  background: linear-gradient(
-    160deg,
-    var(--v2-surface-raised) 25%,
-    var(--v2-surface) 63%,
-    var(--v2-surface-raised)
-  );
-  animation: setShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
-}
-
-@keyframes setShimmer {
-  from {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0.5;
-  }
 }
