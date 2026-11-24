@@ -88,13 +88,13 @@ export function SetsView({
       </Row>
 
       <div role="group" aria-label="Sort sets by">
-        <Row gap={2} wrap>
+        <div className={styles.sortRow} data-testid="sort-chips">
           {SET_SORTS.map((s) => (
             <Chip key={s.key} onPress={() => onSort(s.key)} pressed={s.key === sort}>
               {s.label}
             </Chip>
           ))}
-        </Row>
+        </div>
       </div>
 
       {isError ? (

@@ -91,6 +91,27 @@
   white-space: nowrap;
 }
 
+/* Sync is not connected yet: this is the action, so it reads as one. */
+.syncConnect {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent-strong);
+  min-height: var(--v2-tap);
+}
+
+/* One scrollable row of sort chips: never wraps onto a second line. */
+.sortRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--v2-space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sortRow > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* On is a filled dot's worth of colour AND the word "on" in the label itself. */
 .syncOn {
   border-color: var(--v2-accent);

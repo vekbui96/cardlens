@@ -84,6 +84,7 @@ export function CollectionScreen() {
   };
 
   const sync = syncLine(syncStatus);
+  const needsConnect = syncStatus.state === "off";
   const summary = summaryLine(collection.length, totalFinishesOwned, groups);
 
   return (
@@ -132,12 +133,17 @@ export function CollectionScreen() {
         */}
         <button
           type="button"
-          className={cx(styles.button, styles.sync, sync.on && styles.syncOn)}
+          className={cx(
+            styles.button,
+            styles.sync,
+            sync.on && styles.syncOn,
+            needsConnect && styles.syncConnect,
+          )}
           onClick={() => void onSync()}
           aria-label={`${sync.label}. ${sync.hint || "No action available"}`}
           data-snapshot="volatile"
         >
-          {sync.label}
+          {needsConnect ? `${sync.label} · ${sync.hint}` : sync.label}
         </button>
       </Row>
 
