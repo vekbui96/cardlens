@@ -21,6 +21,33 @@
   margin: var(--v2-space-0);
 }
 
+/* The one next step on a fresh device: a link that looks like ErrorNotice's primary button. */
+.browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  box-sizing: border-box;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-accent);
+  color: var(--v2-on-accent);
+  font-weight: var(--v2-fw-medium);
+  text-decoration: none;
+}
+
+/* Global link colours would otherwise win over the label colour. */
+.browse:link,
+.browse:visited {
+  color: var(--v2-on-accent);
+  text-decoration: none;
+}
+
+.browse:hover {
+  background: var(--v2-accent-strong);
+}
+
 .kind {
   font-size: var(--v2-fs-small);
   color: var(--v2-fg-muted);

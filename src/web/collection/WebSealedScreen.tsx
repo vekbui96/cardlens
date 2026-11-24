@@ -1,4 +1,5 @@
 import { useNavigation } from "../../app/NavigationProvider.tsx";
+import { useLibrary } from "../../app/LibraryProvider.tsx";
 import { useSealed } from "../../hooks/useSealed.ts";
 import { SEALED_KINDS } from "../../models/sealed.ts";
 import { formatUsd } from "../../utils/format.ts";
@@ -17,19 +18,30 @@ import styles from "./WebSealedScreen.module.css";
  */
 export function WebSealedScreen() {
   const { push } = useNavigation();
+  const { collection } = useLibrary();
   const { rows, pending, missing } = useSealed();
+  const nothingCollected = collection.length === 0;
 
   return (
     <section className={styles.screen} aria-label="Sealed prices">
       <header className={styles.head}>
         <h2 className={styles.title}>Sealed prices</h2>
-        <p className={styles.summary}>
-          Pack and box prices for the {rows.length} {rows.length === 1 ? "set" : "sets"} you collect
-          {pending > 0 ? ` · loading ${pending} more…` : ""}
-        </p>
+        {nothingCollected ? null : (
+          <p className={styles.summary}>
+            Pack and box prices for the {rows.length} {rows.length === 1 ? "set" : "sets"} you collect
+            {pending > 0 ? ` · loading ${pending} more…` : ""}
+          </p>
+        )}
       </header>
 
-      {rows.length === 0 && pending === 0 ? (
+      {nothingCollected ? (
+        <div className={styles.empty}>
+          <p>Mark a card as owned and its set&rsquo;s sealed prices show up here.</p>
+          <button type="button" className={styles.browse} onClick={() => push({ name: "sets" })}>
+            Browse sets
+          </button>
+        </div>
+      ) : rows.length === 0 && pending === 0 ? (
         <p className={styles.empty}>
           No sealed product found for your sets. Promos and tins are not sold in packs, so there is nothing
           upstream to price.

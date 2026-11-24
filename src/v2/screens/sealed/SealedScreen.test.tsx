@@ -95,10 +95,13 @@ describe("with nothing collected", () => {
     render(<SealedScreen />, { wrapper: harness() });
 
     expect(await screen.findByRole("heading", { name: "Nothing collected yet" })).toBeInTheDocument();
-    expect(screen.getByText(/Mark a card as owned/i)).toBeInTheDocument();
-    // Sealed prices are public catalog data — it needs no token of its own, and
-    // saying so stops "connect something" being the assumed fix.
-    expect(screen.getByText(/no token of their own/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Mark a card as owned and its set.s sealed prices show up here/i),
+    ).toBeInTheDocument();
+    // One next step, a real link to the set list.
+    expect(screen.getByRole("link", { name: "Browse sets" })).toHaveAttribute("href", "#/sets");
+    // No "0 sets" wording on a fresh device.
+    expect(screen.queryByText(/\b0 sets?\b/i)).toBeNull();
     expect(screen.queryByText(/failed|error/i)).toBeNull();
   });
 });

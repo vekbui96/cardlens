@@ -123,6 +123,23 @@
   color: var(--cl-fg-muted);
 }
 
+.empty p {
+  margin: 0 0 var(--cl-gap);
+}
+
+.browse {
+  min-height: 44px;
+  padding: 0 var(--cl-gap-lg);
+  border: none;
+  border-radius: var(--cl-radius);
+  background: var(--cl-accent);
+  color: var(--cl-on-accent);
+  font-family: inherit;
+  font-size: var(--cl-fs-body);
+  font-weight: 650;
+  cursor: pointer;
+}
+
 @media (min-width: 700px) {
   .prices {
     grid-template-columns: repeat(4, minmax(0, 1fr));
