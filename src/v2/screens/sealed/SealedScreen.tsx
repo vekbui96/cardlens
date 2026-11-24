@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import { useSealed, type SealedRow } from "../../../hooks/useSealed.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { SEALED_KINDS } from "../../../models/sealed.ts";
@@ -35,7 +36,7 @@ import styles from "./sealed.module.css";
  *
  * No token of any kind is involved: `/api/sealed/:setId` is public catalog
  * data. What the screen needs is a COLLECTION, which is why its empty state
- * talks about marking cards and about the collection sync token.
+ * talks about marking cards and offers the way to the set list.
  */
 export function SealedScreen() {
   const { push } = useNavigation();
@@ -84,7 +85,9 @@ export function SealedScreen() {
     <Stack gap={5}>
       <header>
         <h1 className={styles.h1}>Sealed prices</h1>
-        <p className={styles.lead}>{summary({ priced: rows.length, setCount, waiting, collected })}</p>
+        {collected ? (
+          <p className={styles.lead}>{summary({ priced: rows.length, setCount, waiting })}</p>
+        ) : null}
       </header>
 
       {!collected ? <NoCollection /> : null}
@@ -143,14 +146,11 @@ function summary({
   priced,
   setCount,
   waiting,
-  collected,
 }: {
   priced: number;
   setCount: number;
   waiting: boolean;
-  collected: boolean;
 }): string {
-  if (!collected) return "Nothing is collected on this device yet.";
   if (waiting && priced === 0) return `Pricing ${setCount} ${setCount === 1 ? "set" : "sets"}…`;
   const line = `${priced} of ${setCount} ${setCount === 1 ? "set" : "sets"} priced`;
   return waiting ? `${line} · still loading` : line;
@@ -214,23 +214,17 @@ function SetPrices({ row, onOpen }: { row: SealedRow; onOpen: () => void }) {
  * No collection on this device.
  *
  * The screen is empty for a reason that has an action attached, so it says the
- * action. This is also the "no token" state: sealed prices need none of their
- * own, but the collection they follow arrives either by marking cards here or
- * by connecting this device with the collection sync token.
+ * action in one sentence and offers the one next step: the set list.
  */
 function NoCollection() {
   return (
     <Panel title="Nothing collected yet" tone="raised">
       <Stack gap={3}>
-        <p>
-          Sealed prices follow the sets you collect, so there is nothing to price until this device holds some
-          cards. Mark a card as owned — or connect this device to your collection with the sync token — and
-          its set&rsquo;s pack, box, bundle and ETB prices appear here.
-        </p>
-        <p className={styles.meta}>
-          These prices need no token of their own: they are public catalog data, read from TCGplayer&rsquo;s
-          daily dump.
-        </p>
+        <p>Mark a card as owned and its set&rsquo;s sealed prices show up here.</p>
+        {/* A real link to a real route, like EmptyStart's tiles (#165). */}
+        <a className={styles.browse} href={`#${screenToPath({ name: "sets" })}`}>
+          Browse sets
+        </a>
       </Stack>
     </Panel>
   );

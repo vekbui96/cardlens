@@ -270,10 +270,8 @@ test.describe("Sealed", () => {
     await openSealed(page);
 
     await expect(page.getByRole("heading", { name: "Nothing collected yet" })).toBeVisible();
-    await expect(page.getByRole("main")).toContainText("Mark a card as owned");
-    // It needs no token of its own, and says so — otherwise "connect something"
-    // is the assumed fix for a screen that needs a collection instead.
-    await expect(page.getByRole("main")).toContainText("no token of their own");
+    await expect(page.getByRole("main")).toContainText("sealed prices show up here");
+    await expect(page.getByRole("link", { name: "Browse sets" })).toBeVisible();
   });
 
   test("an unpriced product reads Unavailable, never $0.00", async ({ page }) => {
