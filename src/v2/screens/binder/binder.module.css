@@ -295,6 +295,8 @@ button.pocket:hover {
 /* "Unpriced" is the absence of a price, not a price: muted, like Money's absent state. */
 .priceAbsent {
   color: var(--v2-fg-muted);
+  /* 12px, up from the 11px mark size: readable on the scrim, still one line in a pocket. */
+  font-size: 12px; /* v2-tokens-allow: between --v2-fs-tiny (11) and --v2-fs-small (13) */
 }
 
 /* Stacked above the tag when a pocket carries both. */
@@ -791,9 +793,14 @@ button.pocket:hover {
   line-height: var(--v2-lh-tight);
 }
 
+/* Set / number / finish line: 16px, muted (--v2-fg-muted on the dark stage is well over 4.5:1). */
+.showMeta {
+  font-size: 16px; /* v2-tokens-allow: readable at arm's length, above --v2-fs-body (15) */
+}
+
 .showPrice {
   color: var(--v2-price);
-  font-size: var(--v2-fs-small);
+  font-size: 16px; /* v2-tokens-allow: matches the caption line above it */
   font-variant-numeric: tabular-nums;
 }
 

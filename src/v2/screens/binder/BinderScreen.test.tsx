@@ -506,6 +506,19 @@ describe("show off", () => {
     expect(within(view).queryByText("$0.00")).not.toBeInTheDocument();
   });
 
+  it("gives the showcase caption line its own readable-size class", async () => {
+    threePlusCover();
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    await user.click(screen.getByRole("button", { name: "Show off" }));
+    const view = screen.getByRole("dialog", { name: "Showcase: Jolteon" });
+
+    const meta = view.querySelector("[data-show-meta]");
+    expect(meta).not.toBeNull();
+    expect(meta?.className).toMatch(/showMeta/);
+  });
+
   it("an empty binder says what to do next, and the way back closes the view", async () => {
     save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
     const user = userEvent.setup();
