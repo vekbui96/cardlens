@@ -38,12 +38,20 @@ Check (-not (Pol '"includeSpecs":true,' '').Enabled) 'includeSpecs missing -> of
 Check (-not (Pol '"server-deploy",' '').Enabled) 'exclude without server-deploy -> off (the policy cannot be widened)'
 Check (-not (Pol '"protected"]' '"protected","money"]').Enabled) 'an exclusion this loop does not implement -> off'
 Check ((Pol '"includeSpecs":true' '"includeSpecs":false').IncludeSpecs -eq $false) 'includeSpecs false is read'
+# the look window before a via-policy merge (Ve, 2026-11-24): optional, 0..24
+Check ($p.MergeLookHours -eq 0) 'no mergeLookHours: no look window (0)'
+Check ((Pol '"vetoHours":6' '"vetoHours":6,"mergeLookHours":1').MergeLookHours -eq 1) 'mergeLookHours 1 is read'
+Check ((Pol '"vetoHours":6' '"vetoHours":6,"mergeLookHours":0').Enabled) 'mergeLookHours 0 keeps the policy on (window off)'
+Check (-not (Pol '"vetoHours":6' '"vetoHours":6,"mergeLookHours":"1"').Enabled) 'mergeLookHours as a string -> off (fail closed)'
+Check (-not (Pol '"vetoHours":6' '"vetoHours":6,"mergeLookHours":-1').Enabled -and -not (Pol '"vetoHours":6' '"vetoHours":6,"mergeLookHours":48').Enabled) 'mergeLookHours below 0 or over 24 -> off'
+Check (-not (Get-AutonomyPolicy -Exists $false).MergeLookHours) 'policy off: no look window either'
 
 # the committed policy file: Ve's decision of 2026-11-23, valid for this loop
 $file = Read-AutonomyPolicy -Path (Join-Path $PSScriptRoot $script:AutonomyFileName)
 Check ($file.Enabled -and $file.VetoHours -eq 1 -and $file.IncludeSpecs -and $file.SetBy -eq 'vekbui96' -and $file.SetOn -eq '2026-11-23') "innovation/AUTONOMY.json is valid and on ($($file.Reason))"
 $fj = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $script:AutonomyFileName)) | ConvertFrom-Json
 Check ("$($fj.decision)" -match 'Everything but server/data' -and "$($fj.decision)" -match '2026-11-23') 'the policy file records Ve''s decision and its date'
+Check ($file.MergeLookHours -eq 1 -and "$($fj.mergeLookSetOn)" -eq '2026-11-24' -and "$($fj.mergeLookDecision)" -match 'veto option A' -and $fj.vetoHours -eq 1) 'AUTONOMY.json: the look window (1 h, Ve 2026-11-24), the proposal veto kept'
 Check (@($script:ProtectedPathPatterns | Where-Object { 'innovation/AUTONOMY.json' -match $_ }).Count -gt 0) 'innovation/AUTONOMY.json is a protected path (merge-pr refuses a PR that touches it)'
 
 # ---- scope: what the policy covers ---------------------------------------------------------------------------

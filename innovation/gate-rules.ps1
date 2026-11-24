@@ -1182,9 +1182,13 @@ function Split-BuildableByBudget {
 # (-Request) but never the plan budget's hold.
 function Get-PrecheckDecision {
     param($Queue, [string]$Mode = 'FULL', $Budget = $null, [int[]]$Deferred = @(), [bool]$PhaseBAllowed = $true,
-        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @(), $Coordinator = $null, [int]$QaUx = 0)
+        [string]$BuildCap = '', [string]$PhaseBCap = '', [int]$Intake = 0, [int[]]$RequestBuilds = @(), $Coordinator = $null, [int]$QaUx = 0, [int[]]$ParkedDue = @())
     $mk = { param([bool]$L, [string]$Why, [bool]$H = $false) [pscustomobject]@{ Launch = $L; Reason = $Why; Hold = $H } }
     if ($Budget -and $Budget.Verdict -eq 'hold') { return (& $mk $false "$($Budget.Reason): no claude session" $true) }
+    # a parked via-policy merge whose look window is over (preview-rules.ps1 Get-UnparkDecision) finishes a build that
+    # already started: it goes before everything else and the daily build cap does not apply to it
+    $pkd = @($ParkedDue | Where-Object { $null -ne $_ })
+    if ($Mode -eq 'FULL' -and $pkd.Count -gt 0) { return (& $mk $true "parked merge(s) whose look window is over: $(@($pkd | ForEach-Object { "#$_" }) -join ' ')") }
     if ($Mode -ne 'PRODUCT_REVIEW' -and $Intake -gt 0) { return (& $mk $true "$Intake request(s) of Ve's to plan (intake goes first)") }
     if ($Mode -eq 'FULL' -and $null -ne $Queue -and @($RequestBuilds | Where-Object { $null -ne $_ -and @($Deferred) -notcontains [int]$_ }).Count -gt 0) {
         return (& $mk $true "Ve's request issue(s) buildable: $(@($RequestBuilds | ForEach-Object { "#$_" }) -join ' ') (requests go first; no daily cap)")
@@ -1336,11 +1340,12 @@ function Get-RequestPlanChildren {
 # (newest last, at most $Keep runs including this one). $Buildable / $NeedsOpus: issue numbers; $Progress: builds
 # that ended loop:deployed in this run; $RolledBack: a build of this run was rolled back; $NeedsVe: the run stopped
 # on an uncertain deploy (DEPLOY STATE UNCERTAIN); $BuildCapped: the daily build cap's refusal ('' = not capped);
-# $PolicyDueAt: the earliest end of a via-policy veto window still to come (ISO UTC, '' = none).
+# $PolicyDueAt: the earliest end of a via-policy veto window still to come (ISO UTC, '' = none); $MergeDueAt: the
+# earliest end of a look window of a parked via-policy merge (preview-rules.ps1 Get-NextMergeDue; '' = none).
 function New-DrainState {
     param([string]$RunId, [datetime]$EndedAt = (Get-Date), [string]$Result = '', [int[]]$Buildable = @(), [int[]]$NeedsOpus = @(),
         [int]$Progress = 0, [bool]$RolledBack = $false, [bool]$NeedsVe = $false, [string]$BuildCapped = '', $Previous = $null, [int]$Keep = 6,
-        [string]$PolicyDueAt = '')
+        [string]$PolicyDueAt = '', [string]$MergeDueAt = '')
     $b = @($Buildable | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
     $head = 0; if ($b.Count -gt 0) { $head = $b[0] }
     $h = @(); if ($Previous -and $Previous.PSObject.Properties.Name -contains 'history') { $h = @($Previous.history | Where-Object { $_ -and "$($_.runId)" -ne $RunId }) }
@@ -1348,27 +1353,30 @@ function New-DrainState {
     if ($h.Count -gt $Keep) { $h = @($h | Select-Object -Last $Keep) }
     return [ordered]@{ schema = 1; runId = $RunId; endedAt = $EndedAt.ToString('o'); result = $Result; buildable = @($b); head = $head
         needsOpus = @($NeedsOpus | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ }); progress = $Progress; rolledBack = $RolledBack; needsVe = $NeedsVe
-        buildCapped = $BuildCapped; policyDueAt = $PolicyDueAt; history = @($h) }
+        buildCapped = $BuildCapped; policyDueAt = $PolicyDueAt; mergeDueAt = $MergeDueAt; history = @($h) }
 }
 
 # May the watcher start the loop's task to drain the queue now? $Drain: the parsed drain.json; $Running: the task is
 # running or a live run holds the loop's lock; $Verdict: the ops hub's plan-budget verdict; $Done: the watcher's
 # state keys (a drain key starts at most one run per finished run). Start + Key + Reason. In order:
 #   no drain state                                                                   -> no
-#   nothing buildable, and no via-policy veto window ended yet (policyDueAt)          -> no
+#   nothing buildable, and no via-policy veto window or look window ended yet         -> no
+#   (policyDueAt / mergeDueAt)
 #   already drained after this run                                                   -> no
 #   the last run stopped on an uncertain deploy (needsVe)                            -> no (Ve first)
 #   plan budget hold; no-opus while every buildable issue needs Opus                 -> no
 #   a run in progress                                                                -> no
 #   the last run ended less than $IdleMinutes ago                                    -> not yet
 #   the daily build cap was reached today                                            -> no
-#   a via-policy veto window ended (nothing else buildable)                          -> start (the run re-checks it)
+#   a via-policy veto window or a parked merge's look window ended (nothing else       -> start (the run re-checks it)
+#   buildable)
 #   the last run rolled a build back, or the last $FailRuns runs all had the same queue head and deployed nothing
 #   (failed, skipped or stopped)                                                     -> back off $BackoffMinutes after the last run
 #   otherwise                                                                        -> start
 # policyDueAt (drain.json): the earliest end of a via-policy veto window after that run (gate-rules.ps1
 # Get-ViaPolicyDecision). Once it has passed an issue may be buildable; the run re-checks every approval itself, and
-# finds nothing ($0) if Ve held or closed it meanwhile.
+# finds nothing ($0) if Ve held or closed it meanwhile. mergeDueAt (drain.json): the earliest end of the look window of a
+# via-policy build parked before its merge (preview-rules.ps1); the run then re-checks the hold and the PR head and merges.
 function Get-DrainDecision {
     param($Drain, [bool]$Running = $false, [string]$Verdict = 'normal', [datetime]$Now = (Get-Date), [string[]]$Done = @(), [string]$Repo = '',
         [int]$IdleMinutes = 15, [int]$FailRuns = 2, [int]$BackoffMinutes = 120)
@@ -1379,9 +1387,12 @@ function Get-DrainDecision {
         if ([datetime]::TryParse("$x", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { return $p.ToUniversalTime() }; return $null }
     $b = @(@($Drain.buildable) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" })
     $pd = $null; if ($Drain.PSObject.Properties.Name -contains 'policyDueAt' -and "$($Drain.policyDueAt)") { $pd = & $toUtc $Drain.policyDueAt }
+    $md = $null; if ($Drain.PSObject.Properties.Name -contains 'mergeDueAt' -and "$($Drain.mergeDueAt)") { $md = & $toUtc $Drain.mergeDueAt }
+    $what = 'via-policy veto window'
+    if ($null -ne $md -and ($null -eq $pd -or $md -lt $pd)) { $pd = $md; $what = 'look window of a parked merge' }
     $policy = ($b.Count -eq 0 -and $null -ne $pd -and $Now.ToUniversalTime() -ge $pd)
     if ($b.Count -eq 0 -and -not $policy) {
-        if ($null -ne $pd) { return (& $mk $false '' "nothing buildable after run $($Drain.runId); next via-policy veto window ends $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))") }
+        if ($null -ne $pd) { return (& $mk $false '' "nothing buildable after run $($Drain.runId); next $what ends $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))") }
         return (& $mk $false '' "nothing buildable after run $($Drain.runId)")
     }
     if (@($Done) -contains $key) { return (& $mk $false '' "already started a drain run after run $($Drain.runId)") }
@@ -1396,7 +1407,7 @@ function Get-DrainDecision {
     $idle = ($Now.ToUniversalTime() - $end).TotalMinutes
     if ($idle -lt $IdleMinutes) { return (& $mk $false '' "run $($Drain.runId) ended $([int]$idle) min ago (wait $IdleMinutes)") }
     if ("$($Drain.buildCapped)" -and $end.ToLocalTime().Date -eq $Now.Date) { return (& $mk $false '' "daily build cap reached today ($($Drain.buildCapped))") }
-    if ($policy) { return (& $mk $true $key "via-policy veto window ended $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm')) after run $($Drain.runId): re-check the queue") }
+    if ($policy) { return (& $mk $true $key "$what ended $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm')) after run $($Drain.runId): re-check the queue") }
     $h = @(@($Drain.history) | Where-Object { $_ })
     $last = @($h | Select-Object -Last $FailRuns)
     $stuck = ($last.Count -ge $FailRuns -and @($last | Where-Object { "$($_.head)" -eq "$($b[0])" -and "$($_.progress)" -eq '0' }).Count -eq $last.Count)
@@ -1694,7 +1705,7 @@ $script:ViaPolicySensitive = @(
 # problem means Enabled = $false (manual approval), with the reason.
 function Get-AutonomyPolicy {
     param([bool]$Exists = $true, [AllowNull()][AllowEmptyString()][string]$Text = '', [string]$ReadError = '', [string]$Loop = $script:ViaPolicyLoop)
-    $off = { param([string]$Why) [pscustomobject]@{ Enabled = $false; VetoHours = 0; IncludeSpecs = $false; Exclude = @(); SetBy = ''; SetOn = ''; Reason = $Why } }
+    $off = { param([string]$Why) [pscustomobject]@{ Enabled = $false; VetoHours = 0; MergeLookHours = 0; IncludeSpecs = $false; Exclude = @(); SetBy = ''; SetOn = ''; Reason = $Why } }
     if (-not $Exists) { return (& $off "no innovation/$($script:AutonomyFileName): manual approval only") }
     if ($ReadError) { return (& $off "$($script:AutonomyFileName) unreadable ($(ConvertTo-SafeLine $ReadError 120)): manual approval only (fail closed)") }
     if ([string]::IsNullOrWhiteSpace($Text)) { return (& $off "$($script:AutonomyFileName) is empty: manual approval only (fail closed)") }
@@ -1709,6 +1720,14 @@ function Get-AutonomyPolicy {
     if (-not $j.enabled) { return (& $off "switched off by Ve ($($script:AutonomyFileName) enabled: false): manual approval only") }
     $vh = $j.vetoHours
     if (-not ($vh -is [int] -or $vh -is [long] -or $vh -is [double] -or $vh -is [decimal]) -or [double]$vh -lt 1 -or [double]$vh -gt 168) { return (& $off "$($script:AutonomyFileName) vetoHours must be a number from 1 to 168: manual approval only (fail closed)") }
+    # mergeLookHours (Ve, 2026-11-24): the look window on the working preview before a via-policy merge (preview-rules.ps1
+    # Get-LookWindowDecision). Optional (absent = 0, no window); when present, a number from 0 to 24.
+    $lh = [double]0
+    if ($names -contains 'mergeLookHours') {
+        $mv = $j.mergeLookHours
+        if (-not ($mv -is [int] -or $mv -is [long] -or $mv -is [double] -or $mv -is [decimal]) -or [double]$mv -lt 0 -or [double]$mv -gt 24) { return (& $off "$($script:AutonomyFileName) mergeLookHours must be a number from 0 to 24: manual approval only (fail closed)") }
+        $lh = [double]$mv
+    }
     if ($names -notcontains 'includeSpecs' -or -not ($j.includeSpecs -is [bool])) { return (& $off "$($script:AutonomyFileName) includeSpecs is not true or false: manual approval only (fail closed)") }
     $ex = @(@($j.exclude) | Where-Object { $null -ne $_ } | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Select-Object -Unique)
     $missing = @($script:ViaPolicyExcludes | Where-Object { $ex -notcontains $_ })
@@ -1716,8 +1735,8 @@ function Get-AutonomyPolicy {
     if ($missing.Count -gt 0) { return (& $off "$($script:AutonomyFileName) exclude lacks $($missing -join ', '): manual approval only (fail closed)") }
     if ($unknown.Count -gt 0) { return (& $off "$($script:AutonomyFileName) exclude names $(ConvertTo-SafeLine ($unknown -join ', ') 80), which this loop does not implement: manual approval only (fail closed)") }
     $by = ConvertTo-SafeLine "$($j.setBy)" 40; $on = ConvertTo-SafeLine "$($j.setOn)" 20
-    return [pscustomobject]@{ Enabled = $true; VetoHours = [double]$vh; IncludeSpecs = [bool]$j.includeSpecs; Exclude = @($ex); SetBy = $by; SetOn = $on
-        Reason = "via-policy on (set by $by on $on; veto window $([double]$vh) h; specs $(if ($j.includeSpecs) { 'included' } else { 'excluded' }))" }
+    return [pscustomobject]@{ Enabled = $true; VetoHours = [double]$vh; MergeLookHours = $lh; IncludeSpecs = [bool]$j.includeSpecs; Exclude = @($ex); SetBy = $by; SetOn = $on
+        Reason = "via-policy on (set by $by on $on; veto window $([double]$vh) h; look window before the merge $lh h; specs $(if ($j.includeSpecs) { 'included' } else { 'excluded' }))" }
 }
 # Get-AutonomyPolicy over a file. Never throws.
 function Read-AutonomyPolicy {
@@ -1940,7 +1959,7 @@ function Read-ViaPolicyState {
 # becomes approved-by-hand (Ve's label) or gone (closed, deployed, ...), unless a build outcome says more.
 function Update-ViaPolicyState {
     param($State, [object[]]$Entries = @(), [hashtable]$Approvals = @{}, [hashtable]$Posted = @{}, [hashtable]$Outcomes = @{}, [hashtable]$Previews = @{}, $Policy = $null, [bool]$PolicyEnabled = $true,
-        [string]$RunId = '', [string]$Repo = '', [string]$Loop = $script:ViaPolicyLoop, [datetime]$NowUtc = [datetime]::UtcNow)
+        [string]$RunId = '', [string]$Repo = '', [string]$Loop = $script:ViaPolicyLoop, [datetime]$NowUtc = [datetime]::UtcNow, [hashtable]$Parked = @{})
     $now = $NowUtc.ToUniversalTime().ToString('o')
     $old = @{}; if ($State -and $State.Issues) { foreach ($k in $State.Issues.Keys) { $old[[int]$k] = $State.Issues[$k] } }
     $out = [ordered]@{}; $events = New-Object System.Collections.ArrayList
@@ -1955,12 +1974,14 @@ function Update-ViaPolicyState {
         if ($prev -and -not $nAt) { $nAt = "$(& $get $prev 'noticedAt')"; $dAt = "$(& $get $prev 'dueAt')"; try { $cid = [long](& $get $prev 'commentId') } catch { } }
         $pst = "$(& $get $prev 'status')"
         if ($Outcomes.ContainsKey($n)) { $st = "$($Outcomes[$n])" }
+        elseif ($Parked.ContainsKey($n)) { $st = 'parked' }   # parked before its merge: Ve can look at the preview until mergeAt
         elseif ($pst -in @('deployed', 'failed', 'rolled-back') -and $st -in @('ineligible', 'closed')) { $st = $pst }   # keep the build result
         $rec = [ordered]@{ issue = $n; title = (ConvertTo-SafeLine "$($e.title)" 120); spec = [bool]$e.spec; status = $st; noticedAt = $nAt; dueAt = $dAt; commentId = $cid
             reasons = @(@($e.reasons) | Where-Object { $_ } | ForEach-Object { ConvertTo-SafeLine "$_" 200 } | Select-Object -First 4)
             statusAt = $(if ($pst -eq $st -and $prev) { "$(& $get $prev 'statusAt')" } else { $now }); url = $(if ($Repo) { "https://github.com/$Repo/issues/$n" } else { '' })
-            approvedAt = "$(& $get $prev 'approvedAt')"; outcome = "$(& $get $prev 'outcome')"; runId = "$(& $get $prev 'runId')"; preview = (& $get $prev 'preview') }
+            approvedAt = "$(& $get $prev 'approvedAt')"; outcome = "$(& $get $prev 'outcome')"; runId = "$(& $get $prev 'runId')"; preview = (& $get $prev 'preview'); mergeAt = '' }
         if ($Previews.ContainsKey($n)) { $rec.preview = $Previews[$n] }
+        if ($Parked.ContainsKey($n) -and -not $Outcomes.ContainsKey($n)) { $rec.mergeAt = "$($Parked[$n].mergeAt)"; if ("$($Parked[$n].url)" -and $null -eq $rec.preview) { $rec.preview = [ordered]@{ status = 'up'; url = "$($Parked[$n].url)"; pr = [int]$Parked[$n].pr; headSha = "$($Parked[$n].sha)"; mergeAt = "$($Parked[$n].mergeAt)" } } }
         if ($st -eq 'due' -and -not $rec.approvedAt) { $rec.approvedAt = $dAt }
         if ($Outcomes.ContainsKey($n)) { $rec.outcome = "$($Outcomes[$n])"; $rec.runId = $RunId }
         $out["$n"] = $rec
@@ -1971,11 +1992,13 @@ function Update-ViaPolicyState {
         $p = $old[$n]; $pst = "$(& $get $p 'status')"
         $st = $pst
         if ($Outcomes.ContainsKey([int]$n)) { $st = "$($Outcomes[[int]$n])" }
-        elseif ($pst -in @('waiting', 'due', 'needs-notice') -and -not $PolicyEnabled) { $st = 'off' }
-        elseif ($pst -in @('waiting', 'due', 'needs-notice')) { if ($Approvals.ContainsKey([int]$n) -and "$($Approvals[[int]$n])" -eq 'label') { $st = 'approved-by-hand' } else { $st = 'gone' } }
+        elseif ($Parked.ContainsKey([int]$n)) { $st = 'parked' }
+        elseif ($pst -in @('waiting', 'due', 'needs-notice', 'parked') -and -not $PolicyEnabled) { $st = 'off' }
+        elseif ($pst -in @('waiting', 'due', 'needs-notice', 'parked')) { if ($Approvals.ContainsKey([int]$n) -and "$($Approvals[[int]$n])" -eq 'label') { $st = 'approved-by-hand' } else { $st = 'gone' } }
         $rec = [ordered]@{}; foreach ($pp in $p.PSObject.Properties) { $rec[$pp.Name] = $pp.Value }
         $rec.status = $st
         if ($Previews.ContainsKey([int]$n)) { $rec.preview = $Previews[[int]$n] }
+        $rec.mergeAt = $(if ($Parked.ContainsKey([int]$n) -and -not $Outcomes.ContainsKey([int]$n)) { "$($Parked[[int]$n].mergeAt)" } else { '' })
         if ($st -ne $pst) { $rec.statusAt = $now }
         if ($Outcomes.ContainsKey([int]$n)) { $rec.outcome = "$($Outcomes[[int]$n])"; $rec.runId = $RunId }
         $out["$n"] = $rec
@@ -1983,10 +2006,12 @@ function Update-ViaPolicyState {
     }
     $recs = @($out.Values | Sort-Object { [int]$_.issue })
     $next = @($recs | Where-Object { $_.status -eq 'waiting' -and $_.dueAt } | ForEach-Object { ConvertTo-ViaPolicyUtc $_.dueAt } | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
+    $nextM = @($recs | Where-Object { $_.status -eq 'parked' -and "$($_.mergeAt)" } | ForEach-Object { ConvertTo-ViaPolicyUtc $_.mergeAt } | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
     $pol = [ordered]@{ enabled = $false; reason = 'unknown' }
-    if ($Policy) { $pol = [ordered]@{ enabled = [bool]$Policy.Enabled; vetoHours = $Policy.VetoHours; includeSpecs = [bool]$Policy.IncludeSpecs; setBy = $Policy.SetBy; setOn = $Policy.SetOn; reason = "$($Policy.Reason)"; file = "innovation/$($script:AutonomyFileName)" } }
+    if ($Policy) { $pol = [ordered]@{ enabled = [bool]$Policy.Enabled; vetoHours = $Policy.VetoHours; mergeLookHours = $(if ($Policy.PSObject.Properties.Name -contains 'MergeLookHours') { $Policy.MergeLookHours } else { 0 }); includeSpecs = [bool]$Policy.IncludeSpecs; setBy = $Policy.SetBy; setOn = $Policy.SetOn; reason = "$($Policy.Reason)"; file = "innovation/$($script:AutonomyFileName)" } }
     $file = [ordered]@{ schema = 1; loop = $Loop; repo = $Repo; updatedAt = $now; runId = $RunId; policy = $pol
-        nextDueAt = $(if ($next.Count -gt 0) { $next[0].ToString('o') } else { '' }); issues = @($recs) }
+        nextDueAt = $(if ($next.Count -gt 0) { $next[0].ToString('o') } else { '' })
+        nextMergeAt = $(if ($nextM.Count -gt 0) { $nextM[0].ToString('o') } else { '' }); issues = @($recs) }
     return [pscustomobject]@{ State = $file; Events = @($events) }
 }
 

@@ -74,8 +74,9 @@ function Get-PreviewSlots {
 # Which slot a new preview of PR -Pr goes to. The PR's own slot first (a new head replaces the old preview), then a
 # free one, then an expired one, then the oldest (with N slots there are never more than N previews). Returns Slot
 # (the record), Reason, Evicts (the record it replaces: $null when the slot was free or the PR's own).
+# -Protect: PRs parked in their look window (Ve may be looking at them): evicted only when every busy slot is one.
 function Select-PreviewSlot {
-    param([object[]]$Slots, [int]$Pr, [datetime]$NowUtc = [datetime]::UtcNow)
+    param([object[]]$Slots, [int]$Pr, [datetime]$NowUtc = [datetime]::UtcNow, [int[]]$Protect = @())
     $all = @($Slots | Where-Object { $_ })
     if ($all.Count -eq 0) { return [pscustomobject]@{ Slot = $null; Reason = 'no preview slots configured'; Evicts = $null } }
     $own = @($all | Where-Object { $_.status -ne 'free' -and [int]$_.pr -eq $Pr })
@@ -84,7 +85,8 @@ function Select-PreviewSlot {
     if ($free.Count) { return [pscustomobject]@{ Slot = $free[0]; Reason = "slot $($free[0].slot) (port $($free[0].port)) was free"; Evicts = $null } }
     $exp = @($all | Where-Object { $e = ConvertTo-PreviewUtc $_.expiresAt; $null -eq $e -or $e -le $NowUtc.ToUniversalTime() })
     if ($exp.Count) { return [pscustomobject]@{ Slot = $exp[0]; Reason = "slot $($exp[0].slot) held an expired preview of PR #$($exp[0].pr)"; Evicts = $exp[0] } }
-    $old = @($all | Sort-Object { $c = ConvertTo-PreviewUtc $_.createdAt; if ($c) { $c } else { [datetime]::MinValue } } | Select-Object -First 1)
+    $pool = @($all | Where-Object { @($Protect) -notcontains [int]$_.pr }); if ($pool.Count -eq 0) { $pool = $all }
+    $old = @($pool | Sort-Object { $c = ConvertTo-PreviewUtc $_.createdAt; if ($c) { $c } else { [datetime]::MinValue } } | Select-Object -First 1)
     return [pscustomobject]@{ Slot = $old[0]; Reason = "all $($all.Count) slots busy; replacing the oldest preview (PR #$($old[0].pr))"; Evicts = $old[0] }
 }
 
@@ -233,9 +235,10 @@ function Get-PreviewQaNext {
 # merge-pr.ps1's check. -Record: state\preview-qa-<issue>.json ($null = none). -RunId: this run (env). -HeadSha: the PR
 # head. -UserFacing: the PR changes a user-facing file (product-qa.ps1 Get-QaScope). A record of this run marks the
 # preview gate as required; without one (previews off this run, or Ve's manual merge-pr run) nothing is required.
-# Returns Ok, Required, Why.
+# A record with mergeAt (the look window of a via-policy build, Get-LookWindowDecision) refuses the merge before that
+# time, whatever else holds: the runner starts the merge session only once it has passed. Returns Ok, Required, Why.
 function Get-PreviewMergeGate {
-    param($Record, [string]$RunId, [string]$HeadSha, [bool]$UserFacing = $true)
+    param($Record, [string]$RunId, [string]$HeadSha, [bool]$UserFacing = $true, [datetime]$NowUtc = [datetime]::UtcNow)
     $mk = { param([bool]$Ok, [bool]$Req, [string]$W) [pscustomobject]@{ Ok = $Ok; Required = $Req; Why = $W } }
     if ($null -eq $Record -or -not $RunId -or "$($Record.runId)" -ne $RunId -or -not [bool]$Record.required) { return (& $mk $true $false 'preview QA not required in this run') }
     if (-not $UserFacing) { return (& $mk $true $true 'no user-facing file in the PR: no preview needed') }
@@ -247,7 +250,116 @@ function Get-PreviewMergeGate {
     $g = Get-PreviewQaGate -Verdict "$($Record.verdict)"
     if ("$($Record.gate)" -and "$($Record.gate)" -ne $g.Gate) { $g = [pscustomobject]@{ Gate = "$($Record.gate)"; Merge = ("$($Record.gate)" -in @('pass', 'unverified', 'skipped')); Why = "gate $($Record.gate)" } }
     if (-not $g.Merge) { return (& $mk $false $true "preview QA failed on $s7 ($($g.Why)): fix it (one round) or fail the build; never merge") }
+    if ($Record.PSObject.Properties.Name -contains 'mergeAt' -and "$($Record.mergeAt)") {
+        $ma = ConvertTo-PreviewUtc $Record.mergeAt
+        if ($null -eq $ma) { return (& $mk $false $true "the look window's merge time is unreadable ($($Record.mergeAt)): not merging (fail closed)") }
+        if ($NowUtc.ToUniversalTime() -lt $ma) { return (& $mk $false $true "look window: Ve can look at the preview until $($ma.ToLocalTime().ToString('yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture)); the runner merges after that (end the session, not a failure)") }
+    }
     return (& $mk $true $true "preview QA gate $($g.Gate) on $s7")
+}
+
+# ---- the look window (Ve, 2026-11-24: "veto option A") -------------------------------------------------------------
+# A build approved via Ve's standing policy (via-policy) whose preview is up and whose preview QA allows the merge is
+# PARKED for innovation/AUTONOMY.json mergeLookHours before its merge session: the preview stays up, the runner posts
+# "Merges at <time> unless you comment /hold. Preview: <url>" on the issue and the PR, and the run moves on to its next
+# build (nothing waits holding the lock). state\merge-parked.json (runner-written; sessions cannot write state\) has one
+# record per parked PR; a later run (or the watcher's drain: drain.json mergeDueAt) re-checks it and merges once the
+# window is over. A /hold by Ve (on the issue or the PR, also the ops center's "/hold (from the ops center)"), closing
+# the PR or the issue, or an approval that no longer verifies cancels it: class held, the PR is left open and its
+# preview goes at its TTL. A new head (someone pushed, or the merge session had to merge main in) is previewed and
+# QA'd again and the window starts over. Label approvals (Ve tapped Approve), slices and request issues skip it.
+$script:MergeParkedName = 'merge-parked'      # state\merge-parked.json
+$script:LookWindowMaxHours = 24
+
+# Should this build park for the look window? -Approval: run-loop's approvalOf (label | via-policy | via-spec #n | ...).
+# -LookHours: the policy's MergeLookHours. -Gate / -Url: the preview round's gate and preview URL. -Action:
+# Get-PreviewQaNext's action. Returns Park, MergeAt (ISO UTC, '' when not parked), Why.
+function Get-LookWindowDecision {
+    param([string]$Approval, [double]$LookHours = 0, [string]$Gate, [string]$Url = '', [string]$Action = 'merge', [datetime]$NowUtc = [datetime]::UtcNow)
+    $mk = { param([bool]$P, [string]$At, [string]$W) [pscustomobject]@{ Park = $P; MergeAt = $At; Why = $W } }
+    if ($Action -ne 'merge') { return (& $mk $false '' "next step is $Action, not a merge") }
+    if ("$Approval" -ne 'via-policy') { return (& $mk $false '' "approval $(if ($Approval) { $Approval } else { 'unknown' }): Ve chose it himself (or through its spec / request), no look window") }
+    if ($LookHours -le 0) { return (& $mk $false '' 'no look window (AUTONOMY.json mergeLookHours absent or 0)') }
+    if ($Gate -notin @('pass', 'unverified')) { return (& $mk $false '' "preview gate $(if ($Gate) { $Gate } else { 'none' }): no preview to look at") }
+    if (-not "$Url") { return (& $mk $false '' 'no preview is up: nothing to look at, the merge goes on as before') }
+    $at = $NowUtc.ToUniversalTime().AddHours([math]::Min($LookHours, $script:LookWindowMaxHours))
+    return (& $mk $true $at.ToString('o') "via-policy build with its preview up (gate $Gate): look window of $LookHours h before the merge")
+}
+
+# state\merge-parked.json -> the parked records (malformed ones dropped): issue, pr, sha, mergeAt, parkedAt, runId,
+# model, round, url, expiresAt, gate, why.
+function Get-ParkedMerges {
+    param($State)
+    $out = @()
+    if ($null -eq $State -or -not ($State.PSObject.Properties.Name -contains 'parked')) { return @() }
+    foreach ($p in @($State.parked | Where-Object { $_ })) {
+        try {
+            $n = [int]$p.issue; $pr = [int]$p.pr
+            if ($n -le 0 -or $pr -le 0 -or "$($p.sha)" -notmatch '^[0-9a-f]{40}$' -or $null -eq (ConvertTo-PreviewUtc $p.mergeAt)) { continue }
+            $g = { param($k) if ($p.PSObject.Properties.Name -contains $k -and $null -ne $p.$k) { return $p.$k }; return '' }
+            $rd = 1; try { $rd = [int](& $g 'round'); if ($rd -lt 1) { $rd = 1 } } catch { $rd = 1 }
+            $out += [pscustomobject][ordered]@{ issue = $n; pr = $pr; sha = "$($p.sha)"; mergeAt = (ConvertTo-PreviewUtc $p.mergeAt).ToString('o'); parkedAt = "$(& $g 'parkedAt')"
+                runId = "$(& $g 'runId')"; model = "$(& $g 'model')"; round = $rd; url = "$(& $g 'url')"; expiresAt = "$(& $g 'expiresAt')"; gate = "$(& $g 'gate')"; why = "$(& $g 'why')" }
+        } catch { continue }
+    }
+    return @($out)
+}
+
+function New-ParkedMerge {
+    param([int]$Issue, [int]$Pr, [string]$Sha, [string]$MergeAt, [string]$RunId = '', [string]$Model = '', [int]$Round = 1, [string]$Url = '', [string]$ExpiresAt = '',
+        [string]$Gate = '', [string]$Why = '', [datetime]$NowUtc = [datetime]::UtcNow)
+    return [pscustomobject][ordered]@{ issue = $Issue; pr = $Pr; sha = $Sha; mergeAt = $MergeAt; parkedAt = $NowUtc.ToUniversalTime().ToString('o'); runId = $RunId; model = $Model
+        round = $Round; url = $Url; expiresAt = $ExpiresAt; gate = $Gate; why = $Why }
+}
+
+# The parked list with -Record put in (one record per issue) or issue -Remove taken out. Returns the file object.
+function Update-ParkedMerges {
+    param([object[]]$Parked = @(), $Record = $null, [int]$Remove = 0, [datetime]$NowUtc = [datetime]::UtcNow)
+    $drop = @(); if ($Record) { $drop += [int]$Record.issue }; if ($Remove -gt 0) { $drop += $Remove }
+    $l = @(@($Parked | Where-Object { $_ -and $drop -notcontains [int]$_.issue }))
+    if ($Record) { $l += $Record }
+    $l = @($l | Sort-Object { ConvertTo-PreviewUtc $_.mergeAt })
+    return [ordered]@{ schema = 1; updatedAt = $NowUtc.ToUniversalTime().ToString('o'); nextMergeAt = (Get-NextMergeDue -Parked $l); parked = @($l) }
+}
+
+# The earliest mergeAt of the parked records (ISO UTC; '' none): drain.json mergeDueAt.
+function Get-NextMergeDue {
+    param([object[]]$Parked = @())
+    $t = @($Parked | Where-Object { $_ } | ForEach-Object { ConvertTo-PreviewUtc $_.mergeAt } | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
+    if ($t.Count -eq 0) { return '' }
+    return $t[0].ToString('o')
+}
+
+# What to do with one parked record now. -PrState: open | closed | merged ('' unknown: wait). -HeadSha: the PR's head
+# now. -Held / -HeldWhy: a /hold on the issue or the PR, or the approval no longer verifies. Action: wait | merge |
+# recheck (new head: preview QA again, then the window starts over) | held (cancelled: class held, PR left open) |
+# merged-elsewhere (someone merged it: drop the record, nothing else).
+function Get-UnparkDecision {
+    param($Record, [string]$PrState = '', [string]$HeadSha = '', [bool]$Held = $false, [string]$HeldWhy = '', [datetime]$NowUtc = [datetime]::UtcNow,
+        [double]$MinutesLeft = 999, [int]$MergeMinutes = $script:PreviewMergeMinMinutes)
+    $mk = { param([string]$A, [string]$W) [pscustomobject]@{ Action = $A; Why = $W } }
+    $ma = ConvertTo-PreviewUtc $Record.mergeAt
+    $when = ''; if ($ma) { $when = $ma.ToLocalTime().ToString('yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture) }
+    if ($PrState -eq 'merged') { return (& $mk 'merged-elsewhere' "PR #$($Record.pr) was merged outside the loop during the look window") }
+    if ($PrState -eq 'closed') { return (& $mk 'held' "PR #$($Record.pr) was closed during the look window") }
+    if ($Held) { return (& $mk 'held' $(if ($HeldWhy) { $HeldWhy } else { 'held during the look window' })) }
+    if ($PrState -ne 'open') { return (& $mk 'wait' "cannot read PR #$($Record.pr)'s state; kept parked") }
+    if ($null -eq $ma) { return (& $mk 'held' 'the parked record has no readable merge time (fail closed)') }
+    if ($NowUtc.ToUniversalTime() -lt $ma) { return (& $mk 'wait' "look window runs until $when") }
+    if (-not $HeadSha) { return (& $mk 'wait' "cannot read PR #$($Record.pr)'s head; kept parked") }
+    if ($HeadSha -ne "$($Record.sha)") { return (& $mk 'recheck' "PR #$($Record.pr)'s head moved from $("$($Record.sha)".Substring(0, 7)) to $($HeadSha.Substring(0, [math]::Min(7, $HeadSha.Length))): preview QA again, then a new look window") }
+    if ($MinutesLeft -lt $MergeMinutes) { return (& $mk 'wait' "look window over, but $([int]$MinutesLeft) min are left in this run (a merge needs $MergeMinutes): the next run merges") }
+    return (& $mk 'merge' "look window over at $when, no hold, head unchanged: merge")
+}
+
+# The one comment on the issue and the PR when a build parks. Times local (server-pc).
+function Format-LookWindowComment {
+    param([string]$MergeAt, [string]$Url, [string]$Sha = '', [string]$Gate = '', [string]$Who = 'Ve')
+    $ma = ConvertTo-PreviewUtc $MergeAt
+    $t = ''; if ($ma) { $t = $ma.ToLocalTime().ToString('ddd yyyy-MM-dd h:mm tt', [Globalization.CultureInfo]::InvariantCulture) }
+    $l = @("Merges at $t unless you comment ``/hold``. Preview: $Url", '')
+    $l += "<sub>Approved via $Who's standing policy (innovation/AUTONOMY.json), so it waits a look window on its working preview (tailnet only, mock data$(if ($Sha) { "; head $($Sha.Substring(0, [math]::Min(7, $Sha.Length)))" })$(if ($Gate) { "; preview QA $Gate" })). ``/hold`` on the issue or this PR (or Hold in the ops center) cancels the merge and leaves the PR open. A new push restarts the window.</sub>"
+    return ($l -join "`n")
 }
 
 # 'LOOP-PR-READY <issue> <pr> <sha40>' in a build session's text (the last one for -Issue wins). $null when none.
@@ -263,8 +375,8 @@ function Get-PrReadyMarker {
 # The via-policy state's `preview` object for one issue (gate-rules.ps1 Update-ViaPolicyState keeps it). The hub reads
 # issues[].preview.url while issues[].preview.status is 'up'.
 function New-ViaPolicyPreview {
-    param([string]$Url, [int]$Pr, [string]$Sha, [string]$Status = 'up', [string]$Qa = '', [string]$UpAt = '', [string]$ExpiresAt = '', [datetime]$NowUtc = [datetime]::UtcNow)
-    return [ordered]@{ status = $Status; url = $Url; pr = $Pr; headSha = $Sha; qa = $Qa; upAt = $UpAt; expiresAt = $ExpiresAt; updatedAt = $NowUtc.ToUniversalTime().ToString('o') }
+    param([string]$Url, [int]$Pr, [string]$Sha, [string]$Status = 'up', [string]$Qa = '', [string]$UpAt = '', [string]$ExpiresAt = '', [string]$MergeAt = '', [datetime]$NowUtc = [datetime]::UtcNow)
+    return [ordered]@{ status = $Status; url = $Url; pr = $Pr; headSha = $Sha; qa = $Qa; upAt = $UpAt; expiresAt = $ExpiresAt; mergeAt = $MergeAt; updatedAt = $NowUtc.ToUniversalTime().ToString('o') }
 }
 
 # The one "Preview:" line (PR comment, progress detail, run summary). Times local.
@@ -315,7 +427,10 @@ function Format-PreviewContinueLines {
     $s7 = $Sha.Substring(0, [math]::Min(7, $Sha.Length))
     $o = @()
     $o += "- STAGE: continue #$Issue after the preview (LOOP.md section 3 step 9a). Steps 1-8 are done: PR #$Pr is open and CI passed on $s7. Print ``LOOP-ISSUE-START $Issue`` first, do NOT repeat steps 2-8, and keep using progress.ps1 (the progress comment is the same one)."
-    if ($Next -eq 'merge') { $o += "- NEXT: merge. Check the time, then section 3 step 9 ""Merge"" (merge-pr.ps1 -Pr $Pr -Issue $Issue), then steps 10-11 (or 12 on a failure)." }
+    if ($Next -eq 'merge') {
+        $o += "- NEXT: merge. Check the time, then section 3 step 9 ""Merge"" (merge-pr.ps1 -Pr $Pr -Issue $Issue), then steps 10-11 (or 12 on a failure)."
+        $o += "- MAIN MOVED: if merge-pr refuses because the PR no longer merges cleanly into main (a conflict), take main into the branch as a retry does (section 3 step 6: git -C ""<CLONE>"" checkout the PR branch, merge --no-edit origin/main, resolve, local gate, push), wait-ci.ps1 until WAIT-CI PASS, then print ``LOOP-PR-READY $Issue $Pr <new head sha, 40 chars>`` and end: the runner previews and QAs the new head again (a via-policy build then waits a new look window). Not a QA fix round."
+    }
     else { $o += "- NEXT: fix (the ONE QA fix round). Fix what QA found on loop/$Issue-... in CLONE (git -C ""<CLONE>"" checkout the PR branch if needed), local gate, update-snapshots if visuals changed, commit, push, wait-ci.ps1 -Pr $Pr until WAIT-CI PASS, then print ``LOOP-PR-READY $Issue $Pr <new head sha, 40 chars>`` and end (the runner previews and QAs it again; a second QA failure fails the build). Not a CI fix round." }
     if ($Url) { $o += "- PREVIEW: $Url   (head $s7; tailnet only, mock data)" }
     $o += "- PREVIEW_QA: $Gate   ($(ConvertTo-SafeLine $Why 200); round $Round)"

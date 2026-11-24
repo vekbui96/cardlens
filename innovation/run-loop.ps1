@@ -167,6 +167,8 @@ Write-Log "options: $(@($Opts.Keys | ForEach-Object { "$_=$($Opts[$_])" }) -join
 # Ve's standing approval policy, read from this checkout like FOCUS.md (check-approval.ps1 re-reads it for every decision)
 $script:Policy = Read-AutonomyPolicy -Path (Join-Path $ScriptsDir $script:AutonomyFileName)
 Write-Log "POLICY: $($script:Policy.Reason)"
+# the look window before a via-policy merge (AUTONOMY.json mergeLookHours; 0 = none; preview-rules.ps1)
+$script:LookHours = [double]0; if ($script:Policy.Enabled -and $script:Policy.PSObject.Properties.Name -contains 'MergeLookHours') { $script:LookHours = [double]$script:Policy.MergeLookHours }
 
 if ($SelfTest) {
     Write-Log "selftest: elevated=$(Test-IsElevated) (run this from a NORMAL PowerShell to prove the non-elevated trigger)"
@@ -372,7 +374,7 @@ function Save-ViaPolicyState {
         $st = Read-ViaPolicyState -Path $script:ViaPolicyStatePath
         if (-not $st.Ok) { Write-Log "via-policy: $($st.Reason); not rewriting it" 'WARN'; return }
         $u = Update-ViaPolicyState -State $st -Entries $script:ViaPolicyLastEntries -Approvals $script:ViaPolicyLastApprovals -Posted $Posted -Outcomes $script:ViaPolicyOutcomes -Previews $script:ViaPolicyPreviews `
-            -Policy $script:Policy -PolicyEnabled $PolicyEnabled -RunId $RunId -Repo $script:Repo
+            -Policy $script:Policy -PolicyEnabled $PolicyEnabled -RunId $RunId -Repo $script:Repo -Parked (Get-ParkedByIssue)
         if (@($u.State.issues).Count -eq 0 -and -not (Test-Path -LiteralPath $script:ViaPolicyStatePath)) { return }   # nothing ever noticed: no file yet
         [IO.File]::WriteAllText($script:ViaPolicyStatePath, ($u.State | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
         if (@($u.Events).Count -gt 0) {
@@ -385,6 +387,46 @@ function Save-ViaPolicyState {
 function Get-ViaPolicyNextDue {
     try { $st = Read-ViaPolicyState -Path $script:ViaPolicyStatePath; if ($st.Ok -and $st.Raw -and "$($st.Raw.nextDueAt)") { return "$($st.Raw.nextDueAt)" } } catch { }
     return ''
+}
+
+# ---- the look window (Ve, 2026-11-24; preview-rules.ps1 Get-LookWindowDecision): parked via-policy merges ----------
+# state\merge-parked.json: runner-written (the sessions cannot write state\). An unreadable file parks nothing new and
+# merges nothing parked (the issues stay loop:in-progress with their PRs open until Ve looks): fail closed.
+function Read-ParkedMerges {
+    try { return @(Get-ParkedMerges (Read-State $script:MergeParkedName)) } catch { Write-Log "merge-parked: state unreadable ($_): no parked merge is touched" 'WARN'; return @() }
+}
+function Save-ParkedMerges {
+    param($File)
+    if ($DryRun) { return }
+    try { Save-State $script:MergeParkedName $File } catch { Write-Log "merge-parked: could not write the state: $_" 'WARN' }
+}
+function Get-ParkedByIssue { $h = @{}; foreach ($p in @(Read-ParkedMerges)) { $h[[int]$p.issue] = $p }; return $h }
+# A loop comment on an issue (marker first), like the runner's other comments. Never throws.
+function Send-LoopIssueComment {
+    param([int]$Issue, [string]$Body)
+    if ($DryRun) { Write-Log "dry run: would comment on #${Issue}: $(@($Body -split "`n")[0])"; return }
+    try {
+        $bp = Join-Path $script:LoopHome "work\note-$RunId-$Issue-$([guid]::NewGuid().ToString('N').Substring(0, 6)).md"
+        [IO.File]::WriteAllText($bp, "$($script:Marker)`n$Body`n", (New-Object Text.UTF8Encoding $false))
+        Invoke-Gh -Arguments @('issue', 'comment', "$Issue", '-R', $script:Repo, '--body-file', $bp) -Quiet | Out-Null
+    } catch { Write-Log "could not comment on #${Issue}: $_" 'WARN' }
+}
+# Park a via-policy build before its merge: the gate record carries mergeAt (merge-pr.ps1 refuses before it), the
+# parked record goes to state\merge-parked.json, Ve is told on the issue and the PR, the preview stays up.
+function Invoke-ParkMerge {
+    param([int]$Issue, [int]$Pr, $Round, [int]$RoundNo, [string]$MergeAt, [string]$Model, [string]$Why)
+    $rec = New-ParkedMerge -Issue $Issue -Pr $Pr -Sha $Round.Sha -MergeAt $MergeAt -RunId $RunId -Model $Model -Round $RoundNo -Url $Round.Url -ExpiresAt $Round.ExpiresAt -Gate $Round.Gate -Why $Why
+    $when = Format-ViaPolicyTime $MergeAt
+    if ($DryRun) { Write-Log "dry run: #$Issue would park PR #$Pr until $when ($Why)"; return }
+    Save-PreviewGate -Issue $Issue -Pr $Pr -Sha $Round.Sha -Gate $Round.Gate -Verdict $(if ($Round.Qa) { $Round.Qa.Verdict } else { $Round.Gate }) -Why $Round.Why -Url $Round.Url -Round $RoundNo -Qa $Round.Qa -MergeAt $MergeAt
+    Save-ParkedMerges (Update-ParkedMerges -Parked @(Read-ParkedMerges) -Record $rec)
+    $body = Format-LookWindowComment -MergeAt $MergeAt -Url $Round.Url -Sha $Round.Sha -Gate $Round.Gate -Who 'Ve'
+    Send-LoopIssueComment -Issue $Issue -Body $body
+    Send-PreviewComment -Pr $Pr -Body $body
+    Set-PreviewProgress -Issue $Issue -Stage 'merge' -Status 'running' -Detail "Look window: merges at $when unless Ve comments /hold. Preview: $($Round.Url)"
+    Set-ViaPolicyPreview -Issue $Issue -Preview (New-ViaPolicyPreview -Url $Round.Url -Pr $Pr -Sha $Round.Sha -Status 'up' -Qa $Round.Gate -ExpiresAt $Round.ExpiresAt -MergeAt $MergeAt)
+    $note = "#${Issue}: parked PR #$Pr for the look window; merges at $when unless Ve comments /hold ($($Round.Url))"
+    Write-Log $note; [void]$runNotes.Add($note)
 }
 
 # 'via-spec #<spec>' when the queue says the issue is auto-approved through its spec, else 'label'.
@@ -1310,9 +1352,9 @@ function Get-SessionText {
 }
 # The gate merge-pr.ps1 reads (state\preview-qa-<n>.json; the sessions cannot write state\).
 function Save-PreviewGate {
-    param([int]$Issue, [int]$Pr = 0, [string]$Sha = '', [string]$Gate, [string]$Verdict, [string]$Why = '', [string]$Url = '', [int]$Round = 0, $Qa = $null, $Cost = $null)
+    param([int]$Issue, [int]$Pr = 0, [string]$Sha = '', [string]$Gate, [string]$Verdict, [string]$Why = '', [string]$Url = '', [int]$Round = 0, $Qa = $null, $Cost = $null, [string]$MergeAt = '')
     if ($DryRun -and -not $PreviewProof) { return }
-    $rec = [ordered]@{ issue = $Issue; pr = $Pr; headSha = $Sha; runId = $RunId; required = $true; gate = $Gate; verdict = $Verdict; why = $Why; url = $Url; round = $Round; at = [datetime]::UtcNow.ToString('o') }
+    $rec = [ordered]@{ issue = $Issue; pr = $Pr; headSha = $Sha; runId = $RunId; required = $true; gate = $Gate; verdict = $Verdict; why = $Why; url = $Url; round = $Round; at = [datetime]::UtcNow.ToString('o'); mergeAt = $MergeAt }
     if ($Qa) {
         $rec.passed = @($Qa.Criteria | Where-Object { $_.Result -eq 'pass' }).Count; $rec.failed = @($Qa.Criteria | Where-Object { $_.Result -eq 'fail' }).Count
         $rec.unverified = @($Qa.Criteria | Where-Object { $_.Result -eq 'unverified' }).Count; $rec.regressions = @($Qa.Regressions | ForEach-Object { "$($_.Workflow): $($_.Summary)" })
@@ -1707,8 +1749,12 @@ try {
         foreach ($qi in @($QaIssues)) { Register-QaTarget -Issue ([int]$qi) }
     }
     $qaDue = 0; if ($script:QaUxOn -and -not $ProductReview) { $qaDue = Get-QaUxDue -Budget $budget }
+    # parked via-policy merges whose look window is over (or that may have been held: the run decides)
+    $parkedAll = @(Read-ParkedMerges)
+    $parkedDue = @($parkedAll | Where-Object { $m = ConvertTo-PreviewUtc $_.mergeAt; $m -and $m -le [datetime]::UtcNow } | ForEach-Object { [int]$_.issue })
+    if ($parkedAll.Count -gt 0) { Write-Log "look window: $(@($parkedAll | ForEach-Object { "#$($_.issue) (PR #$($_.pr), merges at $(Format-ViaPolicyTime $_.mergeAt))" }) -join ', ')$(if ($parkedDue.Count) { "; due now: $(@($parkedDue | ForEach-Object { "#$_" }) -join ' ')" })" }
     $pre = Get-PrecheckDecision -Queue $queue -Mode $mode -Budget $budget -Deferred @($deferred | ForEach-Object { $_.Issue }) -PhaseBAllowed $pbOk -BuildCap $buildCap -PhaseBCap $pbCap `
-        -Intake $(if ($intakeOk) { $intakeQ.Count } else { 0 }) -RequestBuilds $reqWork -Coordinator $(if ($coord) { $coord.Decision } else { $null }) -QaUx $qaDue
+        -Intake $(if ($intakeOk) { $intakeQ.Count } else { 0 }) -RequestBuilds $reqWork -Coordinator $(if ($coord) { $coord.Decision } else { $null }) -QaUx $qaDue -ParkedDue $parkedDue
     Write-Log "queue: $(Format-QueueLine $queue)"
     if ($deferred.Count -gt 0) { Write-Log "Phase A: $(Format-Deferred $deferred $budget.Verdict)"; [void]$runNotes.Add("Phase A: $(Format-Deferred $deferred $budget.Verdict)") }
     if ($mode -eq 'FULL' -and (Format-SliceWaitLine $queue)) { [void]$runNotes.Add("Phase A: $(Format-SliceWaitLine $queue)") }
@@ -1888,9 +1934,14 @@ try {
     # A block, dot-sourced (same scope): it runs again after Phase B when that session opened slices that are
     # auto-approved through their spec, so they are built in the same run (MaxBuilds and the time rules still
     # count every build of the run).
+    $Unparking = $false
+    $unparkTried = @()
     $phaseA = {
         $q = $queue
         while ($true) {
+            # parked via-policy merges first (the look window): held ones are cancelled, due ones merged
+            if ($budget.Verdict -ne 'hold') { . $unparkPass }
+            if ($stopRun) { break }
             if ($built.Count -gt 0 -and -not $DryRun) { $q = Get-LoopQueue }
             if ($null -eq $q) { Write-Log 'Phase A: the queue check failed; no build session' 'WARN'; [void]$runNotes.Add('Phase A: queue check failed, nothing built'); break }
             # the plan budget, re-read before every build session (a verdict that changes mid-run counts)
@@ -1901,7 +1952,7 @@ try {
                 $dl = "Phase A: $(Format-Deferred @($split.Deferred) $budget.Verdict)"
                 if ($runNotes -notcontains $dl) { Write-Log $dl; [void]$runNotes.Add($dl) }
             }
-            $dec = Get-NextBuildDecision -Buildable @($split.Allowed) -Done $built -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
+            $dec = Get-NextBuildDecision -Buildable @($split.Allowed) -Done @($built | Where-Object { -not $_.Unparked }) -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
             # the daily build cap (sessions.json build.maxPerDay), checked before every build session; an issue from
             # one of Ve's requests is not capped (the plan budget above still applies)
             $isReq = ($dec.Start -and @(Get-RequestWork $q) -contains [int]$dec.Issue)
@@ -1939,18 +1990,114 @@ try {
             }
             $buildStart = $s.Start
             # ---- PR preview + QA before the merge (options.previewQa): the session ended at LOOP-PR-READY ----
-            $pvPr = 0; $pvRound = 0
-            while ($script:PreviewOn -and -not $stopRun -and $pvRound -le $script:PreviewMaxFixRounds) {
+            $pvPr = 0; $pvRound = 0; $pvParked = $false; $pvMerging = $false; $pvLastSha = ''; $pvHeadChanges = 0; $pvPreset = $null
+            . $previewLoop
+            . $finishBuild
+            if ($stopRun) { break }
+        }
+    }
+    # Parked via-policy merges (preview-rules.ps1 Get-UnparkDecision), each at most once per run: a /hold on the issue or
+    # the PR, a closed PR, or an approval that no longer verifies cancels it (class held, PR left open, preview kept until
+    # its TTL); a new head is previewed and QA'd again and parks again; a due one gets its merge session. Nothing parked
+    # is touched in a dry run (the decisions are logged).
+    $unparkPass = {
+        foreach ($pk in @(Read-ParkedMerges | Where-Object { $unparkTried -notcontains [int]$_.issue })) {
+            if ($stopRun) { break }
+            $n = [int]$pk.issue
+            $prState = ''; $head = ''
+            try { $p = Get-GhJson @('api', "repos/$($script:Repo)/pulls/$($pk.pr)"); $prState = $(if ($p.merged_at) { 'merged' } else { "$($p.state)" }); $head = "$($p.head.sha)" } catch { Write-Log "parked #${n}: cannot read PR #$($pk.pr): $_" 'WARN' }
+            $held = $false; $hw = ''
+            if ($prState -eq 'open') {
+                $apv = Test-PreviewApproval -Issue $n
+                if (-not $apv.Ok) { $held = $true; $hw = "its approval no longer verifies during the look window ($($apv.Why))" }
+                else {
+                    try {
+                        $pc = @(Get-GhJson @('api', "repos/$($script:Repo)/issues/$($pk.pr)/comments?per_page=100") | ForEach-Object { $_ } | Where-Object { $_ })
+                        $hc = Find-HoldComment -Comments $pc -Owner $script:Owner -Marker $script:Marker -Since $pk.parkedAt
+                        if ($hc) { $held = $true; $hw = "Ve commented /hold on PR #$($pk.pr) during the look window (comment $($hc.id))" }
+                    } catch { $held = $true; $hw = "cannot read PR #$($pk.pr)'s comments to check for a /hold (fail closed: not merged): $_" }
+                }
+            }
+            $ud = Get-UnparkDecision -Record $pk -PrState $prState -HeadSha $head -Held $held -HeldWhy $hw -MinutesLeft (& $minutesLeft)
+            if ($ud.Action -eq 'recheck' -and -not $script:PreviewOn) { $ud = [pscustomobject]@{ Action = 'wait'; Why = "$($ud.Why), but previews are off in this run ($($script:PreviewWhy)): kept parked" } }
+            Write-Log "parked #$n (PR #$($pk.pr), merges at $(Format-ViaPolicyTime $pk.mergeAt)): $($ud.Action) ($($ud.Why))"
+            if ($ud.Action -eq 'wait') { continue }
+            $unparkTried += $n
+            if ($DryRun) { [void]$runNotes.Add("parked #${n}: would $($ud.Action) ($($ud.Why))"); continue }
+            Save-ParkedMerges (Update-ParkedMerges -Parked @(Read-ParkedMerges) -Remove $n)
+            $approvalOf[$n] = 'via-policy'
+            # the parked run's progress comment carries on (progress state is per run: state\progress\<run>-<issue>.json)
+            try {
+                $pd = Join-Path $script:LoopHome 'state\progress'
+                foreach ($x in @('json', 'approval.txt')) { $src = Join-Path $pd "$($pk.runId)-$n.$x"; $dst = Join-Path $pd "$RunId-$n.$x"; if ((Test-Path -LiteralPath $src) -and -not (Test-Path -LiteralPath $dst)) { Copy-Item -LiteralPath $src -Destination $dst } }
+            } catch { Write-Log "parked #${n}: progress state not carried over: $_" 'WARN' }
+            if ($ud.Action -eq 'merged-elsewhere') { [void]$runNotes.Add("#${n}: $($ud.Why); the record was dropped"); continue }
+            if ($ud.Action -eq 'held') {
+                $syn = "It was not merged: $($ud.Why). The live site is unchanged, the pull request is left open and its preview stays up until it expires, so you can still look at it. Add ``approved`` to build it again, or close it."
+                Set-PreviewBuildFailed -Issue $n -Pr ([int]$pk.pr) -Class 'held' -Outcome 'skipped' -Synopsis $syn -Details "PR #$($pk.pr), head $($pk.sha), parked by run $($pk.runId) until $(Format-ViaPolicyTime $pk.mergeAt) ($($pk.url)). $($ud.Why)." -SessionModel "$($pk.model)"
+                $script:ViaPolicyOutcomes[$n] = 'held'; Save-ViaPolicyState
+                [void]$runNotes.Add("#${n}: look window cancelled ($($ud.Why)); PR #$($pk.pr) left open")
+                continue
+            }
+            # merge or recheck: the build continues in this run, on the parked run's progress comment
+            $Unparking = $true
+            $sm = "$($pk.model)"; if (-not $sm) { $sm = "$($Cfg.build.model)" }
+            if (-not (Test-BudgetAllowsModel -Verdict $budget.Verdict -Model $sm)) { $sm = "$($Cfg.build.model)" }
+            $isReq = $false; $q = $queue; $buildStart = Get-Date; $s = $null
+            $minutes = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
+            $sha = Reset-Clone; try { $liveHead = Get-LiveHead } catch { }
+            $builtLine = @($built | ForEach-Object { "#$($_.Issue) $($_.Outcome)" }) -join ', '
+            $pvPr = [int]$pk.pr; $pvRound = [int]$pk.round; $pvParked = $false; $pvHeadChanges = 0; $pvLastSha = "$($pk.sha)"; $pvMerging = $false; $pvPreset = $null
+            if ($ud.Action -eq 'recheck') {
+                Save-PreviewGate -Issue $n -Pr $pvPr -Gate 'pending' -Verdict 'pending' -Why 'new head after the look window; preview again'
+                $pvPreset = [pscustomobject]@{ Issue = $n; Pr = $pvPr; Sha = $head }
+            } else {
+                # the gate of the parked round, now for this run and without the window (merge-pr.ps1 3c)
+                Save-PreviewGate -Issue $n -Pr $pvPr -Sha "$($pk.sha)" -Gate "$($pk.gate)" -Verdict "$($pk.gate)" -Why "look window over at $(Format-ViaPolicyTime $pk.mergeAt); no hold" -Url "$($pk.url)" -Round $pvRound
+                $pp2 = New-SessionPrompt -Kind 'build' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine `
+                    -ExtraLines @(Format-PreviewContinueLines -Issue $n -Pr $pvPr -Sha "$($pk.sha)" -Next 'merge' -Url "$($pk.url)" -Gate "$($pk.gate)" -Why "preview QA $($pk.gate); look window over at $(Format-ViaPolicyTime $pk.mergeAt), no /hold" -Round $pvRound)
+                $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $minutes -PromptPath $pp2 -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg)
+                [void]$sessions.Add($s)
+                if ($s.EndClass -eq 'not-started') { [void]$problems.Add("build #${n} (after its look window): the session could not be started ($($s.Reason)); the run stopped"); $stopRun = $true }
+                $buildStart = $s.Start; $pvMerging = $true
+            }
+            if (-not $stopRun) { . $previewLoop }
+            . $finishBuild
+            $Unparking = $false
+        }
+    }
+    # The preview rounds of one build ($n, $s, $sm, $isReq, $q, $sha, $builtLine; $pvRound / $pvMerging / $pvLastSha /
+    # $pvPreset set by the caller). Each LOOP-PR-READY of the last session is previewed and QA'd; then the merge session,
+    # the ONE fix round, a runner failure (qa / held / out-of-time) or, for a via-policy build, the look window (parked:
+    # $pvParked). A merge session that had to take main into the branch prints LOOP-PR-READY again with a new head:
+    # previewed and QA'd once more (not a fix round; once per build), and a via-policy build parks again.
+    $previewLoop = {
+        while ($script:PreviewOn -and -not $stopRun) {
+            if ($pvPreset) { $ready = $pvPreset; $pvPreset = $null; $isRecheck = $true }
+            else {
+                if ($null -eq $s) { break }
                 $ready = Get-PrReadyMarker -Text (Get-SessionText $s.Path) -Issue $n
                 if (-not $ready) { break }
-                $pvRound++; $pvPr = $ready.Pr
-                Write-Log "build #${n}: PR #$($ready.Pr) ready at $($ready.Sha) (round $pvRound): preview + QA before the merge"
-                $rd = Invoke-PreviewRound -Issue $n -Pr $ready.Pr -Sha $ready.Sha -Round $pvRound
-                Publish-PreviewGate -Issue $n -Pr $ready.Pr -Round $rd -RoundNo $pvRound
-                $apv = Test-PreviewApproval -Issue $n
-                $nx = Get-PreviewQaNext -Gate $rd.Gate -Round $pvRound -Held (-not $apv.Ok) -MinutesLeft (& $minutesLeft)
-                Write-Log "build #${n}: after preview round ${pvRound}: $($nx.Action) ($($nx.Why))"
-                if ($nx.Action -in @('fail', 'held', 'out-of-time')) {
+                $isRecheck = $false
+                if ($pvMerging) {
+                    if ($ready.Sha -eq $pvLastSha -or $pvHeadChanges -ge 1) { Write-Log "build #${n}: the merge session printed LOOP-PR-READY $($ready.Sha.Substring(0, 7)) again; not previewing it again in this run" 'WARN'; break }
+                    $pvHeadChanges++; $isRecheck = $true
+                    Write-Log "build #${n}: the merge session moved PR #$($ready.Pr) to a new head $($ready.Sha.Substring(0, 7)): preview + QA again"
+                }
+            }
+            if (-not $isRecheck) {
+                if ($pvRound -gt $script:PreviewMaxFixRounds) { break }
+                $pvRound++
+            }
+            $pvMerging = $false; $pvPr = $ready.Pr
+            Write-Log "build #${n}: PR #$($ready.Pr) ready at $($ready.Sha) (round $pvRound$(if ($isRecheck) { ', new head' })): preview + QA before the merge"
+            $rd = Invoke-PreviewRound -Issue $n -Pr $ready.Pr -Sha $ready.Sha -Round $pvRound
+            Publish-PreviewGate -Issue $n -Pr $ready.Pr -Round $rd -RoundNo $pvRound
+            $pvLastSha = $rd.Sha
+            $apv = Test-PreviewApproval -Issue $n
+            $nx = Get-PreviewQaNext -Gate $rd.Gate -Round $pvRound -Held (-not $apv.Ok) -MinutesLeft (& $minutesLeft)
+            Write-Log "build #${n}: after preview round ${pvRound}: $($nx.Action) ($($nx.Why))"
+            if ($nx.Action -in @('fail', 'held', 'out-of-time')) {
                     $cls = @{ fail = 'qa'; held = 'held'; 'out-of-time' = 'out-of-time' }[$nx.Action]
                     $oc = 'failed'; if ($nx.Action -eq 'held') { $oc = 'skipped' }
                     $syn = switch ($nx.Action) {
@@ -1964,6 +2111,12 @@ try {
                     Set-PreviewBuildFailed -Issue $n -Pr $ready.Pr -Class $cls -Outcome $oc -Synopsis $syn -Details $det -SessionModel $sm
                     break
                 }
+                # via-policy: the look window on the working preview before the merge (Ve, 2026-11-24): park and move on
+                if ($nx.Action -eq 'merge') {
+                    $lw = Get-LookWindowDecision -Approval "$($approvalOf[$n])" -LookHours $script:LookHours -Gate $rd.Gate -Url $rd.Url -Action $nx.Action
+                    Write-Log "build #${n}: look window: $(if ($lw.Park) { "park until $(Format-ViaPolicyTime $lw.MergeAt)" } else { 'none' }) ($($lw.Why))"
+                    if ($lw.Park) { Invoke-ParkMerge -Issue $n -Pr $ready.Pr -Round $rd -RoundNo $pvRound -MergeAt $lw.MergeAt -Model $sm -Why $lw.Why; $pvParked = $true; break }
+                }
                 # the next build session for the same issue: the merge, or the one QA fix round
                 $min2 = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
                 $sfx = "s$($pvRound + 1)"
@@ -1972,18 +2125,29 @@ try {
                 $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix $sfx -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $min2 -PromptPath $pp2 -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg) -Request:$isReq
                 [void]$sessions.Add($s)
                 if ($s.EndClass -eq 'not-started') { [void]$problems.Add("build #${n} (after the preview): the session could not be started ($($s.Reason)); the run stopped"); $stopRun = $true; break }
-                if ($nx.Action -eq 'merge') { break }
+                if ($nx.Action -eq 'merge') { $pvMerging = $true }
             }
+    }
+    # The end of one build ($n, $s, $buildStart, $minutes, $sm, $pvPr, $pvParked): outcome, labels, preview teardown,
+    # via-policy record, deploy certainty (an uncertain deploy sets $stopRun; the caller breaks). A parked build keeps its
+    # issue loop:in-progress, its progress comment open and its preview up; a later run merges it.
+    $finishBuild = {
+        if ($pvParked) {
+            $built += [pscustomobject]@{ Issue = $n; Outcome = 'parked'; Unparked = $Unparking }
+            Write-Log "build #$n parked for its look window (PR #$pvPr); the issue stays loop:in-progress"
+            return
+        }
+        $endClass = 'session-ended'; if ($s) { $endClass = $s.EndClass }
             # finalise this issue: a progress comment left mid-build, an issue left loop:in-progress
             try { $ended = @(Complete-LoopProgress -LoopHome $script:LoopHome -RunId $RunId -GhExe $script:GhExe -Issue $n); if ($ended.Count -gt 0) { Write-Log "progress comment of #$n left mid-build, marked as ended" 'WARN' } } catch { Write-Log "progress finalisation of #${n}: $_" 'WARN' }
-            $closed = @(Close-UnfinishedIssues -Issues @($n) -EndClass $s.EndClass -Since $buildStart -LimitMinutes $minutes -SessionModel $sm)
+            $closed = @(Close-UnfinishedIssues -Issues @($n) -EndClass $endClass -Since $buildStart -LimitMinutes $minutes -SessionModel $sm)
             $markerOutcome = ''
-            try { $part = @((Read-LoopTranscript -Path $s.Path -SessionIssue $n).Parts | Where-Object { $_.Issue -eq $n }); if ($part.Count -gt 0) { $markerOutcome = "$($part[0].Outcome)" } } catch { }
+            try { if ($null -eq $s) { throw 'no session' }; $part = @((Read-LoopTranscript -Path $s.Path -SessionIssue $n).Parts | Where-Object { $_.Issue -eq $n }); if ($part.Count -gt 0) { $markerOutcome = "$($part[0].Outcome)" } } catch { }
             $lbl = @(); try { $lbl = @((Get-GhJson @('api', "repos/$($script:Repo)/issues/$n")).labels | ForEach-Object { $_.name }) } catch { Write-Log "cannot read #$n labels: $_" 'WARN' }
             $cert = Get-DeployCertainty -SessionStart $buildStart -MergeRec (Read-State "merge-$n") -DeployRec (Read-State "deploy-$n") -RollbackRec (Read-State "rollback-$n")
             # a scope refusal that merged nothing is a skip (the next approved issue is built); anything merged is not
             $outcome = Get-BuildOutcome -Labels $lbl -MarkerOutcome $markerOutcome -Merged ($cert.State -ne 'none')
-            $built += [pscustomobject]@{ Issue = $n; Outcome = $outcome }
+            $built += [pscustomobject]@{ Issue = $n; Outcome = $outcome; Unparked = $Unparking }
             # the build is over (merged, failed or left open): its preview goes (cleanup on merge, close and failure)
             if ($pvPr -gt 0) {
                 [void](Remove-LoopPreview -Pr $pvPr -Why "build of #$n ended ($outcome)")
@@ -1994,16 +2158,14 @@ try {
             # Phase 3: a verified deploy (a build or a request child) is queued for QA (and UX when it changed the UI)
             Write-Log "build #$n ended: outcome=$outcome (marker: $markerOutcome) deploy=$($cert.State) ($($cert.Reason))$(if ($closed.Count) { '; marked loop:failed by the runner' })$(if ($outcome -eq 'skipped' -and $lbl -contains 'loop:failed') { ' (refused on scope, nothing merged: Phase A goes on)' })"
             $dr = Read-State "deploy-$n"
-            if ($dr -and $dr.serverDeployed -and $dr.startedUtc -and ([datetime]$dr.startedUtc).ToUniversalTime() -ge $s.Start.ToUniversalTime()) { $serverUsed = "#$n" }
+            if ($dr -and $dr.serverDeployed -and $dr.startedUtc -and ([datetime]$dr.startedUtc).ToUniversalTime() -ge $buildStart.ToUniversalTime()) { $serverUsed = "#$n" }
             if (-not $cert.Certain) {
                 [void]$problems.Add("#${n}: $($cert.Reason). DEPLOY STATE UNCERTAIN, NEEDS VE: the run stopped here (no further build, no proposals)")
                 Write-Log "build #${n}: deploy state uncertain ($($cert.Reason)); stopping the run" 'ERROR'
                 Set-LoopNeedsVe -Issue $n -Reason "#${n}: $($cert.Reason)"
-                $stopRun = $true; break
+                $stopRun = $true; return
             }
             if ($outcome -eq 'deployed') { Register-QaTarget -Issue $n }
-
-        }
     }
     if ($mode -eq 'FULL' -and -not $stopRun) { . $phaseA }
 
@@ -2197,10 +2359,11 @@ try {
                 $dRes = & $gv 'res'; $dStatus = 'FAILED'; if ($dRes) { $dStatus = "$($dRes.Status)" } elseif ((& $gv 'exitCode') -eq 0) { $dStatus = 'NOTHING-TO-DO' }
                 $dCap = ''; $dc = Get-DailyCap 'build'; if (-not $dc.Allowed) { $dCap = $dc.Reason }
                 $dDue = Get-ViaPolicyNextDue
-                $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -PolicyDueAt $dDue -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
+                $dMerge = Get-NextMergeDue -Parked @(Read-ParkedMerges)
+                $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -PolicyDueAt $dDue -MergeDueAt $dMerge -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
                     -RolledBack (@($dBuilt | Where-Object { $_.Outcome -eq 'rolled-back' }).Count -gt 0) -NeedsVe (@($problems | Where-Object { "$_" -match 'UNCERTAIN' }).Count -gt 0) -BuildCapped $dCap -Previous $prevD
                 [IO.File]::WriteAllText($dPath, ($ds | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
-                Write-Log "drain state: $(@($db).Count) buildable after this run [$(@($db | ForEach-Object { "#$_" }) -join ' ')], $(@($dOpus).Count) need Opus, progress $($ds.progress)$(if ($dDue) { "; next via-policy veto window ends $(Format-ViaPolicyTime $dDue)" })"
+                Write-Log "drain state: $(@($db).Count) buildable after this run [$(@($db | ForEach-Object { "#$_" }) -join ' ')], $(@($dOpus).Count) need Opus, progress $($ds.progress)$(if ($dDue) { "; next via-policy veto window ends $(Format-ViaPolicyTime $dDue)" })$(if ($dMerge) { "; next parked merge due $(Format-ViaPolicyTime $dMerge)" })"
             }
         } catch { Write-Log "drain state not written: $_" 'WARN' }
     }

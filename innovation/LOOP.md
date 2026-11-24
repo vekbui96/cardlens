@@ -483,8 +483,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    - `MERGE-PR OK <mergeSha>`: progress `ci` ok and `merge` ok ("merged as <sha7>"), then go to 10.
    - `MERGE-PR CI-PENDING ...` (exit 5) or `MERGE-PR CI-FAILED ...` (exit 3): the head changed or CI was
      re-run after wait-ci; go back to wait-ci.ps1.
-   - `MERGE-PR REFUSED PREVIEW-QA: ...`: the preview QA gate (step 9a) has not passed on this head. Not a
-     failure: do what it says (print `LOOP-PR-READY` and end, or the fix round).
+   - `MERGE-PR REFUSED PREVIEW-QA: ...`: the preview QA gate (step 9a) has not passed on this head, or its look
+     window still runs. Not a failure: do what it says (print `LOOP-PR-READY` and end, the fix round, or end the
+     session for a look window: the runner merges after it).
    - `MERGE-PR REFUSED ...` or `CI-TIMEOUT` (exit 4): nothing was merged. Go to Failure (no rollback
      needed; leave the PR open).
 
@@ -505,6 +506,10 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      with the new head and end. A second QA failure is the runner's: it marks the issue `loop:failed` (class
      `qa`) and leaves the PR open. If you cannot fix it, go to Failure (class `tests`).
      QA infrastructure problems never block you: the gate is then `unverified` and the next session merges.
+   - **Look window** (via-policy builds; nothing for you to do): once QA allows the merge of an issue approved through
+     Ve's standing policy, the runner parks the PR for `mergeLookHours` (innovation/AUTONOMY.json) with the preview
+     up and posts "Merges at <time> unless you comment /hold". A later session gets `NEXT: merge`; if that merge is
+     refused because main moved and the PR conflicts, follow the header's `MAIN MOVED` line.
 
 10. **Deploy and verify.** `<SCRIPTS>\deploy.ps1 -Issue <n> -MergeSha <mergeSha> -ExpectString "<string>"`
     in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source; for a change

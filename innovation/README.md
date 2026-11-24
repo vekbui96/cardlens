@@ -179,6 +179,20 @@ that cannot touch anything live:
   exists once the change is built, and building before the approval would change what the policy approves. A
   `/hold` still stops the merge at any point up to it (check-approval runs again before the merge session and in
   merge-pr).
+- **Look window** (Ve, 2026-11-24, "veto option A"; `AUTONOMY.json` `mergeLookHours`, 1 h). A via-policy build whose
+  preview is up and whose preview QA allows the merge is parked before its merge session: the runner writes
+  `state\merge-parked.json` (issue, pr, sha, mergeAt, the parked run's model and round), puts `mergeAt` into
+  `state\preview-qa-<n>.json` (merge-pr.ps1 refuses before it), posts "Merges at <local time> unless you comment
+  `/hold`. Preview: <url>" on the issue and the PR, records `issues[].mergeAt`, status `parked` and the preview
+  URL in `state\via-policy.json` (and `nextMergeAt`), keeps the preview up (its slot is the last to be evicted) and
+  goes on with the next build: nothing waits holding the lock. The next run (the drain starts one at `mergeDueAt` in
+  `drain.json`) handles parked PRs first: a `/hold` on the issue or the PR (also the ops center's "/hold (from the
+  ops center)"), a closed PR or an approval that no longer verifies -> class `held`, PR left open, preview until
+  its TTL; a new head -> preview QA again and a new window; window over -> the merge session (on the parked run's
+  progress comment). If main moved and the PR conflicts, the merge session takes main in and prints
+  `LOOP-PR-READY` again: previewed, QA'd and parked once more. Builds Ve approved with the label, slices and request
+  issues skip it, as does a change with no preview (nothing user-facing, or the preview failed). The idea veto
+  (`vetoHours`) is unchanged, so a via-policy item has two windows: on the proposal and on the working preview.
 - Proof run: `run-loop.ps1 -DryRun -PreviewProof -PreviewPr <pr> -PreviewIssue <issue> [-PreviewPostTo <pr>]` runs
   one preview + QA round for an existing loop PR and posts only to `-PreviewPostTo` (as an agent comment).
 

@@ -4,11 +4,14 @@
   "approval": "via-policy",
   "enabled": true,
   "vetoHours": 1,
+  "mergeLookHours": 1,
   "includeSpecs": true,
   "exclude": ["server-deploy", "stored-data", "manual", "protected"],
   "setBy": "vekbui96",
   "setOn": "2026-11-23",
   "decision": "Ve set this on 2026-11-23 in an interactive session, answering two direct questions: 'How much should the loops auto-approve without asking you?' -> 'Everything but server/data' (auto-approve every proposal and spec after a veto window, except ones that change the server, stored data or protected areas), and 'Which loops?' -> CardLens and Ops hub (not portfolio).",
-  "howItWorks": "The runner posts one notice on each eligible issue ('Auto-approves via Ve's policy at <time> unless you comment /hold'); after vetoHours it is built without an approved label. A /hold comment, closing the issue, or editing its body after the notice stops it for good; adding approved builds it at once. Eligibility: innovation/gate-rules.ps1 Get-ViaPolicyDecision (fails closed).",
-  "offSwitch": "Set enabled to false (commit and push from D:\\projects\\cardlens): manual approval again at the next check, nothing else changes. The loop's sessions can never write this file."
+  "mergeLookSetOn": "2026-11-24",
+  "mergeLookDecision": "Ve decided on 2026-11-24, after the CardLens preview work (cardlens #291/#296), on 'veto option A': a build approved via this policy whose preview is up and whose preview QA allows the merge waits mergeLookHours (1 h) on its working preview before the merge, and a /hold in that window cancels the merge. The proposal veto (vetoHours) stays as it is. Builds Ve approved with the label skip the look window.",
+  "howItWorks": "The runner posts one notice on each eligible issue ('Auto-approves via Ve's policy at <time> unless you comment /hold'); after vetoHours it is built without an approved label. A /hold comment, closing the issue, or editing its body after the notice stops it for good; adding approved builds it at once. Once its preview is up and preview QA allows the merge, the PR is parked for mergeLookHours ('Merges at <time> unless you comment /hold. Preview: <url>' on the issue and the PR); a /hold on either (or Hold in the ops center), or closing the PR, cancels the merge and leaves the PR open; a new head restarts the window. Eligibility: innovation/gate-rules.ps1 Get-ViaPolicyDecision (fails closed); the look window: innovation/preview-rules.ps1 Get-LookWindowDecision.",
+  "offSwitch": "Set enabled to false (commit and push from D:\\projects\\cardlens): manual approval again at the next check, nothing else changes. mergeLookHours 0 (or removing it) turns only the look window off. The loop's sessions can never write this file."
 }

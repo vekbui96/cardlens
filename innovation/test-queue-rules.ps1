@@ -138,6 +138,10 @@ Check ((Get-PrecheckDecision -Queue (Q @() 2) -Mode 'FULL').Launch) 'a free slot
 Check (-not (Get-PrecheckDecision -Queue (Q @(33) 0) -Mode 'PROPOSE_ONLY').Launch) 'PROPOSE_ONLY ignores buildable issues'
 Check ((Get-PrecheckDecision -Queue (Q @() 0) -Mode 'PRODUCT_REVIEW').Launch) 'product review always launches'
 Check ((Get-PrecheckDecision -Queue $null -Mode 'FULL').Launch) 'queue check failed -> launch as before'
+$pp = Get-PrecheckDecision -Queue (Q @() 0 @(1, 2, 3)) -Mode 'FULL' -ParkedDue @(293) -BuildCap 'daily cap reached'
+Check ($pp.Launch -and $pp.Reason -match 'parked merge.*#293') "a parked merge whose look window is over launches (even with the build cap reached) ($($pp.Reason))"
+Check (-not (Get-PrecheckDecision -Queue (Q @() 0 @(1, 2, 3)) -Mode 'PROPOSE_ONLY' -ParkedDue @(293)).Launch) 'PROPOSE_ONLY never merges a parked PR'
+Check ((Get-PrecheckDecision -Queue (Q @() 0) -Mode 'FULL' -ParkedDue @(293) -Budget ([pscustomobject]@{ Verdict = 'hold'; Reason = 'plan budget hold' })).Hold) 'plan budget hold still stops a parked merge'
 $w = Format-WaitingOnOwner @([pscustomobject]@{ issue = 33; reason = 'tests: x' }, [pscustomobject]@{ issue = 40; reason = 'scope: y' }) 'Ve'
 Check ($w -eq 'Failed, waiting on Ve: #33 (tests: x); #40 (scope: y).') "waiting line ($w)"
 
@@ -333,6 +337,19 @@ $movedH = @([pscustomobject]@{ runId = 'a'; endedAt = $now.AddMinutes(-200).ToSt
 Check ((Get-DrainDecision -Drain (Dr -H $movedH -Prog 0) -Now $now).Start) 'the head moved on (the failed one waits for Ve) -> no back-off'
 Check (-not (Get-DrainDecision -Drain (Dr -Rb $true) -Now $now).Start) 'the last run rolled a build back -> back off'
 Check ((Get-DrainDecision -Drain (Dr -Rb $true -Ago 130) -Now $now).Start) 'rollback, 2 h later -> one more try'
+# a parked merge's look window (drain.json mergeDueAt, Ve 2026-11-24)
+$dm = { param([string]$Merge, [string]$Pol = '') $d = Dr -B @(); $d | Add-Member -NotePropertyName mergeDueAt -NotePropertyValue $Merge; if ($Pol) { $d | Add-Member -NotePropertyName policyDueAt -NotePropertyValue $Pol }; $d }
+$dd = Get-DrainDecision -Drain (& $dm $now.AddMinutes(10).ToString('o')) -Now $now
+Check (-not $dd.Start -and $dd.Reason -match 'look window of a parked merge ends') "nothing buildable, a look window still running -> no ($($dd.Reason))"
+$dd = Get-DrainDecision -Drain (& $dm $now.AddMinutes(-1).ToString('o')) -Now $now -Repo 'r'
+Check ($dd.Start -and $dd.Key -eq 'drain:r:20261123-150000' -and $dd.Reason -match 'look window') "a look window ended -> start (the run re-checks the hold and the head) ($($dd.Reason))"
+Check (-not (Get-DrainDecision -Drain (& $dm $now.AddMinutes(-1).ToString('o')) -Now $now -Repo 'r' -Done @('drain:r:20261123-150000')).Start) 'a due merge starts at most one drain run per finished run'
+Check (-not (Get-DrainDecision -Drain (& $dm $now.AddMinutes(-1).ToString('o')) -Now $now -Verdict 'hold').Start) 'plan budget hold: no drain for a parked merge'
+$dd = Get-DrainDecision -Drain (& $dm $now.AddMinutes(30).ToString('o') $now.AddMinutes(-1).ToString('o')) -Now $now
+Check ($dd.Start -and $dd.Reason -match 'veto window') 'a veto window that ended first still drains (the earliest due time wins)'
+Check (-not (Get-DrainDecision -Drain (& $dm '') -Now $now).Start) 'empty mergeDueAt: nothing to do'
+$sM = New-DrainState -RunId 'r9' -Buildable @() -MergeDueAt '2026-11-23T21:00:00Z'
+Check ($sM.mergeDueAt -eq '2026-11-23T21:00:00Z' -and $sM.policyDueAt -eq '') 'New-DrainState writes mergeDueAt'
 # the record the runner writes
 $s1 = New-DrainState -RunId 'r1' -EndedAt $now.AddMinutes(-60) -Result 'OK' -Buildable @(181, 192, 193) -NeedsOpus @(193) -Progress 4
 Check ($s1.schema -eq 1 -and $s1.head -eq 181 -and (@($s1.buildable) -join ',') -eq '181,192,193' -and (@($s1.needsOpus) -join ',') -eq '193' -and @($s1.history).Count -eq 1) 'New-DrainState: the record'
