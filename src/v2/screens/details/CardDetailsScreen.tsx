@@ -245,8 +245,11 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
   }
 
   const heldHere = finishes.filter((f) => held.includes(f)).length;
-  // One headline price: the first printing (list order) that has one.
-  const headlinePrice = finishes.map(priceOf).find((p) => p !== undefined);
+  // One headline price, and the printing it belongs to: a priced printing the
+  // collector holds comes first, else the first priced one (list order).
+  const pricedFinishes = finishes.filter((f) => priceOf(f) !== undefined);
+  const headlineFinish = pricedFinishes.find((f) => held.includes(f)) ?? pricedFinishes[0];
+  const headlinePrice = headlineFinish === undefined ? undefined : priceOf(headlineFinish);
 
   return (
     <Stack gap={5}>
@@ -270,7 +273,9 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
           </Stack>
 
           <p className={styles.priceLine} data-testid="price-line">
-            <span className={styles.priceLabel}>Market price</span>
+            <span className={styles.priceLabel}>
+              Market price{headlineFinish === undefined ? "" : ` · ${finishLabel(headlineFinish)}`}
+            </span>
             <Money value={headlinePrice} loading={printings.isLoading} absentLabel={UNPRICED} />
           </p>
 
