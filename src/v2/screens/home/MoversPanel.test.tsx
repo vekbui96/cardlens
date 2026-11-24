@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { MoversPanel } from "./MoversPanel.tsx";
@@ -69,15 +69,27 @@ describe("MoversPanel", () => {
     expect(b.container.innerHTML).toBe("");
   });
 
-  it("says why it is empty while prices are missing, then shows the rows", () => {
+  it("holds three placeholder rows while loading, with no 'retrying' copy, then shows the rows", () => {
     const a = render(<MoversPanel rows={null} loading />);
     expect(screen.getByRole("heading", { name: "Biggest movers" })).toBeTruthy();
-    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(0);
-    expect(screen.getByText("Movers need prices; retrying")).toBeTruthy();
+    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(3);
+    expect(a.container.textContent).not.toMatch(/retrying/i);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     a.unmount();
     render(<MoversPanel rows={rows} loading={false} />);
     expect(screen.queryByTestId("home-movers-skeleton")).toBeNull();
     expect(screen.getByText("+18.4% 7d")).toBeTruthy();
+  });
+
+  it("names what is missing after a price request failed, and offers Try again", () => {
+    const retry = vi.fn();
+    render(<MoversPanel rows={null} loading failed onRetry={retry} />);
+    expect(screen.getByText("Movers need price data that has not loaded yet.")).toBeTruthy();
+    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(0);
+    const button = screen.getByRole("button", { name: "Try again" });
+    expect(button.className).toMatch(/moverRetry/);
+    fireEvent.click(button);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("says Unpriced where a mover has no price", () => {

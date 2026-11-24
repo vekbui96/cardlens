@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { pulledLine } from "./pulledLine.ts";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { screenToPath } from "../../../app/screenUrl.ts";
@@ -74,6 +75,7 @@ export function HomeScreen() {
   const connectDevice = useConnectDevice();
   const [connected, setConnected] = useState(false);
   const { data: sets } = useSets();
+  const client = useQueryClient();
   const value = useLibraryValue();
   useHomeLoadMetric(value);
   // One localStorage read and write once prices settle — no request (#110).
@@ -200,7 +202,16 @@ export function HomeScreen() {
       <ProgressPanel resume={resume} rows={rows} loading={sets === undefined} />
 
       {/* Below Sets in progress, so it appearing never moves what is above it. */}
-      <MoversPanel rows={moverRows} loading={moverRows === null} />
+      <MoversPanel
+        rows={moverRows}
+        loading={moverRows === null}
+        failed={value.failed > 0}
+        onRetry={() => {
+          // The same two queries the Value panel's retry re-runs: no new request shape.
+          void client.invalidateQueries({ queryKey: ["catalog-prices"] });
+          void client.invalidateQueries({ queryKey: ["printings-value"] });
+        }}
+      />
 
       {/*
         The one destination Home repeats from the nav, and only because it can
