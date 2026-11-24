@@ -66,11 +66,24 @@ describe("a set row", () => {
     expect(screen.getByText("MASTER")).toBeInTheDocument();
   });
 
-  it("shows the set size instead of a progress figure when nothing is owned", () => {
+  it("shows 0 / total with a bar when nothing is owned", () => {
     render(<SetRow row={{ set: OBF, tiers: setTiers({ total: 230, printedTotal: 197 }, 0), owned: 0 }} />);
 
-    expect(screen.getByText("230 cards")).toBeInTheDocument();
+    expect(screen.getByText("0 / 230")).toBeInTheDocument();
+    expect(screen.getByTestId("set-progress")).toBeInTheDocument();
     expect(screen.queryByText("MASTER")).not.toBeInTheDocument();
+  });
+
+  it("invents no total for an unowned set whose size is unknown", () => {
+    const set: PokemonSet = { id: "x1", name: "Mystery", total: 0, printedTotal: 0 };
+    render(<SetRow row={{ set, tiers: setTiers({ total: 0, printedTotal: 0 }, 0), owned: 0 }} />);
+
+    expect(screen.queryByTestId("set-progress")).not.toBeInTheDocument();
+  });
+
+  it("draws the set code in a placeholder when the logo is missing", () => {
+    render(<SetRow row={model(OBF, held(3))} />);
+    expect(screen.getByText("OBF")).toBeInTheDocument();
   });
 });
 

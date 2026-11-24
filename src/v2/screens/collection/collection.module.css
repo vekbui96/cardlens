@@ -283,6 +283,7 @@
 }
 
 .logoFallback {
+  width: 3.2em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -379,8 +380,26 @@
 
 .tierCount {
   flex: none;
+  font-size: var(--v2-fs-small);
   font-variant-numeric: tabular-nums;
   color: var(--v2-fg-muted);
+}
+
+/* A set with nothing owned yet: "0 / total" and a thin empty track. */
+.notStarted {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  min-width: 0;
+}
+
+.thinBar {
+  flex: 1 1 2ch;
+  min-width: 2ch;
+  height: var(--v2-space-1);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-surface-sunken);
 }
 
 .tierDone {

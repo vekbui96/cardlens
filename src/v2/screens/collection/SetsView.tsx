@@ -211,11 +211,17 @@ export function SetRow({ row }: { row: SetRowModel }) {
               cards" beside it was the same number twice — at the cost of the
               width that pushed the set NAME into an ellipsis.
             */}
-            {owned === 0 && set.total ? <span>{set.total} cards</span> : null}
           </span>
         </span>
 
         {owned > 0 ? <Tiers name={set.name} tiers={tiers} /> : null}
+        {/* Not started: the size as "0 / 230" with an empty bar, so every tile reads the same way. */}
+        {owned === 0 && set.total ? (
+          <span className={styles.notStarted} data-testid="set-progress">
+            <span className={styles.tierCount}>0 / {set.total}</span>
+            <span className={styles.thinBar} aria-hidden="true" />
+          </span>
+        ) : null}
         {/* The slot is there from the first paint ("pricing"), so the row never grows when prices land. */}
         {owned > 0 && worthText(row.worth) ? (
           <span className={styles.setWorth} data-testid="set-worth">
