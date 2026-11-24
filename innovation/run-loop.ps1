@@ -690,15 +690,16 @@ function New-SessionPrompt {
 # against the daily cap. -RequestIssue: the request an intake session plans (the guard's only target).
 function Invoke-Session {
     param([string]$Kind, [int]$Issue = 0, [string]$SessionModel, [int]$Turns, [int]$Minutes, [string]$PromptPath, [double]$BudgetUsd = 0,
-        [switch]$Request, [int]$RequestIssue = 0, [string]$NameSuffix = '', [string]$SettingsKind = '', [string]$GuardMode = '', [int]$PreviewPort = 0)
+        [switch]$Request, [int]$RequestIssue = 0, [string]$NameSuffix = '', [string]$SettingsKind = '', [string]$GuardModeOverride = '', [int]$PreviewPort = 0)
     # -NameSuffix: a second session of the same kind and issue in one run (the build session after a preview, the preview
-    # QA session) gets its own transcript. -SettingsKind / -GuardMode: the preview QA session is a qa session with the
+    # QA session) gets its own transcript. -SettingsKind / -GuardModeOverride (not -GuardMode: PowerShell names are case-insensitive, so
+    # it would be the local $guardMode below): the preview QA session is a qa session with the
     # qapreview settings and guard mode QA_PREVIEW; -PreviewPort: the one preview it may open.
     $name = $Kind; if ($Issue -gt 0) { $name = "$Kind-$Issue" }; if ($NameSuffix) { $name += ".$NameSuffix" }
     $s = [pscustomobject]@{ Kind = $Kind; Issue = $Issue; Model = $SessionModel; Path = (Join-Path $script:LoopHome "logs\run-$RunId.$name.jsonl"); Start = (Get-Date)
         EndClass = 'session-ended'; Status = ''; Reason = ''; Ok = $false; Summary = ''; Turns = 0; Cost = $null; ExitCode = $null }
     $guardMode = @{ build = 'BUILD'; propose = 'PROPOSE'; review = 'PRODUCT_REVIEW'; intake = 'INTAKE'; memory = 'MEMORY'; observe = 'OBSERVE'; pm = 'PM'; qa = 'QA'; ux = 'UX' }[$Kind]
-    if ($GuardMode) { $guardMode = $GuardMode }
+    if ($GuardModeOverride) { $guardMode = $GuardModeOverride }
     $env:INNOVATION_LOOP_CARDLENS_MODE = $guardMode   # the guard narrows what each kind of session may do
     $env:INNOVATION_LOOP_CARDLENS_PREVIEW_PORT = $(if ($PreviewPort -gt 0) { "$PreviewPort" } else { '' })
     $env:INNOVATION_LOOP_CARDLENS_REQUEST = $(if ($RequestIssue -gt 0) { "$RequestIssue" } else { '' })
@@ -1359,7 +1360,7 @@ function Invoke-PreviewQaSession {
             -Work (Join-Path $script:LoopHome 'work') -ScriptsDir $ScriptsDir -Round $Round)
     $pp = New-SessionPrompt -Kind 'qapreview' -Issue $Issue -NameSuffix "preview$Round" -SessionModel $sm -Turns ([int]$c.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $queue -MainSha $Sha -LiveHead $liveHead -ExtraLines $lines
     $usd = Get-SessionBudget -Kind 'qa' -Model $sm -Config $Cfg
-    $s = Invoke-Session -Kind 'qa' -Issue $Issue -NameSuffix "preview$Round" -SettingsKind 'qapreview' -GuardMode 'QA_PREVIEW' -PreviewPort $Port -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd $usd
+    $s = Invoke-Session -Kind 'qa' -Issue $Issue -NameSuffix "preview$Round" -SettingsKind 'qapreview' -GuardModeOverride 'QA_PREVIEW' -PreviewPort $Port -SessionModel $sm -Turns ([int]$c.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd $usd
     [void]$sessions.Add($s); $res.Cost = $s.Cost
     if ($s.EndClass -eq 'not-started') { $res.Why = "the QA session could not be started ($($s.Reason))"; [void]$problems.Add("preview qa #${Issue}: $($res.Why)"); return $res }
     $artOk = { param([string]$Rel) Test-Path -LiteralPath (Join-Path $art ($Rel -replace '/', '\')) -PathType Leaf }
@@ -1414,7 +1415,8 @@ function Invoke-PreviewRound {
         $q = Invoke-PreviewQaSession -Issue $Issue -Pr $Pr -Sha $out.Sha -Url $pv.Url -Port $pv.Port -Round $Round -Crit $crit -Scope $scope -DiffStat $stat -Title "$($iss.title)" -WfMap $wf
         $out.Qa = $q.Qa; $out.Shots = $q.Shots
         $fails = 0; $regs = 0; if ($q.Qa) { $fails = @($q.Qa.Criteria | Where-Object { $_.Result -eq 'fail' }).Count; $regs = @($q.Qa.Regressions).Count }
-        $g = Get-PreviewQaGate -Verdict $q.Verdict -Failed $fails -Regressions $regs
+        $passes = 0; if ($q.Qa) { $passes = @($q.Qa.Criteria | Where-Object { $_.Result -eq 'pass' }).Count }
+        $g = Get-PreviewQaGate -Verdict $q.Verdict -Failed $fails -Regressions $regs -Passed $passes
         $out.Gate = $g.Gate; $out.Why = $(if ($q.Why) { "$($g.Why): $($q.Why)" } else { $g.Why })
         return $out
     } catch { $out.Gate = 'unverified'; $out.Why = "preview round failed: $_"; Write-Log "preview #${Issue}: $($out.Why)" 'WARN'; return $out }

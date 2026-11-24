@@ -198,7 +198,9 @@ function Get-PreviewBuildEnv {
 # Gate: pass (criteria passed or none failed), fail (a criterion failed or a regression: blocks), unverified (QA could
 # not judge: the merge goes on and the post-deploy QA on the live site runs as before).
 function Get-PreviewQaGate {
-    param([string]$Verdict, [int]$Failed = 0, [int]$Regressions = 0)
+    param([string]$Verdict, [int]$Failed = 0, [int]$Regressions = 0, [int]$Passed = -1)
+    # partial with nothing passed = QA saw nothing it could judge: unverified, not a pass (-Passed -1: unknown, as before)
+    if ("$Verdict".ToLowerInvariant() -eq 'partial' -and $Passed -eq 0) { return [pscustomobject]@{ Gate = 'unverified'; Merge = $true; Why = 'QA could not verify any criterion on the preview; the merge goes on and QA runs on the live site after the deploy' } }
     switch ("$Verdict".ToLowerInvariant()) {
         'pass' { return [pscustomobject]@{ Gate = 'pass'; Merge = $true; Why = 'every criterion passed on the preview' } }
         'partial' { return [pscustomobject]@{ Gate = 'pass'; Merge = $true; Why = 'no criterion failed and no regression on the preview (some unverified)' } }

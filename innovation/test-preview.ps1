@@ -110,6 +110,8 @@ Check ($pb -match "\^\(VITE_\|GH_\|GITHUB_\|ANTHROPIC_" -and $pb -match 'TOKEN\|
 # ---- QA before the merge -------------------------------------------------------------------------------------------
 Check ((Get-PreviewQaGate 'pass').Merge -and (Get-PreviewQaGate 'pass').Gate -eq 'pass') 'pass merges'
 Check ((Get-PreviewQaGate 'partial').Merge -and (Get-PreviewQaGate 'partial').Gate -eq 'pass') 'none failed, some unverified: merges'
+Check ((Get-PreviewQaGate 'partial' -Passed 0).Gate -eq 'unverified' -and (Get-PreviewQaGate 'partial' -Passed 0).Merge) 'nothing verified at all is unverified, not a pass (live QA still runs after the deploy)'
+Check ((Get-PreviewQaGate 'partial' -Passed 1).Gate -eq 'pass') 'one passed, none failed: pass'
 Check (-not (Get-PreviewQaGate 'fail' -Failed 1).Merge) 'a failed criterion blocks the merge'
 Check (-not (Get-PreviewQaGate 'fail' -Regressions 1).Merge) 'a regression blocks the merge'
 foreach ($v in 'invalid', 'error', 'unavailable', '') { $g = Get-PreviewQaGate $v; Check ($g.Merge -and $g.Gate -eq 'unverified') "QA that could not judge ($v) never blocks (live QA after the deploy)" }
@@ -201,7 +203,8 @@ Check ((Format-PreviewLine -Url 'https://server-pc.tail0e4194.ts.net:8460/' -Sha
 $lm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'LOOP.md'))
 Check ($lm -match '(?m)^## 14\. Preview QA' -and $lm -match '9a\. Preview and QA before the merge' -and $lm -match 'LOOP-PR-READY <ISSUE> <pr#> <sha>') 'LOOP.md has step 9a and section 14'
 $rl = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'run-loop.ps1'))
-Check ($rl -match "SettingsKind 'qapreview' -GuardMode 'QA_PREVIEW' -PreviewPort" -and $rl -match "qapreview = @\('preview-browse'\)") 'the preview QA session runs with its own settings and guard mode'
+Check ($rl -match "SettingsKind 'qapreview' -GuardModeOverride 'QA_PREVIEW' -PreviewPort" -and $rl -match "qapreview = @\('preview-browse'\)") 'the preview QA session runs with its own settings and guard mode'
+Check ($rl -notmatch '\[string\]\$GuardMode\b' -and $rl -match 'if \(\$GuardModeOverride\) \{ \$guardMode = \$GuardModeOverride \}') 'the guard-mode override is not shadowed by the local $guardMode (PowerShell names are case-insensitive; proof run 20261124-101349)'
 Check ($rl -match 'Remove-LoopPreview -Pr \$pvPr' -and $rl -match 'Invoke-PreviewHousekeeping') 'the runner tears previews down after each build and at the end of the run'
 $sj = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sessions.json')) | ConvertFrom-Json
 Check ((Get-LoopOptions $sj).previewQa -eq $true -and (Get-LoopOptions $null).previewQa -eq $false) 'options.previewQa: on in sessions.json, off by default'
