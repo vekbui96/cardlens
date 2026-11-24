@@ -34,7 +34,10 @@ describe("Collection set list while loading", () => {
 
   it("shows eight set-row placeholders and says it is loading", () => {
     const { container } = render(setsView({}));
-    expect(container.querySelectorAll("[data-skeleton]")).toHaveLength(8);
+    const count = container.querySelectorAll("[data-skeleton]").length;
+    expect(count).toBe(8);
+    // Whole rows at 1, 2 and 4 columns, so the desktop grid has no half-empty last row.
+    expect(count % 4).toBe(0);
     expect(screen.getByText("Loading your sets")).toBeTruthy();
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
