@@ -65,6 +65,13 @@
   align-items: start;
 }
 
+/* On a desktop window the cards in a row share one height (#288). */
+@media (min-width: 900px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .top {
+    align-items: stretch;
+  }
+}
+
 .top > :first-child {
   flex: 1 1 calc(var(--v2-pocket) * 2);
 }
@@ -496,6 +503,17 @@
 .actionHint {
   color: var(--v2-fg-muted);
   font-size: var(--v2-fs-small);
+}
+
+/*
+ * First-run card on a desktop window: copy and buttons 1360px apart read as
+ * broken, so it is capped and centred (#288). Phone width is untouched.
+ */
+@media (min-width: 900px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .emptyWrap {
+    max-width: 720px; /* v2-tokens-allow: the first-run reading width */
+    margin-inline: auto;
+  }
 }
 
 /* --- Sync notice ---------------------------------------------------------- */

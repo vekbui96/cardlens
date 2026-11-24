@@ -34,31 +34,33 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
         : null;
   const syncLine = emptySyncLine(syncStatus);
   return (
-    <EmptyStart
-      headingLevel={1}
-      status={syncLine}
-      extraActions={
-        <>
-          {connect === "offer" ? (
-            <Card onPress={onConnect} className={styles.tile} pad={4}>
-              <Stack gap={1}>
-                <span className={styles.actionName}>Connect this device</span>
-                <span className={styles.actionHint}>
-                  Already use CardLens elsewhere? You will need the sync token from the server's .env file.
-                </span>
-              </Stack>
-            </Card>
-          ) : null}
-          {connect === "busy" ? (
-            <Card className={styles.tile} pad={4}>
-              <Stack gap={1}>
-                <span className={styles.actionName}>Connecting…</span>
-                <span className={styles.actionHint}>Pulling the collection from your other device</span>
-              </Stack>
-            </Card>
-          ) : null}
-        </>
-      }
-    />
+    <div className={styles.emptyWrap}>
+      <EmptyStart
+        headingLevel={1}
+        status={syncLine}
+        extraActions={
+          <>
+            {connect === "offer" ? (
+              <Card onPress={onConnect} className={styles.tile} pad={4}>
+                <Stack gap={1}>
+                  <span className={styles.actionName}>Connect this device</span>
+                  <span className={styles.actionHint}>
+                    Already use CardLens elsewhere? You will need the sync token from the server's .env file.
+                  </span>
+                </Stack>
+              </Card>
+            ) : null}
+            {connect === "busy" ? (
+              <Card className={styles.tile} pad={4}>
+                <Stack gap={1}>
+                  <span className={styles.actionName}>Connecting…</span>
+                  <span className={styles.actionHint}>Pulling the collection from your other device</span>
+                </Stack>
+              </Card>
+            ) : null}
+          </>
+        }
+      />
+    </div>
   );
 }
