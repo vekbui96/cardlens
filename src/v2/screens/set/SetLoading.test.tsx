@@ -66,6 +66,11 @@ describe("SetCardsScreen while the set loads", () => {
     expect(region!.querySelectorAll("[data-skeleton]")).toHaveLength(2 * (BINDER_PAGE_SIZE + 1));
     expect(screen.queryByRole("heading", { name: /Page 1/ })).toBeNull();
     // Sighted readers get the same words as a visible line above the first page.
-    expect(screen.getByText("Loading cards...")).toBeInTheDocument();
+    const line = screen.getByText("Loading cards…");
+    expect(line).toBeInTheDocument();
+    // The shared status-line look: a small icon in front of the words, hidden from assistive tech.
+    expect(line.querySelector("[data-loading-icon]")).not.toBeNull();
+    // The skeleton pages use the same grid wrapper as the loaded binder.
+    expect(region!.querySelector('[data-testid="binder-pages-loading"]')).not.toBeNull();
   });
 });

@@ -362,9 +362,10 @@ function PageSkeletons() {
       <ScreenReaderOnly>Loading the set&apos;s cards</ScreenReaderOnly>
       {/* The same words for sighted readers; hidden from assistive tech so they are not read twice. */}
       <p className={styles.loadingLine} aria-hidden="true">
-        Loading cards...
+        <span className={styles.loadingIcon} data-loading-icon="" />
+        Loading cards…
       </p>
-      <div className={styles.pages}>
+      <div className={styles.pages} data-testid="binder-pages-loading">
         {[1, 2].map((page) => (
           <Panel key={page}>
             <Skeleton className={styles.skeletonBar} />
