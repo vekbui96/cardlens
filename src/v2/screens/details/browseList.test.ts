@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
-import { neighbours, readBrowseList, rememberBrowseList, swipeStep } from "./browseList.ts";
+import {
+  clearBrowseList,
+  keepsBrowseList,
+  neighbours,
+  readBrowseList,
+  rememberBrowseList,
+  swipeStep,
+} from "./browseList.ts";
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -58,10 +65,26 @@ describe("remembering a list", () => {
   });
 
   it("reads anything malformed as no list", () => {
-    sessionStorage.setItem("cardlens:v1:browse-list", "{not json");
+    sessionStorage.setItem("cardlens:v2:browse-list", "{not json");
     expect(readBrowseList()).toBeNull();
-    sessionStorage.setItem("cardlens:v1:browse-list", JSON.stringify({ label: 3, cardIds: "a" }));
+    sessionStorage.setItem("cardlens:v2:browse-list", JSON.stringify({ label: 3, cardIds: "a" }));
     expect(readBrowseList()).toBeNull();
+  });
+});
+
+describe("forgetting a list", () => {
+  it("clearBrowseList leaves no list, so a card in the old list gets no arrows", () => {
+    rememberBrowseList("Search results", [{ cardId: "a" }, { cardId: "b" }]);
+    clearBrowseList();
+    expect(readBrowseList()).toBeNull();
+    expect(neighbours(readBrowseList(), "a")).toBeNull();
+  });
+
+  it("only the list screens and details keep it", () => {
+    for (const name of ["details", "results", "owned", "collection"])
+      expect(keepsBrowseList(name)).toBe(true);
+    for (const name of ["home", "wantlist", "sets", "set", "favorites"])
+      expect(keepsBrowseList(name)).toBe(false);
   });
 });
 

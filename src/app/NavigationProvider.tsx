@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
 import type { PokemonCardSummary } from "../models/cards.ts";
 import { canGoBack, currentScreen, initialNavState, navReducer, type Screen } from "./navigation.ts";
+import { clearBrowseList, keepsBrowseList } from "../v2/screens/details/browseList.ts";
 import { screenFromLocation, screenToPath } from "./screenUrl.ts";
 
 interface NavigationValue {
@@ -62,6 +63,13 @@ export function NavigationProvider({
       window.removeEventListener("hashchange", adopt);
     };
   }, [urlBacked]);
+
+  // A remembered browse list only lives while the collector stays on the lists
+  // it came from and card details; any other screen ends it.
+  const screenName = currentScreen(state).name;
+  useEffect(() => {
+    if (!keepsBrowseList(screenName)) clearBrowseList();
+  }, [screenName]);
 
   const value = useMemo<NavigationValue>(() => {
     /** Go to a screen, writing a history entry on web. */

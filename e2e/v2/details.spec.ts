@@ -213,6 +213,7 @@ test.describe("details @visual", () => {
     });
     await expect(page.getByRole("button", { name: /Poké Ball Reverse/ })).toBeVisible();
     await stabiliseForSnapshot(page);
+    await expect(page.getByRole("navigation", { name: "Step through this list" })).toHaveCount(0);
     await expect(page).toHaveScreenshot("card-details-from-home.png");
   });
 
