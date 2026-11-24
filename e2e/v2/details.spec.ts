@@ -143,6 +143,22 @@ test.describe("next and previous card", () => {
     await expect(page.getByRole("heading", { name: /for “charizard”/ })).toBeVisible();
   });
 
+  test("on a phone the card art leads, and on desktop the row stays in the column", async ({ page }) => {
+    await servePrintings(page);
+    await openV2(page, "/search/charizard");
+    await page.getByRole("link", { name: /#\d/ }).first().click();
+    const nav = page.getByRole("navigation", { name: "Step through this list" });
+    await expect(nav).toBeAttached();
+    const width = page.viewportSize()?.width ?? 0;
+    if (width <= 900) {
+      const art = await page.getByRole("main").locator("img").first().boundingBox();
+      // Was ~190px with the row in the flow; the shell's own header and margin are ~128px.
+      expect(art?.y ?? 999).toBeLessThan(140);
+    } else {
+      expect((await nav.boundingBox())?.width ?? 9999).toBeLessThanOrEqual(721);
+    }
+  });
+
   test("a card opened by its link has no list to step through", async ({ page }) => {
     await servePrintings(page);
     await openV2(page, CARD);

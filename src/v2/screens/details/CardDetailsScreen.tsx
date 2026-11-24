@@ -113,7 +113,7 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
     return <CardDetailsBody key={cardId} cardId={cardId} {...(summary ? { summary } : {})} />;
 
   return (
-    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className={styles.browseHost} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <Stack gap={4}>
         <nav className={styles.browse} aria-label="Step through this list">
           <button

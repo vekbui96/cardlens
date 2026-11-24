@@ -73,6 +73,62 @@
   gap: var(--v2-space-3);
 }
 
+/* Desktop: the row stays in the details column's width, not the window's. */
+.browse {
+  max-width: calc(var(--v2-space-7) * 15);
+}
+
+.browseHost {
+  position: relative;
+}
+
+/*
+ * Phone: the row leaves the flow so the card art leads the screen. The arrows
+ * float over the art's edges (still 44px targets) and the position is a small
+ * pill over its top edge. The nav itself ignores the pointer, so only the
+ * buttons catch taps and the swipe on the art still works.
+ */
+@media (max-width: 900px) /* v2-tokens-allow: the shell's phone/desktop breakpoint */ {
+  .browse {
+    position: absolute;
+    inset: 0 0 auto 0;
+    z-index: 1;
+    display: block;
+    max-width: none;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .browse .step {
+    position: absolute;
+    top: calc(var(--v2-space-7) * 3);
+    pointer-events: auto;
+    padding: var(--v2-space-2);
+    background: var(--v2-surface-raised);
+    box-shadow: var(--v2-shadow);
+  }
+
+  .browse .step:first-child {
+    left: var(--v2-space-2);
+  }
+
+  .browse .step:last-of-type {
+    right: var(--v2-space-2);
+  }
+
+  .browse .position {
+    position: absolute;
+    top: var(--v2-space-2);
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - var(--v2-tap) * 2 - var(--v2-space-4) * 2);
+    padding: var(--v2-space-1) var(--v2-space-3);
+    border-radius: var(--v2-radius-pill);
+    background: var(--v2-surface-raised);
+    color: var(--v2-fg);
+  }
+}
+
 .step {
   min-height: var(--v2-tap);
   min-width: var(--v2-tap);
@@ -104,8 +160,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  color: var(--v2-fg-muted);
-  font-size: var(--v2-fs-small);
+  color: var(--v2-fg);
+  font-size: 14px; /* v2-tokens-allow: 14px floor for the position label; no token between small 13 and body 15 */
   font-variant-numeric: tabular-nums;
 }
 
