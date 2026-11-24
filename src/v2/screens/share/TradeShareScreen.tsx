@@ -150,13 +150,18 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
           <>
             {binder.forTrade ? "Offered for trade" : "A shared binder"} · <strong>{counts.copies}</strong>{" "}
             {counts.copies === 1 ? "card" : "cards"}
+            {value.unpriced > 0 ? (
+              <>
+                {" · "}
+                <span className={styles.unpriced}>{value.unpriced} unpriced</span>
+              </>
+            ) : null}
           </>
         }
         updatedAt={updatedAt}
         aside={
           <span className={styles.total}>
             <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />
-            {value.unpriced > 0 ? <span className={styles.unpriced}>{value.unpriced} unpriced</span> : null}
           </span>
         }
       />
@@ -231,12 +236,12 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
               />
             </div>
             <h2 className={styles.enlargedName}>{enlarged.slot.name ?? "Card"}</h2>
-            <p className={styles.showcaseMeta}>
+            <p className={styles.enlargedMeta}>
               Page {enlarged.page}, pocket {enlarged.pocket} · {finishLabel(enlarged.slot.finish)}
               {enlarged.copies > 1 ? ` · ${enlarged.copies} copies` : ""}
               {enlarged.slot.condition ? ` · ${conditionLabel(enlarged.slot.condition)}` : ""}
             </p>
-            <span className={styles.showcasePrice}>
+            <span className={styles.enlargedPrice}>
               <Money value={value.priceFor(enlarged.slot)} loading={value.isLoading} absentLabel={UNPRICED} />
             </span>
             <button type="button" className={styles.closeButton} onClick={() => setOpen(null)}>

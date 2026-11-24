@@ -107,6 +107,17 @@ describe("TradeShareScreen, the binder showcase", () => {
     expect(within(grid).getAllByRole("button")).toHaveLength(3);
   });
 
+  it("says the unpriced count in the same line as the card count, with no dangling separator", async () => {
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    await screen.findByRole("heading", { name: "Eeveelution wall", level: 1 });
+    const unpriced = await screen.findByText(/\d+ unpriced/);
+    const line = unpriced.closest("p");
+    expect(line?.textContent).toMatch(/4 cards · \d+ unpriced/);
+    expect(line?.textContent?.trim().endsWith("·")).toBe(false);
+  });
+
   it("opens a card large when tapped, and closes again", async () => {
     const user = userEvent.setup();
     serve({ kind: "binder", binder: sharedBinder(), at: NOW });
