@@ -200,7 +200,7 @@ export function HomeScreen() {
       <ProgressPanel resume={resume} rows={rows} loading={sets === undefined} />
 
       {/* Below Sets in progress, so it appearing never moves what is above it. */}
-      <MoversPanel rows={moverRows} />
+      <MoversPanel rows={moverRows} loading={moverRows === null} />
 
       {/*
         The one destination Home repeats from the nav, and only because it can

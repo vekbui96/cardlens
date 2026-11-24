@@ -42,6 +42,13 @@ describe("ProgressPanel finish line", () => {
     expect(link.getAttribute("href")).toBe("#/wantlist");
   });
 
+  it("uses the shared skeleton for three rows while the set list loads", () => {
+    render(<ProgressPanel resume={null} rows={[]} loading={true} />);
+    const box = screen.getByTestId("home-progress-skeleton");
+    expect(box.querySelectorAll("[data-skeleton]")).toHaveLength(3);
+    expect(screen.getByText("Loading your sets")).toBeTruthy();
+  });
+
   it("shows no extra line when nothing is left", () => {
     render(<ProgressPanel resume={null} rows={[row(null)]} loading={false} />);
     expect(screen.queryByText(/to go/)).toBeNull();
