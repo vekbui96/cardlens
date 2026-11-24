@@ -214,6 +214,14 @@
   width: 100%;
   /* Small enough that the whole sheet fits on a phone: scrolled content hides the top border under the handle. */
   max-width: calc(var(--v2-pocket) * 1.7);
+  /*
+   * On desktop the pocket is bigger, so the width cap alone made the card
+   * taller than the sheet (72dvh) leaves room for and the top was clipped. 28dvh
+   * of width is about 39dvh of card, which leaves the title and button below it.
+   * A phone's 1.7 pockets is already narrower than this, so it is unchanged.
+   */
+  max-width: min(calc(var(--v2-pocket) * 1.7), 28vh);
+  max-width: min(calc(var(--v2-pocket) * 1.7), 28dvh);
 }
 
 .enlargedName {

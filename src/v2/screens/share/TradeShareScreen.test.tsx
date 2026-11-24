@@ -143,6 +143,8 @@ describe("TradeShareScreen, the binder showcase", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Sylveon V" });
     expect(within(dialog).getByRole("img", { name: "Sylveon V" })).toBeTruthy();
+    // The art wrapper carries the height-capped class (28dvh, share.module.css) so the whole card shows on desktop.
+    expect(dialog.querySelector('[data-fit="whole-card"]')).not.toBeNull();
     // Where it lives, so the visitor can ask for it by pocket.
     expect(within(dialog).getByText(/Page 1, pocket 5/)).toBeTruthy();
 

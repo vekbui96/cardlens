@@ -230,7 +230,7 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
       <Sheet open={enlarged !== null} onClose={() => setOpen(null)} label={enlarged?.slot.name ?? "Card"}>
         {enlarged ? (
           <div className={styles.enlarged}>
-            <div className={styles.enlargedArt}>
+            <div className={styles.enlargedArt} data-fit="whole-card">
               <CardArt
                 src={enlarged.slot.imageSmall}
                 name={enlarged.slot.name ?? "Card"}
