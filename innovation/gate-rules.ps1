@@ -721,15 +721,17 @@ $script:PrecheckNewRx = '(?i)\b(new|create[sd]?|creating|introduc\w*|add(s|ed|in
 function Get-ProposalPathCheck {
     param([string]$Body = '', [scriptblock]$Exists, [int]$Max = 20)
     $b = [regex]::Replace("$Body", '(?s)<!--.*?-->', '')
-    $paths = New-Object System.Collections.ArrayList
-    foreach ($line in @($b -split "`r?`n")) {
+    # a path the body ever calls new ("Add a new src/web/Foo.tsx") is left out everywhere it appears (portfolio #65
+    # named its new public/404.html again in its test plan); backslashes read as slashes
+    $paths = New-Object System.Collections.ArrayList; $isNew = @{}
+    foreach ($line in @(($b -replace '\\', '/') -split "`r?`n")) {
         foreach ($m in [regex]::Matches($line, $script:PrecheckPathRx)) {
             $p = $m.Groups[1].Value
-            if ($line.Substring(0, $m.Index) -match $script:PrecheckNewRx) { continue }   # "a new src/web/Foo.tsx"
-            if (-not $paths.Contains($p)) { [void]$paths.Add($p) }
-            if ($paths.Count -ge $Max) { break }
+            if ($line.Substring(0, $m.Index) -match $script:PrecheckNewRx) { $isNew[$p] = $true; continue }
+            if (-not $paths.Contains($p) -and $paths.Count -lt $Max) { [void]$paths.Add($p) }
         }
     }
+    $paths = @($paths | Where-Object { -not $isNew.ContainsKey($_) })
     $missing = @($paths | Where-Object { -not (& $Exists $_) })
     $refuse = ($paths.Count -gt 0 -and $missing.Count -eq $paths.Count)
     $why = $(if ($paths.Count -eq 0) { 'the issue names no repo file: nothing to pre-check' }

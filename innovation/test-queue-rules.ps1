@@ -969,6 +969,8 @@ Check (-not $pc.Refuse -and @($pc.Missing) -contains 'src/web/home/Gone.tsx') 's
 Check (-not (Get-ProposalPathCheck -Body 'Make the Home screen value card taller.' -Exists $ex).Refuse) 'no file named: nothing to refuse (the session checks screens itself)'
 Check (-not (Get-ProposalPathCheck -Body "<!-- src/gone/x.ts -->`nPolish the Home header." -Exists $ex).Refuse) 'paths inside HTML comments are ignored'
 Check (-not (Get-ProposalPathCheck -Body 'Create src/web/new/Thing.tsx for the new card.' -Exists $ex).Refuse) 'a proposal that only names files it creates is not refused'
+Check (-not (Get-ProposalPathCheck -Body "## What`nAdd a new ``src/web/new/Thing.tsx``.`n## How it would be tested`nA unit test asserts ``src/web/new/Thing.tsx`` renders." -Exists $ex).Refuse) 'a file called new once is not counted where it is named again (portfolio #65)'
+Check ((Get-ProposalPathCheck -Body 'Change src\web\home\HomeWeb.tsx' -Exists $ex).Paths -contains 'src/web/home/HomeWeb.tsx') 'backslash paths are read as repo paths'
 $md2 = [IO.File]::ReadAllText("$PSScriptRoot\LOOP.md")
 $b1 = Get-LoopMdSections -Text $md2 -Sections @(0, 2, 3, 6) -Kind 'build'
 $bm2 = Get-LoopMdSections -Text $md2 -Sections @(0, 2, 3, 6) -Kind 'buildmerge'
