@@ -5,7 +5,7 @@ import { topMovers, type Mover, type MoverWindow, type TopMovers } from "../../.
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { formatChangeShort, formatUsd } from "../../../utils/format.ts";
-import { Card, Money, Panel, ScreenReaderOnly, Skeleton, Stack, UNPRICED } from "../../primitives/index.ts";
+import { Card, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -34,12 +34,9 @@ export function MoversPanel({
     return (
       <Panel title="Biggest movers" headingLevel={2}>
         <div aria-busy="true" data-testid="home-movers-skeleton">
-          <ScreenReaderOnly>Loading biggest movers</ScreenReaderOnly>
-          <Stack gap={2}>
-            <Skeleton height="var(--v2-space-7)" />
-            <Skeleton height="var(--v2-space-7)" />
-            <Skeleton height="var(--v2-space-7)" />
-          </Stack>
+          <p className={styles.resumeMeta} role="status">
+            Movers need prices; retrying
+          </p>
         </div>
       </Panel>
     );
