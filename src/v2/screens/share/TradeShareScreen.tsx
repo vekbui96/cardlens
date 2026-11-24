@@ -178,13 +178,13 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
           <Stack gap={3}>
             <Row gap={2} wrap justify="space-between">
               <p className={styles.hint}>Tap a card to see it larger</p>
-              <Row gap={2} wrap>
+              <div role="group" aria-label="Sort cards" className={styles.sortPills}>
                 {SORTS.map((s) => (
                   <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
                     {s.label}
                   </Chip>
                 ))}
-              </Row>
+              </div>
             </Row>
 
             <ul className={styles.showcaseGrid} aria-label="Cards in this binder">
