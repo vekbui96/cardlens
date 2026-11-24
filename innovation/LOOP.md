@@ -1171,7 +1171,28 @@ or a regression blocks the merge) and posts the verdict.
    `artifact:qa/<run>-<issue>-p1/ac1/390x844.png`), or `file:line`. A **regression** is something the change
    broke that no criterion covers (a screen that no longer renders, a page error, a layout overflow at 390px,
    missing copy): at most 3, each with workflow, summary and evidence. Be sure before you fail anything: a fail
-   blocks the merge and costs a fix round. Optional `lesson` as in section 12.
+   blocks the merge and costs a fix round. Optional `lesson`: one sentence about checking this kind of change next time (memory agent input only).
 4. **Budget**: a few browser runs per criterion; stop when each criterion has a verdict.
-5. **End.** A few lines of summary, then exactly ONE fenced `json` block in the format of section 12 step 4,
-   then `LOOP-RESULT: OK qa <pass|fail|partial>`.
+5. **End.** A few lines of summary, then exactly ONE fenced `json` block, then
+   `LOOP-RESULT: OK qa <pass|fail|partial>`:
+
+   ```json
+   {
+     "criteria": [
+       {
+         "id": "ac1",
+         "result": "pass",
+         "evidence": ["artifact:qa/20261124-091808-286-p1/ac1/390x844.png"],
+         "note": "With the collection sample, the sort chips sit on one row at 390px"
+       },
+       {
+         "id": "ac2",
+         "result": "unverified",
+         "evidence": [],
+         "note": "needs a real sync server; the preview has none"
+       }
+     ],
+     "regressions": [],
+     "lesson": ""
+   }
+   ```
