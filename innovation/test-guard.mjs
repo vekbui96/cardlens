@@ -267,6 +267,22 @@ const deny = [
   ps(`Remove-Item "${S}\\FOCUS.md"`),
   ps(`Copy-Item "${W}\\f.md" "${C}\\innovation\\FOCUS.md"`),
   ps(`Write-Output x > "${S}\\FOCUS.md"`),
+  // AUTONOMY.json is Ve's standing approval policy: the loop can never write it (scripts dir or clone), nor the
+  // runner's via-policy state and log (the veto window runs from the runner's record)
+  { tool_name: "Write", tool_input: { file_path: `${S}\\AUTONOMY.json`, content: "{}" } },
+  { tool_name: "Edit", tool_input: { file_path: `${S}\\AUTONOMY.json`, old_string: "6", new_string: "1" } },
+  { tool_name: "Write", tool_input: { file_path: `${C}\\innovation\\AUTONOMY.json`, content: "{}" } },
+  {
+    tool_name: "Edit",
+    tool_input: { file_path: `${C}\\innovation\\AUTONOMY.json`, old_string: "false", new_string: "true" },
+  },
+  ps(`Set-Content "${S}\\AUTONOMY.json" '{}'`),
+  ps(`Remove-Item "${S}\\AUTONOMY.json"`),
+  ps(`Copy-Item "${W}\\a.json" "${C}\\innovation\\AUTONOMY.json"`),
+  ps(`Write-Output '{}' > "${S}\\AUTONOMY.json"`),
+  { tool_name: "Write", tool_input: { file_path: `${HOME}\\state\\via-policy.json`, content: "{}" } },
+  ps(`Remove-Item "${HOME}\\state\\via-policy.json"`),
+  ps(`Add-Content "${HOME}\\state\\via-policy-log.jsonl" x`),
   { tool_name: "Write", tool_input: { file_path: `${HOME}\\elevated\\request.json`, content: "{}" } },
   { tool_name: "Write", tool_input: { file_path: `${HOME}\\state\\deploy-12.json`, content: "{}" } },
   {

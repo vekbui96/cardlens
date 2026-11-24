@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "loop": "cardlens",
+  "approval": "via-policy",
+  "enabled": true,
+  "vetoHours": 6,
+  "includeSpecs": true,
+  "exclude": ["server-deploy", "stored-data", "manual", "protected"],
+  "setBy": "vekbui96",
+  "setOn": "2026-11-23",
+  "decision": "Ve set this on 2026-11-23 in an interactive session, answering two direct questions: 'How much should the loops auto-approve without asking you?' -> 'Everything but server/data' (auto-approve every proposal and spec after a veto window, except ones that change the server, stored data or protected areas), and 'Which loops?' -> CardLens and Ops hub (not portfolio).",
+  "howItWorks": "The runner posts one notice on each eligible issue ('Auto-approves via Ve's policy at <time> unless you comment /hold'); after vetoHours it is built without an approved label. A /hold comment, closing the issue, or editing its body after the notice stops it for good; adding approved builds it at once. Eligibility: innovation/gate-rules.ps1 Get-ViaPolicyDecision (fails closed).",
+  "offSwitch": "Set enabled to false (commit and push from D:\\projects\\cardlens): manual approval again at the next check, nothing else changes. The loop's sessions can never write this file."
+}

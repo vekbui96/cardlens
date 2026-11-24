@@ -317,7 +317,12 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 1. **Take the issue:** print `LOOP-ISSUE-START <ISSUE>`. If the header says `APPROVAL: via-spec #<spec>`,
    the issue is a slice auto-approved by Ve's approval of its spec: it has no `approved` label and needs
    none (`check-approval.ps1 -Issue <n>` reports `approval: via-spec`); build it exactly like any approved
-   issue and say `approval: via-spec #<spec>` in your summary. If the header says `retry: yes`, this is the ONE
+   issue and say `approval: via-spec #<spec>` in your summary. If the header says `APPROVAL: via-policy`, the issue is
+   approved through Ve's standing policy (`innovation/AUTONOMY.json`, after its veto window; `check-approval.ps1 -Issue <n>`
+   reports `approval: via-policy`): build it like any approved issue and say `approval: via-policy` in your summary.
+   The policy covers only Pages-only changes outside the server, stored data and protected areas: if the change turns
+   out to need any of those, refuse it as in step 3 (class `scope`, outcome `skipped`) instead of building it.
+   If the header says `retry: yes`, this is the ONE
    automatic retry of a build that failed for a reason outside the change, or of a Sonnet build that failed on
    the change (then this session runs on Opus; `check-approval.ps1 -Issue <n>` shows its `retryReason`): read
    the last attempt's failure comment and PR first, and build it like any other, with the differences in steps
@@ -679,6 +684,13 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    ## Scope
    "In scope for the loop." OR "**Manual / needs Ve**: <why: which rule-8 item>. The loop will not build this."
    ```
+
+   **Ve's standing policy auto-approves some proposals** (`innovation/AUTONOMY.json`, read-only to you): a proposal or spec
+   whose "What deploys" is Pages only (a spec: every slice), whose Scope is "In scope for the loop" and that names no stored
+   data shape, sync / merge rule, scanner gate, secret, CORS, `innovation/` or protected path is built after a veto window
+   unless Ve comments `/hold`. So write "What deploys" and Risk exactly: never "Pages only" for a change that needs the server,
+   and name any data, sync or gate change plainly (that makes it Manual / needs Ve, as rule 8 says). The runner posts the
+   notice; you never comment about the policy and never write `AUTONOMY.json`.
 
 7. **A spec** is opened with
    `gh issue create -R vekbui96/cardlens --title "Spec: <feature>" --label loop:proposal --label loop:spec --body-file <file>`.

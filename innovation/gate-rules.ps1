@@ -378,7 +378,8 @@ function Find-HoldComment {
 function Get-ViaSpecDecision {
     param($Slice, [string]$SliceEditedAt = '', [object[]]$SliceComments = @(), [int]$SliceApprovalEvents = 0,
         $Spec = $null, $SpecCheck = $null, [object[]]$SpecComments = @(), [object[]]$Issues = @(),
-        [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+        [string]$Owner, [string]$Marker = '<!-- innovation-loop -->', [bool]$PolicyScope = $false)
+    # -PolicyScope: the spec was approved via Ve's policy (Get-ViaPolicyDecision), so each slice must itself be covered by it
     $r = New-Object System.Collections.ArrayList
     $body = "$($Slice.body)"
     $link = Get-SliceLink -Body $body
@@ -444,6 +445,10 @@ function Get-ViaSpecDecision {
     if ($hs) { [void]$r.Add("$Owner put this slice on hold (comment $($hs.id))") }
     # 5. body never edited
     if ($SliceEditedAt) { [void]$r.Add("body edited at $SliceEditedAt, after it was opened") }
+    if ($PolicyScope) {
+        $ps = Get-ViaPolicyScope -Title "$($Slice.title)" -Body $body -IsSpec $false
+        if (-not $ps.InScope) { [void]$r.Add("spec #$($link.Spec) was approved via Ve's policy, which covers only Pages-only work outside the server, stored data and protected areas: $(@($ps.Reasons) -join '; ')") }
+    }
     return [pscustomobject]@{ Linked = $true; Eligible = ($r.Count -eq 0); Spec = $link.Spec; K = $link.K; Of = $link.Of; SpecApprovedAt = $specAt; Reasons = @($r) }
 }
 
@@ -1326,10 +1331,12 @@ function Get-RequestPlanChildren {
 # The drain.json record for this run. $Previous: the parsed earlier drain.json ($null = none); its history is kept
 # (newest last, at most $Keep runs including this one). $Buildable / $NeedsOpus: issue numbers; $Progress: builds
 # that ended loop:deployed in this run; $RolledBack: a build of this run was rolled back; $NeedsVe: the run stopped
-# on an uncertain deploy (DEPLOY STATE UNCERTAIN); $BuildCapped: the daily build cap's refusal ('' = not capped).
+# on an uncertain deploy (DEPLOY STATE UNCERTAIN); $BuildCapped: the daily build cap's refusal ('' = not capped);
+# $PolicyDueAt: the earliest end of a via-policy veto window still to come (ISO UTC, '' = none).
 function New-DrainState {
     param([string]$RunId, [datetime]$EndedAt = (Get-Date), [string]$Result = '', [int[]]$Buildable = @(), [int[]]$NeedsOpus = @(),
-        [int]$Progress = 0, [bool]$RolledBack = $false, [bool]$NeedsVe = $false, [string]$BuildCapped = '', $Previous = $null, [int]$Keep = 6)
+        [int]$Progress = 0, [bool]$RolledBack = $false, [bool]$NeedsVe = $false, [string]$BuildCapped = '', $Previous = $null, [int]$Keep = 6,
+        [string]$PolicyDueAt = '')
     $b = @($Buildable | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
     $head = 0; if ($b.Count -gt 0) { $head = $b[0] }
     $h = @(); if ($Previous -and $Previous.PSObject.Properties.Name -contains 'history') { $h = @($Previous.history | Where-Object { $_ -and "$($_.runId)" -ne $RunId }) }
@@ -1337,43 +1344,55 @@ function New-DrainState {
     if ($h.Count -gt $Keep) { $h = @($h | Select-Object -Last $Keep) }
     return [ordered]@{ schema = 1; runId = $RunId; endedAt = $EndedAt.ToString('o'); result = $Result; buildable = @($b); head = $head
         needsOpus = @($NeedsOpus | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ }); progress = $Progress; rolledBack = $RolledBack; needsVe = $NeedsVe
-        buildCapped = $BuildCapped; history = @($h) }
+        buildCapped = $BuildCapped; policyDueAt = $PolicyDueAt; history = @($h) }
 }
 
 # May the watcher start the loop's task to drain the queue now? $Drain: the parsed drain.json; $Running: the task is
 # running or a live run holds the loop's lock; $Verdict: the ops hub's plan-budget verdict; $Done: the watcher's
 # state keys (a drain key starts at most one run per finished run). Start + Key + Reason. In order:
-#   no drain state / nothing buildable / already drained after this run              -> no
+#   no drain state                                                                   -> no
+#   nothing buildable, and no via-policy veto window ended yet (policyDueAt)          -> no
+#   already drained after this run                                                   -> no
 #   the last run stopped on an uncertain deploy (needsVe)                            -> no (Ve first)
 #   plan budget hold; no-opus while every buildable issue needs Opus                 -> no
 #   a run in progress                                                                -> no
 #   the last run ended less than $IdleMinutes ago                                    -> not yet
 #   the daily build cap was reached today                                            -> no
+#   a via-policy veto window ended (nothing else buildable)                          -> start (the run re-checks it)
 #   the last run rolled a build back, or the last $FailRuns runs all had the same queue head and deployed nothing
 #   (failed, skipped or stopped)                                                     -> back off $BackoffMinutes after the last run
 #   otherwise                                                                        -> start
+# policyDueAt (drain.json): the earliest end of a via-policy veto window after that run (gate-rules.ps1
+# Get-ViaPolicyDecision). Once it has passed an issue may be buildable; the run re-checks every approval itself, and
+# finds nothing ($0) if Ve held or closed it meanwhile.
 function Get-DrainDecision {
     param($Drain, [bool]$Running = $false, [string]$Verdict = 'normal', [datetime]$Now = (Get-Date), [string[]]$Done = @(), [string]$Repo = '',
         [int]$IdleMinutes = 15, [int]$FailRuns = 2, [int]$BackoffMinutes = 120)
     $mk = { param([bool]$S, [string]$K, [string]$Why) [pscustomobject]@{ Start = $S; Key = $K; Reason = $Why } }
     if ($null -eq $Drain -or "$($Drain.schema)" -ne '1' -or -not "$($Drain.runId)") { return (& $mk $false '' 'no drain state') }
     $key = "drain:${Repo}:$($Drain.runId)"
+    $toUtc = { param($x) if ($x -is [datetime]) { return $x.ToUniversalTime() }; $p = [datetime]::MinValue
+        if ([datetime]::TryParse("$x", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { return $p.ToUniversalTime() }; return $null }
     $b = @(@($Drain.buildable) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" })
-    if ($b.Count -eq 0) { return (& $mk $false '' "nothing buildable after run $($Drain.runId)") }
+    $pd = $null; if ($Drain.PSObject.Properties.Name -contains 'policyDueAt' -and "$($Drain.policyDueAt)") { $pd = & $toUtc $Drain.policyDueAt }
+    $policy = ($b.Count -eq 0 -and $null -ne $pd -and $Now.ToUniversalTime() -ge $pd)
+    if ($b.Count -eq 0 -and -not $policy) {
+        if ($null -ne $pd) { return (& $mk $false '' "nothing buildable after run $($Drain.runId); next via-policy veto window ends $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))") }
+        return (& $mk $false '' "nothing buildable after run $($Drain.runId)")
+    }
     if (@($Done) -contains $key) { return (& $mk $false '' "already started a drain run after run $($Drain.runId)") }
     if ("$($Drain.needsVe)" -eq 'True') { return (& $mk $false '' "run $($Drain.runId) stopped on an uncertain deploy: waiting for Ve") }
     $v = "$Verdict".Trim().ToLowerInvariant()
     if ($v -eq 'hold') { return (& $mk $false '' 'plan budget hold') }
     $op = @(@($Drain.needsOpus) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" })
-    if ($v -eq 'no-opus' -and @($b | Where-Object { $op -notcontains $_ }).Count -eq 0) { return (& $mk $false '' 'plan budget no-opus and every buildable issue needs Opus') }
+    if ($v -eq 'no-opus' -and $b.Count -gt 0 -and @($b | Where-Object { $op -notcontains $_ }).Count -eq 0) { return (& $mk $false '' 'plan budget no-opus and every buildable issue needs Opus') }
     if ($Running) { return (& $mk $false '' 'a run is in progress') }
-    $toUtc = { param($x) if ($x -is [datetime]) { return $x.ToUniversalTime() }; $p = [datetime]::MinValue
-        if ([datetime]::TryParse("$x", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { return $p.ToUniversalTime() }; return $null }
     $end = & $toUtc $Drain.endedAt
     if ($null -eq $end) { return (& $mk $false '' 'drain state has no endedAt') }
     $idle = ($Now.ToUniversalTime() - $end).TotalMinutes
     if ($idle -lt $IdleMinutes) { return (& $mk $false '' "run $($Drain.runId) ended $([int]$idle) min ago (wait $IdleMinutes)") }
     if ("$($Drain.buildCapped)" -and $end.ToLocalTime().Date -eq $Now.Date) { return (& $mk $false '' "daily build cap reached today ($($Drain.buildCapped))") }
+    if ($policy) { return (& $mk $true $key "via-policy veto window ended $($pd.ToLocalTime().ToString('yyyy-MM-dd HH:mm')) after run $($Drain.runId): re-check the queue") }
     $h = @(@($Drain.history) | Where-Object { $_ })
     $last = @($h | Select-Object -Last $FailRuns)
     $stuck = ($last.Count -ge $FailRuns -and @($last | Where-Object { "$($_.head)" -eq "$($b[0])" -and "$($_.progress)" -eq '0' }).Count -eq $last.Count)
@@ -1615,4 +1634,363 @@ function Format-RequestSynopsis {
 function ConvertTo-AsciiJson {
     param([string]$Json)
     return [regex]::Replace("$Json", '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+}
+# ==================================================================================================
+# Via-policy approval: Ve's STANDING approval policy. Ve decided on 2026-11-23 (in an interactive session, asked
+# directly: "How much should the loops auto-approve without asking you?" -> "Everything but server/data", for the
+# CardLens and Ops hub loops) that the loop's own proposals and specs are approved after a veto window, except
+# ones that change the server, stored data or protected areas. The approving authority is Ve's written policy
+# file, innovation/AUTONOMY.json, read from Ve's checkout (next to the scripts, like FOCUS.md); the loop's
+# sessions can never write it (guard.mjs denies it, merge-pr.ps1 refuses innovation/**). Never the loop's own
+# judgement: eligibility is decided here, deterministically, and fails closed. The loop still never adds the
+# `approved` label; via-policy is a runner decision like via-spec.
+#
+# An open issue is approved via policy when ALL hold (Get-ViaPolicyDecision):
+#  0. the policy is on: AUTONOMY.json exists, parses, schema 1, this loop, approval "via-policy", enabled true,
+#     vetoHours 1..168, includeSpecs a boolean, exclude names exactly the exclusions this file implements
+#     (server-deploy, stored-data, manual, protected). Anything else = manual approval (fail closed).
+#     enabled: false is Ve's off switch: manual approval again, at once.
+#  1. it is the loop's own proposal: loop:proposal, opened by the owner's account, body's first line the loop
+#     marker; not a slice (via-spec rule), not from a request (via-request rule), no `approved` label (Ve's
+#     label approval wins, immediately); a spec only with includeSpecs (its slices then follow via-spec, and each
+#     slice must itself pass the scope rule below)
+#  2. not Manual / needs Ve, not loop:failed, not loop:deployed
+#  3. scope (Get-ViaPolicyScope): "What deploys" says Pages only (a spec: every slice says Pages only), nothing
+#     names the server; "Scope" says "In scope for the loop"; and no sensitive area is named outside a negated
+#     clause: stored data shapes, sync / merge rules, the scanner gate or card index, secrets, CORS / CSP,
+#     innovation/ / CI / the loop itself, the Target bot, metrics events, or a protected path
+#  4. no veto: open (Ve closing it rejects it), no `approved` added and removed by hand, no owner /hold comment
+#  5. the runner posted its ONE notice comment (Format-ViaPolicyNotice) and recorded it in
+#     <LOOP_HOME>\state\via-policy.json; the comment is still there; the body was not edited after the notice
+#  6. the veto window (vetoHours) has passed since the notice; the plan budget is not `hold`
+# merge-pr.ps1 re-checks it before merging, refuses any protected path (the backstop for a misclassified
+# proposal) and refuses a via-policy merge that needs a server deploy.
+# ==================================================================================================
+$script:AutonomyFileName = 'AUTONOMY.json'
+$script:ViaPolicyLoop = 'cardlens'
+$script:ViaPolicyMarker = '<!-- innovation-loop:via-policy -->'
+$script:ViaPolicyStateName = 'via-policy.json'
+$script:ViaPolicyLogName = 'via-policy-log.jsonl'
+$script:ViaPolicyExcludes = @('server-deploy', 'stored-data', 'manual', 'protected')
+$script:ViaPolicyNegationRx = "(?i)(\b(no|not|never|none|nothing|without|unchanged|untouched|unaffected|neither|nor)\b|n't\b)"
+# area name -> pattern; matched per clause, ignored only when a negation comes BEFORE the match in that clause
+$script:ViaPolicySensitive = @(
+    @{ Name = 'stored data shapes'; Rx = '(?i)\b(stored (data |row )?shapes?|data shapes?|schemas?|migrat\w*|whitelists?|tombstones?|watermarks?|or-set|canonicalfinish|storage keys?|cache keys?|cache[- ]versions?|collection\.json|binders\.json|shares\.json)\b|d:\\+services\\+data' },
+    @{ Name = 'sync / merge rules'; Rx = '(?i)\b(sync(ing|ed|s)?|merge rules?|merge logic|conflict resolution|last-write-wins|outbox)\b' },
+    @{ Name = 'the scanner gate / card index'; Rx = '(?i)\b(accept gate|scanner gate|gate constants?|phash|min_margin\w*|near_exact|min_detail|judge\.py|build-card-index|card[- ]index (re)?builds?)\b' },
+    @{ Name = 'secrets'; Rx = '(?i)\b(secrets?|api[- ]keys?|passwords?|credentials?|auth(entication)? tokens?|bearer|VITE_\w*(TOKEN|KEY|SECRET))\b|(?<![\w-])\.env\b' },
+    @{ Name = 'CORS / CSP'; Rx = '(?i)\b(cors|allowed[_ ]origins|access-control-allow-\w+|content-security-policy|csp)\b' },
+    @{ Name = 'innovation/, CI or the loop itself'; Rx = '(?i)(\binnovation[\\/]|\.github[\\/]|\.claude[\\/]|\bautonomy\.json\b|\bci workflows?\b)' },
+    @{ Name = 'the Target bot'; Rx = '(?i)(\btarget ?bot\b|/api/target|\bautobuy\b)' },
+    @{ Name = 'a metrics event (needs a server deploy)'; Rx = '(?i)\b(metrics? events?|metricsevents)\b' }
+)
+
+# Ve's policy file, parsed. $Exists / $Text / $ReadError: the file as run-loop.ps1 / check-approval.ps1 read it from
+# the scripts dir (Ve's checkout). Returns Enabled, VetoHours, IncludeSpecs, Exclude, SetBy, SetOn, Reason. Every
+# problem means Enabled = $false (manual approval), with the reason.
+function Get-AutonomyPolicy {
+    param([bool]$Exists = $true, [AllowNull()][AllowEmptyString()][string]$Text = '', [string]$ReadError = '', [string]$Loop = $script:ViaPolicyLoop)
+    $off = { param([string]$Why) [pscustomobject]@{ Enabled = $false; VetoHours = 0; IncludeSpecs = $false; Exclude = @(); SetBy = ''; SetOn = ''; Reason = $Why } }
+    if (-not $Exists) { return (& $off "no innovation/$($script:AutonomyFileName): manual approval only") }
+    if ($ReadError) { return (& $off "$($script:AutonomyFileName) unreadable ($(ConvertTo-SafeLine $ReadError 120)): manual approval only (fail closed)") }
+    if ([string]::IsNullOrWhiteSpace($Text)) { return (& $off "$($script:AutonomyFileName) is empty: manual approval only (fail closed)") }
+    $j = $null
+    try { $j = "$Text".TrimStart([char]0xFEFF) | ConvertFrom-Json } catch { return (& $off "$($script:AutonomyFileName) is not valid JSON: manual approval only (fail closed)") }
+    if ($null -eq $j -or -not ($j -is [pscustomobject])) { return (& $off "$($script:AutonomyFileName) is not a JSON object: manual approval only (fail closed)") }
+    $names = @($j.PSObject.Properties.Name)
+    if ("$($j.schema)" -ne '1') { return (& $off "$($script:AutonomyFileName) schema is not 1: manual approval only (fail closed)") }
+    if ("$($j.loop)" -ne $Loop) { return (& $off "$($script:AutonomyFileName) is for loop '$(ConvertTo-SafeLine "$($j.loop)" 30)', not '$Loop': manual approval only (fail closed)") }
+    if ("$($j.approval)" -ne 'via-policy') { return (& $off "$($script:AutonomyFileName) approval is not 'via-policy': manual approval only (fail closed)") }
+    if ($names -notcontains 'enabled' -or -not ($j.enabled -is [bool])) { return (& $off "$($script:AutonomyFileName) enabled is not true or false: manual approval only (fail closed)") }
+    if (-not $j.enabled) { return (& $off "switched off by Ve ($($script:AutonomyFileName) enabled: false): manual approval only") }
+    $vh = $j.vetoHours
+    if (-not ($vh -is [int] -or $vh -is [long] -or $vh -is [double] -or $vh -is [decimal]) -or [double]$vh -lt 1 -or [double]$vh -gt 168) { return (& $off "$($script:AutonomyFileName) vetoHours must be a number from 1 to 168: manual approval only (fail closed)") }
+    if ($names -notcontains 'includeSpecs' -or -not ($j.includeSpecs -is [bool])) { return (& $off "$($script:AutonomyFileName) includeSpecs is not true or false: manual approval only (fail closed)") }
+    $ex = @(@($j.exclude) | Where-Object { $null -ne $_ } | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Select-Object -Unique)
+    $missing = @($script:ViaPolicyExcludes | Where-Object { $ex -notcontains $_ })
+    $unknown = @($ex | Where-Object { $script:ViaPolicyExcludes -notcontains $_ })
+    if ($missing.Count -gt 0) { return (& $off "$($script:AutonomyFileName) exclude lacks $($missing -join ', '): manual approval only (fail closed)") }
+    if ($unknown.Count -gt 0) { return (& $off "$($script:AutonomyFileName) exclude names $(ConvertTo-SafeLine ($unknown -join ', ') 80), which this loop does not implement: manual approval only (fail closed)") }
+    $by = ConvertTo-SafeLine "$($j.setBy)" 40; $on = ConvertTo-SafeLine "$($j.setOn)" 20
+    return [pscustomobject]@{ Enabled = $true; VetoHours = [double]$vh; IncludeSpecs = [bool]$j.includeSpecs; Exclude = @($ex); SetBy = $by; SetOn = $on
+        Reason = "via-policy on (set by $by on $on; veto window $([double]$vh) h; specs $(if ($j.includeSpecs) { 'included' } else { 'excluded' }))" }
+}
+# Get-AutonomyPolicy over a file. Never throws.
+function Read-AutonomyPolicy {
+    param([string]$Path, [string]$Loop = $script:ViaPolicyLoop)
+    $ex = $false; $t = ''; $e = ''
+    try { $ex = Test-Path -LiteralPath $Path -PathType Leaf } catch { $ex = $true; $e = "$($_.Exception.Message)" }
+    if ($ex -and -not $e) { try { $t = [IO.File]::ReadAllText($Path) } catch { $e = "$($_.Exception.Message)" } }
+    return (Get-AutonomyPolicy -Exists $ex -Text $t -ReadError $e -Loop $Loop)
+}
+
+# The text of one "## <Heading>" section of an issue body, or $null when there is none.
+function Get-MdSection {
+    param([string]$Body, [string]$Heading)
+    $m = [regex]::Match("$Body", ('(?ms)^\s*##\s*' + [regex]::Escape($Heading) + '\s*$(.*?)(?=^\s*##\s|\z)'))
+    if (-not $m.Success) { return $null }
+    return $m.Groups[1].Value
+}
+
+# Sensitive areas named in $Text outside a negated clause ("no stored shape, merge rule or cache key changes" is
+# fine; "changes the merge rule" is not). Clauses: sentences, semicolons and lines. Also path-like tokens that match
+# a protected path pattern. Returns the area names hit (unique).
+function Find-ViaPolicySensitive {
+    param([string]$Text, [object[]]$Rules = $script:ViaPolicySensitive, [string[]]$ProtectedPatterns = $script:ProtectedPathPatterns)
+    $hits = New-Object System.Collections.ArrayList
+    foreach ($cl in @("$Text" -split '(?<=[.;!?])\s+|;|\r?\n')) {
+        $c = "$cl".Trim(); if (-not $c) { continue }
+        foreach ($rule in $Rules) {
+            foreach ($m in [regex]::Matches($c, $rule.Rx)) {
+                if ($c.Substring(0, $m.Index) -match $script:ViaPolicyNegationRx) { continue }
+                if (-not $hits.Contains($rule.Name)) { [void]$hits.Add($rule.Name) }
+                break
+            }
+        }
+        foreach ($m in [regex]::Matches($c, '[A-Za-z0-9_.\-]*[\\/][A-Za-z0-9_.\-\\/]+|(?<![\w/\\-])\.env\S*')) {
+            $p = (($m.Value.Replace('\', '/') -replace '^\./', '') -replace '^/+', '').TrimEnd('.', ',', ')', ':')
+            if ($m.Value -match '^\.env') { $p = $m.Value }
+            foreach ($re in @($ProtectedPatterns)) {
+                if ($p -match $re -or ($p.TrimEnd('/') + '/') -match $re) {
+                    if ($c.Substring(0, $m.Index) -match $script:ViaPolicyNegationRx) { break }
+                    $nm = "protected path $p"
+                    if (-not $hits.Contains($nm)) { [void]$hits.Add($nm) }
+                    break
+                }
+            }
+        }
+    }
+    return @($hits)
+}
+
+# What may ship under the policy (loop-specific): the "## What deploys" section of a proposal, or the "## Slices"
+# list of a spec. CardLens: "Pages only", never the server. Returns the reasons it is not covered (empty = covered).
+function Test-ViaPolicyDeploy {
+    param([string]$Body, [bool]$IsSpec = $false)
+    $r = @()
+    if ($IsSpec) {
+        $sec = Get-MdSection -Body $Body -Heading 'Slices'
+        $items = @(); if ($null -ne $sec) { $items = @($sec -split "`r?`n" | Where-Object { $_ -match '^\s?\d+[.)]\s+' }) }
+        if ($items.Count -eq 0) { return @('spec has no numbered "## Slices" list') }
+        foreach ($it in $items) {
+            $k = ([regex]::Match($it, '^\s?(\d+)')).Groups[1].Value
+            if ($it -notmatch '(?i)\bpages\s+only\b') { $r += "slice $k does not say Pages only" }
+            elseif ($it -match '(?i)\b(server|service|restart)\b|\+\s*server') { $r += "slice $k names the server" }
+        }
+        return $r
+    }
+    $wd = Get-MdSection -Body $Body -Heading 'What deploys'
+    if ($null -eq $wd) { return @('no "## What deploys" section') }
+    if ($wd -notmatch '(?i)\bpages\s+only\b') { $r += '"What deploys" is not "Pages only"' }
+    elseif ($wd -match '(?i)\b(server|service|services|restart|recognition|card[- ]index|data)\b') { $r += '"What deploys" names the server or its data' }
+    return $r
+}
+
+# Is the issue's CONTENT covered by the policy (deploy, scope, sensitive areas)? Title + body (HTML comments
+# removed). Returns InScope + Reasons.
+function Get-ViaPolicyScope {
+    param([string]$Title = '', [string]$Body = '', [bool]$IsSpec = $false)
+    $r = New-Object System.Collections.ArrayList
+    $b = [regex]::Replace("$Body", '(?s)<!--.*?-->', '')
+    if ("$Body" -match $script:ManualRx) { [void]$r.Add('marked Manual / needs Ve') }
+    foreach ($x in @(Test-ViaPolicyDeploy -Body $b -IsSpec $IsSpec)) { [void]$r.Add($x) }
+    if (-not $IsSpec) {
+        $sc = Get-MdSection -Body $b -Heading 'Scope'
+        if ($null -eq $sc -or $sc -notmatch '(?i)in scope for the loop') { [void]$r.Add('"Scope" does not say "In scope for the loop"') }
+    }
+    $hits = @(Find-ViaPolicySensitive -Text "$Title`n$b")
+    if ($hits.Count -gt 0) { [void]$r.Add("names $($hits -join ', ')") }
+    return [pscustomobject]@{ InScope = ($r.Count -eq 0); Reasons = @($r) }
+}
+
+function ConvertTo-ViaPolicyUtc {
+    param($Value)
+    if ($null -eq $Value -or "$Value" -eq '') { return $null }
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+    $p = [datetime]::MinValue
+    if ([datetime]::TryParse("$Value", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { return $p.ToUniversalTime() }
+    return $null
+}
+# A due time as Ve reads it: server-pc local time, e.g. "Mon 2026-11-23 4:00 PM".
+function Format-ViaPolicyTime {
+    param($Utc)
+    $u = ConvertTo-ViaPolicyUtc $Utc
+    if ($null -eq $u) { return '' }
+    return $u.ToLocalTime().ToString('ddd yyyy-MM-dd h:mm tt', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+# The runner's notice comment on $Comments (by -Owner, loop marker + via-policy marker, not an agent's), by id
+# when -CommentId is given, else the first. $null when there is none.
+function Find-ViaPolicyNotice {
+    param([object[]]$Comments = @(), [string]$Owner, [string]$Marker = '<!-- innovation-loop -->', [long]$CommentId = 0)
+    foreach ($c in @($Comments | Where-Object { $_ } | Sort-Object { [datetime]$_.created_at })) {
+        if ("$($c.user.login)" -ne $Owner) { continue }
+        $b = "$($c.body)"
+        if (-not $b.Contains($Marker) -or -not $b.Contains($script:ViaPolicyMarker) -or (Test-AgentComment $c)) { continue }
+        if ($CommentId -gt 0 -and [long]$c.id -ne $CommentId) { continue }
+        return $c
+    }
+    return $null
+}
+
+# Is $Issue (number, title, state, labels, body, author/user, createdAt/created_at, pull_request) approved through
+# Ve's policy now? $EditedAt: GraphQL lastEditedAt ('' = never edited). $Comments: its comments. $ApprovalEvents:
+# labeled/unlabeled `approved` events. $Policy: Get-AutonomyPolicy. $Record: this issue's entry in
+# state\via-policy.json ($null = no notice yet). $Budget: the plan-budget verdict. Returns:
+#   Status   off | not-applicable | ineligible | needs-notice | waiting | due | held | voided | closed
+#   Eligible (Status due: buildable without `approved`), NoticedAt / DueAt (ISO UTC, '' when none), CommentId,
+#   Spec (it is a spec), Reasons (why not; for waiting: when it vetoes).
+# held / voided / closed are final for that issue (Ve approves it by hand if he still wants it).
+function Get-ViaPolicyDecision {
+    param($Issue, [string]$EditedAt = '', [object[]]$Comments = @(), [int]$ApprovalEvents = 0, $Policy = $null, $Record = $null,
+        [string]$Budget = 'normal', [datetime]$NowUtc = [datetime]::UtcNow, [string]$Owner, [string]$Marker = '<!-- innovation-loop -->')
+    $r = New-Object System.Collections.ArrayList
+    $labels = @(Get-IssueLabelNames $Issue)
+    $isSpec = ($labels -contains $script:SpecLabel)
+    $noticedAt = ''; $dueAt = ''; $cid = [long]0
+    $mk = { param([string]$S) [pscustomobject]@{ Status = $S; Eligible = ($S -eq 'due'); NoticedAt = $noticedAt; DueAt = $dueAt; CommentId = $cid; Spec = $isSpec; Reasons = @($r) } }
+    if ($null -eq $Policy -or -not $Policy.Enabled) { $why = 'no policy'; if ($Policy) { $why = "$($Policy.Reason)" }; [void]$r.Add($why); return (& $mk 'off') }
+    $body = "$($Issue.body)"
+    if ($labels -contains 'approved') { [void]$r.Add("has Ve's approved label (label approval)"); return (& $mk 'not-applicable') }
+    if (Get-SliceLink -Body $body) { [void]$r.Add('a slice of a spec (the via-spec rule decides)'); return (& $mk 'not-applicable') }
+    if ((Get-RequestLink -Body $body) -gt 0) { [void]$r.Add("from one of Ve's requests (the via-request rule decides)"); return (& $mk 'not-applicable') }
+    if ($labels -contains $script:RequestLabel) { [void]$r.Add('a loop:request (Ve''s own request)'); return (& $mk 'not-applicable') }
+    # final vetoes first: closed, approved-and-removed by hand, /hold
+    if ("$($Issue.state)" -notmatch '^(?i)open$') { [void]$r.Add('closed (closing a proposal rejects it)'); return (& $mk 'closed') }
+    if ($ApprovalEvents -gt 0) { [void]$r.Add('`approved` was added and removed by hand; that decision stands over the policy'); return (& $mk 'voided') }
+    $created = Get-IssueCreated $Issue
+    $h = Find-HoldComment -Comments $Comments -Owner $Owner -Marker $Marker -Since $created
+    if ($h) { [void]$r.Add("$Owner put it on hold (comment $($h.id))"); return (& $mk 'held') }
+    # 1. the loop's own proposal
+    if ($isSpec -and -not $Policy.IncludeSpecs) { [void]$r.Add('a spec, and the policy excludes specs (includeSpecs: false)') }
+    if ($labels -notcontains 'loop:proposal') { [void]$r.Add('missing label loop:proposal') }
+    $author = Get-IssueAuthor $Issue
+    if ($author -ne $Owner) { [void]$r.Add("opened by $author, not $Owner") }
+    $lines = @($body -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($lines.Count -lt 1 -or $lines[0] -ne $Marker) { [void]$r.Add('body does not start with the loop marker line (not the loop''s own proposal)') }
+    if ($Issue.PSObject.Properties.Name -contains 'pull_request' -and $Issue.pull_request) { [void]$r.Add('is a pull request') }
+    # 2. manual / failed / deployed
+    if ($labels -contains 'loop:failed') { [void]$r.Add('has label loop:failed (via-policy gives no automatic retry)') }
+    if ($labels -contains 'loop:deployed') { [void]$r.Add('has label loop:deployed') }
+    # 3. scope
+    $sc = Get-ViaPolicyScope -Title "$($Issue.title)" -Body $body -IsSpec $isSpec
+    foreach ($x in $sc.Reasons) { [void]$r.Add($x) }
+    if ($r.Count -gt 0) { return (& $mk 'ineligible') }
+    # 5. the notice
+    if ($null -eq $Record -or -not "$($Record.noticedAt)") {
+        if (Find-ViaPolicyNotice -Comments $Comments -Owner $Owner -Marker $Marker) { [void]$r.Add('a via-policy notice comment is on the issue but the runner has no record of it (fail closed)'); return (& $mk 'voided') }
+        [void]$r.Add('eligible: the runner posts the notice next and the veto window starts then'); return (& $mk 'needs-notice')
+    }
+    $nt = ConvertTo-ViaPolicyUtc $Record.noticedAt
+    if ($null -eq $nt) { [void]$r.Add('the runner''s notice record has no readable time (fail closed)'); return (& $mk 'voided') }
+    $noticedAt = $nt.ToString('o'); $cid = [long]0; try { $cid = [long]$Record.commentId } catch { }
+    $due = $nt.AddHours([double]$Policy.VetoHours); $dueAt = $due.ToString('o')
+    if ($cid -le 0 -or -not (Find-ViaPolicyNotice -Comments $Comments -Owner $Owner -Marker $Marker -CommentId $cid)) { [void]$r.Add("the runner's notice comment ($cid) is no longer on the issue (fail closed)"); return (& $mk 'voided') }
+    $ed = ConvertTo-ViaPolicyUtc $EditedAt
+    if ($ed -and $ed -gt $nt) { [void]$r.Add("body edited at $EditedAt, after the policy notice; approve it by hand if it should still be built"); return (& $mk 'voided') }
+    # 6. the veto window and the plan budget
+    if ($NowUtc.ToUniversalTime() -lt $due) { [void]$r.Add("auto-approves at $(Format-ViaPolicyTime $due) unless $Owner comments /hold"); return (& $mk 'waiting') }
+    if ("$Budget".Trim().ToLowerInvariant() -eq 'hold') { [void]$r.Add('veto window over, but the plan budget is hold'); return (& $mk 'waiting') }
+    return (& $mk 'due')
+}
+
+# The ONE comment the runner posts when an issue first becomes eligible. $DueUtc: notice time + vetoHours.
+function Format-ViaPolicyNotice {
+    param($DueUtc, [string]$Who = 'Ve', [string]$Marker = '<!-- innovation-loop -->')
+    return "$Marker`n$($script:ViaPolicyMarker)`nAuto-approves via $Who's policy at $(Format-ViaPolicyTime $DueUtc) unless you comment ``/hold``. Policy: innovation/$($script:AutonomyFileName)`n`n" +
+        "<sub>The loop's own proposal, Pages only, outside the server, stored data and protected areas (checked by gate-rules.ps1 Get-ViaPolicyDecision). Adding ``approved`` yourself builds it at once; closing it rejects it; editing the body after this notice cancels the auto-approval.</sub>`n"
+}
+
+# The runner's state file <LOOP_HOME>\state\via-policy.json, parsed: Ok, Issues (number -> record), Raw, Reason.
+# A missing file is an empty state; a file that exists but cannot be read or parsed is NOT ok (callers then treat
+# the policy as off: no notice, no approval; fail closed).
+function Get-ViaPolicyState {
+    param([bool]$Exists = $false, [string]$Text = '', [string]$ReadError = '')
+    $map = @{}
+    if (-not $Exists) { return [pscustomobject]@{ Ok = $true; Issues = $map; Raw = $null; Reason = 'no via-policy state yet' } }
+    $j = $null
+    if (-not $ReadError) { try { $j = "$Text".TrimStart([char]0xFEFF) | ConvertFrom-Json } catch { $ReadError = "$($_.Exception.Message)" } }
+    if ($null -eq $j -or "$($j.schema)" -ne '1') {
+        $why = 'via-policy state unreadable'; if ($ReadError) { $why += " ($(ConvertTo-SafeLine $ReadError 120))" } else { $why += ' (schema)' }
+        return [pscustomobject]@{ Ok = $false; Issues = $map; Raw = $null; Reason = "$why; via-policy approval off until it is fixed (fail closed)" }
+    }
+    foreach ($e in @($j.issues | Where-Object { $_ -and "$($_.issue)" -match '^\d+$' })) { $map[[int]$e.issue] = $e }
+    return [pscustomobject]@{ Ok = $true; Issues = $map; Raw = $j; Reason = "via-policy state: $($map.Count) issue(s)" }
+}
+function Read-ViaPolicyState {
+    param([string]$Path)
+    $ex = $false; $t = ''; $e = ''
+    try { $ex = Test-Path -LiteralPath $Path -PathType Leaf } catch { $ex = $true; $e = "$($_.Exception.Message)" }
+    if ($ex -and -not $e) { try { $t = [IO.File]::ReadAllText($Path) } catch { $e = "$($_.Exception.Message)" } }
+    return (Get-ViaPolicyState -Exists $ex -Text $t -ReadError $e)
+}
+
+# The next state (runner side, pure). $State: Get-ViaPolicyState; $Entries: check-approval.ps1 -List `viaPolicy`
+# (issue, title, spec, status, noticedAt, dueAt, commentId, reasons); $Approvals: issue -> approval of the buildable
+# queue; $Posted: notices posted now (issue -> @{ noticedAt; commentId; dueAt }); $Outcomes: builds of this run
+# (issue -> deployed | failed | rolled-back | skipped); -PolicyEnabled $false (Ve switched it off): waiting records become off.
+# Only issues that were ever noticed are kept. Returns State
+# (the file's object) and Events (log records for status changes). A record that drops out of the open candidates
+# becomes approved-by-hand (Ve's label) or gone (closed, deployed, ...), unless a build outcome says more.
+function Update-ViaPolicyState {
+    param($State, [object[]]$Entries = @(), [hashtable]$Approvals = @{}, [hashtable]$Posted = @{}, [hashtable]$Outcomes = @{}, $Policy = $null, [bool]$PolicyEnabled = $true,
+        [string]$RunId = '', [string]$Repo = '', [string]$Loop = $script:ViaPolicyLoop, [datetime]$NowUtc = [datetime]::UtcNow)
+    $now = $NowUtc.ToUniversalTime().ToString('o')
+    $old = @{}; if ($State -and $State.Issues) { foreach ($k in $State.Issues.Keys) { $old[[int]$k] = $State.Issues[$k] } }
+    $out = [ordered]@{}; $events = New-Object System.Collections.ArrayList
+    $get = { param($o, [string]$n) if ($null -ne $o -and $o.PSObject.Properties.Name -contains $n) { return $o.$n }; return $null }
+    $seen = @{}
+    foreach ($e in @($Entries | Where-Object { $_ })) {
+        $n = [int]$e.issue; $seen[$n] = $true
+        $prev = $null; if ($old.ContainsKey($n)) { $prev = $old[$n] }
+        $st = "$($e.status)"; $nAt = "$($e.noticedAt)"; $dAt = "$($e.dueAt)"; $cid = [long]0; try { $cid = [long]$e.commentId } catch { }
+        if ($Posted.ContainsKey($n)) { $p = $Posted[$n]; $st = 'waiting'; $nAt = "$($p.noticedAt)"; $dAt = "$($p.dueAt)"; $cid = [long]$p.commentId }
+        if (-not $prev -and -not $Posted.ContainsKey($n)) { continue }   # never noticed: nothing to keep
+        if ($prev -and -not $nAt) { $nAt = "$(& $get $prev 'noticedAt')"; $dAt = "$(& $get $prev 'dueAt')"; try { $cid = [long](& $get $prev 'commentId') } catch { } }
+        $pst = "$(& $get $prev 'status')"
+        if ($Outcomes.ContainsKey($n)) { $st = "$($Outcomes[$n])" }
+        elseif ($pst -in @('deployed', 'failed', 'rolled-back') -and $st -in @('ineligible', 'closed')) { $st = $pst }   # keep the build result
+        $rec = [ordered]@{ issue = $n; title = (ConvertTo-SafeLine "$($e.title)" 120); spec = [bool]$e.spec; status = $st; noticedAt = $nAt; dueAt = $dAt; commentId = $cid
+            reasons = @(@($e.reasons) | Where-Object { $_ } | ForEach-Object { ConvertTo-SafeLine "$_" 200 } | Select-Object -First 4)
+            statusAt = $(if ($pst -eq $st -and $prev) { "$(& $get $prev 'statusAt')" } else { $now }); url = $(if ($Repo) { "https://github.com/$Repo/issues/$n" } else { '' })
+            approvedAt = "$(& $get $prev 'approvedAt')"; outcome = "$(& $get $prev 'outcome')"; runId = "$(& $get $prev 'runId')" }
+        if ($st -eq 'due' -and -not $rec.approvedAt) { $rec.approvedAt = $dAt }
+        if ($Outcomes.ContainsKey($n)) { $rec.outcome = "$($Outcomes[$n])"; $rec.runId = $RunId }
+        $out["$n"] = $rec
+        if ($pst -ne $st) { [void]$events.Add([ordered]@{ ts = $now; runId = $RunId; issue = $n; title = $rec.title; event = $(if ($Posted.ContainsKey($n)) { 'noticed' } elseif ($Outcomes.ContainsKey($n)) { 'built' } else { 'status' }); from = $pst; status = $st; dueAt = $dAt; reason = "$(@($rec.reasons) | Select-Object -First 1)" }) }
+    }
+    foreach ($n in @($old.Keys | Sort-Object)) {
+        if ($seen.ContainsKey([int]$n)) { continue }
+        $p = $old[$n]; $pst = "$(& $get $p 'status')"
+        $st = $pst
+        if ($Outcomes.ContainsKey([int]$n)) { $st = "$($Outcomes[[int]$n])" }
+        elseif ($pst -in @('waiting', 'due', 'needs-notice') -and -not $PolicyEnabled) { $st = 'off' }
+        elseif ($pst -in @('waiting', 'due', 'needs-notice')) { if ($Approvals.ContainsKey([int]$n) -and "$($Approvals[[int]$n])" -eq 'label') { $st = 'approved-by-hand' } else { $st = 'gone' } }
+        $rec = [ordered]@{}; foreach ($pp in $p.PSObject.Properties) { $rec[$pp.Name] = $pp.Value }
+        $rec.status = $st
+        if ($st -ne $pst) { $rec.statusAt = $now }
+        if ($Outcomes.ContainsKey([int]$n)) { $rec.outcome = "$($Outcomes[[int]$n])"; $rec.runId = $RunId }
+        $out["$n"] = $rec
+        if ($st -ne $pst) { [void]$events.Add([ordered]@{ ts = $now; runId = $RunId; issue = [int]$n; title = "$($rec.title)"; event = $(if ($Outcomes.ContainsKey([int]$n)) { 'built' } else { 'status' }); from = $pst; status = $st; dueAt = "$($rec.dueAt)"; reason = '' }) }
+    }
+    $recs = @($out.Values | Sort-Object { [int]$_.issue })
+    $next = @($recs | Where-Object { $_.status -eq 'waiting' -and $_.dueAt } | ForEach-Object { ConvertTo-ViaPolicyUtc $_.dueAt } | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
+    $pol = [ordered]@{ enabled = $false; reason = 'unknown' }
+    if ($Policy) { $pol = [ordered]@{ enabled = [bool]$Policy.Enabled; vetoHours = $Policy.VetoHours; includeSpecs = [bool]$Policy.IncludeSpecs; setBy = $Policy.SetBy; setOn = $Policy.SetOn; reason = "$($Policy.Reason)"; file = "innovation/$($script:AutonomyFileName)" } }
+    $file = [ordered]@{ schema = 1; loop = $Loop; repo = $Repo; updatedAt = $now; runId = $RunId; policy = $pol
+        nextDueAt = $(if ($next.Count -gt 0) { $next[0].ToString('o') } else { '' }); issues = @($recs) }
+    return [pscustomobject]@{ State = $file; Events = @($events) }
+}
+
+# One line for the run summary / log: what the policy did and will do ('' when nothing to say).
+function Format-ViaPolicyLine {
+    param([object[]]$Entries = @(), $Policy = $null)
+    $e = @($Entries | Where-Object { $_ })
+    $parts = @()
+    $due = @($e | Where-Object { $_.status -eq 'due' }); if ($due.Count) { $parts += "approved via Ve's standing policy: $(@($due | ForEach-Object { "#$($_.issue)" }) -join ' ')" }
+    $w = @($e | Where-Object { $_.status -eq 'waiting' }); if ($w.Count) { $parts += "waiting out the veto window: $(@($w | ForEach-Object { "#$($_.issue) (auto-approves $(Format-ViaPolicyTime $_.dueAt))" }) -join ', ')" }
+    $nn = @($e | Where-Object { $_.status -eq 'needs-notice' }); if ($nn.Count) { $parts += "notice to post: $(@($nn | ForEach-Object { "#$($_.issue)" }) -join ' ')" }
+    $hv = @($e | Where-Object { $_.status -in @('held', 'voided') }); if ($hv.Count) { $parts += "held or voided: $(@($hv | ForEach-Object { "#$($_.issue) ($($_.status))" }) -join ', ')" }
+    if ($parts.Count -eq 0) { return '' }
+    return "Via-policy: $($parts -join '; ')"
 }

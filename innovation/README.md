@@ -345,6 +345,44 @@ as before. It steers proposals only; it never widens what the loop may build or 
   holds the later ones until you close it. An auto-approved slice that fails is not retried automatically:
   remove `loop:failed` to rebuild it, or close it.
 
+### Your standing policy: approval via-policy (`AUTONOMY.json`)
+
+On 2026-11-23 you decided that the loop should stop waiting for you on most of its own ideas: **"Everything but
+server/data"**, for CardLens and the Ops hub (not the portfolio). That decision is written down in
+`innovation/AUTONOMY.json`, your file (read from this checkout like FOCUS.md; the loop's sessions can never write it:
+the guard denies it and `merge-pr.ps1` refuses `innovation/**`):
+
+```json
+{ "enabled": true, "vetoHours": 6, "includeSpecs": true,
+  "exclude": ["server-deploy", "stored-data", "manual", "protected"], "setBy": "vekbui96", "setOn": "2026-11-23", ... }
+```
+
+- **What qualifies** (gate-rules.ps1 `Get-ViaPolicyDecision`, deterministic, fails closed): the loop's own open
+  proposal (loop marker, opened by your account; not a slice, not a request's issue, no `approved`), or a spec when
+  `includeSpecs` is true (its slices then follow the via-spec rule, and each slice must itself qualify); not Manual,
+  not `loop:failed`; "What deploys" says **Pages only** (a spec: every slice); Scope "In scope for the loop"; and it
+  names no stored data shape, sync / merge rule, scanner gate or card index, secret, CORS / CSP, `innovation/` / CI,
+  Target bot, metrics event or protected path (outside a clause that negates it, like "no stored shape changes").
+- **The notice and your veto.** When an issue first qualifies, the runner (never a session) posts ONE comment:
+  "Auto-approves via Ve's policy at <time> unless you comment `/hold`. Policy: innovation/AUTONOMY.json", and records
+  it in `<LOOP_HOME>\state\via-policy.json`. Six hours later it is built without an `approved` label (the watcher
+  starts a run when the window ends). To stop it for good: comment `/hold` (or `hold`), close it, or edit its body
+  (an edit after the notice cancels the auto-approval). Adding `approved` yourself builds it at once. Removing
+  `approved` after adding it is a decision too: no auto-approval.
+- **Backstops.** `check-approval.ps1` reports `approval: via-policy (vetoes at <time>)` while the window runs and
+  `approval: via-policy` once due; `merge-pr.ps1` re-checks it, refuses any protected path, and refuses a via-policy
+  merge that needs a server deploy. The plan budget `hold` holds approvals too. The loop never adds `approved`.
+- **What auto-shipped.** Every notice, status change and build outcome is appended to
+  `<LOOP_HOME>\state\via-policy-log.jsonl`; `state\via-policy.json` has the current status of each noticed issue
+  (waiting, due, deployed, failed, held, voided, gone, ...) and `nextDueAt`. The run summary, the Run data comment and
+  the progress comment say "approved via Ve's standing policy". Last 7 days:
+  `Get-Content "$env:USERPROFILE\.innovation-loop-cardlens\state\via-policy-log.jsonl" | ConvertFrom-Json | Where-Object { [datetime]$_.ts -gt (Get-Date).AddDays(-7) }`
+- **Off switch.** Set `"enabled": false` in `innovation/AUTONOMY.json`, commit and push from `D:\projects\cardlens`:
+  from the next check on everything waits for your `approved` again (waiting issues show `off`). A missing, unreadable
+  or malformed file means manual approval too.
+- Dry run (read-only, posts nothing): `innovation\check-approval.ps1 -List -PolicyPreview` lists what the policy
+  would decide for every open proposal, approved ones included.
+
 ## What you see on an issue it builds
 
 - **Plan** comment, then one **Progress** comment that the loop edits in place as it goes (approval, plan,

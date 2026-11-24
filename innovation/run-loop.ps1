@@ -157,6 +157,9 @@ Write-Log "cardlens innovation loop run $RunId mode=$mode dryRun=$DryRun maxBuil
 Write-Log "time: run budget $($TimeBudget.Reason); each build after the first needs $SecondBuildMinMinutes min left"
 Write-Log "sessions: $cfgLine$(if ($Model) { "; -Model $Model overrides all" })"
 Write-Log "options: $(@($Opts.Keys | ForEach-Object { "$_=$($Opts[$_])" }) -join ' ')"
+# Ve's standing approval policy, read from this checkout like FOCUS.md (check-approval.ps1 re-reads it for every decision)
+$script:Policy = Read-AutonomyPolicy -Path (Join-Path $ScriptsDir $script:AutonomyFileName)
+Write-Log "POLICY: $($script:Policy.Reason)"
 
 if ($SelfTest) {
     Write-Log "selftest: elevated=$(Test-IsElevated) (run this from a NORMAL PowerShell to prove the non-elevated trigger)"
@@ -244,6 +247,7 @@ function Get-LoopQueue {
         if ($q.PSObject.Properties.Name -contains 'error' -or -not ($q.PSObject.Properties.Name -contains 'slots')) { Write-Log "queue check failed: $json" 'WARN'; return $null }
         Publish-ViaSpecNotices $q
         Publish-SliceWaitNotices $q
+        Publish-ViaPolicyNotices $q
         return $q
     } catch { Write-Log "queue check failed: $_" 'WARN'; return $null }
 }
@@ -308,6 +312,74 @@ function Publish-ViaSpecNotices {
         } catch { Write-Log "#${n}: auto-approval notice failed: $_" 'WARN' }
     }
 }
+# Ve's standing approval policy (innovation/AUTONOMY.json; gate-rules.ps1 Get-ViaPolicyDecision). check-approval.ps1
+# -List decides every candidate (`viaPolicy`); the runner, never a session, posts the ONE notice comment when an issue
+# first becomes eligible (status needs-notice), records it in <LOOP_HOME>\state\via-policy.json (the veto window runs
+# from there; the sessions cannot write state\) and keeps that file current after every queue check and build, plus
+# an append-only log of every change (state\via-policy-log.jsonl: noticed, due, held, built + outcome, ...). The ops
+# hub reads both as data. Never in a dry run (it logs what it would post). A failed post is a warning; the next queue
+# check tries again.
+$script:ViaPolicyStatePath = Join-Path $script:LoopHome "state\$($script:ViaPolicyStateName)"
+$script:ViaPolicyLogPath = Join-Path $script:LoopHome "state\$($script:ViaPolicyLogName)"
+$script:ViaPolicyOutcomes = @{}   # issue -> build outcome of this run (via-policy builds only)
+$script:ViaPolicyLastEntries = $null
+$script:ViaPolicyLastApprovals = @{}
+function Publish-ViaPolicyNotices {
+    param($Q)
+    if ($null -eq $Q -or -not ($Q.PSObject.Properties.Name -contains 'viaPolicy') -or -not ($Q.PSObject.Properties.Name -contains 'policy')) { return }
+    $posted = @{}
+    if ($Q.policy.enabled -and $Q.policy.stateOk) {
+        $veto = [double]$Q.policy.vetoHours
+        foreach ($v in @($Q.viaPolicy | Where-Object { $_ -and "$($_.status)" -eq 'needs-notice' })) {
+            $n = [int]$v.issue
+            $due = [datetime]::UtcNow.AddHours($veto)
+            if ($DryRun) { Write-Log "#${n}: via-policy eligible; would post the notice (auto-approves $(Format-ViaPolicyTime $due) unless Ve comments /hold) (dry run: not posted)"; continue }
+            try {
+                $body = Format-ViaPolicyNotice -DueUtc $due -Who 'Ve' -Marker $script:Marker
+                $tmp = Join-Path $script:LoopHome "state\viapolicy-$n.json"
+                [IO.File]::WriteAllText($tmp, (@{ body = $body } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+                $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+                $out = & $script:GhExe api "repos/$($script:Repo)/issues/$n/comments" -X POST --input $tmp 2>&1 | ForEach-Object { "$_" }
+                $code = $LASTEXITCODE; $ErrorActionPreference = $prev
+                if ($code -ne 0) { Write-Log "#${n}: could not post the via-policy notice: $((@($out) | Select-Object -Last 1))" 'WARN'; continue }
+                $c = (@($out) -join "`n") | ConvertFrom-Json
+                $at = ConvertTo-ViaPolicyUtc $c.created_at; if ($null -eq $at) { $at = [datetime]::UtcNow }
+                $posted[$n] = @{ noticedAt = $at.ToString('o'); dueAt = $at.AddHours($veto).ToString('o'); commentId = [long]$c.id }
+                $v.status = 'waiting'; $v.noticedAt = $posted[$n].noticedAt; $v.dueAt = $posted[$n].dueAt; $v.commentId = [long]$c.id
+                Write-Log "#${n}: via-policy notice posted (comment $($c.id)); auto-approves $(Format-ViaPolicyTime $posted[$n].dueAt) unless Ve comments /hold"
+            } catch { Write-Log "#${n}: via-policy notice failed: $_" 'WARN' }
+        }
+    }
+    $ap = @{}; if ($Q.approvals) { foreach ($pr in $Q.approvals.PSObject.Properties) { $ap[[int]$pr.Name] = "$($pr.Value)" } }
+    $script:ViaPolicyLastEntries = @($Q.viaPolicy | Where-Object { $_ })
+    $script:ViaPolicyLastApprovals = $ap
+    Save-ViaPolicyState -Posted $posted -PolicyEnabled ([bool]$Q.policy.enabled)
+}
+# Rewrite state\via-policy.json from the last queue check (plus notices just posted and this run's build outcomes)
+# and append the changes to the log. Not in a dry run; never throws. An unreadable state file is left alone (the
+# policy is then off in check-approval.ps1 until Ve looks at it).
+function Save-ViaPolicyState {
+    param([hashtable]$Posted = @{}, [bool]$PolicyEnabled = $true)
+    if ($DryRun -or $null -eq $script:ViaPolicyLastEntries) { return }
+    try {
+        $st = Read-ViaPolicyState -Path $script:ViaPolicyStatePath
+        if (-not $st.Ok) { Write-Log "via-policy: $($st.Reason); not rewriting it" 'WARN'; return }
+        $u = Update-ViaPolicyState -State $st -Entries $script:ViaPolicyLastEntries -Approvals $script:ViaPolicyLastApprovals -Posted $Posted -Outcomes $script:ViaPolicyOutcomes `
+            -Policy $script:Policy -PolicyEnabled $PolicyEnabled -RunId $RunId -Repo $script:Repo
+        if (@($u.State.issues).Count -eq 0 -and -not (Test-Path -LiteralPath $script:ViaPolicyStatePath)) { return }   # nothing ever noticed: no file yet
+        [IO.File]::WriteAllText($script:ViaPolicyStatePath, ($u.State | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+        if (@($u.Events).Count -gt 0) {
+            Add-Content -LiteralPath $script:ViaPolicyLogPath -Value @($u.Events | ForEach-Object { $_ | ConvertTo-Json -Compress -Depth 4 }) -Encoding UTF8
+            foreach ($e in $u.Events) { Write-Log "via-policy: #$($e.issue) $($e.from) -> $($e.status)$(if ($e.event -eq 'built') { ' (build outcome)' })" }
+        }
+    } catch { Write-Log "via-policy state not written: $_" 'WARN' }
+}
+# The earliest end of a via-policy veto window still to come (ISO UTC, '' none), from the state file (drain.json).
+function Get-ViaPolicyNextDue {
+    try { $st = Read-ViaPolicyState -Path $script:ViaPolicyStatePath; if ($st.Ok -and $st.Raw -and "$($st.Raw.nextDueAt)") { return "$($st.Raw.nextDueAt)" } } catch { }
+    return ''
+}
+
 # 'via-spec #<spec>' when the queue says the issue is auto-approved through its spec, else 'label'.
 function Get-QueueApproval {
     param($Q, [int]$Issue)
@@ -334,6 +406,7 @@ function Format-QueueLine {
     if ($w) { $s += "; $w" }
     $ws = Format-SliceWaitLine $Q
     if ($ws) { $s += "; $ws" }
+    if ($Q.PSObject.Properties.Name -contains 'viaPolicy') { $vp = Format-ViaPolicyLine -Entries @($Q.viaPolicy); if ($vp) { $s += "; $vp" } }
     return $s
 }
 function Get-QueueLabels {
@@ -466,7 +539,8 @@ function New-SessionPrompt {
             $lines += "- ISSUE: $Issue   (retry: $retry)"
             $ap = Get-QueueApproval $Q $Issue
             if ($ap -like 'via-request*') { $lines += "- APPROVAL: $ap   (an issue the intake session opened for Ve's own request in ""Build it"" mode: it has no ``approved`` label of its own and needs none; check-approval.ps1 -Issue $Issue shows approval via-request. Say ``approval: $ap`` in your summary. Ve asked for this: build exactly what the issue says.)" }
-            elseif ($ap -ne 'label') { $lines += "- APPROVAL: $ap   (a slice auto-approved by Ve's approval of its spec: it has no ``approved`` label of its own and needs none; check-approval.ps1 -Issue $Issue shows approval via-spec. Say ``approval: $ap`` in your summary.)" }
+            elseif ($ap -eq 'via-policy') { $lines += "- APPROVAL: via-policy   (approved via Ve's standing policy, innovation/AUTONOMY.json, after its veto window: it has no ``approved`` label of its own and needs none; check-approval.ps1 -Issue $Issue shows approval via-policy. The policy covers Pages-only changes outside the server, stored data and protected areas: if the change turns out to need any of those, refuse it as in LOOP.md section 3 step 3 (class ``scope``, outcome ``skipped``) instead of building it; merge-pr.ps1 refuses a via-policy merge that needs a server deploy. Say ``approval: via-policy`` in your summary.)" }
+        elseif ($ap -ne 'label') { $lines += "- APPROVAL: $ap   (a slice auto-approved by Ve's approval of its spec: it has no ``approved`` label of its own and needs none; check-approval.ps1 -Issue $Issue shows approval via-spec. Say ``approval: $ap`` in your summary.)" }
             else { $lines += '- APPROVAL: label (Ve added `approved`)' }
             $lines += "- SERVER_DEPLOY: $serverDeploy   $( if ($serverDeploy -notlike 'available*') { "($serverWhy) -> if this change needs a server deploy, skip it (section 3 step 3)" } )"
             $su = 'no'; if ($ServerUsed) { $su = "yes ($ServerUsed): at most one server deploy per run, so if this change needs one, skip it (section 3 step 3)" }
@@ -1412,6 +1486,7 @@ try {
         if ($waitLine) { $sumLines += "- $waitLine" }
         $sliceWaitLine = Format-SliceWaitLine $queue
         if ($sliceWaitLine) { $sumLines += "- $sliceWaitLine" }
+        if ($queue -and ($queue.PSObject.Properties.Name -contains 'viaPolicy')) { $vpl = Format-ViaPolicyLine -Entries @($queue.viaPolicy); if ($vpl) { $sumLines += "- $vpl" } }
         $resLine = 'LOOP-RESULT: NOTHING-TO-DO'
         if ($pre.Hold) { $resLine += ' plan budget hold (no claude session)' }
         elseif ($deferred.Count -gt 0 -or -not $pbOk) { $resLine += " plan budget $($budget.Verdict) (Opus sessions deferred)" }
@@ -1602,6 +1677,9 @@ try {
                 $built += [pscustomobject]@{ Issue = $n; Outcome = 'deployed' }; $simMinutes += 75   # assume it deploys in ~75 min, to show the plan
                 continue
             }
+            # the approval this build runs on, for its progress comment (reporting.ps1 Invoke-LoopProgress); runner-written
+            try { $pd = Join-Path $script:LoopHome 'state\progress'; if (-not (Test-Path -LiteralPath $pd)) { New-Item -ItemType Directory -Path $pd -Force | Out-Null }
+                [IO.File]::WriteAllText((Join-Path $pd "$RunId-$n.approval.txt"), "$($approvalOf[$n])", (New-Object Text.UTF8Encoding $false)) } catch { Write-Log "could not record #$n's approval for its progress comment: $_" 'WARN' }
             $s = Invoke-Session -Kind 'build' -Issue $n -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg) -Request:$isReq
             [void]$sessions.Add($s)
             if ($s.EndClass -eq 'not-started') {
@@ -1618,6 +1696,8 @@ try {
             # a scope refusal that merged nothing is a skip (the next approved issue is built); anything merged is not
             $outcome = Get-BuildOutcome -Labels $lbl -MarkerOutcome $markerOutcome -Merged ($cert.State -ne 'none')
             $built += [pscustomobject]@{ Issue = $n; Outcome = $outcome }
+            # via-policy: every auto-approved build and its outcome go to state\via-policy.json and its log (weekly safety summary)
+            if ($approvalOf[$n] -eq 'via-policy') { $script:ViaPolicyOutcomes[[int]$n] = $outcome; Save-ViaPolicyState; [void]$runNotes.Add("#${n}: approved via Ve's standing policy (innovation/AUTONOMY.json), build $outcome") }
             # Phase 3: a verified deploy (a build or a request child) is queued for QA (and UX when it changed the UI)
             Write-Log "build #$n ended: outcome=$outcome (marker: $markerOutcome) deploy=$($cert.State) ($($cert.Reason))$(if ($closed.Count) { '; marked loop:failed by the runner' })$(if ($outcome -eq 'skipped' -and $lbl -contains 'loop:failed') { ' (refused on scope, nothing merged: Phase A goes on)' })"
             $dr = Read-State "deploy-$n"
@@ -1734,7 +1814,7 @@ try {
         [void]$sum.Add("- $nm ($($s.Model), $($s.Turns) turns, $c, ended: $($s.EndClass)): LOOP-RESULT $($s.Status) $($s.Reason)".TrimEnd())
     }
     foreach ($b in $built) {
-        $ap = ''; if ($approvalOf.ContainsKey([int]$b.Issue) -and $approvalOf[[int]$b.Issue] -ne 'label') { $ap = " (approval: $($approvalOf[[int]$b.Issue]))" }
+        $ap = ''; if ($approvalOf.ContainsKey([int]$b.Issue) -and $approvalOf[[int]$b.Issue] -ne 'label') { $ap = " (approval: $($approvalOf[[int]$b.Issue]))"; if ($approvalOf[[int]$b.Issue] -eq 'via-policy') { $ap = " (approved via Ve's standing policy, innovation/AUTONOMY.json)" } }
         [void]$sum.Add("- build #$($b.Issue): $($b.Outcome)$ap")
     }
     foreach ($r in $runNotes) { [void]$sum.Add("- $r") }
@@ -1751,6 +1831,7 @@ try {
     [void]$sum.Add(''); if ($waitLine) { [void]$sum.Add($waitLine) } else { [void]$sum.Add('Failed, waiting on Ve: none') }
     $sliceWaitLine = Format-SliceWaitLine $finalQueue
     if ($sliceWaitLine) { [void]$sum.Add($sliceWaitLine) }
+    if ($finalQueue -and ($finalQueue.PSObject.Properties.Name -contains 'viaPolicy')) { $vpl = Format-ViaPolicyLine -Entries @($finalQueue.viaPolicy); if ($vpl) { [void]$sum.Add($vpl) } }
     [void]$sum.Add($res.Line)
     [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.summary.txt"), ($sum -join "`r`n"), $utf8)
     $tc = [double]0; $tt = 0; foreach ($s in $sessions) { if ($null -ne $s.Cost) { $tc += [double]$s.Cost }; $tt += [int]$s.Turns }
@@ -1819,10 +1900,11 @@ try {
                 $dBuilt = @(& $gv 'built' | ForEach-Object { $_ } | Where-Object { $_ })
                 $dRes = & $gv 'res'; $dStatus = 'FAILED'; if ($dRes) { $dStatus = "$($dRes.Status)" } elseif ((& $gv 'exitCode') -eq 0) { $dStatus = 'NOTHING-TO-DO' }
                 $dCap = ''; $dc = Get-DailyCap 'build'; if (-not $dc.Allowed) { $dCap = $dc.Reason }
-                $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
+                $dDue = Get-ViaPolicyNextDue
+                $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -PolicyDueAt $dDue -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
                     -RolledBack (@($dBuilt | Where-Object { $_.Outcome -eq 'rolled-back' }).Count -gt 0) -NeedsVe (@($problems | Where-Object { "$_" -match 'UNCERTAIN' }).Count -gt 0) -BuildCapped $dCap -Previous $prevD
                 [IO.File]::WriteAllText($dPath, ($ds | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
-                Write-Log "drain state: $(@($db).Count) buildable after this run [$(@($db | ForEach-Object { "#$_" }) -join ' ')], $(@($dOpus).Count) need Opus, progress $($ds.progress)"
+                Write-Log "drain state: $(@($db).Count) buildable after this run [$(@($db | ForEach-Object { "#$_" }) -join ' ')], $(@($dOpus).Count) need Opus, progress $($ds.progress)$(if ($dDue) { "; next via-policy veto window ends $(Format-ViaPolicyTime $dDue)" })"
             }
         } catch { Write-Log "drain state not written: $_" 'WARN' }
     }
