@@ -216,6 +216,34 @@ check(
   `a child of a BelowNormal process starts BelowNormal (got ${inh.stdout.trim()}, want ${BN})`,
 );
 
+// ---- wiring: every browser launcher next to this file takes the slot (the same file ships in every loop) ----
+const smokeFile = path.join(here, "smoke.mjs");
+if (existsSync(smokeFile)) {
+  const s = readFileSync(smokeFile, "utf8");
+  check(
+    /acquireBrowserSlot\(/.test(s) && /setLowPriority\(\)/.test(s),
+    "smoke.mjs takes the browser slot and lowers its priority",
+  );
+  check(
+    /process\.exit\(2\)/.test(s) && /unverified \(busy\)/.test(s),
+    "smoke.mjs exits 2 (could not run: unverified, busy) when the slot is busy",
+  );
+  check(
+    /300000\)/.test(s) && /slot\.release\(\)/.test(s),
+    "smoke.mjs has a 5-minute hard cap and releases the slot",
+  );
+}
+const browseFile = path.join(here, "preview-browse.mjs");
+if (existsSync(browseFile)) {
+  const s = readFileSync(browseFile, "utf8");
+  check(
+    /acquireBrowserSlot\(/.test(s) &&
+      /PREVIEW-BROWSE BUSY unverified \(busy\)/.test(s) &&
+      /slot\.release\(\)/.test(s),
+    "preview-browse.mjs takes the slot, says BUSY, releases it",
+  );
+}
+
 rmSync(dir, { recursive: true, force: true });
 if (fail > 0) {
   console.log(`TEST-BROWSER-LOCK FAIL (${fail} failed, ${pass} passed)`);
