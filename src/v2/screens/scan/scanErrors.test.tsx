@@ -11,8 +11,8 @@ describe("CardIndexError uses the shared ErrorNotice", () => {
     const alert = screen.getByRole("alert");
     expect(within(alert).getByRole("heading", { name: "The card index could not load" })).toBeInTheDocument();
     expect(alert).toHaveTextContent("The card list did not download.");
-    expect(alert).not.toHaveTextContent("500");
-    expect(within(alert).getByTitle("HTTP 500")).toBeInTheDocument();
+    // The real cause is visible text, not only a tooltip touch users never see.
+    expect(within(alert).getByText("Reason: HTTP 500")).toBeVisible();
     expect(alert).toHaveTextContent("Nothing on this device can identify a card.");
     expect(within(alert).queryByRole("button")).not.toBeInTheDocument();
 
