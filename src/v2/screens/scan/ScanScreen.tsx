@@ -323,16 +323,24 @@ export function ScanScreen() {
                     Capture
                   </button>
                 ) : camera.phase.at === "unsupported" ? null : (
-                  <button
-                    type="button"
-                    className={styles.primary}
-                    onClick={() => void camera.start()}
-                    disabled={camera.phase.at === "starting"}
-                  >
-                    {camera.phase.at === "starting" ? "Starting camera…" : "Start camera"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={cx(styles.primary, needsCardList && styles.unavailable)}
+                      onClick={() => {
+                        if (!needsCardList) void camera.start();
+                      }}
+                      disabled={camera.phase.at === "starting"}
+                      {...(needsCardList ? { "aria-disabled": true } : {})}
+                    >
+                      {camera.phase.at === "starting" ? "Starting camera…" : "Start camera"}
+                    </button>
+                    {needsCardList ? <span className={styles.muted}>{NEEDS_CARD_LIST}</span> : null}
+                  </>
                 )}
+              </Row>
 
+              <div className={styles.modeRow}>
                 <Chip
                   onPress={() => {
                     // Fresh state either way: a stale baseline from before the
@@ -365,7 +373,7 @@ export function ScanScreen() {
                 >
                   {reviewing ? "Keep scanning" : "Pause and review"}
                 </Chip>
-              </Row>
+              </div>
             </Stack>
           </Panel>
         </div>

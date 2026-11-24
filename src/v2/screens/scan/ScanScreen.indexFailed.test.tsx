@@ -62,4 +62,12 @@ describe("ScanScreen when the card index failed on a device with no server token
     expect(screen.queryByText("Recognition runs on this device.")).toBeNull();
     expect(screen.queryByText("On device")).toBeNull();
   });
+
+  it("shows Start camera as aria-disabled with the reason beside it", async () => {
+    render(<ScanScreen />, { wrapper: Wrapper });
+    await screen.findByRole("alert");
+    const start = await screen.findByRole("button", { name: "Start camera" });
+    expect(start).toHaveAttribute("aria-disabled", "true");
+    expect(start.parentElement).toHaveTextContent("Needs the card list");
+  });
 });

@@ -236,6 +236,29 @@
   cursor: pointer;
 }
 
+/* Index failed: looks unavailable but keeps full-contrast text (4.5:1), unlike
+   the 50% opacity of a plain disabled button. */
+.unavailable,
+.unavailable:hover {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg-muted);
+  border: var(--v2-border-w) solid var(--v2-border);
+  cursor: default;
+}
+
+/* Mode pills: scan-only override of the shared 11px chip. */
+.modeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
+.modeRow > button {
+  font-size: var(--v2-fs-pill);
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-3);
+}
+
 .primary:disabled,
 .secondary:disabled {
   opacity: 0.5;
