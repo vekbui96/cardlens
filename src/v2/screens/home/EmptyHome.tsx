@@ -34,7 +34,7 @@ export function EmptyHome({ syncStatus, onConnect }: { syncStatus: SyncStatus; o
         : null;
   const syncLine = emptySyncLine(syncStatus);
   return (
-    <div className={styles.emptyWrap}>
+    <div className={styles.emptyWrap} data-testid="first-run-card">
       <EmptyStart
         headingLevel={1}
         status={syncLine}

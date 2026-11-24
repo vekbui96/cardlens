@@ -48,6 +48,26 @@ test.describe("nothing tracked yet", () => {
     await expect(shell.current).toHaveText("Search");
   });
 
+  test("the first-run card is at most 720px wide and centred on a desktop window", async ({ page }) => {
+    await openV2(page, "/", { seed: "empty" });
+    const wrap = page.getByTestId("first-run-card");
+    await expect(wrap).toBeVisible();
+    const viewport = page.viewportSize();
+    const wrapBox = await wrap.boundingBox();
+    const cardBox = await wrap.locator("> *").first().boundingBox();
+    if (!viewport || !wrapBox || !cardBox) throw new Error("no layout boxes");
+    if (viewport.width >= 900) {
+      expect(cardBox.width).toBeLessThanOrEqual(720);
+      expect(wrapBox.width).toBeLessThanOrEqual(720);
+      const leftGap = cardBox.x;
+      const rightGap = viewport.width - (cardBox.x + cardBox.width);
+      expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(24);
+    } else {
+      // Phone: the card still fills the column.
+      expect(cardBox.width).toBeGreaterThan(viewport.width - 80);
+    }
+  });
+
   test("shows no value panel at all, rather than a panel full of dashes", async ({ page }) => {
     await openV2(page, "/", { seed: "empty" });
     await expect(page.getByRole("heading", { name: "Collection value" })).toHaveCount(0);

@@ -511,8 +511,15 @@
  */
 @media (min-width: 900px) /* v2-tokens-allow: no token can express a breakpoint */ {
   .emptyWrap {
+    box-sizing: border-box;
+    width: 100%;
     max-width: 720px; /* v2-tokens-allow: the first-run reading width */
     margin-inline: auto;
+  }
+
+  /* The card itself fills the capped wrapper and never grows past it (#293). */
+  .emptyWrap > * {
+    max-width: 100%;
   }
 }
 
