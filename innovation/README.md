@@ -269,7 +269,7 @@ and the last runs' queue head and progress; log line `drain state: ...`). Every 
 as data and starts the task again (log `started innovation-loop-cardlens to drain the queue (...)`) when at
 least one approved issue (or an auto-approved slice / request issue) is buildable, no run holds the lock and the
 last run ended 15+ minutes ago. Never under `hold`, nor `no-opus` when every buildable issue needs Opus, nor after
-a run that stopped on an uncertain deploy; after a rollback, or when the last 2 runs had the same queue head and
+a run that stopped on an uncertain deploy (nor while the needs-Ve flag is set, see "Needs Ve: an uncertain deploy"); after a rollback, or when the last 2 runs had the same queue head and
 deployed nothing, it backs off 2 hours. At most one drain run per finished run. Rule: `Get-DrainDecision` in
 `gate-rules.ps1` (the watcher keeps a literal copy, checked by `test-queue-rules.ps1`).
 
@@ -516,6 +516,40 @@ C:\ProgramData\innovation-loop-cardlens\bin\rollback-server.ps1
 
 Exit codes for deploy/rollback scripts: `0` ok, `1` precondition failed (nothing changed), `2` failed and
 rolled back, `3` rollback failed (look now), `4` install failed (server rolled back).
+
+## Needs Ve: an uncertain deploy
+
+When a build merges a change but the deploy is neither verified nor rolled back and verified (a deploy killed half
+way, a failed rollback, a session that ended between merge and deploy), the runner stops the run with
+`DEPLOY STATE UNCERTAIN, NEEDS VE` and writes the **needs-Ve flag**, `C:\Users\Ve Bui\.innovation-loop-cardlens\state\needs-ve.json` (run id, issue,
+reason, time). It is a file of its own: no later run, `drain.json` or label can overwrite or lift it. While it
+exists:
+
+- every run of the loop (the daily task, `Start-ScheduledTask`, `-ProposeOnly`) stops before any claude session:
+  summary `Needs-Ve stop`, `LOOP-RESULT: FAILED NEEDS VE: ...`, cost 0, exit 1. Nothing is built, merged, deployed or
+  proposed, and `drain.json` is not rewritten;
+- the approval watcher starts the loop for nothing (approvals, requests, refill, queue drain) and logs each skipped
+  trigger once: `... approval skipped: NEEDS VE since ...`. Approvals made in the meantime are not used up: they start
+  the loop once the flag is cleared;
+- the run that set it says so in its summary (`NEEDS VE: the needs-Ve flag is set ...`), its run data
+  (`needsVe`) and a `## Needs Ve: the loop is stopped` comment on the issue, plus a loud `NEEDS VE: the loop is stopped` line at the top of its Run data comment.
+
+What to check, then clear it (normal PowerShell):
+
+```powershell
+# 1. what happened: the flag, the run's summary and log, and the deploy / rollback records
+D:\projects\cardlens\innovation\clear-needs-ve.ps1                 # shows the flag, changes nothing
+Get-Content C:\Users\Ve Bui\.innovation-loop-cardlens\logs\run-<runId>.summary.txt
+Get-Content C:\Users\Ve Bui\.innovation-loop-cardlens\state\deploy-<n>*.json, C:\Users\Ve Bui\.innovation-loop-cardlens\state\rollback-<n>*.json
+# 2. production: load the live site and the health check; fix by hand (deploy, roll back, revert) as needed
+# 3. clear it, saying what you checked (kept with the record in state\needs-ve-cleared-<time>.json and logs\needs-ve.log)
+D:\projects\cardlens\innovation\clear-needs-ve.ps1 -Clear -Note "live site OK; #39 reverted by hand"
+```
+
+The next daily run or watcher poll (within about 10 minutes) starts the loop again. Only you can clear it: the loop's
+sessions cannot run `clear-needs-ve.ps1` or write `state\` (guard.mjs), and the script refuses to run inside a
+loop run. A flag file that cannot be read still blocks (fail closed). Rules: `Get-NeedsVeBlock` in `gate-rules.ps1`
+(literal copy in the watcher, checked by `test-queue-rules.ps1`).
 
 ## Troubleshooting
 

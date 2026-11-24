@@ -831,6 +831,101 @@ Check (-not $pc.Launch -and $pc.Hold) 'hold stops requests too'
 # check-approval.ps1's JSON is ASCII-only, so a console code page cannot mangle Ve's text
 $aj = ConvertTo-AsciiJson ((@{ what = "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)" } | ConvertTo-Json -Compress))
 Check ($aj -notmatch '[^\x00-\x7F]' -and ($aj | ConvertFrom-Json).what -eq "Search $([char]0x00B7) CardLens $([char]0xD83D)$([char]0xDE00) caf$([char]0x00E9)") "ASCII-only JSON round-trips non-ASCII text ($aj)"
+# ---- scratch LOOP_HOME for the needs-Ve tests (child processes read INNOVATION_LOOP_CARDLENS_HOME) ----------------
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ('loop-nv-test-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Path $tmp | Out-Null
+foreach ($d in 'state', 'logs', 'lock', 'work') { New-Item -ItemType Directory -Path (Join-Path $tmp $d) -Force | Out-Null }
+$prevHome = $env:INNOVATION_LOOP_CARDLENS_HOME
+$env:INNOVATION_LOOP_CARDLENS_HOME = $tmp
+
+# ---- a scope refusal that merged nothing does not end Phase A --------------------------------------------------------
+Check ((Get-BuildOutcome -Labels @('loop:proposal', 'approved', 'loop:failed') -MarkerOutcome 'skipped') -eq 'skipped') 'scope refusal (loop:failed + skipped), nothing merged -> skipped'
+Check ((Get-BuildOutcome -Labels @('loop:proposal', 'approved', 'loop:failed') -MarkerOutcome 'skipped' -Merged $true) -eq 'failed') 'loop:failed + skipped but something was merged -> failed (ends Phase A)'
+Check ((Get-BuildOutcome -Labels @('loop:proposal', 'approved', 'loop:failed') -MarkerOutcome 'failed') -eq 'failed') 'a real failure stays failed'
+Check ((Get-BuildOutcome -Labels @('loop:proposal', 'approved', 'loop:failed') -MarkerOutcome 'rolled-back') -eq 'rolled-back') 'a rollback stays rolled-back'
+$nb = Get-NextBuildDecision -Buildable @(12, 14) -Done @([pscustomobject]@{ Issue = 12; Outcome = 'skipped' }) -RemainingMinutes 240
+Check ($nb.Start -and $nb.Issue -eq 14) "after a scope skip the next approved issue is built ($($nb.Reason))"
+$nb = Get-NextBuildDecision -Buildable @(12, 14, 15) -Done @([pscustomobject]@{ Issue = 12; Outcome = 'skipped' }, [pscustomobject]@{ Issue = 14; Outcome = 'failed' }) -RemainingMinutes 240
+Check (-not $nb.Start) 'a real failure after a skip still ends Phase A'
+
+# ---- the needs-Ve flag ---------------------------------------------------------------------------------------------
+Check (-not (Get-NeedsVeBlock -Exists $false).Blocked) 'no flag file -> not blocked'
+$nvr = New-NeedsVeRecord -RunId '20261123-183500' -Loop 'x' -Reason "#39: solid-website: merged as abc1234 but the deploy was not verified (deploy: DEPLOY FAILED)" -Issues @(39) -ClearCommand 'clear-needs-ve.ps1 -Clear -Note x'
+$nvt = $nvr | ConvertTo-Json -Depth 5
+foreach ($k in 'approval', 'request', 'refill', 'drain', 'FULL run', 'PROPOSE_ONLY run') {
+    $b = Get-NeedsVeBlock -Exists $true -Text $nvt -Kind $k
+    Check ($b.Blocked -and $b.Key -eq 'needs-ve:20261123-183500' -and $b.Reason -like "$k skipped: NEEDS VE*#39*") "flag set -> $k blocked ($($b.Reason))"
+}
+Check ((Get-NeedsVeBlock -Exists $true -Text ([char]0xFEFF + $nvt)).Blocked) 'a flag file with a BOM still blocks'
+$b = Get-NeedsVeBlock -Exists $true -Text 'not json {'
+Check ($b.Blocked -and $b.Key -eq 'needs-ve:unreadable') "an unparsable flag file blocks (fail closed: $($b.Reason))"
+Check ((Get-NeedsVeBlock -Exists $true -Text '').Blocked) 'an empty flag file blocks'
+Check ((Get-NeedsVeBlock -Exists $true -Text '{"schema":1}').Blocked) 'a flag file without a runId blocks'
+Check ((Get-NeedsVeBlock -Exists $true -ReadError 'access denied').Blocked) 'a flag file that cannot be read blocks'
+Check ((New-NeedsVeRecord -RunId r -Reason ('x' * 600)).reason.Length -le 403) 'the reason is cut to one short line'
+$nvDir = Join-Path $tmp 'nv-test'; $nvPath = Join-Path $nvDir 'state\needs-ve.json'
+Check (-not (Get-NeedsVeState -Path $nvPath).Blocked) 'Get-NeedsVeState: no file -> not blocked'
+Check ((Set-NeedsVeFlag -Path $nvPath -Record $nvr) -eq 'set') 'Set-NeedsVeFlag writes the flag'
+Check ((Set-NeedsVeFlag -Path $nvPath -Record (New-NeedsVeRecord -RunId 'later-run' -Reason 'later')) -eq 'kept') 'a second uncertain deploy keeps the first flag'
+$st = Get-NeedsVeState -Path $nvPath -Kind 'refill'
+Check ($st.Blocked -and $st.RunId -eq '20261123-183500') "the first flag survives (never overwritten): $($st.RunId)"
+$cm = Format-NeedsVeComment -Issue 39 -RunId 'r1' -Reason 'merged as abc1234 but the deploy was not verified' -ClearCommand 'clear-needs-ve.ps1 -Clear -Note x' -Marker '<!-- innovation-loop -->' -Who 'Ve'
+Check ($cm.StartsWith('<!-- innovation-loop -->') -and $cm -match 'Needs Ve' -and $cm -match 'clear-needs-ve\.ps1') 'the issue comment carries the loop marker and the clear command'
+
+# the clear path: clear-needs-ve.ps1 against this test's LOOP_HOME (the env override set at the top)
+$homeNv = Join-Path $tmp "state\needs-ve.json"
+$clearPs = Join-Path $PSScriptRoot 'clear-needs-ve.ps1'
+$runClear = { param([string[]]$A) $o = & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $clearPs @A 2>&1 | ForEach-Object { "$_" }; [pscustomobject]@{ Code = $LASTEXITCODE; Out = ($o -join "`n") } }
+$c = & $runClear @()
+Check ($c.Code -eq 0 -and $c.Out -match 'NOT SET') "clear-needs-ve.ps1 with no flag: not set, exit 0 ($($c.Code))"
+[void](Set-NeedsVeFlag -Path $homeNv -Record $nvr)
+$c = & $runClear @()
+Check ($c.Code -eq 1 -and $c.Out -match 'NEEDS-VE SET' -and (Test-Path -LiteralPath $homeNv)) "show only: exit 1, flag kept ($($c.Code))"
+$c = & $runClear @('-Clear')
+Check ($c.Code -eq 2 -and (Test-Path -LiteralPath $homeNv)) "-Clear without -Note is refused, flag kept ($($c.Code))"
+$envMode = 'INNOVATION_LOOP_CARDLENS_MODE'
+[Environment]::SetEnvironmentVariable($envMode, 'BUILD', 'Process')
+$c = & $runClear @('-Clear', '-Note', 'from a session')
+[Environment]::SetEnvironmentVariable($envMode, $null, 'Process')
+Check ($c.Code -eq 2 -and $c.Out -match 'REFUSED' -and (Test-Path -LiteralPath $homeNv)) "inside a loop run (_MODE set) clearing is refused ($($c.Code))"
+$c = & $runClear @('-Clear', '-Note', 'checked the live site; deploy verified by hand')
+$cleared = @(Get-ChildItem -LiteralPath (Join-Path $tmp 'state') -Filter 'needs-ve-cleared-*.json')
+Check ($c.Code -eq 0 -and -not (Test-Path -LiteralPath $homeNv) -and $cleared.Count -eq 1) "-Clear -Note clears it and keeps the record ($($c.Code): $($c.Out -split "`n" | Select-Object -Last 1))"
+if ($cleared.Count -eq 1) { $cr = [IO.File]::ReadAllText($cleared[0].FullName) | ConvertFrom-Json; Check ($cr.runId -eq '20261123-183500' -and $cr.note -match 'checked' -and $cr.clearedAt) 'the cleared record keeps the flag, the note and the time' }
+Check ((Test-Path -LiteralPath (Join-Path $tmp 'logs\needs-ve.log')) -and ([IO.File]::ReadAllText((Join-Path $tmp 'logs\needs-ve.log')) -match 'cleared needs-ve:20261123-183500')) 'the clear is logged in logs\needs-ve.log'
+Check (-not (Get-NeedsVeState -Path $homeNv).Blocked) 'after the clear nothing is blocked'
+
+# run-loop.ps1 itself refuses while the flag is set: no session, no queue, no drain.json, lock released (FULL and PROPOSE_ONLY)
+foreach ($ra in @(@(), @('-ProposeOnly'))) {
+    [void](Set-NeedsVeFlag -Path $homeNv -Record $nvr)
+    Get-ChildItem -LiteralPath (Join-Path $tmp 'logs') -Filter 'run-*' -ErrorAction SilentlyContinue | Remove-Item -Force
+    $o = & "$PSHOME\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'run-loop.ps1') @ra -ClaudeExe 'C:\nonexistent\claude.exe' 2>&1 | ForEach-Object { "$_" }
+    $code = $LASTEXITCODE
+    $sumF = @(Get-ChildItem -LiteralPath (Join-Path $tmp 'logs') -Filter 'run-*.summary.txt' -ErrorAction SilentlyContinue)
+    $rdF = @(Get-ChildItem -LiteralPath (Join-Path $tmp 'logs') -Filter 'run-*.rundata.json' -ErrorAction SilentlyContinue)
+    $sumT = ''; if ($sumF.Count -eq 1) { $sumT = [IO.File]::ReadAllText($sumF[0].FullName) }
+    $rdJ = $null; if ($rdF.Count -eq 1) { $rdJ = [IO.File]::ReadAllText($rdF[0].FullName) | ConvertFrom-Json }
+    $what = "run-loop $($ra -join ' ')".Trim()
+    Check ($code -eq 1 -and $sumT -match 'LOOP-RESULT: FAILED NEEDS VE' -and $sumT -match 'clear-needs-ve\.ps1') "$what with the flag set: exit 1, LOOP-RESULT FAILED NEEDS VE with the clear command (exit $code)"
+    Check ($rdJ -and -not $rdJ.claudeStarted -and $rdJ.needsVe.set -and $rdJ.totals.Cost -eq 0) "${what}: run data says no claude session, `$0, needsVe set"
+    Check (-not (Test-Path -LiteralPath (Join-Path $tmp 'state\drain.json'))) "${what}: drain.json is not written"
+    Check (-not (Test-Path -LiteralPath (Join-Path $tmp 'lock\run.lock'))) "${what}: the lock is released"
+    Check (Test-Path -LiteralPath $homeNv) "${what}: the flag is still set afterwards (only Ve clears it)"
+    Remove-Item -LiteralPath $homeNv -Force
+}
+
+# the approval watcher keeps a literal copy of Get-NeedsVeBlock and reads this loop's flag file
+if (Test-Path -LiteralPath $watchRef) {
+    $fnN = { param([string]$File) $ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+        $fn = $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq 'Get-NeedsVeBlock' }, $true) | Select-Object -First 1
+        if ($fn) { ($fn.Extent.Text -replace '\s+', ' ').Trim() } else { '' } }
+    $mineN = & $fnN "$PSScriptRoot\gate-rules.ps1"; $theirsN = & $fnN $watchRef
+    Check ($theirsN -and $mineN -eq $theirsN) 'the approval watcher''s copy of Get-NeedsVeBlock matches gate-rules.ps1 (change both together)'
+    Check ([IO.File]::ReadAllText($watchRef) -match ('NeedsVe = ''' + [regex]::Escape('C:\Users\Ve Bui\.innovation-loop-cardlens\state\needs-ve.json') + '''')) 'the watcher''s entry for this loop names the needs-Ve flag run-loop.ps1 writes'
+}
+$env:INNOVATION_LOOP_CARDLENS_HOME = $prevHome
+Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

@@ -105,6 +105,11 @@ $wl = 'Failed, waiting on Ve: #33 (tests: tests or CI still failed after the fix
 $cw = Format-RunDataComment -Data $d -Issue 4 -Part $d.Parts[0] -RunId 'RW' -Mode 'FULL' -Trigger 'x' -Waiting $wl
 Check ($cw.Contains($wl) -and $cw.IndexOf($wl) -lt $cw.IndexOf('<sub>Cost')) 'issue comment carries the waiting line above the cost note'
 $cwp = Format-RunDataProposalComment -Data $d -RunId 'RW' -Mode 'FULL' -Trigger 'x' -Waiting $wl
+# the needs-Ve flag set by this run: a loud line at the top of the issue's Run data comment
+$nvl = 'Run RW left the deploy of #4 uncertain (merged as abc1234 but the deploy was not verified). Clear it: clear-needs-ve.ps1 -Clear -Note x'
+$cn = Format-RunDataComment -Data $d -Issue 4 -Part $d.Parts[0] -RunId 'RW' -Mode 'FULL' -Trigger 'x' -NeedsVe $nvl
+Check ($cn.Contains('**NEEDS VE: the loop is stopped.** ' + $nvl) -and $cn.IndexOf('NEEDS VE') -lt $cn.IndexOf('| Outcome')) 'issue comment carries the needs-Ve line above the numbers'
+Check (-not $cw.Contains('NEEDS VE')) 'no -NeedsVe: no needs-Ve line'
 Check ($cwp.Contains("<sub>$wl</sub>")) 'proposal footer carries the waiting line'
 Check (-not (Format-RunDataProposalComment -Data $d -RunId 'RW' -Mode 'FULL' -Trigger 'x').Contains('waiting on')) 'proposal footer without -Waiting has no waiting line'
 $null = Publish-LoopRunData -TranscriptPath $noMark -Repo 'o/r' -GhExe 'gh-not-called' -RunId 'nw' -Mode 'FULL' -OutDir $tmp -NoPost -Waiting $wl
