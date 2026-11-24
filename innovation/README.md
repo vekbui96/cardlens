@@ -210,6 +210,35 @@ Caps: one browser and one worker per call, 150 s per preview-browse call, 5 min 
 only state endpoint needs its token, which the loop never reads. Tests: `node innovation\test-browser-lock.mjs`,
 `powershell -ExecutionPolicy Bypass -File innovation\test-resource-rules.ps1`.
 
+### Token savers (Ve, 2026-11-24)
+
+- **Feasibility before proposing and before building.** Proposal, PM and intake sessions check before opening an
+  issue that it is not already on main, that every file, screen, route and component it names exists, and that it
+  does not duplicate an open or recently closed issue (LOOP.md section 5 step 6). A build session's first step
+  (section 3 step 3, "Feasibility first") refuses within a few tool calls (class `scope`, outcome `skipped`) when the
+  issue is already done or names something that is not there. Before any session the runner reads the files the
+  issue names (`gate-rules.ps1 Get-ProposalPathCheck` against `git ls-tree origin/main`): none of them on main ->
+  refused with the same failure comment and no session (it does not count against MaxBuilds); some missing -> the
+  build header's `PRECHECK` line lists them. Back-tested on all 135 proposals: 64 name files, none would be refused.
+- **Small polish is bundled when proposed, not when built.** The PM opens 2-3 Size S, Pages-only polish ideas
+  for the same workflow or screen as ONE proposal (one slot, one build, one PR). Bundling at build time (several
+  approved issues in one session) was not built: one CI failure would block the others' merge, and approval,
+  preview QA, the look window, merge-pr and the deploy records are all per issue.
+- **Small-build caps.** A non-Opus build of a `size:small` issue runs every session of that build with
+  `build.sizeSmallMaxTurns` 100 and `build.sizeSmallMaxBudgetUsd` 2.50 (`Get-BuildCaps`). Ve asked for 80 / 2.00.
+  Over the past 84 small builds, 80 / 2.00 would have stopped 9 (10.7%) and 100 / 2.50 would have stopped 5 (6%),
+  so the slightly higher pair is set. Opus builds (the automatic retry, `model:opus`, a server deploy) keep the
+  full caps.
+- **Trimmed build prompts.** Build prompts leave out sections 1 (labels) and 4 (gates summary). Build sessions
+  read CLAUDE.md, the top of handoff, the frontend or backend agent file for the side they change, and only the
+  `docs/` files CLAUDE.md's index names for that area; runbook, ship and advance are not read up front.
+  Continuation sessions (`buildmerge`: the merge after the preview or the look window; `buildfix`: the QA fix
+  round) get section 3 without the steps they skip. Sizes of LOOP.md in the prompt:
+  - first build session: 52.2 KB -> 45.6 KB
+  - merge continuation: 52.2 KB -> 33.3 KB
+  - QA fix round: 52.2 KB -> 37.0 KB
+  - required reads at session start: about 45 KB -> about 16-20 KB
+
 ## How it works
 
 Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in
