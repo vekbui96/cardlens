@@ -411,6 +411,42 @@ function Send-LoopIssueComment {
         Invoke-Gh -Arguments @('issue', 'comment', "$Issue", '-R', $script:Repo, '--body-file', $bp) -Quiet | Out-Null
     } catch { Write-Log "could not comment on #${Issue}: $_" 'WARN' }
 }
+# The feasibility pre-check of one build (gate-rules.ps1 Get-ProposalPathCheck) against the files on origin/main at
+# -Sha in the loop clone. Returns Refuse, Why and Lines (the PRECHECK header line for the build session). Any error:
+# no refusal (the session's own feasibility step still runs).
+$script:MainFileSets = @{}
+function Get-BuildPrecheck {
+    param([int]$Issue, [string]$Sha)
+    $out = [pscustomobject]@{ Refuse = $false; Why = 'not checked'; Lines = @() }
+    try {
+        if (-not $script:MainFileSets.ContainsKey($Sha)) {
+            $set = New-Object 'System.Collections.Generic.HashSet[string]'
+            $ls = Invoke-Git -Repo $script:Clone -Arguments @('ls-tree', '-r', '--name-only', $(if ($Sha) { $Sha } else { 'origin/main' })) -AllowFail -Quiet
+            if ($ls.Code -ne 0) { $out.Why = 'git ls-tree failed: not checked'; return $out }
+            foreach ($f in @($ls.Output)) { if ("$f") { [void]$set.Add("$f".Trim()) } }
+            if ($set.Count -lt 50) { $out.Why = "only $($set.Count) files listed on main: not checked"; return $out }
+            $script:MainFileSets[$Sha] = $set
+        }
+        $set = $script:MainFileSets[$Sha]
+        $iss = Get-GhJson @('api', "repos/$($script:Repo)/issues/$Issue")
+        $r = Get-ProposalPathCheck -Body "$($iss.body)" -Exists { param($p) $set.Contains($p) }
+        $out.Refuse = [bool]$r.Refuse; $out.Why = $r.Why
+        if (@($r.Paths).Count -gt 0) {
+            $st = @($r.Paths | ForEach-Object { if (@($r.Missing) -contains $_) { "$_ (NOT on main)" } else { "$_ (on main)" } })
+            $out.Lines = @("- PRECHECK: $($r.Why). Named files: $($st -join ', ')   (the runner checked origin/main; section 3 step 3 'Feasibility first')")
+        } else { $out.Lines = @('- PRECHECK: the issue names no repo file; find the screen or component it means before planning (section 3 step 3 "Feasibility first")') }
+    } catch { $out.Refuse = $false; $out.Why = "pre-check failed ($_): not checked" }
+    return $out
+}
+# A build refused by the pre-check: failure comment (class scope, outcome skipped) and loop:failed, like a session's
+# step 3 refusal, without spending a session.
+function Set-PrecheckRefused {
+    param([int]$Issue, [string]$Why, [string]$SessionModel = '')
+    if ($DryRun) { Write-Log "dry run: #$Issue would be refused by the pre-check ($Why)"; return }
+    $body = "$(Format-FailureMarker -Class 'scope' -Outcome 'skipped' -Model $SessionModel)`n## Synopsis`n`nNot built: the change it describes does not match the code on main any more, so a build session would only search and give up. Nothing was changed. Close this issue, or edit it to point at today's code and approve it again.`n`n## Details`n`nPre-check by run-loop.ps1 (run ``$RunId``), before any session: $(ConvertTo-SafeLine $Why 400).`n"
+    Send-LoopIssueComment -Issue $Issue -Body $body
+    try { Invoke-Gh -Arguments @('issue', 'edit', "$Issue", '-R', $script:Repo, '--add-label', 'loop:failed') -Quiet | Out-Null } catch { Write-Log "pre-check: could not label #${Issue}: $_" 'WARN' }
+}
 # Park a via-policy build before its merge: the gate record carries mergeAt (merge-pr.ps1 refuses before it), the
 # parked record goes to state\merge-parked.json, Ve is told on the issue and the PR, the preview stays up.
 function Invoke-ParkMerge {
@@ -574,13 +610,14 @@ function Reset-Clone {
 function New-SessionPrompt {
     param([string]$Kind, [int]$Issue = 0, [string]$SessionModel, [int]$Turns, [datetime]$SessionDeadline, $Q, [string]$MainSha, [string]$LiveHead,
         [string]$ServerUsed = '', [string]$BuiltLine = '', [object[]]$KnownIssues = $null, $RequestInfo = $null, [string[]]$PrefLines = @(),
-        [object[]]$MetricsLines = $null, [string[]]$ExtraLines = @(), [string]$NameSuffix = '')
+        [object[]]$MetricsLines = $null, [string[]]$ExtraLines = @(), [string]$NameSuffix = '', [string]$PromptKind = '')
     $loopMd = [IO.File]::ReadAllText((Join-Path $ScriptsDir 'LOOP.md'))
     $name = $Kind; if ($Issue -gt 0) { $name = "$Kind-$Issue" }; if ($NameSuffix) { $name += ".$NameSuffix" }
     $lines = @()
     switch ($Kind) {
         'build' {
-            $sections = @(0, 1, 2, 3, 4, 6)
+            # sections 1 (labels) and 4 (gates summary) are left out: section 3 has every command a build needs
+            $sections = @(0, 2, 3, 6)
             $retry = 'no'; if (@($Q.retry) -contains $Issue) { $retry = 'yes: the ONE automatic retry (section 3 steps 4 and 6)' }
             $lines += "# CardLens innovation loop run ${RunId}: build session for issue #$Issue"
             $lines += ''
@@ -721,7 +758,7 @@ function New-SessionPrompt {
     $lines += 'Follow the instructions below exactly. They are the only instructions for this session; sections not needed for this job are left out.'
     $lines += ''; $lines += '---'; $lines += ''
     $promptPath = Join-Path $script:LoopHome "logs\run-$RunId.$name.prompt.md"
-    [IO.File]::WriteAllText($promptPath, ($lines -join "`n") + "`n" + (Get-LoopMdSections -Text $loopMd -Sections $sections -Kind $(if ($Opts.compactPrompts) { $Kind } else { '' })), (New-Object Text.UTF8Encoding $false))
+    [IO.File]::WriteAllText($promptPath, ($lines -join "`n") + "`n" + (Get-LoopMdSections -Text $loopMd -Sections $sections -Kind $(if (-not $Opts.compactPrompts) { '' } elseif ($PromptKind) { $PromptKind } else { $Kind })), (New-Object Text.UTF8Encoding $false))
     return $promptPath
 }
 
@@ -1954,7 +1991,7 @@ try {
                 $dl = "Phase A: $(Format-Deferred @($split.Deferred) $budget.Verdict)"
                 if ($runNotes -notcontains $dl) { Write-Log $dl; [void]$runNotes.Add($dl) }
             }
-            $dec = Get-NextBuildDecision -Buildable @($split.Allowed) -Done @($built | Where-Object { -not $_.Unparked }) -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
+            $dec = Get-NextBuildDecision -Buildable @($split.Allowed) -Done @($built | Where-Object { -not $_.Unparked -and -not $_.Precheck }) -MaxBuilds $MaxBuilds -RemainingMinutes (& $minutesLeft) -SecondBuildMinMinutes $SecondBuildMinMinutes
             # the daily build cap (sessions.json build.maxPerDay), checked before every build session; an issue from
             # one of Ve's requests is not capped (the plan budget above still applies)
             $isReq = ($dec.Start -and @(Get-RequestWork $q) -contains [int]$dec.Issue)
@@ -1968,14 +2005,25 @@ try {
             if ($approvalOf[$n] -ne 'label') { Write-Log "Phase A: #$n approval: $($approvalOf[$n])" }
             $bm = Get-QueueBuildModel $q $n
             $sm = $bm.Model
-            Write-Log "Phase A: #$n model $sm ($($bm.Why))"
+            $caps = Get-BuildCaps -Labels $labels -Model $sm -Config $Cfg; $bTurns = [int]$caps.Turns; $bUsd = [double]$caps.BudgetUsd
+            Write-Log "Phase A: #$n model $sm ($($bm.Why)); caps $bTurns turns, `$$(Format-BudgetUsd $bUsd) ($($caps.Why))"
             $minutes = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
             $sessDeadline = (Get-Date).AddMinutes($minutes)
             $sha = $mainSha; if ($built.Count -gt 0 -and -not $DryRun) { $sha = Reset-Clone; try { $liveHead = Get-LiveHead } catch { } }
             $builtLine = @($built | ForEach-Object { "#$($_.Issue) $($_.Outcome)" }) -join ', '
-            $pp = New-SessionPrompt -Kind 'build' -Issue $n -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -SessionDeadline $sessDeadline -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine
+            # the feasibility pre-check (no session): files the issue names that are not on main
+            $pcx = Get-BuildPrecheck -Issue $n -Sha $sha
+            if ($pcx.Refuse) {
+                Write-Log "Phase A: #$n refused before any session: $($pcx.Why)" 'WARN'
+                Set-PrecheckRefused -Issue $n -Why $pcx.Why -SessionModel $sm
+                $built += [pscustomobject]@{ Issue = $n; Outcome = 'skipped'; Unparked = $false; Precheck = $true }
+                if ($approvalOf[$n] -eq 'via-policy') { $script:ViaPolicyOutcomes[[int]$n] = 'skipped'; Save-ViaPolicyState }
+                [void]$runNotes.Add("#${n}: refused by the pre-check, no session: $($pcx.Why)")
+                continue
+            }
+            $pp = New-SessionPrompt -Kind 'build' -Issue $n -SessionModel $sm -Turns $bTurns -SessionDeadline $sessDeadline -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine -ExtraLines @($pcx.Lines)
             if ($DryRun) {
-                Write-Log "DRY RUN plan: build session #$n model=$sm ($($bm.Why); labels: $($labels -join ',')) maxTurns=$($Cfg.build.maxTurns) timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg)) daily=($($capD.Reason)) prompt=$pp"
+                Write-Log "DRY RUN plan: build session #$n model=$sm ($($bm.Why); labels: $($labels -join ',')) maxTurns=$bTurns timeout=${minutes}m maxBudgetUsd=$(Format-BudgetUsd $bUsd) ($($caps.Why)) daily=($($capD.Reason)) precheck=($($pcx.Why)) prompt=$pp ($((Get-Item -LiteralPath $pp).Length) bytes)"
                 $built += [pscustomobject]@{ Issue = $n; Outcome = 'deployed' }; $simMinutes += 75   # assume it deploys in ~75 min, to show the plan
                 continue
             }
@@ -1984,7 +2032,7 @@ try {
                 [IO.File]::WriteAllText((Join-Path $pd "$RunId-$n.approval.txt"), "$($approvalOf[$n])", (New-Object Text.UTF8Encoding $false)) } catch { Write-Log "could not record #$n's approval for its progress comment: $_" 'WARN' }
             # previews on: merge-pr.ps1 refuses a user-facing merge of this issue in this run until the preview QA gate allows it
             if ($script:PreviewOn) { Save-PreviewGate -Issue $n -Gate 'pending' -Verdict 'pending' -Why 'build started; no preview yet' }
-            $s = Invoke-Session -Kind 'build' -Issue $n -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $minutes -PromptPath $pp -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg) -Request:$isReq
+            $s = Invoke-Session -Kind 'build' -Issue $n -SessionModel $sm -Turns $bTurns -Minutes $minutes -PromptPath $pp -BudgetUsd $bUsd -Request:$isReq
             [void]$sessions.Add($s)
             if ($s.EndClass -eq 'not-started') {
                 # e.g. the reduced token could not be verified (fail closed): nothing else may run either
@@ -2045,6 +2093,8 @@ try {
             $Unparking = $true
             $sm = "$($pk.model)"; if (-not $sm) { $sm = "$($Cfg.build.model)" }
             if (-not (Test-BudgetAllowsModel -Verdict $budget.Verdict -Model $sm)) { $sm = "$($Cfg.build.model)" }
+            $plb = @(); try { $plb = @((Get-GhJson @('api', "repos/$($script:Repo)/issues/$n")).labels | ForEach-Object { $_.name }) } catch { }
+            $caps = Get-BuildCaps -Labels $plb -Model $sm -Config $Cfg; $bTurns = [int]$caps.Turns; $bUsd = [double]$caps.BudgetUsd
             $isReq = $false; $q = $queue; $buildStart = Get-Date; $s = $null
             $minutes = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
             $sha = Reset-Clone; try { $liveHead = Get-LiveHead } catch { }
@@ -2056,9 +2106,9 @@ try {
             } else {
                 # the gate of the parked round, now for this run and without the window (merge-pr.ps1 3c)
                 Save-PreviewGate -Issue $n -Pr $pvPr -Sha "$($pk.sha)" -Gate "$($pk.gate)" -Verdict "$($pk.gate)" -Why "look window over at $(Format-ViaPolicyTime $pk.mergeAt); no hold" -Url "$($pk.url)" -Round $pvRound
-                $pp2 = New-SessionPrompt -Kind 'build' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine `
+                $pp2 = New-SessionPrompt -Kind 'build' -PromptKind 'buildmerge' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns $bTurns -SessionDeadline ((Get-Date).AddMinutes($minutes)) -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine `
                     -ExtraLines @(Format-PreviewContinueLines -Issue $n -Pr $pvPr -Sha "$($pk.sha)" -Next 'merge' -Url "$($pk.url)" -Gate "$($pk.gate)" -Why "preview QA $($pk.gate); look window over at $(Format-ViaPolicyTime $pk.mergeAt), no /hold" -Round $pvRound)
-                $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $minutes -PromptPath $pp2 -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg)
+                $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix 'lw' -SessionModel $sm -Turns $bTurns -Minutes $minutes -PromptPath $pp2 -BudgetUsd $bUsd
                 [void]$sessions.Add($s)
                 if ($s.EndClass -eq 'not-started') { [void]$problems.Add("build #${n} (after its look window): the session could not be started ($($s.Reason)); the run stopped"); $stopRun = $true }
                 $buildStart = $s.Start; $pvMerging = $true
@@ -2122,9 +2172,9 @@ try {
                 # the next build session for the same issue: the merge, or the one QA fix round
                 $min2 = [int][math]::Floor([math]::Min([double]$Cfg.build.timeoutMinutes, (& $minutesLeft)))
                 $sfx = "s$($pvRound + 1)"
-                $pp2 = New-SessionPrompt -Kind 'build' -Issue $n -NameSuffix $sfx -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -SessionDeadline ((Get-Date).AddMinutes($min2)) -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine `
+                $pp2 = New-SessionPrompt -Kind 'build' -PromptKind $(if ($nx.Action -eq 'merge') { 'buildmerge' } else { 'buildfix' }) -Issue $n -NameSuffix $sfx -SessionModel $sm -Turns $bTurns -SessionDeadline ((Get-Date).AddMinutes($min2)) -Q $q -MainSha $sha -LiveHead $liveHead -ServerUsed $serverUsed -BuiltLine $builtLine `
                     -ExtraLines @(Format-PreviewContinueLines -Issue $n -Pr $ready.Pr -Sha $rd.Sha -Next $nx.Action -Url $rd.Url -Gate $rd.Gate -Why $rd.Why -Qa $rd.Qa -ShotsDir $rd.Shots -Round $pvRound)
-                $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix $sfx -SessionModel $sm -Turns ([int]$Cfg.build.maxTurns) -Minutes $min2 -PromptPath $pp2 -BudgetUsd (Get-SessionBudget -Kind 'build' -Model $sm -Config $Cfg) -Request:$isReq
+                $s = Invoke-Session -Kind 'build' -Issue $n -NameSuffix $sfx -SessionModel $sm -Turns $bTurns -Minutes $min2 -PromptPath $pp2 -BudgetUsd $bUsd -Request:$isReq
                 [void]$sessions.Add($s)
                 if ($s.EndClass -eq 'not-started') { [void]$problems.Add("build #${n} (after the preview): the session could not be started ($($s.Reason)); the run stopped"); $stopRun = $true; break }
                 if ($nx.Action -eq 'merge') { $pvMerging = $true }

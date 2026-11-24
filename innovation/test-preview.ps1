@@ -268,7 +268,7 @@ $ul3 = Update-ViaPolicyState -State (Get-ViaPolicyState -Exists $true -Text ($ul
 Check ((@($ul3.State.issues | Where-Object { $_.issue -eq 50 })[0]).status -eq 'parked') 'a parked record missing from the queue check stays parked (not gone)'
 $rl0 = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'run-loop.ps1'))
 Check ($rl0 -match 'Get-LookWindowDecision -Approval "\$\(\$approvalOf\[\$n\]\)"' -and $rl0 -match 'Invoke-ParkMerge' -and $rl0 -match '\. \$unparkPass' -and $rl0 -match '-MergeDueAt \$dMerge') 'run-loop parks via-policy builds, unparks first in Phase A and writes mergeDueAt to drain.json'
-Check ($rl0 -match '-Done @\(\$built \| Where-Object \{ -not \$_\.Unparked \}\)') 'a parked build''s later merge does not count against MaxBuilds again'
+Check ($rl0 -match '-Done @\(\$built \| Where-Object \{ -not \$_\.Unparked( -and -not \$_\.Precheck)? \}\)') 'a parked build''s later merge does not count against MaxBuilds again'
 
 # ---- LOOP.md / sessions / runner wiring ------------------------------------------------------------------------------
 $lm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'LOOP.md'))

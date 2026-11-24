@@ -943,6 +943,51 @@ if (Test-Path -LiteralPath $watchRef) {
 $env:INNOVATION_LOOP_CARDLENS_HOME = $prevHome
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
+# ---- token savers (Ve, 2026-11-24): small-build caps, the feasibility pre-check, trimmed build prompts --------------
+$cfgC = Get-SessionConfig ([IO.File]::ReadAllText("$PSScriptRoot\sessions.json") | ConvertFrom-Json)
+$bc = Get-BuildCaps -Labels @('loop:proposal', 'size:small') -Model 'claude-sonnet-5-5' -Config $cfgC
+Check ($bc.Small -and $bc.Turns -eq 100 -and $bc.BudgetUsd -eq 2.5) "a size:small Sonnet build gets the small caps from sessions.json (100 turns, 2.50 USD) ($($bc.Why))"
+$bn = Get-BuildCaps -Labels @('loop:proposal') -Model 'claude-sonnet-5-5' -Config $cfgC
+Check (-not $bn.Small -and $bn.Turns -eq 150 -and $bn.BudgetUsd -eq 4) 'no size:small: the normal caps (150 turns, smallMaxBudgetUsd 4 for a non-Opus build)'
+$bo = Get-BuildCaps -Labels @('size:small') -Model 'claude-opus-5-5' -Config $cfgC
+Check (-not $bo.Small -and $bo.Turns -eq 150 -and $bo.BudgetUsd -eq 8) 'an Opus build (the retry of a small build, model:opus) keeps the full caps'
+Check (-not (Get-BuildCaps -Labels @('test-only') -Model 'claude-sonnet-5-5' -Config $cfgC).Small) 'test-only alone does not get the small caps (size:small only)'
+$cfgD = Get-SessionConfig $null
+$bd = Get-BuildCaps -Labels @('size:small') -Model 'claude-sonnet-5-5' -Config $cfgD
+Check ($bd.Small -and $bd.Turns -eq 100 -and $bd.BudgetUsd -eq 2.5) 'the defaults carry the same small caps'
+$cfgH = Get-SessionConfig ('{"build":{"maxTurns":60,"smallMaxBudgetUsd":1.5,"sizeSmallMaxTurns":100,"sizeSmallMaxBudgetUsd":2.5}}' | ConvertFrom-Json)
+$bh = Get-BuildCaps -Labels @('size:small') -Model 'claude-sonnet-5-5' -Config $cfgH
+Check ($bh.Turns -eq 60 -and $bh.BudgetUsd -eq 1.5) 'small caps never raise a cap that is already lower'
+$fs = @('src/web/home/HomeWeb.tsx', 'server/index.ts', 'e2e/v2/home.spec.ts')
+$ex = { param($p) $fs -contains $p }
+$pc = Get-ProposalPathCheck -Body "## What`nIn ``src/web/home/HomeWeb.tsx`` add a chip, and a new src/web/home/Chip.tsx`n## How it would be tested`ne2e/v2/home.spec.ts" -Exists $ex
+Check (-not $pc.Refuse -and @($pc.Paths).Count -eq 2 -and @($pc.Missing).Count -eq 0) "named files on main, the new file is not counted ($($pc.Why))"
+$pc = Get-ProposalPathCheck -Body "## What`nThe Settings screen (src/v2/screens/settings/SettingsScreen.tsx) gets a button.`nSee src/web/settings/Settings.tsx:40." -Exists $ex
+Check ($pc.Refuse -and @($pc.Missing).Count -eq 2 -and $pc.Why -match 'none of the 2') "every named file missing on main: refused before any session ($($pc.Why))"
+$pc = Get-ProposalPathCheck -Body "Change src/web/home/HomeWeb.tsx and src/web/home/Gone.tsx" -Exists $ex
+Check (-not $pc.Refuse -and @($pc.Missing) -contains 'src/web/home/Gone.tsx') 'some missing: no refusal, listed for the session'
+Check (-not (Get-ProposalPathCheck -Body 'Make the Home screen value card taller.' -Exists $ex).Refuse) 'no file named: nothing to refuse (the session checks screens itself)'
+Check (-not (Get-ProposalPathCheck -Body "<!-- src/gone/x.ts -->`nPolish the Home header." -Exists $ex).Refuse) 'paths inside HTML comments are ignored'
+Check (-not (Get-ProposalPathCheck -Body 'Create src/web/new/Thing.tsx for the new card.' -Exists $ex).Refuse) 'a proposal that only names files it creates is not refused'
+Check (-not (Get-ProposalPathCheck -Body "## What`nAdd a new ``src/web/new/Thing.tsx``.`n## How it would be tested`nA unit test asserts ``src/web/new/Thing.tsx`` renders." -Exists $ex).Refuse) 'a file called new once is not counted where it is named again (portfolio #65)'
+Check ((Get-ProposalPathCheck -Body 'Change src\web\home\HomeWeb.tsx' -Exists $ex).Paths -contains 'src/web/home/HomeWeb.tsx') 'backslash paths are read as repo paths'
+$md2 = [IO.File]::ReadAllText("$PSScriptRoot\LOOP.md")
+$b1 = Get-LoopMdSections -Text $md2 -Sections @(0, 2, 3, 6) -Kind 'build'
+$bm2 = Get-LoopMdSections -Text $md2 -Sections @(0, 2, 3, 6) -Kind 'buildmerge'
+$bf2 = Get-LoopMdSections -Text $md2 -Sections @(0, 2, 3, 6) -Kind 'buildfix'
+Check ($b1 -match 'Feasibility first' -and $b1 -match '5\. \*\*Plan\*\*' -and $b1 -match '8\. \*\*PR\.\*\*' -and $b1 -match '12\. \*\*Failure') 'the first build session gets steps 1-12 and the feasibility step'
+Check ($b1 -notmatch 'docs/runbook\.md`, `\.claude/skills/advance' -and $b1 -match 'reads only what the change needs') 'the build reads only what the change needs (no runbook / ship / advance up front)'
+Check ($bm2 -notmatch '5\. \*\*Plan\*\*' -and $bm2 -notmatch '6\. \*\*Build\*\*' -and $bm2 -match '9\. \*\*CI, then merge' -and $bm2 -match '10\. \*\*Deploy' -and $bm2 -match 'Failure classes' -and $bm2 -match 'Push only' -and $bm2 -match 'Timeouts') 'the merge continuation gets steps 9-12 and the build mechanics of section 0, not steps 1-8'
+Check ($bf2 -match '6\. \*\*Build\*\*' -and $bf2 -match '7\. \*\*Test locally' -and $bf2 -notmatch '5\. \*\*Plan\*\*' -and $bf2 -notmatch '8\. \*\*PR\.\*\*') 'the QA fix round gets steps 6-7 and 9-12'
+Check ([Text.Encoding]::UTF8.GetByteCount($bm2) -lt 0.75 * [Text.Encoding]::UTF8.GetByteCount($b1)) 'the merge continuation prompt is at least a quarter smaller'
+$pp2 = Get-LoopMdSections -Text $md2 -Sections @(0, 1, 2, 5, 6) -Kind 'propose'
+Check ($pp2 -match 'check it is feasible' -and $pp2 -match 'Not already on main' -and $pp2 -match 'Not a duplicate' -and $pp2 -match 'Bundle small polish') 'proposal sessions check feasibility and bundle small polish of one screen'
+Check ((Get-LoopMdSections -Text $md2 -Sections @(0, 1, 2, 5, 6, 8) -Kind 'intake') -match 'feasibility check before opening each one') 'intake runs the feasibility check too'
+$rlC = [IO.File]::ReadAllText("$PSScriptRoot\run-loop.ps1")
+Check ($rlC -match "'build' \{\s+#[^\n]*\n\s+\`$sections = @\(0, 2, 3, 6\)") 'build prompts leave out sections 1 and 4'
+Check ($rlC -match "-PromptKind 'buildmerge'" -and $rlC -match "\{ 'buildmerge' \} else \{ 'buildfix' \}") 'continuation sessions get the trimmed prompt kinds'
+Check ($rlC -match 'Get-BuildPrecheck -Issue \$n' -and $rlC -match 'Set-PrecheckRefused' -and $rlC -match '-Turns \$bTurns' -and $rlC -notmatch "-Turns \(\[int\]\`$Cfg\.build\.maxTurns\)") 'run-loop pre-checks every build and uses the build caps in every build session'
+
 if ($script:fail -gt 0) { Write-Host "TEST-QUEUE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-QUEUE-RULES PASS ($script:pass checks)"
 exit 0

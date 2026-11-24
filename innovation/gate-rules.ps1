@@ -563,7 +563,8 @@ function Get-LoopMdSections {
 # automatic retry of a non-Opus failure caused by the change (Get-RetryDecision Opus).
 $script:SessionDefaults = [ordered]@{
     build   = [ordered]@{ model = 'claude-sonnet-5-5'; opusModel = 'claude-opus-5-5'; opusLabels = @('model:opus'); smallModel = 'claude-sonnet-5-5'; smallLabels = @('size:small', 'test-only')
-        maxTurns = 150; timeoutMinutes = 150; maxBudgetUsd = 8; smallMaxBudgetUsd = 4; maxPerDay = 8 }
+        maxTurns = 150; timeoutMinutes = 150; maxBudgetUsd = 8; smallMaxBudgetUsd = 4; maxPerDay = 8
+        sizeSmallLabels = @('size:small'); sizeSmallMaxTurns = 100; sizeSmallMaxBudgetUsd = 2.5 }
     propose = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 80; timeoutMinutes = 45; minMinutes = 15; maxBudgetUsd = 0.75; maxPerDay = 4 }
     review  = [ordered]@{ model = 'claude-sonnet-5-5'; maxTurns = 120; timeoutMinutes = 60; maxBudgetUsd = 4; maxPerDay = 1 }
     # Ve's requests (options.requestIntake): one intake session per request that needs planning
@@ -688,6 +689,58 @@ function Get-SessionBudget {
     return $d
 }
 # '2.50' (invariant culture: claude reads a dot).
+# The turn and USD caps of one build session (Ve, 2026-11-24: tighter caps for small builds). A build on a model that
+# is not Opus whose issue carries a build.sizeSmallLabels label (size:small) gets build.sizeSmallMaxTurns /
+# build.sizeSmallMaxBudgetUsd; anything else keeps build.maxTurns and Get-SessionBudget (smallMaxBudgetUsd for a
+# non-Opus model, maxBudgetUsd for Opus). An Opus build (the automatic retry, model:opus, a server deploy) never gets
+# the small caps. Every session of the same build (first, QA fix round, merge) uses the same caps. Returns Turns,
+# BudgetUsd, Small, Why.
+function Get-BuildCaps {
+    param([string[]]$Labels = @(), [string]$Model = '', $Config)
+    $c = $Config['build']
+    $turns = [int]$c['maxTurns']; $usd = Get-SessionBudget -Kind 'build' -Model $Model -Config $Config
+    $isOpus = ($Model.Trim() -eq '' -or $Model -match 'opus')
+    $sl = @('size:small'); if ($c.Contains('sizeSmallLabels') -and @($c['sizeSmallLabels']).Count -gt 0) { $sl = @($c['sizeSmallLabels']) }
+    $hit = @($Labels | Where-Object { $sl -contains $_ })
+    if ($isOpus -or $hit.Count -eq 0) { return [pscustomobject]@{ Turns = $turns; BudgetUsd = $usd; Small = $false; Why = $(if ($isOpus) { 'Opus build: the full caps' } else { 'no size:small label: the normal caps' }) } }
+    $t2 = 0; [void][int]::TryParse("$($c['sizeSmallMaxTurns'])", [ref]$t2)
+    $u2 = [double]0; [void][double]::TryParse("$($c['sizeSmallMaxBudgetUsd'])", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$u2)
+    if ($t2 -gt 0 -and $t2 -lt $turns) { $turns = $t2 }
+    if ($u2 -gt 0 -and ($usd -le 0 -or $u2 -lt $usd)) { $usd = $u2 }
+    return [pscustomobject]@{ Turns = $turns; BudgetUsd = $usd; Small = $true; Why = "label $($hit[0]): small-build caps" }
+}
+# ---- the feasibility pre-check before a build session (Ve, 2026-11-24: token savers) -----------------------------
+# The repo paths an issue body names (in backticks or bare: src/, server/, e2e/, public/, scripts/, docs/ + a file
+# extension), minus the ones its line says are new ("new", "create", "add a/an ...", "introduce"). -Exists: a
+# scriptblock (path -> $true when the file is on origin/main). Refuse when the body names at least one such path and
+# NONE of them exists on main: the proposal describes code that is not there (renamed, removed, or never existed, e.g.
+# #235's Settings screen), so a session would only explore and give up. Some missing: no refusal, the build session's
+# header lists them (PRECHECK) so it checks them first. Returns Paths, Missing, Refuse, Why.
+$script:PrecheckPathRx = '(?<![\w/.-])((?:src|server|e2e|public|scripts|docs)/[A-Za-z0-9_./\[\]-]*[A-Za-z0-9_\]-]\.(?:tsx?|jsx?|mjs|cjs|css|json|md|html|py|svg|png))(?![\w/-])'
+$script:PrecheckNewRx = '(?i)\b(new|create[sd]?|creating|introduc\w*|add(s|ed|ing)? (a|an)\b)'
+function Get-ProposalPathCheck {
+    param([string]$Body = '', [scriptblock]$Exists, [int]$Max = 20)
+    $b = [regex]::Replace("$Body", '(?s)<!--.*?-->', '')
+    # a path the body ever calls new ("Add a new src/web/Foo.tsx") is left out everywhere it appears (portfolio #65
+    # named its new public/404.html again in its test plan); backslashes read as slashes
+    $paths = New-Object System.Collections.ArrayList; $isNew = @{}
+    foreach ($line in @(($b -replace '\\', '/') -split "`r?`n")) {
+        foreach ($m in [regex]::Matches($line, $script:PrecheckPathRx)) {
+            $p = $m.Groups[1].Value
+            if ($line.Substring(0, $m.Index) -match $script:PrecheckNewRx) { $isNew[$p] = $true; continue }
+            if (-not $paths.Contains($p) -and $paths.Count -lt $Max) { [void]$paths.Add($p) }
+        }
+    }
+    $paths = @($paths | Where-Object { -not $isNew.ContainsKey($_) })
+    $missing = @($paths | Where-Object { -not (& $Exists $_) })
+    $refuse = ($paths.Count -gt 0 -and $missing.Count -eq $paths.Count)
+    $why = $(if ($paths.Count -eq 0) { 'the issue names no repo file: nothing to pre-check' }
+        elseif ($refuse) { "none of the $($paths.Count) file(s) the issue names exists on main ($(@($missing | Select-Object -First 5) -join ', ')): the proposal no longer matches the code" }
+        elseif ($missing.Count) { "$($missing.Count) of $($paths.Count) named file(s) not on main: $(@($missing | Select-Object -First 5) -join ', ')" }
+        else { "all $($paths.Count) named file(s) exist on main" })
+    return [pscustomobject]@{ Paths = @($paths); Missing = @($missing); Refuse = $refuse; Why = $why }
+}
+
 function Format-BudgetUsd { param([double]$Usd) return $Usd.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture) }
 
 # ---- daily session caps (run-loop.ps1 keeps the counts in <LOOP_HOME>\state\daily-sessions.json) ----------
