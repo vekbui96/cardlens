@@ -153,6 +153,25 @@ describe("one tap, with feedback", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Unmarked: Normal.");
   });
 
+  it("shows an add affordance on every printing row and an icon on the confirmation", async () => {
+    stubPrintings();
+    const { container } = render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const normal = await screen.findByRole("button", { name: /^Normal/ });
+    const rows = screen.getAllByRole("button", { name: /Not owned/ });
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      expect(row.querySelector('[data-affordance="printing-affordance"][aria-hidden="true"]')).not.toBeNull();
+    }
+
+    await userEvent.click(normal);
+    const status = await screen.findByRole("status");
+    expect(status.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    expect(
+      container.querySelector('[data-affordance="printing-affordance"][data-owned="true"]'),
+    ).not.toBeNull();
+  });
+
   it("leaves the row unmarked and says so when the save fails", async () => {
     stubPrintings();
     const repos = new Repositories();

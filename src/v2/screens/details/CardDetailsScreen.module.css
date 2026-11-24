@@ -168,6 +168,30 @@
   font-size: var(--v2-fs-small);
 }
 
+/* A 44px target-sized hint that the whole row toggles; the row itself is the button. */
+.affordance,
+.affordanceOwned {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--v2-tap);
+  height: var(--v2-tap);
+  margin-block: -6px;
+  border-radius: var(--v2-radius-pill);
+}
+
+.affordance {
+  color: var(--v2-accent-strong);
+  border: var(--v2-border-w) solid var(--v2-accent-strong);
+}
+
+.affordanceOwned {
+  color: var(--v2-bg);
+  background: var(--v2-accent-strong);
+  border: var(--v2-border-w) solid var(--v2-accent-strong);
+}
+
 /* --- Prose, notes, failure ------------------------------------------------ */
 
 .prose {
@@ -178,9 +202,13 @@
 
 /* Always mounted so the live region announces; empty it takes no space. */
 .confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
   margin: var(--v2-space-0);
   color: var(--v2-accent-strong);
-  font-size: var(--v2-fs-small);
+  font-size: var(--v2-fs-field);
+  font-weight: var(--v2-fw-medium);
 }
 
 .confirm:empty {
