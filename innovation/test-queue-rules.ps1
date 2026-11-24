@@ -229,6 +229,11 @@ Check ((Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 0).Minutes -eq 360) '
 Check ((Get-RunTimeBudget -Requested 360 -TaskLimitMinutes 60).Minutes -eq 60) 'never below 60 min'
 $real = Join-Path $PSScriptRoot 'run-loop.ps1'
 $rl = [IO.File]::ReadAllText($real)
+# drain.json progress: Get-Variable -ValueOnly emits an array as ONE object, so run-loop must unroll it before counting
+$gvT = { param([string]$N) Get-Variable -Name $N -ValueOnly -ErrorAction SilentlyContinue }
+$builtT = @((D 1 'deployed'), (D 2 'deployed'), (D 3 'skipped'))
+& { $built = $builtT; Check (@(@(& $gvT 'built' | ForEach-Object { $_ } | Where-Object { $_ }) | Where-Object { $_.Outcome -eq 'deployed' }).Count -eq 2) 'unrolled Get-Variable value counts each build' }
+Check ($rl -match "& \`$gv 'built' \| ForEach-Object \{ \`$_ \}") 'run-loop.ps1 unrolls the builds before counting drain progress (run 20261123-153401 logged progress 1 for 4 deploys)'
 Check ($rl -match '\[ValidateRange\(1, 6\)\]\s*\[int\]\$MaxBuilds = 4' -and $rl -match '\[int\]\$TimeoutMinutes = 360' -and $rl -match 'SecondBuildMinMinutes = 100') 'run-loop.ps1 defaults: MaxBuilds 4, 360 min, 100 min for later builds'
 $it = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'install-task.ps1'))
 Check ($it -match "-Daily -At \`$At\s*\n(?:\s*#.*\n)?\s*\`$settings = New-ScheduledTaskSettingsSet @settingsCommon -ExecutionTimeLimit \(New-TimeSpan -Hours 7\)") 'install-task.ps1 gives the daily task 7 h (360-min run + reporting)'
