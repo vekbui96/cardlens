@@ -289,7 +289,9 @@ test.describe("home @visual", () => {
     await stabiliseForSnapshot(page);
     // The panel alone: a full-page capture resizes the viewport, which sends this
     // state back to placeholders before the shot is taken.
-    const panel = page.locator("section").filter({ has: page.getByRole("heading", { name: "Biggest movers" }) });
+    const panel = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Biggest movers" }) });
     await expect(panel).toHaveScreenshot("home-movers-failed.png");
   });
 

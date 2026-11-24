@@ -38,7 +38,11 @@ export function MoversPanel({
   if (rows === null && loading) {
     return (
       <Panel title="Biggest movers" headingLevel={2}>
-        <div aria-busy="true" data-testid="home-movers-skeleton">
+        <div
+          aria-busy={!failed}
+          className={failed ? styles.moversFailed : undefined}
+          data-testid={failed ? "home-movers-failed" : "home-movers-skeleton"}
+        >
           {failed ? (
             <Stack gap={3}>
               <p className={styles.resumeMeta} role="status">

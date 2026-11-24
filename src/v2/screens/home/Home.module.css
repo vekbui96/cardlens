@@ -401,6 +401,11 @@
   cursor: pointer;
 }
 
+/* The failed block keeps the height of the three placeholder rows it replaces, so nothing below moves. */
+.moversFailed {
+  min-height: calc(3 * var(--v2-tap) + 2 * var(--v2-space-2));
+}
+
 .moverRetry {
   align-self: flex-start;
   min-height: var(--v2-tap);
