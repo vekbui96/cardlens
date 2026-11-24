@@ -199,6 +199,77 @@ $cmg = (Format-PreviewContinueLines -Issue 286 -Pr 289 -Sha ('a' * 40) -Next 'me
 Check ($cmg -match 'NEXT: merge' -and $cmg -match 'merge-pr\.ps1 -Pr 289 -Issue 286') 'the merge header points at merge-pr'
 Check ((Format-PreviewLine -Url 'https://server-pc.tail0e4194.ts.net:8460/' -Sha ('a' * 40)) -match '^Preview: https://server-pc\.tail0e4194\.ts\.net:8460/ \(tailnet only') 'the Preview line'
 
+# ---- the look window (via-policy builds park before the merge) ------------------------------------------------------
+$U = 'https://server-pc.tail0e4194.ts.net:8460/'
+$eqT = { param($A, $B) $x = ConvertTo-PreviewUtc $A; $y = ConvertTo-PreviewUtc $B; $null -ne $x -and $x -eq $y }
+$lw = Get-LookWindowDecision -Approval 'via-policy' -LookHours 1 -Gate 'pass' -Url $U -NowUtc $now
+Check ($lw.Park -and (& $eqT $lw.MergeAt $now.AddHours(1))) 'a via-policy build with its preview up parks for mergeLookHours'
+Check ((Get-LookWindowDecision -Approval 'via-policy' -LookHours 1 -Gate 'unverified' -Url $U -NowUtc $now).Park) 'an unverified QA with the preview up still parks (Ve can look)'
+Check (-not (Get-LookWindowDecision -Approval 'label' -LookHours 1 -Gate 'pass' -Url $U).Park) 'label-approved builds (Ve tapped Approve) skip the look window'
+Check (-not (Get-LookWindowDecision -Approval 'via-spec #200' -LookHours 1 -Gate 'pass' -Url $U).Park -and -not (Get-LookWindowDecision -Approval 'via-request #9' -LookHours 1 -Gate 'pass' -Url $U).Park) 'slices and request issues skip it'
+Check (-not (Get-LookWindowDecision -Approval 'via-policy' -LookHours 0 -Gate 'pass' -Url $U).Park) 'mergeLookHours 0 or absent: no window'
+Check (-not (Get-LookWindowDecision -Approval 'via-policy' -LookHours 1 -Gate 'skipped' -Url '').Park) 'nothing user-facing (no preview): merges as before'
+Check (-not (Get-LookWindowDecision -Approval 'via-policy' -LookHours 1 -Gate 'unverified' -Url '').Park) 'no preview up (build failed): merges as before'
+Check (-not (Get-LookWindowDecision -Approval 'via-policy' -LookHours 1 -Gate 'pass' -Url $U -Action 'fix').Park) 'only a merge parks (not a fix round)'
+Check ((Get-LookWindowDecision -Approval 'via-policy' -LookHours 99 -Gate 'pass' -Url $U -NowUtc $now).MergeAt | ForEach-Object { & $eqT $_ $now.AddHours(24) }) 'the window is capped at 24 h'
+# park / unpark state
+$S1 = 'a' * 40; $S2 = 'b' * 40
+$r1 = New-ParkedMerge -Issue 293 -Pr 300 -Sha $S1 -MergeAt (& $iso 1) -RunId 'r1' -Model 'claude-sonnet-5-5' -Round 1 -Url $U -Gate 'pass' -NowUtc $now
+$f1 = Update-ParkedMerges -Parked @() -Record $r1 -NowUtc $now
+$rt = @(Get-ParkedMerges ($f1 | ConvertTo-Json -Depth 5 | ConvertFrom-Json))
+Check ($rt.Count -eq 1 -and $rt[0].issue -eq 293 -and $rt[0].pr -eq 300 -and $rt[0].sha -eq $S1 -and $rt[0].url -eq $U -and (& $eqT $f1.nextMergeAt (& $iso 1))) 'park: the record round-trips through merge-parked.json (issue, pr, sha, mergeAt)'
+$r2 = New-ParkedMerge -Issue 294 -Pr 301 -Sha $S2 -MergeAt (& $iso 0.5) -NowUtc $now
+$f2 = Update-ParkedMerges -Parked $rt -Record $r2 -NowUtc $now
+Check (@($f2.parked).Count -eq 2 -and $f2.parked[0].issue -eq 294 -and (& $eqT (Get-NextMergeDue -Parked $f2.parked) (& $iso 0.5))) 'several parked merges: the earliest is next (drain mergeDueAt)'
+$f3 = Update-ParkedMerges -Parked $f2.parked -Record (New-ParkedMerge -Issue 293 -Pr 300 -Sha $S2 -MergeAt (& $iso 2)) -NowUtc $now
+Check (@($f3.parked).Count -eq 2 -and @($f3.parked | Where-Object { $_.issue -eq 293 })[0].sha -eq $S2) 're-parking an issue replaces its record (one per issue)'
+$f4 = Update-ParkedMerges -Parked $f3.parked -Remove 294 -NowUtc $now
+Check (@($f4.parked).Count -eq 1 -and $f4.parked[0].issue -eq 293) 'unpark: the record is removed'
+Check (@(Get-ParkedMerges ([pscustomobject]@{ parked = @([pscustomobject]@{ issue = 1; pr = 2; sha = 'short'; mergeAt = (& $iso 1) }, [pscustomobject]@{ issue = 3; pr = 4; sha = $S1; mergeAt = 'garbage' }) })).Count -eq 0) 'malformed parked records are dropped'
+Check ((Get-NextMergeDue -Parked @()) -eq '' -and @(Get-ParkedMerges $null).Count -eq 0) 'nothing parked: no due time'
+# the unpark decision
+$ud = { param($R = $r1, [string]$St = 'open', [string]$Hd = $S1, [bool]$Held = $false, [double]$H = 1.1, [double]$Left = 200) Get-UnparkDecision -Record $R -PrState $St -HeadSha $Hd -Held $Held -HeldWhy 'Ve commented /hold' -NowUtc $now.AddHours($H) -MinutesLeft $Left }
+Check ((& $ud -H 0.5).Action -eq 'wait') 'inside the window: wait'
+Check ((& $ud).Action -eq 'merge') 'window over, no hold, same head: merge'
+Check ((& $ud -H 0.5 -Held $true).Action -eq 'held') 'a /hold during the window cancels the merge at once (not only when due)'
+Check ((& $ud -Held $true).Action -eq 'held') 'a /hold seen after the window (before the merge) still cancels it'
+Check ((& $ud -St 'closed').Action -eq 'held') 'closing the PR in the window is a hold'
+Check ((& $ud -St 'merged').Action -eq 'merged-elsewhere') 'merged by someone else: the record is just dropped'
+Check ((& $ud -Hd $S2).Action -eq 'recheck') 'a new head after the window: preview QA again (and a new window)'
+Check ((& $ud -H 0.5 -Hd $S2).Action -eq 'wait') 'a new head inside the window waits for the window end, then re-checks'
+Check ((& $ud -Left 20).Action -eq 'wait') 'window over but too little time left in this run: the next run merges'
+Check ((& $ud -St '').Action -eq 'wait' -and (& $ud -Hd '').Action -eq 'wait') 'PR state or head unreadable: kept parked'
+# merge-pr.ps1 refuses inside the window (backstop)
+$recLw = [pscustomobject]@{ runId = 'r9'; required = $true; headSha = $H; gate = 'pass'; verdict = 'pass'; mergeAt = (& $iso 1) }
+$gl = Get-PreviewMergeGate -Record $recLw -RunId 'r9' -HeadSha $H -NowUtc $now
+Check (-not $gl.Ok -and $gl.Why -match 'look window') 'merge-pr refuses a merge inside the look window'
+Check (Get-PreviewMergeGate -Record $recLw -RunId 'r9' -HeadSha $H -NowUtc $now.AddHours(1.01)).Ok 'and allows it after the window'
+Check (-not (Get-PreviewMergeGate -Record ([pscustomobject]@{ runId = 'r9'; required = $true; headSha = $H; gate = 'pass'; verdict = 'pass'; mergeAt = 'nope' }) -RunId 'r9' -HeadSha $H -NowUtc $now).Ok) 'an unreadable mergeAt refuses (fail closed)'
+Check (Get-PreviewMergeGate -Record ([pscustomobject]@{ runId = 'r9'; required = $true; headSha = $H; gate = 'pass'; verdict = 'pass'; mergeAt = '' }) -RunId 'r9' -HeadSha $H -NowUtc $now).Ok 'no mergeAt (label approval / window over): merges'
+# the comment and the slot protection
+$lc = Format-LookWindowComment -MergeAt (& $iso 1) -Url $U -Sha $S1 -Gate 'pass'
+Check ($lc -match '^Merges at \w{3} 2026-11-24 \d{1,2}:00 (AM|PM) unless you comment `/hold`\. Preview: https://server-pc\.tail0e4194\.ts\.net:8460/') 'the comment: "Merges at <local time> unless you comment /hold. Preview: <url>"'
+$busy = @(
+    [pscustomobject]@{ slot = 0; port = 8460; status = 'up'; pr = 300; createdAt = (& $iso -3); expiresAt = (& $iso 20) },
+    [pscustomobject]@{ slot = 1; port = 8461; status = 'up'; pr = 301; createdAt = (& $iso -2); expiresAt = (& $iso 20) },
+    [pscustomobject]@{ slot = 2; port = 8462; status = 'up'; pr = 302; createdAt = (& $iso -1); expiresAt = (& $iso 20) })
+Check ((Select-PreviewSlot -Slots $busy -Pr 400 -NowUtc $now -Protect @(300)).Slot.pr -eq 301) 'all slots busy: a parked PR''s preview is not evicted while another can go'
+Check ((Select-PreviewSlot -Slots $busy -Pr 400 -NowUtc $now -Protect @(300, 301, 302)).Slot.pr -eq 300) 'all parked: the oldest goes (never more than three previews)'
+# via-policy.json: look-window status, mergeAt and the preview URL for the hub
+$entLw = @([pscustomobject]@{ issue = 50; title = 'x'; spec = $false; status = 'due'; noticedAt = (& $iso -2); dueAt = (& $iso -1); commentId = 9; reasons = @() })
+$pk50 = New-ParkedMerge -Issue 50 -Pr 60 -Sha $S1 -MergeAt (& $iso 1) -Url $U -NowUtc $now
+$ul = Update-ViaPolicyState -State $vst -Entries $entLw -Parked @{ 50 = $pk50 } -Policy $pol -NowUtc $now
+$l50 = @($ul.State.issues | Where-Object { $_.issue -eq 50 })[0]
+Check ($l50.status -eq 'parked' -and $l50.mergeAt -eq (& $iso 1) -and $l50.preview.url -eq $U -and (& $eqT $ul.State.nextMergeAt (& $iso 1))) 'via-policy.json: status parked, issues[].mergeAt and the preview URL (nextMergeAt for the hub)'
+$ul2 = Update-ViaPolicyState -State (Get-ViaPolicyState -Exists $true -Text ($ul.State | ConvertTo-Json -Depth 6)) -Entries $entLw -Outcomes @{ 50 = 'held' } -Policy $pol -NowUtc $now.AddHours(0.5)
+$h50 = @($ul2.State.issues | Where-Object { $_.issue -eq 50 })[0]
+Check ($h50.status -eq 'held' -and $h50.mergeAt -eq '' -and @($ul2.Events | Where-Object { $_.status -eq 'held' }).Count -eq 1) 'a hold in the window: status held, mergeAt cleared, logged'
+$ul3 = Update-ViaPolicyState -State (Get-ViaPolicyState -Exists $true -Text ($ul.State | ConvertTo-Json -Depth 6)) -Entries @() -Parked @{ 50 = $pk50 } -Policy $pol -NowUtc $now
+Check ((@($ul3.State.issues | Where-Object { $_.issue -eq 50 })[0]).status -eq 'parked') 'a parked record missing from the queue check stays parked (not gone)'
+$rl0 = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'run-loop.ps1'))
+Check ($rl0 -match 'Get-LookWindowDecision -Approval "\$\(\$approvalOf\[\$n\]\)"' -and $rl0 -match 'Invoke-ParkMerge' -and $rl0 -match '\. \$unparkPass' -and $rl0 -match '-MergeDueAt \$dMerge') 'run-loop parks via-policy builds, unparks first in Phase A and writes mergeDueAt to drain.json'
+Check ($rl0 -match '-Done @\(\$built \| Where-Object \{ -not \$_\.Unparked \}\)') 'a parked build''s later merge does not count against MaxBuilds again'
+
 # ---- LOOP.md / sessions / runner wiring ------------------------------------------------------------------------------
 $lm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'LOOP.md'))
 Check ($lm -match '(?m)^## 14\. Preview QA' -and $lm -match '9a\. Preview and QA before the merge' -and $lm -match 'LOOP-PR-READY <ISSUE> <pr#> <sha>') 'LOOP.md has step 9a and section 14'

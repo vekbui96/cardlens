@@ -123,7 +123,8 @@ function New-LoopPreview {
     $serve = Get-PreviewServeStatus
     if (-not $serve.Ok) { $r.Why = "preview serving is not set up ($($serve.Why)); Ve runs preview-serve-setup.ps1 once"; return $r }
     $slots = @(Get-PreviewSlots (Read-PreviewState) | Where-Object { @($serve.Ports) -contains [int]$_.port })
-    $sel = Select-PreviewSlot -Slots $slots -Pr $Pr
+    $parkedPrs = @(); try { $parkedPrs = @(Get-ParkedMerges (Read-State $script:MergeParkedName) | ForEach-Object { [int]$_.pr }) } catch { }   # look window: Ve may be looking at them
+    $sel = Select-PreviewSlot -Slots $slots -Pr $Pr -Protect $parkedPrs
     if (-not $sel.Slot) { $r.Why = $sel.Reason; return $r }
     Write-Log "preview #${Issue}: PR #$Pr at $sha7 -> $($sel.Reason)"
     if ($sel.Evicts) { [void](Reset-PreviewSlot -Slot $sel.Evicts -Why 'slot needed for a new preview') }
