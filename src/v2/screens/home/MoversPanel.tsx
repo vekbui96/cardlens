@@ -5,7 +5,7 @@ import { topMovers, type Mover, type MoverWindow, type TopMovers } from "../../.
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { formatChangeShort, formatUsd } from "../../../utils/format.ts";
-import { Card, Money, Panel, Stack } from "../../primitives/index.ts";
+import { Card, Money, Panel, ScreenReaderOnly, Skeleton, Stack, UNPRICED } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -18,11 +18,32 @@ import styles from "./Home.module.css";
  * draws nothing at all, not an empty box. The sign is in the text, so colour is
  * never the only signal.
  */
-export function MoversPanel({ rows }: { rows: OwnedPrintingRow[] | null }) {
+export function MoversPanel({
+  rows,
+  loading = false,
+}: {
+  rows: OwnedPrintingRow[] | null;
+  /** Names and prices are still arriving: hold the place with placeholders (only while `rows` is null). */
+  loading?: boolean;
+}) {
   const [window, setWindow] = useState<MoverWindow>(readMoversWindow);
   const week = useMemo(() => (rows ? topMovers(rows, 7) : NONE), [rows]);
   const month = useMemo(() => (rows ? topMovers(rows, 30) : NONE), [rows]);
   const empty = (m: TopMovers<OwnedPrintingRow>) => m.risers.length === 0 && m.fallers.length === 0;
+  if (rows === null && loading) {
+    return (
+      <Panel title="Biggest movers" headingLevel={2}>
+        <div aria-busy="true" data-testid="home-movers-skeleton">
+          <ScreenReaderOnly>Loading biggest movers</ScreenReaderOnly>
+          <Stack gap={2}>
+            <Skeleton height="var(--v2-space-7)" />
+            <Skeleton height="var(--v2-space-7)" />
+            <Skeleton height="var(--v2-space-7)" />
+          </Stack>
+        </div>
+      </Panel>
+    );
+  }
   if (empty(week) && empty(month)) return null;
   const movers = window === 30 ? month : week;
   const choose = (value: MoverWindow) => {
@@ -84,7 +105,7 @@ function Side({
             <li key={`${row.cardId}|${row.finish}`}>
               <Card
                 href={`#${screenToPath({ name: "details", cardId: row.cardId })}`}
-                label={`${row.name}, ${finishLabel(row.finish)}, ${priced ? `${amount}, ` : ""}${change}`}
+                label={`${row.name}, ${finishLabel(row.finish)}, ${priced ? amount : UNPRICED.toLowerCase()}, ${change}`}
                 className={styles.tile}
               >
                 <span className={styles.mover}>
@@ -96,7 +117,11 @@ function Side({
                   </span>
                   <span className={styles.moverFigures}>
                     <span className={styles.moverPct}>{change}</span>
-                    {priced ? <Money value={row.price} /> : null}
+                    {priced ? (
+                      <Money value={row.price} />
+                    ) : (
+                      <span className={styles.resumeMeta}>{UNPRICED}</span>
+                    )}
                   </span>
                 </span>
               </Card>

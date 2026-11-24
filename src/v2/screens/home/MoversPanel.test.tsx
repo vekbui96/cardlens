@@ -69,6 +69,23 @@ describe("MoversPanel", () => {
     expect(b.container.innerHTML).toBe("");
   });
 
+  it("holds its place with placeholders while loading, then shows the rows", () => {
+    const a = render(<MoversPanel rows={null} loading />);
+    expect(screen.getByRole("heading", { name: "Biggest movers" })).toBeTruthy();
+    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(3);
+    expect(screen.getByText("Loading biggest movers")).toBeTruthy();
+    a.unmount();
+    render(<MoversPanel rows={rows} loading={false} />);
+    expect(screen.queryByTestId("home-movers-skeleton")).toBeNull();
+    expect(screen.getByText("+18.4% 7d")).toBeTruthy();
+  });
+
+  it("says Unpriced where a mover has no price", () => {
+    render(<MoversPanel rows={rows} />);
+    expect(screen.getAllByText("Unpriced").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Charizard ex.*unpriced.*\+18\.4% 7d/ })).toBeTruthy();
+  });
+
   describe("window switch", () => {
     // 7 days flat, 30 days: a slow climb for two cards and a drop for two.
     const slow = [

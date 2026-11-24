@@ -1,4 +1,4 @@
-import { Card, Meter, Panel, Stack, cx } from "../../primitives/index.ts";
+import { Card, Meter, Panel, ScreenReaderOnly, Skeleton, Stack, cx } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { tierLabel } from "../../../features/collection/completionTier.ts";
 import type { ContinueTarget } from "../../../features/home/continueSet.ts";
@@ -48,11 +48,14 @@ export function ProgressPanel({
         {resume ? <ResumeCard resume={resume} /> : null}
 
         {loading ? (
-          <Stack gap={2} aria-busy="true">
-            <span className={styles.skeletonRow} />
-            <span className={styles.skeletonRow} />
-            <span className={styles.skeletonRow} />
-          </Stack>
+          <div aria-busy="true" data-testid="home-progress-skeleton">
+            <ScreenReaderOnly>Loading your sets</ScreenReaderOnly>
+            <Stack gap={2}>
+              <Skeleton height="var(--v2-space-7)" />
+              <Skeleton height="var(--v2-space-7)" />
+              <Skeleton height="var(--v2-space-7)" />
+            </Stack>
+          </div>
         ) : rows.length > 0 ? (
           <Stack gap={2}>
             <h3 className={styles.resumeLabel}>Closest to complete</h3>
