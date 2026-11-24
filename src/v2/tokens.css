@@ -180,6 +180,9 @@
 
   /* The side panel's width when it is open. Shut, it is `--v2-space-0`. */
   --v2-rail-w: 320px;
+
+  /* The first-run create-binder card on a wide window (#261). */
+  --v2-create-w: 520px;
 }
 
 /*

@@ -337,9 +337,30 @@
   cursor: pointer;
 }
 
-.primary:disabled {
-  opacity: 0.45;
-  cursor: default;
+/*
+ * The three-or-four format chips are one choice. The shared Chip styles no
+ * pressed state, so the selected one is styled here, scoped to this group,
+ * and the label is the readable size rather than the tiny one.
+ */
+.formats button {
+  font-size: var(--v2-fs-small);
+}
+
+.formats button[aria-pressed="true"] {
+  border-color: var(--v2-accent);
+  background: var(--v2-accent-dim);
+  color: var(--v2-accent-strong);
+}
+
+/* A wide window centres the card and gives it room; a phone fills the row. */
+@media (min-width: 900px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .createTile {
+    justify-content: center;
+  }
+
+  .create {
+    max-width: var(--v2-create-w);
+  }
 }
 
 .primary:focus-visible,
