@@ -161,6 +161,7 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
         updatedAt={updatedAt}
         aside={
           <span className={styles.total}>
+            <span className={styles.totalLabel}>Total value</span>
             <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />
           </span>
         }
@@ -242,9 +243,19 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
             <p className={styles.enlargedMeta}>
               Page {enlarged.page}, pocket {enlarged.pocket} · {finishLabel(enlarged.slot.finish)}
               {enlarged.copies > 1 ? ` · ${enlarged.copies} copies` : ""}
-              {enlarged.slot.condition ? ` · ${conditionLabel(enlarged.slot.condition)}` : ""}
+              {enlarged.slot.condition ? (
+                <>
+                  {" · "}
+                  <span className={styles.noWrap} data-nowrap>
+                    {conditionLabel(enlarged.slot.condition)}
+                  </span>
+                </>
+              ) : null}
             </p>
-            <span className={styles.enlargedPrice}>
+            <span
+              className={styles.enlargedPrice}
+              data-absent={value.isLoading || typeof value.priceFor(enlarged.slot) !== "number"}
+            >
               <Money value={value.priceFor(enlarged.slot)} loading={value.isLoading} absentLabel={UNPRICED} />
             </span>
             <button type="button" className={styles.closeButton} onClick={() => setOpen(null)}>

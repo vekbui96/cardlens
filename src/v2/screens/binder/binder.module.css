@@ -295,8 +295,10 @@ button.pocket:hover {
 /* "Unpriced" is the absence of a price, not a price: muted, like Money's absent state. */
 .priceAbsent {
   color: var(--v2-fg-muted);
-  /* 12px, up from the 11px mark size: readable on the scrim, still one line in a pocket. */
-  font-size: 12px; /* v2-tokens-allow: between --v2-fs-tiny (11) and --v2-fs-small (13) */
+  /* 13px: readable on the scrim, still one line in a pocket (ellipsis if the pocket is narrower). */
+  font-size: var(--v2-fs-small);
+  /* A denser scrim than the other marks so the muted text holds 4.5:1 even over a light card. */
+  background: rgb(0 0 0 / 80%); /* v2-tokens-allow: denser than --v2-scrim (55%) for contrast */
 }
 
 /* Stacked above the tag when a pocket carries both. */

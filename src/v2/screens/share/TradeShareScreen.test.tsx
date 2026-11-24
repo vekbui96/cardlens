@@ -195,6 +195,26 @@ describe("TradeShareScreen, the binder showcase", () => {
     expect(screen.queryByText("$0.00")).toBeNull();
   });
 
+  it("labels the top figure as the total value", async () => {
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    const label = await screen.findByText("Total value");
+    expect(label.parentElement?.textContent).toMatch(/^Total value/);
+  });
+
+  it("keeps the condition together on the enlarged card's detail line", async () => {
+    const user = userEvent.setup();
+    serve({ kind: "binder", binder: sharedBinder(), at: NOW });
+    render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
+
+    const grid = await screen.findByRole("list", { name: "Cards in this binder" });
+    await user.click(within(grid).getByRole("button", { name: /Umbreon VMAX/ }));
+    const dialog = screen.getByRole("dialog", { name: "Umbreon VMAX" });
+    const kept = dialog.querySelector("[data-nowrap]");
+    expect(kept?.textContent).toMatch(/Lightly played/);
+  });
+
   it("an empty binder says so, and what to do about it", async () => {
     serve({ kind: "binder", binder: emptyBinder("b2", "Fresh binder", "9", NOW), at: NOW });
     render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
