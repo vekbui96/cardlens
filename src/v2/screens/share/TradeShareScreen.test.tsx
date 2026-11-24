@@ -112,6 +112,7 @@ describe("TradeShareScreen, the binder showcase", () => {
     render(<TradeShareScreen shareId="abc" />, { wrapper: harness() });
 
     await screen.findByRole("heading", { name: "Eeveelution wall", level: 1 });
+    expect(screen.getByText("Sort by")).toBeTruthy();
     const group = screen.getByRole("group", { name: "Sort cards" });
     const chips = within(group).getAllByRole("button");
     expect(chips.map((c) => c.textContent)).toEqual(["Value", "Pocket", "Name"]);
