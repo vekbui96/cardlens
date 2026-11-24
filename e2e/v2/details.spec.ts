@@ -199,6 +199,23 @@ test.describe("details @visual", () => {
     await expect(page).toHaveScreenshot("card-details-from-search.png");
   });
 
+  test("opened from Home after a list was browsed looks like itself", async ({ page }) => {
+    await servePrintings(page);
+    // A list left over from earlier browsing in this tab, holding this very card.
+    await page.addInitScript(() => {
+      const stale = JSON.stringify({ label: "Search results", cardIds: ["sv3-1", "sv3-223", "sv3-224"] });
+      sessionStorage.setItem("cardlens:v1:browse-list", stale);
+      sessionStorage.setItem("cardlens:v2:browse-list", stale);
+    });
+    await openV2(page, "/");
+    await page.evaluate(() => {
+      window.location.hash = "#/card/sv3-223";
+    });
+    await expect(page.getByRole("button", { name: /Poké Ball Reverse/ })).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("card-details-from-home.png");
+  });
+
   test("the printing-list failure looks like itself", async ({ page }) => {
     await servePrintings(page, { failFirst: 99 });
     await openV2(page, CARD);
