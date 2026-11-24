@@ -600,6 +600,10 @@ test.describe("when there is nothing to scan with", () => {
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     // No server either, so the screen must not pretend it can identify anything.
     await expect(page.getByText(/Nothing on this device can identify a card/)).toBeVisible();
+    // The viewfinder agrees with the error card instead of claiming it runs on device.
+    await expect(page.getByText("Needs the card list").first()).toBeVisible();
+    await expect(page.getByText("On device", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^Reason: /)).toBeVisible();
   });
 });
 

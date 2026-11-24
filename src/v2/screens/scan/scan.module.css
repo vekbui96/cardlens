@@ -167,6 +167,14 @@
   font-weight: var(--v2-fw-medium);
 }
 
+.errorDetail {
+  display: block;
+  margin-top: var(--v2-space-2);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  overflow-wrap: anywhere;
+}
+
 .muted {
   margin: var(--v2-space-0);
   color: var(--v2-fg-muted);

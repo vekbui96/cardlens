@@ -176,13 +176,15 @@ export function ScanScreen() {
 
   /* --- What the screen is doing right now --------------------------------- */
 
+  // The on-device recogniser has no card list to match against.
+  const needsCardList = engine === "device" && cards.state.status === "failed";
+
   const status = (() => {
     if (cards.state.status === "loading" && !live) return "Loading the card index…";
     if (blocked) return "The server refused this device. Choose a recogniser before scanning again.";
     if (!live) {
-      return engine === "server"
-        ? "Each capture is sent to your server to identify."
-        : "Recognition runs on this device.";
+      if (engine === "server") return "Each capture is sent to your server to identify.";
+      return needsCardList ? NEEDS_CARD_LIST : "Recognition runs on this device.";
     }
     if (!canRecognise) return "Nothing can identify a card yet.";
     if (!camera.ready) return "Focusing…";
@@ -241,7 +243,7 @@ export function ScanScreen() {
             headingLevel={2}
             aside={
               <Chip tone={engine === "server" && !blocked ? "accent" : "default"}>
-                {engine === "server" ? "Server" : "On device"}
+                {engine === "server" ? "Server" : needsCardList ? NEEDS_CARD_LIST : "On device"}
               </Chip>
             }
           >
@@ -472,6 +474,8 @@ export function ScanScreen() {
   );
 }
 
+const NEEDS_CARD_LIST = "Needs the card list";
+
 /**
  * The on-device card index did not load. Only how that is SAID lives here:
  * which recogniser runs, and what falls back to what, is the screen's.
@@ -491,6 +495,7 @@ export function CardIndexError({
       {engine === "server"
         ? "The server is the only recogniser, and there is nothing to fall back to if it stops answering."
         : "Nothing on this device can identify a card. Connect this device in Settings to use the server."}
+      <span className={styles.errorDetail}>Reason: {error}</span>
     </ErrorNotice>
   );
 }
