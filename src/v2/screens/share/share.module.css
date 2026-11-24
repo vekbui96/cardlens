@@ -102,7 +102,20 @@
 .sortPills {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--v2-space-2);
+}
+
+.sortLabel {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+/* The chosen order is a filled pill, not just a different border. */
+.sortPills button[aria-pressed="true"] {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-on-accent);
 }
 
 .sortPills button {

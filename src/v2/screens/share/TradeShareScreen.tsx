@@ -179,6 +179,9 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
             <Row gap={2} wrap justify="space-between">
               <p className={styles.hint}>Tap a card to see it larger</p>
               <div role="group" aria-label="Sort cards" className={styles.sortPills}>
+                <span className={styles.sortLabel} aria-hidden="true">
+                  Sort by
+                </span>
                 {SORTS.map((s) => (
                   <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
                     {s.label}
