@@ -67,8 +67,19 @@
 
 .priceLabel {
   color: var(--v2-fg-muted);
-  font-size: var(--v2-fs-small);
+  font-size: var(--v2-fs-field);
   font-weight: var(--v2-fw-medium);
+}
+
+/* Desktop: a bigger figure, and the whole screen kept to a readable width. */
+@media (min-width: 901px) /* v2-tokens-allow: the shell's phone/desktop breakpoint */ {
+  .priceLine {
+    font-size: var(--v2-fs-display);
+  }
+
+  .page {
+    max-width: calc(var(--v2-space-7) * 23);
+  }
 }
 
 .count {

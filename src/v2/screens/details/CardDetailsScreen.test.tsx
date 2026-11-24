@@ -153,6 +153,20 @@ describe("one tap, with feedback", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Unmarked: Normal.");
   });
 
+  it("puts the confirmation above the printing rows, next to the Printings header", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const normal = await screen.findByRole("button", { name: /^Normal/ });
+    await userEvent.click(normal);
+    const status = await screen.findByRole("status");
+    const section = screen.getByTestId("printings-section");
+    expect(section).toContainElement(status);
+    expect(status.compareDocumentPosition(screen.getByRole("button", { name: /^Normal/ }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("shows an add affordance on every printing row and an icon on the confirmation", async () => {
     stubPrintings();
     const { container } = render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
