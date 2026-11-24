@@ -46,7 +46,7 @@
   check-approval.ps1 -List output instead of the live queue.
 .PARAMETER MaxBuilds
   At most this many approved issues are built per run, one session each, strictly one after another
-  (default 4; 1 = one issue per run). At most one server deploy per run; any failure or rollback ends Phase A.
+  (default 4; 1 = one issue per run). At most one server deploy per run; any failure or rollback ends Phase A (a scope refusal that merged nothing does not: the next approved issue is built).
 .PARAMETER SecondBuildMinMinutes
   (alias NextBuildMinMinutes) Minutes that must remain before the run's deadline (start + TimeoutMinutes) to start
   each build after the first (default 100: a build takes ~60-75 min, ~110 with a CI fix round; a session's limit is
@@ -133,6 +133,9 @@ $TimeoutMinutes = $TimeBudget.Minutes
 $Deadline = $RunStart.AddMinutes($TimeoutMinutes)
 Initialize-LoopDirs
 $script:LogFile = Join-Path $script:LoopHome "logs\run-$RunId.log"
+# The needs-Ve flag (gate-rules.ps1 Get-NeedsVeBlock): set on an uncertain deploy, cleared only by Ve
+$NeedsVePath = Join-Path $script:LoopHome "state\$($script:NeedsVeFileName)"
+$NeedsVeClear = "powershell -ExecutionPolicy Bypass -File `"$ScriptsDir\clear-needs-ve.ps1`" -Clear -Note `"<what you checked>`""
 $mode = 'FULL'; if ($ProposeOnly) { $mode = 'PROPOSE_ONLY' }
 if ($ProductReview) { $mode = 'PRODUCT_REVIEW'; $ProposeOnly = $true }   # no Phase A in any form
 
@@ -1255,6 +1258,24 @@ function Invoke-RequestIntake {
     } catch { Write-Log "request #${n}: after the intake session: $_" 'WARN'; [void]$problems.Add("request #${n}: could not finish the plan: $_") }
     return $s
 }
+# An uncertain deploy: set the needs-Ve flag (never overwritten while set) and say so on the issue, once. Never throws.
+$script:NeedsVeSetThisRun = ''
+function Set-LoopNeedsVe {
+    param([int]$Issue, [string]$Reason)
+    try {
+        $rec = New-NeedsVeRecord -RunId $RunId -Loop 'cardlens' -Reason $Reason -Issues @($Issue) -ClearCommand $NeedsVeClear
+        $r = Set-NeedsVeFlag -Path $NeedsVePath -Record $rec
+        Write-Log "needs-ve: flag $r [$NeedsVePath]: every automatic run is skipped until Ve clears it ($NeedsVeClear)" $(if ($r -like 'error*') { 'ERROR' } else { 'WARN' })
+        $script:NeedsVeSetThisRun = $Reason
+        if ($r -like 'error*') { [void]$problems.Add("the needs-Ve flag could not be written ($r): drain.json still stops the queue drain, but refill and approval runs would not be stopped") }
+        if ($r -eq 'set' -and $Issue -gt 0 -and -not $DryRun) {
+            $bp = Join-Path $script:LoopHome "work\needs-ve-$RunId-$Issue.md"
+            [IO.File]::WriteAllText($bp, (Format-NeedsVeComment -Issue $Issue -RunId $RunId -Reason $Reason -ClearCommand $NeedsVeClear -Marker $script:Marker -Who 'Ve'), (New-Object Text.UTF8Encoding $false))
+            Invoke-Gh -Arguments @('issue', 'comment', "$Issue", '-R', $script:Repo, '--body-file', $bp) -Quiet | Out-Null
+        }
+    } catch { Write-Log "needs-ve: could not set the flag: $_" 'ERROR' }
+}
+
 $exitCode = 1
 $queue = $null; $finalQueue = $null; $res = $null
 $sessions = New-Object System.Collections.ArrayList
@@ -1263,6 +1284,37 @@ $runNotes = New-Object System.Collections.ArrayList
 $serverDeploy = 'unavailable'; $serverWhy = ''
 $focus = ''; $product = ''
 try {
+    # ---- the needs-Ve flag: an uncertain deploy stops EVERY run (FULL, PROPOSE_ONLY, the weekly review) until Ve clears it ----
+    # Checked before the decision collector, the queue, the clone and any session: nothing is built, merged, deployed,
+    # proposed or reviewed, $0. Not even the read-only Phase B: Ve asked for every automatic run to stop, and a proposal
+    # run would refill the queue the next runs build from. drain.json is not rewritten (no queue is read).
+    $nv = Get-NeedsVeState -Path $NeedsVePath -Kind "$mode run"
+    if ($nv.Blocked) {
+        Write-Log "needs-ve: $($nv.Reason) [$NeedsVePath]" 'ERROR'
+        if ($DryRun) { Write-Log 'needs-ve: a real run would stop here with no claude session (dry run: carrying on to show the plan)' 'WARN' }
+        else {
+            $nvWhy = $nv.Reason -replace '^.*? skipped: ', ''
+            $resLine = "LOOP-RESULT: FAILED NEEDS VE: the needs-Ve flag is set ($nvWhy); no session started, nothing built, merged, deployed or proposed until Ve clears it"
+            $sumLines = @('Needs-Ve stop (no claude session started): the loop is stopped until Ve clears the flag.',
+                "- $nvWhy.",
+                "- Flag: $NeedsVePath",
+                "- Check production (README ""Needs Ve: an uncertain deploy""), then clear it from a normal PowerShell: $NeedsVeClear",
+                $resLine)
+            $utf8 = New-Object Text.UTF8Encoding $false
+            [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.summary.txt"), ($sumLines -join "`r`n"), $utf8)
+            $nvRec = $null; try { $nvRec = [IO.File]::ReadAllText($NeedsVePath) | ConvertFrom-Json } catch { }
+            $rd = [ordered]@{ runId = $RunId; mode = $mode; status = 'FAILED'; precheck = 'needs-ve flag set'; claudeStarted = $false
+                needsVe = [ordered]@{ set = $true; key = $nv.Key; reason = $nvWhy; path = $NeedsVePath; clear = $NeedsVeClear; record = $nvRec }
+                totals = [ordered]@{ Turns = 0; Requests = 0; Input = 0; Output = 0; CacheRead = 0; CacheWrite = 0; Cost = 0; Models = @() }
+                issues = @(); createdIssues = @(); sessions = @() }
+            [IO.File]::WriteAllText((Join-Path $script:LoopHome "logs\run-$RunId.rundata.json"), ($rd | ConvertTo-Json -Depth 6), $utf8)
+            Write-Log 'result: subtype=precheck is_error=False turns=0 cost=0 (needs-Ve flag set: no claude session)'
+            Write-Log $resLine
+            $exitCode = 1
+            return
+        }
+    }
+
     # ---- environment ------------------------------------------------------------------------
     Add-GhToPath
     foreach ($n in (Clear-SecretEnv)) { Write-Log "unset env var $n for this run" }
@@ -1562,16 +1614,18 @@ try {
             $markerOutcome = ''
             try { $part = @((Read-LoopTranscript -Path $s.Path -SessionIssue $n).Parts | Where-Object { $_.Issue -eq $n }); if ($part.Count -gt 0) { $markerOutcome = "$($part[0].Outcome)" } } catch { }
             $lbl = @(); try { $lbl = @((Get-GhJson @('api', "repos/$($script:Repo)/issues/$n")).labels | ForEach-Object { $_.name }) } catch { Write-Log "cannot read #$n labels: $_" 'WARN' }
-            $outcome = Get-BuildOutcome -Labels $lbl -MarkerOutcome $markerOutcome
+            $cert = Get-DeployCertainty -SessionStart $s.Start -MergeRec (Read-State "merge-$n") -DeployRec (Read-State "deploy-$n") -RollbackRec (Read-State "rollback-$n")
+            # a scope refusal that merged nothing is a skip (the next approved issue is built); anything merged is not
+            $outcome = Get-BuildOutcome -Labels $lbl -MarkerOutcome $markerOutcome -Merged ($cert.State -ne 'none')
             $built += [pscustomobject]@{ Issue = $n; Outcome = $outcome }
             # Phase 3: a verified deploy (a build or a request child) is queued for QA (and UX when it changed the UI)
-            $cert = Get-DeployCertainty -SessionStart $s.Start -MergeRec (Read-State "merge-$n") -DeployRec (Read-State "deploy-$n") -RollbackRec (Read-State "rollback-$n")
-            Write-Log "build #$n ended: outcome=$outcome (marker: $markerOutcome) deploy=$($cert.State) ($($cert.Reason))$(if ($closed.Count) { '; marked loop:failed by the runner' })"
+            Write-Log "build #$n ended: outcome=$outcome (marker: $markerOutcome) deploy=$($cert.State) ($($cert.Reason))$(if ($closed.Count) { '; marked loop:failed by the runner' })$(if ($outcome -eq 'skipped' -and $lbl -contains 'loop:failed') { ' (refused on scope, nothing merged: Phase A goes on)' })"
             $dr = Read-State "deploy-$n"
             if ($dr -and $dr.serverDeployed -and $dr.startedUtc -and ([datetime]$dr.startedUtc).ToUniversalTime() -ge $s.Start.ToUniversalTime()) { $serverUsed = "#$n" }
             if (-not $cert.Certain) {
                 [void]$problems.Add("#${n}: $($cert.Reason). DEPLOY STATE UNCERTAIN, NEEDS VE: the run stopped here (no further build, no proposals)")
                 Write-Log "build #${n}: deploy state uncertain ($($cert.Reason)); stopping the run" 'ERROR'
+                Set-LoopNeedsVe -Issue $n -Reason "#${n}: $($cert.Reason)"
                 $stopRun = $true; break
             }
             if ($outcome -eq 'deployed') { Register-QaTarget -Issue $n }
@@ -1685,6 +1739,7 @@ try {
     }
     foreach ($r in $runNotes) { [void]$sum.Add("- $r") }
     foreach ($p in $problems) { [void]$sum.Add("- RUNNER: $p") }
+    if ($script:NeedsVeSetThisRun) { [void]$sum.Add("- NEEDS VE: the needs-Ve flag is set ($NeedsVePath). Every automatic run of this loop (daily, approval, request, refill, drain) is skipped until Ve checks production and clears it: $NeedsVeClear") }
     foreach ($s in $sessions) {
         $nm = $s.Kind; if ($s.Issue) { $nm += " #$($s.Issue)" }
         [void]$sum.Add(''); [void]$sum.Add("=== $nm session summary ===")
@@ -1723,7 +1778,8 @@ try {
             # into the issue's comment (-QaLines)
             $posted = Publish-LoopRunData -Sessions @($ran | ForEach-Object { [pscustomobject]@{ Path = $_.Path; Kind = $_.Kind; Issue = $(if ($_.Kind -in @('intake', 'qa', 'ux')) { 0 } else { $_.Issue }); Model = $_.Model; About = $(if ($_.Kind -in @('qa', 'ux')) { $_.Issue } else { 0 }) } }) -Status $st `
                 -Repo $script:Repo -GhExe $script:GhExe -RunId $RunId -Mode $mode -Trigger $trigger -LoopHome $script:LoopHome -Waiting $waitLine -Approvals $approvalOf `
-                -WaitingOnSlice @(Get-SliceWaitRunData $finalQueue) -QaLines $script:QaLines -NoPost:$DryRun
+                -WaitingOnSlice @(Get-SliceWaitRunData $finalQueue) -QaLines $script:QaLines -NoPost:$DryRun `
+                -NeedsVe $(if ($script:NeedsVeSetThisRun) { "Run ``$RunId`` left a deploy uncertain ($($script:NeedsVeSetThisRun)). Every automatic run is skipped until Ve checks production and clears it: ``$NeedsVeClear``" } else { '' })
             Write-Log "run data: $posted comment(s) posted"
         } catch { Write-Log "run data / progress reporting skipped: $_" 'WARN' }
     }
@@ -1772,5 +1828,6 @@ try {
     }
     Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
     Write-Log "exit $exitCode"
+    if ($exitCode -ne 0) { exit $exitCode }   # a return inside try (the needs-Ve stop) skips the exit below
 }
 exit $exitCode

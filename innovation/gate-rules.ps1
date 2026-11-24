@@ -886,7 +886,7 @@ function Get-NextBuildDecision {
     $built = @($done | Where-Object { $_.Outcome -eq 'deployed' }).Count
     $skips = @($done | Where-Object { $_.Outcome -eq 'skipped' }).Count
     if ($built -ge $MaxBuilds) { return (& $stop "MaxBuilds ($MaxBuilds) reached") }
-    if ($skips -ge $MaxSkips) { return (& $stop "$skips issue(s) skipped this run (server rule or approval); not trying more") }
+    if ($skips -ge $MaxSkips) { return (& $stop "$skips issue(s) skipped this run (server rule, approval or scope); not trying more") }
     $tried = @($done | ForEach-Object { [int]$_.Issue })
     $cand = @($Buildable | Where-Object { $tried -notcontains [int]$_ })
     if ($cand.Count -eq 0) { if ($done.Count -eq 0) { return (& $stop 'nothing buildable') } else { return (& $stop 'nothing more buildable') } }
@@ -897,10 +897,17 @@ function Get-NextBuildDecision {
 
 # How a build session left its issue, from the issue's labels afterwards and its LOOP-ISSUE-END word.
 # deployed | failed | rolled-back | skipped (no state label at all: left untouched) | unknown.
+# A scope refusal (LOOP.md section 3 step 3: loop:failed with LOOP-ISSUE-END <n> skipped) is 'skipped' too, so the next
+# approved issue is built in the same run, but ONLY when $Merged is false (nothing was merged in that session, so nothing
+# was deployed either); with a merge it stays 'failed' and ends Phase A like every real failure and rollback.
 function Get-BuildOutcome {
-    param([string[]]$Labels = @(), [string]$MarkerOutcome = '')
+    param([string[]]$Labels = @(), [string]$MarkerOutcome = '', [bool]$Merged = $false)
     if ($Labels -contains 'loop:deployed') { return 'deployed' }
-    if ($Labels -contains 'loop:failed') { if ("$MarkerOutcome" -match '^rolled') { return 'rolled-back' } else { return 'failed' } }
+    if ($Labels -contains 'loop:failed') {
+        if ("$MarkerOutcome" -match '^rolled') { return 'rolled-back' }
+        if ("$MarkerOutcome".Trim() -eq 'skipped' -and -not $Merged) { return 'skipped' }
+        return 'failed'
+    }
     if ($Labels -contains 'loop:in-progress') { return 'unknown' }
     if ("$MarkerOutcome" -match '^(deployed|fail|rolled)') { return 'unknown' }   # it said so, but the labels disagree
     return 'skipped'
@@ -1376,6 +1383,84 @@ function Get-DrainDecision {
         return (& $mk $true $key "drain after back-off ($why): $($b.Count) buildable, head #$($b[0])")
     }
     return (& $mk $true $key "drain: $($b.Count) buildable approved issue(s) left after run $($Drain.runId) (head #$($b[0]))")
+}
+
+# ==================================================================================================
+# The needs-Ve flag: <LOOP_HOME>\state\needs-ve.json, a file of its own (never part of drain.json, so no later run can
+# overwrite it). run-loop.ps1 writes it the moment a build leaves the deploy state uncertain (DEPLOY STATE UNCERTAIN:
+# merged, but neither deployed-and-verified nor rolled-back-and-verified). While it exists:
+#   - run-loop.ps1 stops before the queue check and before any claude session (LOOP-RESULT: FAILED NEEDS VE, $0): no
+#     build, merge, deploy or proposal, in FULL and PROPOSE_ONLY alike;
+#   - the approval watcher starts the loop's task for nothing (approval, request, refill, drain) and logs why.
+# Only the owner removes it: clear-needs-ve.ps1 -Clear -Note "<what was checked>" (moves it to
+# state\needs-ve-cleared-<time>.json). The loop's sessions cannot: the guard confines their writes to the clones and
+# WORK, and clear-needs-ve.ps1 is not one of the session scripts. A flag file that exists but cannot be read or parsed
+# still blocks (fail closed).
+# ==================================================================================================
+$script:NeedsVeFileName = 'needs-ve.json'
+
+# The record run-loop.ps1 writes. $Reason: the uncertain deploy, one line (cut to 400 characters).
+function New-NeedsVeRecord {
+    param([string]$RunId, [string]$Loop = '', [string]$Reason = '', [int[]]$Issues = @(), [datetime]$SetAt = (Get-Date), [string]$ClearCommand = '')
+    $r = ("$Reason" -replace '\s+', ' ').Trim(); if ($r.Length -gt 400) { $r = $r.Substring(0, 399) + '...' }
+    return [ordered]@{ schema = 1; runId = $RunId; loop = $Loop; setAt = $SetAt.ToString('o')
+        issues = @($Issues | Where-Object { $_ -gt 0 } | Sort-Object -Unique); reason = $r; clear = $ClearCommand }
+}
+
+# Does the needs-Ve flag block a run (or a watcher trigger) now? $Exists: the file is there; $Text: its content;
+# $ReadError: why it could not be read; $Kind: what is being skipped (for the reason). Blocked + Key + Reason + RunId.
+# The approval watcher keeps a LITERAL COPY of this function (it runs from an admin-only folder and must not dot-source
+# anything from a user-writable checkout); test-queue-rules.ps1 checks that the two are identical.
+function Get-NeedsVeBlock {
+    param([bool]$Exists = $false, [string]$Text = '', [string]$ReadError = '', [string]$Kind = 'run')
+    $mk = { param([bool]$B, [string]$K, [string]$Why, [string]$Run = '') [pscustomobject]@{ Blocked = $B; Key = $K; Reason = $Why; RunId = $Run } }
+    if (-not $Exists) { return (& $mk $false '' 'no needs-Ve flag') }
+    $j = $null
+    if (-not $ReadError) { try { $j = "$Text".TrimStart([char]0xFEFF) | ConvertFrom-Json } catch { $ReadError = "$($_.Exception.Message)" } }
+    if ($null -eq $j -or -not "$($j.runId)") {
+        $why = 'the needs-Ve flag exists but cannot be read'; if ($ReadError) { $why += " ($ReadError)" }
+        return (& $mk $true 'needs-ve:unreadable' "$Kind skipped: $why; failing closed until Ve clears it")
+    }
+    $iss = @(@($j.issues) | Where-Object { "$_" -match '^\d+$' } | ForEach-Object { "#$_" }) -join ' '
+    $why = "$Kind skipped: NEEDS VE since $($j.setAt): run $($j.runId) left the deploy state uncertain"
+    if ($iss) { $why += " ($iss)" }
+    if ("$($j.reason)") { $why += ": $($j.reason)" }
+    return (& $mk $true "needs-ve:$($j.runId)" $why "$($j.runId)")
+}
+
+# Get-NeedsVeBlock over a file (run-loop.ps1, clear-needs-ve.ps1). Never throws.
+function Get-NeedsVeState {
+    param([string]$Path, [string]$Kind = 'run')
+    $ex = $false; $t = ''; $e = ''
+    try { $ex = Test-Path -LiteralPath $Path -PathType Leaf } catch { $ex = $true; $e = "$($_.Exception.Message)" }
+    if ($ex -and -not $e) { try { $t = [IO.File]::ReadAllText($Path) } catch { $e = "$($_.Exception.Message)" } }
+    return (Get-NeedsVeBlock -Exists $ex -Text $t -ReadError $e -Kind $Kind)
+}
+
+# Write the flag unless it is already set (the FIRST uncertain deploy is the one Ve must look at; a set flag is never
+# overwritten). Returns 'set' | 'kept' (already there) | 'error: <why>'.
+function Set-NeedsVeFlag {
+    param([string]$Path, $Record)
+    try {
+        $dir = Split-Path -Parent $Path
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $bytes = (New-Object Text.UTF8Encoding $false).GetBytes(($Record | ConvertTo-Json -Depth 5))
+        $fs = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $fs.Write($bytes, 0, $bytes.Length) } finally { $fs.Close() }
+        return 'set'
+    } catch [IO.IOException] {
+        if (Test-Path -LiteralPath $Path) { return 'kept' }
+        return "error: $($_.Exception.Message)"
+    } catch { return "error: $($_.Exception.Message)" }
+}
+
+# The comment the runner posts on the issue whose deploy is uncertain (loop marker: never read as Ve's words).
+function Format-NeedsVeComment {
+    param([int]$Issue, [string]$RunId, [string]$Reason, [string]$ClearCommand, [string]$Marker = '<!-- innovation-loop -->', [string]$Who = 'Ve')
+    return "$Marker`n## Needs $Who`: the loop is stopped`n`nRun ``$RunId`` merged this change but could not verify its deploy: $Reason.`n`n" +
+        "Until $Who clears it, every automatic run of this loop is skipped: the daily run stops before any session, and the approval watcher " +
+        "starts nothing (approvals, requests, refill, queue drain). Check production first (innovation/README.md, ""Needs Ve: an uncertain deploy""), then clear it from a normal PowerShell:`n`n" +
+        "``````powershell`n$ClearCommand`n```````n"
 }
 
 # Does a request need an intake session now? Returns NeedsIntake, Key (the approval watcher's once-key:

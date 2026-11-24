@@ -292,6 +292,11 @@ const deny = [
     tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/collection", prompt: "x" },
   },
   { tool_name: "WebSearch", tool_input: { query: "x" } },
+  // the needs-Ve flag is Ve's: a session can neither delete, rewrite nor clear it
+  ps(`Remove-Item "${HOME}\\state\\needs-ve.json"`),
+  ps(`Move-Item "${HOME}\\state\\needs-ve.json" "${W}\\x.json"`),
+  ps(`${S}\\clear-needs-ve.ps1 -Clear -Note "done"`),
+  { tool_name: "Write", tool_input: { file_path: `${HOME}\\state\\needs-ve.json`, content: "{}" } },
   // PRODUCT.md is Ve's, read-only (like FOCUS.md); the review label is only for the review run
   { tool_name: "Write", tool_input: { file_path: `${S}\\PRODUCT.md`, content: "x" } },
   { tool_name: "Edit", tool_input: { file_path: `${S}\\PRODUCT.md`, old_string: "a", new_string: "b" } },

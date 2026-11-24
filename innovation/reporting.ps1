@@ -454,12 +454,14 @@ function Get-RunDataContextLine {
 
 # The "## Run data" comment for one issue. -Part $null = no per-issue split (markers missing).
 function Format-RunDataComment {
-    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Gap = '', [string]$Waiting = '')
+    param([Parameter(Mandatory)]$Data, [int]$Issue, $Part, [string]$RunId, [string]$Mode, [string]$Trigger, [string]$Marker = '<!-- innovation-loop -->', [string]$Gap = '', [string]$Waiting = '', [string]$NeedsVe = '')
     $t = $Data.Totals; $oh = $Data.Overhead
     $sb = New-Object Text.StringBuilder
     [void]$sb.AppendLine($Marker); [void]$sb.AppendLine($script:RunDataMarker)
     [void]$sb.AppendLine('## Run data'); [void]$sb.AppendLine()
     [void]$sb.AppendLine((Get-RunDataContextLine $Data $RunId $Mode $Trigger)); [void]$sb.AppendLine()
+    # the needs-Ve flag (run-loop.ps1): loud, right under the context line, before the numbers
+    if ($NeedsVe) { [void]$sb.AppendLine("> **NEEDS VE: the loop is stopped.** $NeedsVe"); [void]$sb.AppendLine() }
     $sessionDur = $null; if ($Data.DurationMs) { $sessionDur = [TimeSpan]::FromMilliseconds($Data.DurationMs) } else { $sessionDur = $Data.Wall }
     $tCost = Format-RunDataCost $t
     if ($Part) {
@@ -572,6 +574,7 @@ function Publish-LoopRunData {
         [string]$OutDir = '',
         [string]$LoopHome = '',
         [string]$Waiting = '',   # 'Failed, waiting on Ve: #n (reason)' line (run-loop.ps1), appended to every comment
+        [string]$NeedsVe = '',   # the needs-Ve flag this run set (run-loop.ps1): a loud line at the top of every issue's comment
         [hashtable]$Approvals = @{},   # build issue -> 'label' | 'via-spec #<spec>' (run-loop.ps1); via-spec is noted
         [object[]]$WaitingOnSlice = @(),   # slices skipped as waiting-on-slice (run-loop.ps1 Get-SliceWaitRunData), recorded in run data
         [hashtable]$QaLines = @{},   # Phase 3: issue -> QA verdict / UX review line(s) (product-qa.ps1); appended to its comment, or posted alone
@@ -599,7 +602,7 @@ function Publish-LoopRunData {
                 totals = $t | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 overhead = $data.Overhead | Select-Object Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models
                 issues = @($data.Parts | Select-Object Issue, Outcome, Start, End, Turns, Requests, Input, Output, CacheRead, CacheWrite, Cost, Models)
-                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting; waitingOnSlice = @($WaitingOnSlice | Where-Object { $_ })
+                createdIssues = $data.CreatedIssues; touchedIssues = $data.TouchedIssues; waitingOnVe = $Waiting; needsVe = $NeedsVe; waitingOnSlice = @($WaitingOnSlice | Where-Object { $_ })
                 approvals = @(if ($Approvals) { @($Approvals.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; approval = "$($Approvals[$_])" } }) })
                 qa = @(if ($QaLines) { @($QaLines.Keys | Sort-Object | ForEach-Object { [ordered]@{ issue = [int]$_; line = "$($QaLines[$_])" } }) })
                 sessions = @(if ($data.PSObject.Properties.Name -contains 'Sessions') { @($data.Sessions | Select-Object Kind, Agent, Issue, Model, Status, HasResult, Turns, Input, Output, CacheRead, CacheWrite, Cost, Start, End, Models) }) }
@@ -625,7 +628,7 @@ function Publish-LoopRunData {
         $jobs = New-Object System.Collections.ArrayList
         foreach ($tg in $targets) {
             $gapLine = Get-RunDataGapLine -LoopHome $LoopHome -RunId $RunId -Issue $tg.Issue
-            $cb = Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting
+            $cb = Format-RunDataComment -Data $data -Issue $tg.Issue -Part $tg.Part -RunId $RunId -Mode $Mode -Trigger $Trigger -Marker $Marker -Gap $gapLine -Waiting $Waiting -NeedsVe $NeedsVe
             if ($Approvals -and $Approvals.ContainsKey([int]$tg.Issue) -and "$($Approvals[[int]$tg.Issue])" -like 'via-spec*') { $cb = $cb.TrimEnd() + "`n`nApproval: $($Approvals[[int]$tg.Issue]) (auto-approved by the spec's approval; no ``approved`` label of its own)`n" }
             if ($QaLines -and $QaLines.ContainsKey([int]$tg.Issue)) { $cb = $cb.TrimEnd() + "`n`n$($QaLines[[int]$tg.Issue])`n" }
             [void]$jobs.Add([pscustomobject]@{ Issue = $tg.Issue; Body = $cb })
