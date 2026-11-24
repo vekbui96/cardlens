@@ -225,7 +225,9 @@ function ShowcaseCard({
       </div>
       <figcaption className={styles.showCaption}>
         <span className={styles.showName}>{name}</span>
-        <span className={styles.hint}>{meta.filter(Boolean).join(" · ")}</span>
+        <span className={cx(styles.hint, styles.showMeta)} data-show-meta="">
+          {meta.filter(Boolean).join(" · ")}
+        </span>
         {slot.kind === "card" ? (
           <span className={styles.showPrice}>
             <Money value={price} loading={pricesLoading} absentLabel={UNPRICED} />
