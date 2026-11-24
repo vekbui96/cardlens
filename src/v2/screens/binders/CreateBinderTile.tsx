@@ -41,12 +41,15 @@ export function CreateBinderTile({
     <li className={styles.createTile}>
       <form className={styles.create} onSubmit={submit}>
         <Stack gap={3}>
-          <p className={styles.createTitle}>New binder</p>
+          <p className={styles.createTitle}>{alone ? "Create your first binder" : "New binder"}</p>
           {alone ? (
-            <p className={styles.createHint}>
-              A binder is a layout you arrange yourself — any cards, in any order, including ones you do not
-              own yet. Name one to start.
-            </p>
+            <Stack gap={1}>
+              <p className={styles.createHint}>
+                A binder is a layout you arrange yourself — any cards, in any order, including ones you do not
+                own yet.
+              </p>
+              <p className={styles.createHint}>Name one below to start, then fill its pockets.</p>
+            </Stack>
           ) : null}
 
           <Field

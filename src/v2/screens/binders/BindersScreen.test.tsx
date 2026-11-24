@@ -230,6 +230,23 @@ describe("an empty shelf", () => {
     expect(screen.queryByText(/0 binders/)).not.toBeInTheDocument();
   });
 
+  it("leads with 'Create your first binder' and says what a binder is, in two lines", () => {
+    render(<BindersScreen />, { wrapper: harness() });
+
+    expect(screen.getByText("Create your first binder")).toBeInTheDocument();
+    expect(screen.getByText(/A binder is a layout you arrange yourself/)).toBeInTheDocument();
+    expect(screen.getByText(/Name one below to start/)).toBeInTheDocument();
+    expect(screen.queryByText("New binder")).not.toBeInTheDocument();
+  });
+
+  it("goes back to 'New binder', without the explainer, once a binder exists", () => {
+    renderSeeded(fullBinder());
+
+    expect(screen.getByText("New binder")).toBeInTheDocument();
+    expect(screen.queryByText("Create your first binder")).not.toBeInTheDocument();
+    expect(screen.queryByText(/A binder is a layout you arrange yourself/)).not.toBeInTheDocument();
+  });
+
   it("creates a binder and puts it on the shelf", async () => {
     const user = userEvent.setup();
     render(<BindersScreen />, { wrapper: harness() });
