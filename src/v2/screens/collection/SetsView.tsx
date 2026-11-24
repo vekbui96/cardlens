@@ -10,6 +10,7 @@ import {
   Panel,
   Row,
   ScreenReaderOnly,
+  Skeleton,
   Stack,
   cx,
 } from "../../primitives/index.ts";
@@ -305,11 +306,11 @@ function SetSkeletons() {
   return (
     <Panel title="Sets" headingLevel={2} tone="quiet">
       <div aria-busy="true">
-        <ScreenReaderOnly>Loading sets</ScreenReaderOnly>
+        <ScreenReaderOnly>Loading your sets</ScreenReaderOnly>
         <ul className={styles.setGrid}>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <li key={i}>
-              <div className={styles.skeletonRow} />
+              <Skeleton height="3.8em" />
             </li>
           ))}
         </ul>
