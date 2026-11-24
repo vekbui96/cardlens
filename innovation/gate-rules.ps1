@@ -605,9 +605,11 @@ $script:SessionDefaults = [ordered]@{
 #   observation makes the Observer run.
 #   Phase 3: qaUx runs a QA session after each deployed build (and shipped request child) and a UX review after a UI
 #   change, plus a weekly UX sample of one workflow not reviewed for uxStaleDays (every uxSampleDays); product-qa.ps1.
+#   previewQa (needs qaUx): each build's PR is built as a mock-data preview on the tailnet (preview.ps1, ports 8460-8462)
+#   and QA drives it with Playwright BEFORE the merge; merge-pr.ps1 refuses a user-facing merge until the QA gate allows it.
 $script:LoopOptionDefaults = [ordered]@{ proposeIssueDigest = $true; proposeMetricsDigest = $true; compactPrompts = $true; logKeepDays = 30; digestMaxIssues = 150; digestDeployedDays = 3
     productStore = $false; productCollectMinutes = 10; memoryAgent = $false; memoryMinDecisions = 5; memoryEveryDays = 7; requestIntake = $false
-    designSkills = $false; observerPm = $false; observeMetricPoints = 10; qaUx = $false; uxSampleDays = 7; uxStaleDays = 30 }
+    designSkills = $false; observerPm = $false; observeMetricPoints = 10; qaUx = $false; uxSampleDays = 7; uxStaleDays = 30; previewQa = $false }
 
 # ---- design skills (options.designSkills) ----------------------------------------------------------
 # Pinned copies outside Ve's ~\.claude (guard.mjs keeps sessions out of it: credentials live there). Only
@@ -623,7 +625,7 @@ $script:DesignSkillPaths = [ordered]@{
     # Python is a per-user install, not on the machine PATH the runner starts from (lib.ps1): prepended for sessions
     PythonDir    = ('{0}\Programs\Python\Python312' -f $(if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { "$env:USERPROFILE\AppData\Local" }))
 }
-$script:DesignSkillKinds = @('build', 'propose', 'review', 'observe', 'pm', 'qa', 'ux')
+$script:DesignSkillKinds = @('build', 'propose', 'review', 'observe', 'pm', 'qa', 'qapreview', 'ux')
 
 # What the runner adds when options.designSkills is on and the files check out: Ok/Reason (why it is off),
 # Allow (the permission rules for the session kinds in DesignSkillKinds), PathPrepend (Python's folder, put in
@@ -1023,6 +1025,8 @@ $script:ChangeFailures = [ordered]@{
     'scope'         = 'out of scope for the loop (rule 8, config, or too large for one run)'
     'deploy-failed' = 'deploy or live verification failed and was rolled back'
     'session-ended' = 'the session stopped mid-build with work that needs a look (e.g. merged but not verified)'
+    'qa'            = 'QA on the PR preview still failed (a failed criterion or a regression) after the one fix round'
+    'held'          = 'not merged: the approval no longer verified after the preview (Ve held it or withdrew the approval)'
     'other'         = 'other failure'
 }
 # The marker may name the build's model (model=<id>, from the session's MODEL header line); markers without it (all
@@ -1928,12 +1932,14 @@ function Read-ViaPolicyState {
 # The next state (runner side, pure). $State: Get-ViaPolicyState; $Entries: check-approval.ps1 -List `viaPolicy`
 # (issue, title, spec, status, noticedAt, dueAt, commentId, reasons); $Approvals: issue -> approval of the buildable
 # queue; $Posted: notices posted now (issue -> @{ noticedAt; commentId; dueAt }); $Outcomes: builds of this run
-# (issue -> deployed | failed | rolled-back | skipped); -PolicyEnabled $false (Ve switched it off): waiting records become off.
+# (issue -> deployed | failed | rolled-back | skipped); -Previews: PR previews of this run (issue -> preview-rules.ps1
+# New-ViaPolicyPreview: status up | down, url, pr, headSha, qa, upAt, expiresAt), kept on the record as `preview` (the hub
+# shows issues[].preview.url while issues[].preview.status is up); -PolicyEnabled $false (Ve switched it off): waiting records become off.
 # Only issues that were ever noticed are kept. Returns State
 # (the file's object) and Events (log records for status changes). A record that drops out of the open candidates
 # becomes approved-by-hand (Ve's label) or gone (closed, deployed, ...), unless a build outcome says more.
 function Update-ViaPolicyState {
-    param($State, [object[]]$Entries = @(), [hashtable]$Approvals = @{}, [hashtable]$Posted = @{}, [hashtable]$Outcomes = @{}, $Policy = $null, [bool]$PolicyEnabled = $true,
+    param($State, [object[]]$Entries = @(), [hashtable]$Approvals = @{}, [hashtable]$Posted = @{}, [hashtable]$Outcomes = @{}, [hashtable]$Previews = @{}, $Policy = $null, [bool]$PolicyEnabled = $true,
         [string]$RunId = '', [string]$Repo = '', [string]$Loop = $script:ViaPolicyLoop, [datetime]$NowUtc = [datetime]::UtcNow)
     $now = $NowUtc.ToUniversalTime().ToString('o')
     $old = @{}; if ($State -and $State.Issues) { foreach ($k in $State.Issues.Keys) { $old[[int]$k] = $State.Issues[$k] } }
@@ -1953,7 +1959,8 @@ function Update-ViaPolicyState {
         $rec = [ordered]@{ issue = $n; title = (ConvertTo-SafeLine "$($e.title)" 120); spec = [bool]$e.spec; status = $st; noticedAt = $nAt; dueAt = $dAt; commentId = $cid
             reasons = @(@($e.reasons) | Where-Object { $_ } | ForEach-Object { ConvertTo-SafeLine "$_" 200 } | Select-Object -First 4)
             statusAt = $(if ($pst -eq $st -and $prev) { "$(& $get $prev 'statusAt')" } else { $now }); url = $(if ($Repo) { "https://github.com/$Repo/issues/$n" } else { '' })
-            approvedAt = "$(& $get $prev 'approvedAt')"; outcome = "$(& $get $prev 'outcome')"; runId = "$(& $get $prev 'runId')" }
+            approvedAt = "$(& $get $prev 'approvedAt')"; outcome = "$(& $get $prev 'outcome')"; runId = "$(& $get $prev 'runId')"; preview = (& $get $prev 'preview') }
+        if ($Previews.ContainsKey($n)) { $rec.preview = $Previews[$n] }
         if ($st -eq 'due' -and -not $rec.approvedAt) { $rec.approvedAt = $dAt }
         if ($Outcomes.ContainsKey($n)) { $rec.outcome = "$($Outcomes[$n])"; $rec.runId = $RunId }
         $out["$n"] = $rec
@@ -1968,6 +1975,7 @@ function Update-ViaPolicyState {
         elseif ($pst -in @('waiting', 'due', 'needs-notice')) { if ($Approvals.ContainsKey([int]$n) -and "$($Approvals[[int]$n])" -eq 'label') { $st = 'approved-by-hand' } else { $st = 'gone' } }
         $rec = [ordered]@{}; foreach ($pp in $p.PSObject.Properties) { $rec[$pp.Name] = $pp.Value }
         $rec.status = $st
+        if ($Previews.ContainsKey([int]$n)) { $rec.preview = $Previews[[int]$n] }
         if ($st -ne $pst) { $rec.statusAt = $now }
         if ($Outcomes.ContainsKey([int]$n)) { $rec.outcome = "$($Outcomes[[int]$n])"; $rec.runId = $RunId }
         $out["$n"] = $rec

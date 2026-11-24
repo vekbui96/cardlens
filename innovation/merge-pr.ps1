@@ -23,6 +23,9 @@
      (gate-rules.ps1 Get-CiVerdict). Skipped, cancelled, neutral or never-created jobs refuse; failure
      exits 3 for a CI fix round. Blocks at most -WaitMinutes per call, then exits 5 (call again); the total
      wait per head sha is capped at -TimeoutMinutes. A newer push changes the sha and restarts the wait.
+  3c. preview QA (sessions.json options.previewQa): when the runner marked it required for this run and the PR is
+     user-facing, the QA verdict on the PR's preview must be for this exact head and allow the merge (pass, partial,
+     unverified); otherwise MERGE-PR REFUSED PREVIEW-QA: ... (print LOOP-PR-READY and end; not a failure)
   4b. if the PR needs a server deploy: the elevated task's selftest
   5. gh pr merge --merge --match-head-commit <sha> --delete-branch; prints the merge commit sha
 
@@ -39,6 +42,8 @@ param(
 )
 . "$PSScriptRoot\lib.ps1"
 . "$PSScriptRoot\gate-rules.ps1"
+. "$PSScriptRoot\product-qa.ps1"      # Get-QaScope: is the PR user-facing (preview QA gate)
+. "$PSScriptRoot\preview-rules.ps1"   # Get-PreviewMergeGate
 Start-ScriptLog "merge-pr-$Issue-$Pr"
 Add-GhToPath
 $Repo = $script:Repo
@@ -126,6 +131,14 @@ try {
         }
         Refuse $why
     }
+    # ---- 3c. preview QA (options.previewQa): the runner built this head as a mock-data preview and QA drove it
+    # before the merge. A record of THIS run (state\preview-qa-<n>.json, written by the runner; sessions cannot write
+    # state\) makes the gate required; a user-facing PR then merges only when the QA verdict for its exact head allows
+    # it (pass / unverified / skipped), never on a QA failure (preview-rules.ps1 Get-PreviewMergeGate).
+    $pvScope = Get-QaScope -Files @($files | ForEach-Object { $_.filename; $_.previous_filename } | Where-Object { $_ })
+    $pv = Get-PreviewMergeGate -Record (Read-State "preview-qa-$Issue") -RunId "$env:INNOVATION_LOOP_RUN_ID" -HeadSha $headSha -UserFacing $pvScope.UserFacing
+    Write-Log "preview QA gate: ok=$($pv.Ok) required=$($pv.Required) ($($pv.Why))"
+    if (-not $pv.Ok) { Refuse "PREVIEW-QA: $($pv.Why)" }
     # ---- 4. CI on the exact head sha -----------------------------------------------------
     # CI is the e2e gate for EVERY change (the loop runs no Playwright suite locally). All three required
     # jobs (gate-rules.ps1 $CiRequiredJobs) must be completed + success on this exact head; a skipped,

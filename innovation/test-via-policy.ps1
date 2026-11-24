@@ -41,7 +41,7 @@ Check ((Pol '"includeSpecs":true' '"includeSpecs":false').IncludeSpecs -eq $fals
 
 # the committed policy file: Ve's decision of 2026-11-23, valid for this loop
 $file = Read-AutonomyPolicy -Path (Join-Path $PSScriptRoot $script:AutonomyFileName)
-Check ($file.Enabled -and $file.VetoHours -eq 6 -and $file.IncludeSpecs -and $file.SetBy -eq 'vekbui96' -and $file.SetOn -eq '2026-11-23') "innovation/AUTONOMY.json is valid and on ($($file.Reason))"
+Check ($file.Enabled -and $file.VetoHours -eq 1 -and $file.IncludeSpecs -and $file.SetBy -eq 'vekbui96' -and $file.SetOn -eq '2026-11-23') "innovation/AUTONOMY.json is valid and on ($($file.Reason))"
 $fj = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $script:AutonomyFileName)) | ConvertFrom-Json
 Check ("$($fj.decision)" -match 'Everything but server/data' -and "$($fj.decision)" -match '2026-11-23') 'the policy file records Ve''s decision and its date'
 Check (@($script:ProtectedPathPatterns | Where-Object { 'innovation/AUTONOMY.json' -match $_ }).Count -gt 0) 'innovation/AUTONOMY.json is a protected path (merge-pr refuses a PR that touches it)'

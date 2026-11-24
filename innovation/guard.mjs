@@ -41,8 +41,24 @@ const MODE = String(process.env.INNOVATION_LOOP_CARDLENS_MODE || "FULL").toUpper
 const INTAKE = MODE === "INTAKE";
 const OBSERVE = MODE === "OBSERVE";
 const PM = MODE === "PM";
-const QA = MODE === "QA";
+// QA_PREVIEW (the QA session BEFORE the merge, on the PR's preview): QA's posture, plus ONE script
+// (preview-browse.ps1, Playwright against this session's preview only) and GET to the preview URL. The preview port
+// is INNOVATION_LOOP_CARDLENS_PREVIEW_PORT (set by the runner); without it no preview URL is allowed at all. The
+// live API (8443) is off limits in this mode: a preview runs on mocks and needs no live data.
+const QAP = MODE === "QA_PREVIEW";
+const QA = MODE === "QA" || QAP;
 const UX = MODE === "UX";
+const PREVIEW_PORT = /^846[0-2]$/.test(String(process.env.INNOVATION_LOOP_CARDLENS_PREVIEW_PORT || ""))
+  ? String(process.env.INNOVATION_LOOP_CARDLENS_PREVIEW_PORT)
+  : "";
+// this session's preview, and nothing else: https on the tailnet name, the one port, never /api
+const isPreviewUrl = (u) =>
+  QAP &&
+  PREVIEW_PORT !== "" &&
+  new RegExp(
+    `^https://server-pc\\.tail0e4194\\.ts\\.net:${PREVIEW_PORT}(/(?!api\\b)[^\\s"'<>\`]*)?$`,
+    "i",
+  ).test(String(u || ""));
 // the read-only agents: the runner validates their JSON; they change nothing
 const AGENT_RO = OBSERVE || QA || UX;
 const NO_GH_WRITES = process.env.INNOVATION_LOOP_CARDLENS_NO_GH_WRITES === "1";
@@ -54,6 +70,7 @@ const READ_ONLY = [
   "OBSERVE",
   "PM",
   "QA",
+  "QA_PREVIEW",
   "UX",
 ].includes(MODE);
 // keep identical to product-intel.ps1 $script:LoopRefsRx
@@ -251,7 +268,7 @@ function checkDesignCommand(c, isPy) {
         i++;
         continue;
       }
-      if (SHOT_URL.test(t)) {
+      if (SHOT_URL.test(t) || isPreviewUrl(t)) {
         url++;
         continue;
       }
@@ -276,7 +293,7 @@ function checkDesignCommand(c, isPy) {
         i++;
         continue;
       }
-      if (inClone(t) || SHOT_URL.test(t)) {
+      if (inClone(t) || SHOT_URL.test(t) || isPreviewUrl(t)) {
         targets++;
         continue;
       }
@@ -325,6 +342,30 @@ function checkPmRefs(c) {
     );
 }
 
+// ---- preview QA: preview-browse.ps1 -Url "<this session's preview>" -Steps "<WORK file>" -Out "<ARTIFACTS\qa\...>" ----
+function checkPreviewBrowse(c) {
+  const toks = [...c.trim().matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+  const a = {};
+  for (let i = 1; i < toks.length; i++) {
+    const k = String(toks[i]).toLowerCase();
+    if (!["-url", "-steps", "-out"].includes(k) || toks[i + 1] === undefined || a[k] !== undefined)
+      block(
+        "preview-browse.ps1 takes exactly -Url <preview url> -Steps <file in WORK> -Out <folder in ARTIFACTS\\qa>",
+      );
+    a[k] = toks[++i];
+  }
+  if (!a["-url"] || !a["-steps"] || !a["-out"]) block("preview-browse.ps1 needs -Url, -Steps and -Out");
+  if (!isPreviewUrl(a["-url"]))
+    block(
+      `preview-browse.ps1 opens only this session's preview (port ${PREVIEW_PORT || "none"}), never the live site or an API port: ${a["-url"]}`,
+    );
+  const sp = norm(a["-steps"]);
+  const op = norm(a["-out"]);
+  if (!sp.startsWith(HOME + "\\work\\")) block(`the steps file must be in ${HOME}\\work`);
+  if (!op.startsWith(HOME + "\\artifacts\\qa\\"))
+    block(`screenshots go to a folder under ${HOME}\\artifacts\\qa`);
+}
+
 // ---- file tools --------------------------------------------------------------------------------
 if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].includes(tool)) {
   const p = ti.file_path || ti.path || ti.notebook_path || "";
@@ -369,6 +410,11 @@ if (tool === "WebFetch") {
   const u = String(ti.url || "");
   if ((QA || UX) && /token|secret|[?&]key=|\/api\/sync/i.test(u))
     block(`the ${MODE} session never sends a token or a sync call (${u})`);
+  if (isPreviewUrl(u)) process.exit(0);
+  if (QAP && /server-pc\.tail0e4194\.ts\.net/i.test(u))
+    block(
+      `the preview QA session reads only its own preview (port ${PREVIEW_PORT || "none"}), never the live API or another port (${u})`,
+    );
   if (
     !/^https:\/\/(vekbui96\.github\.io\/cardlens|server-pc\.tail0e4194\.ts\.net:8443\/api\/(health|catalog|printings|metrics\/summary)|api\.pokemontcg\.io|api\.tcgdex\.net)(\/|\?|$)/i.test(
       u,
@@ -696,6 +742,9 @@ if (tool === "Bash" || tool === "PowerShell") {
     const urls = c.match(/https?:\/\/[^\s"']+/gi) || [];
     if (urls.length === 0) block("HTTP calls must spell out a full URL");
     for (const u of urls) {
+      if (isPreviewUrl(u) && !/token|secret|[?&]key=/i.test(u)) continue;
+      if (QAP && /server-pc\.tail0e4194\.ts\.net|127\.0\.0\.1|localhost/i.test(u))
+        block(`the preview QA session reads only its own preview (port ${PREVIEW_PORT || "none"}): ${u}`);
       if (
         !/^https?:\/\/(127\.0\.0\.1|localhost):(8787|8200|5273|8887|4173)\/|^https:\/\/(vekbui96\.github\.io\/cardlens|server-pc\.tail0e4194\.ts\.net:8443\/|api\.pokemontcg\.io\/|api\.tcgdex\.net\/)/i.test(
           u,
@@ -802,6 +851,11 @@ if (tool === "Bash" || tool === "PowerShell") {
       const f = norm(s);
       if (!f.startsWith(SCRIPTS + "\\"))
         block(`scripts must be called by bare full path from ${SCRIPTS}\\<name>.ps1 (saw ${s})`);
+      if (/\\preview-browse\.ps1$/.test(f)) {
+        if (!QAP) block(`${s} drives a PR preview: only the preview QA session may run it`);
+        checkPreviewBrowse(c);
+        continue;
+      }
       if (
         !/\\(check-approval|test-gate|update-snapshots|wait-ci|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1$/.test(
           f,
