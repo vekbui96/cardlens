@@ -115,7 +115,7 @@ function Test-LiveSite {
                     if ($ShotPath) { $smokeArgs += $ShotPath }
                     $s = Invoke-Native -File $script:NodeExe -Arguments $smokeArgs -AllowFail
                     if ($s.Code -eq 0) { return @{ Ok = $true; Asset = $asset; Signature = $sig } }
-                    if ($s.Code -eq 2) { Write-Log 'render check could not run (no playwright-core or browser); served-bytes checks passed' 'WARN'; return @{ Ok = $true; Asset = $asset; Signature = $sig } }
+                    if ($s.Code -eq 2) { Write-Log 'render check could not run (no playwright-core or browser, or unverified (busy): the shared browser slot was taken or memory was low, browser-lock.mjs); served-bytes checks passed' 'WARN'; return @{ Ok = $true; Asset = $asset; Signature = $sig } }
                     $last = 'render check failed: ' + ($s.Output -join ' ')
                 } elseif ($g.Capped) { $last = "chunk graph exceeds $($script:LiveChunkCap) files (raise `$script:LiveChunkCap in live-check.ps1 deliberately)" }
                 else { $last = 'string/file checks not passing' }

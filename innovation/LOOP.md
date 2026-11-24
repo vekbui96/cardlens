@@ -1168,6 +1168,8 @@ or a regression blocks the merge) and posts the verdict.
    - sample data: add `seed=<name>` to the query (collection, numbered, binders, scan, trade, empty); each run
      starts from a fresh browser, so seed in every run that needs it.
    - `/api` calls 404 on a preview (there is no server): never a regression. Images may load from public hosts.
+   - `PREVIEW-BROWSE BUSY unverified (busy): ...` (exit 4): another loop's browser holds the one shared slot, or
+     free memory is low. Not a finding: try once more, then mark what you could not check `unverified` (note: busy).
 3. **Judge each criterion**: `pass` (you saw it), `fail` (you saw it is not true; the note says what you saw), or
    `unverified` (it needs the live server, a real device or a signed-in sync; the note says why). Notes under
    300 characters. Evidence: `artifact:<path under ARTIFACTS>` of a screenshot or result.json you made (e.g.

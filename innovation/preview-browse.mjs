@@ -11,6 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { acquireBrowserSlot, setLowPriority } from "./browser-lock.mjs";
 
 const HOST = "server-pc.tail0e4194.ts.net";
 const PORTS = [8460, 8461, 8462];
@@ -111,8 +112,17 @@ function locate(page, s) {
   return s.nth !== undefined ? l.nth(Number(s.nth)) : l.first();
 }
 
+// One test browser at a time across the loops, BelowNormal priority, none under 2 GB free RAM (browser-lock.mjs).
+// Busy is not a finding: the session marks what it could not check `unverified`.
+setLowPriority();
+const slot = await acquireBrowserSlot({ what: `preview-browse ${url}`, holdMinutes: 4, waitMs: 60000 });
+if (!slot.ok) {
+  console.log(`PREVIEW-BROWSE BUSY unverified (busy): ${slot.why}`);
+  process.exit(4);
+}
 const killer = setTimeout(() => {
   console.log("PREVIEW-BROWSE FAIL timed out after 150 s");
+  slot.release();
   process.exit(1);
 }, 150000);
 
@@ -223,6 +233,7 @@ try {
 } finally {
   await browser.close();
   clearTimeout(killer);
+  slot.release();
 }
 writeFileSync(path.join(out, "result.json"), JSON.stringify(result, null, 2));
 let allOk = true;

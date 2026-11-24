@@ -182,6 +182,20 @@ that cannot touch anything live:
 - Proof run: `run-loop.ps1 -DryRun -PreviewProof -PreviewPr <pr> -PreviewIssue <issue> [-PreviewPostTo <pr>]` runs
   one preview + QA round for an existing loop PR and posts only to `-PreviewPostTo` (as an agent comment).
 
+### Resource limits: one test browser at a time (Ve, 2026-11-24)
+
+server-pc also runs the CardLens API, recognition, the contact API, the hub and the Target stock checker, so every
+loop on the box (cardlens, portfolio, ops-hub) shares ONE test-browser slot: the lock file
+`%USERPROFILE%\.innovation-loop-shared\browser.lock` (`browser-lock.mjs`; owner pid + hold-until, stale locks are taken
+over). `smoke.mjs` (deploy render check, waits up to 5 min), `preview-browse.mjs` (preview QA, waits 60 s) and
+`update-snapshots.ps1` (docker baselines, waits 10 min, then runs anyway) take it. Busy or under 2 GB free RAM means
+"unverified (busy)", fail-open as before: the render check is skipped (served-bytes checks still decide), a preview QA
+step reports BUSY, and the runner does not start the preview QA session at all under 2 GB (`resource-rules.ps1`). The
+gate (`test-gate.ps1`), the preview build and every loop browser run at BelowNormal priority (children inherit it).
+Caps: one browser and one worker per call, 150 s per preview-browse call, 5 min per smoke render. The Target bot is not gated: its
+only state endpoint needs its token, which the loop never reads. Tests: `node innovation\test-browser-lock.mjs`,
+`powershell -ExecutionPolicy Bypass -File innovation\test-resource-rules.ps1`.
+
 ## How it works
 
 Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in
