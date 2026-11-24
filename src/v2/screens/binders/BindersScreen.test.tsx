@@ -247,6 +247,31 @@ describe("an empty shelf", () => {
     expect(screen.queryByText(/A binder is a layout you arrange yourself/)).not.toBeInTheDocument();
   });
 
+  it("shows the default format as the pressed chip, and moves it when another is chosen", async () => {
+    const user = userEvent.setup();
+    render(<BindersScreen />, { wrapper: harness() });
+
+    expect(screen.getByRole("button", { name: "9-pocket" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "12-pocket" })).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(screen.getByRole("button", { name: "12-pocket" }));
+    expect(screen.getByRole("button", { name: "12-pocket" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "9-pocket" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps Create binder pressable with no name, and points at the name field instead of doing nothing", async () => {
+    const user = userEvent.setup();
+    render(<BindersScreen />, { wrapper: harness() });
+
+    const button = screen.getByRole("button", { name: "Create binder" });
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(screen.getByLabelText("Binder name")).toHaveFocus();
+    expect(screen.getByLabelText("Binder name")).toHaveAttribute("title", "Name your binder first");
+    expect(new Repositories().getBinders()).toHaveLength(0);
+  });
+
   it("creates a binder and puts it on the shelf", async () => {
     const user = userEvent.setup();
     render(<BindersScreen />, { wrapper: harness() });

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { BINDER_FORMATS, specFor, type BinderFormat } from "../../../models/binderLayout.ts";
 import { Chip, Field, Row, Stack } from "../../primitives/index.ts";
 import styles from "./binders.module.css";
@@ -26,13 +26,17 @@ export function CreateBinderTile({
 }) {
   const [name, setName] = useState("");
   const [format, setFormat] = useState<BinderFormat>("9");
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
-    // A silent no-op is the bug: the button is disabled while this is true, so
-    // nothing can reach here by pressing it.
-    if (!trimmed) return;
+    // The button is never disabled (a faded fill read as "cannot be pressed"),
+    // so an empty name lands here. Send the collector to the field, not nowhere.
+    if (!trimmed) {
+      nameRef.current?.focus();
+      return;
+    }
     onCreate(trimmed, format);
     setName("");
   };
@@ -53,6 +57,8 @@ export function CreateBinderTile({
           ) : null}
 
           <Field
+            ref={nameRef}
+            title="Name your binder first"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Name it"
@@ -62,7 +68,7 @@ export function CreateBinderTile({
           {/* The group is a plain element around the Row: the layout primitives
               take no ARIA props on purpose, and three chips that are one choice
               have to be announced as one choice. */}
-          <div role="group" aria-label="Binder format">
+          <div role="group" aria-label="Binder format" className={styles.formats}>
             <Row gap={2} wrap>
               {BINDER_FORMATS.map((f) => (
                 <Chip key={f} onPress={() => setFormat(f)} pressed={format === f}>
@@ -73,7 +79,7 @@ export function CreateBinderTile({
           </div>
 
           <div>
-            <button type="submit" className={styles.primary} disabled={!name.trim()}>
+            <button type="submit" className={styles.primary}>
               Create binder
             </button>
           </div>
