@@ -282,13 +282,35 @@
 
 .loading {
   display: grid;
+  width: 100%;
   gap: var(--v2-space-3);
 }
 
 .loadingLine {
-  margin: var(--v2-space-0);
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  margin: var(--v2-space-4) var(--v2-space-0) var(--v2-space-0);
+  padding: var(--v2-space-0) var(--v2-space-4);
   font-size: var(--v2-fs-body);
   color: var(--v2-fg-muted);
+}
+
+/* 14px ring; stops turning under reduced motion via the shimmer token. */
+.loadingIcon {
+  flex: none;
+  width: 14px; /* v2-tokens-allow: icon size from the issue, no token */
+  height: 14px; /* v2-tokens-allow: icon size from the issue, no token */
+  border: calc(2 * var(--v2-border-w)) solid var(--v2-fg-dim);
+  border-top-color: var(--v2-fg-muted);
+  border-radius: 50%;
+  animation: loadingSpin var(--v2-dur-shimmer) linear infinite;
+}
+
+@keyframes loadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .skeletonBar {
