@@ -40,14 +40,14 @@ function CollectionProbe() {
   return <output data-testid="collection">{JSON.stringify(collection)}</output>;
 }
 
-function harness(repos = new Repositories()) {
+function harness(repos = new Repositories(), urlBacked = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
         <RepositoriesProvider value={repos}>
           <CatalogProvider base={new MockPokemonProvider()}>
-            <NavigationProvider>
+            <NavigationProvider urlBacked={urlBacked}>
               <LibraryProvider>{children}</LibraryProvider>
             </NavigationProvider>
           </CatalogProvider>
@@ -314,7 +314,9 @@ describe("next and previous card", () => {
   it("steps through the list the card was opened from, and stops at its ends", async () => {
     stubPrintings();
     rememberBrowseList("Search results", [{ cardId: "sv3-125" }, { cardId: CARD_ID }]);
-    render(<Routed initial={CARD_ID} />, { wrapper: harness() });
+    // The router must really be on card details: any other screen ends the list.
+    window.location.hash = `#/card/${CARD_ID}`;
+    render(<Routed initial={CARD_ID} />, { wrapper: harness(new Repositories(), true) });
 
     expect(await screen.findByText(/2 of 2 · Search results/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next card" })).toBeDisabled();

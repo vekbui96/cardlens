@@ -36,7 +36,8 @@ export interface Neighbours {
   next?: BrowseEntry;
 }
 
-const KEY = "cardlens:v1:browse-list";
+// v2: lists remembered before lists were cleared on leaving their screens are dropped.
+const KEY = "cardlens:v2:browse-list";
 
 const summaries = new Map<string, PokemonCardSummary>();
 
@@ -54,6 +55,31 @@ export function rememberBrowseList(label: string, entries: BrowseEntry[]): void 
   } catch {
     // Private mode or a full quota: the arrows simply do not appear.
   }
+}
+
+/** Forget the remembered list (and its in-memory summaries). */
+export function clearBrowseList(): void {
+  summaries.clear();
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // Nothing to clear when storage is unavailable.
+  }
+}
+
+/**
+ * Screens a remembered list may outlive: the lists it comes from (Search,
+ * Everything owned) and card details itself. Landing anywhere else (Home, the
+ * Want list, a link) ends the list, so a card opened from there is not offered
+ * stale Previous/Next arrows.
+ */
+export function keepsBrowseList(screenName: string): boolean {
+  return (
+    screenName === "details" ||
+    screenName === "results" ||
+    screenName === "owned" ||
+    screenName === "collection"
+  );
 }
 
 /** The remembered list, or null. Corruption-safe: anything malformed is no list. */
