@@ -1759,7 +1759,8 @@ try {
                 $prevD = $null; try { if (Test-Path -LiteralPath $dPath -PathType Leaf) { $prevD = [IO.File]::ReadAllText($dPath) | ConvertFrom-Json } } catch { }
                 $db = @(Get-QueueInts $dq 'buildable')
                 $dOpus = @($db | Where-Object { (Get-QueueBuildModel $dq ([int]$_) '').Opus })
-                $dBuilt = @(& $gv 'built' | Where-Object { $_ })
+                # Get-Variable -ValueOnly emits the array as ONE object: unroll it, or every count is 0 or 1
+                $dBuilt = @(& $gv 'built' | ForEach-Object { $_ } | Where-Object { $_ })
                 $dRes = & $gv 'res'; $dStatus = 'FAILED'; if ($dRes) { $dStatus = "$($dRes.Status)" } elseif ((& $gv 'exitCode') -eq 0) { $dStatus = 'NOTHING-TO-DO' }
                 $dCap = ''; $dc = Get-DailyCap 'build'; if (-not $dc.Allowed) { $dCap = $dc.Reason }
                 $ds = New-DrainState -RunId $RunId -Result $dStatus -Buildable $db -NeedsOpus $dOpus -Progress @($dBuilt | Where-Object { $_.Outcome -eq 'deployed' }).Count `
