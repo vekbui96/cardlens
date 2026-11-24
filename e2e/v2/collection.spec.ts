@@ -380,9 +380,10 @@ test.describe("layout", () => {
       expect(b.w).toBeLessThanOrEqual(500);
       // 44px is a thumb, which a pointer does not need; 72 is where a row stops
       // being a row and starts being a card. A started row carries one more line
-      // for the set's worth, hence 88 rather than the old 72.
+      // for the set's worth, and BASE and MASTER are two stacked lines (#294),
+      // hence 112 rather than the old 72.
       expect(b.h).toBeGreaterThanOrEqual(44);
-      expect(b.h).toBeLessThanOrEqual(88);
+      expect(b.h).toBeLessThanOrEqual(112);
     }
   });
 
