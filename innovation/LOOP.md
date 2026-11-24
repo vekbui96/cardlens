@@ -1162,13 +1162,16 @@ or a regression blocks the merge) and posts the verdict.
      (each step ok or its error, console and page errors, blocked requests). Read the PNGs (phone first) and
      the step lines it prints. A step that fails because of your locator is your mistake: adjust it and run
      again (a few tries at most); a page error or a screen that does not render is a finding.
+   - drive it like a collector: open the root (or the nearest screen) and reach the criterion's screen by
+     clicking through the app, then use the changed control at least once (click, type, press); a goto straight
+     to the final route alone proves the screen renders, not that the workflow works.
    - sample data: add `seed=<name>` to the query (collection, numbered, binders, scan, trade, empty); each run
      starts from a fresh browser, so seed in every run that needs it.
    - `/api` calls 404 on a preview (there is no server): never a regression. Images may load from public hosts.
 3. **Judge each criterion**: `pass` (you saw it), `fail` (you saw it is not true; the note says what you saw), or
    `unverified` (it needs the live server, a real device or a signed-in sync; the note says why). Notes under
    300 characters. Evidence: `artifact:<path under ARTIFACTS>` of a screenshot or result.json you made (e.g.
-   `artifact:qa/<run>-<issue>-p1/ac1/390x844.png`), or `file:line`. A **regression** is something the change
+   `artifact:qa/<run>-<issue>-p1/ac1/390x844.png`), or a repo path with a line number such as `src/v2/screens/home/HomeScreen.tsx:41` (no `file:` prefix). A **regression** is something the change
    broke that no criterion covers (a screen that no longer renders, a page error, a layout overflow at 390px,
    missing copy): at most 3, each with workflow, summary and evidence. Be sure before you fail anything: a fail
    blocks the merge and costs a fix round. Optional `lesson`: one sentence about checking this kind of change next time (memory agent input only).
