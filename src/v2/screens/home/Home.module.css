@@ -401,6 +401,19 @@
   cursor: pointer;
 }
 
+.moverRetry {
+  align-self: flex-start;
+  min-height: var(--v2-tap);
+  min-width: var(--v2-tap);
+  padding: var(--v2-space-0) var(--v2-space-4);
+  border: var(--v2-border-w) solid var(--v2-fg);
+  border-radius: var(--v2-radius);
+  background: transparent;
+  color: var(--v2-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
 .moverToggleButton[aria-pressed="true"] {
   color: var(--v2-fg);
   font-weight: var(--v2-fw-bold);

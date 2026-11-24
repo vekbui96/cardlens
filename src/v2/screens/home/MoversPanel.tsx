@@ -5,7 +5,7 @@ import { topMovers, type Mover, type MoverWindow, type TopMovers } from "../../.
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { formatChangeShort, formatUsd } from "../../../utils/format.ts";
-import { Card, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
+import { Card, Money, Panel, Skeleton, Stack, UNPRICED } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -21,10 +21,15 @@ import styles from "./Home.module.css";
 export function MoversPanel({
   rows,
   loading = false,
+  failed = false,
+  onRetry,
 }: {
   rows: OwnedPrintingRow[] | null;
   /** Names and prices are still arriving: hold the place with placeholders (only while `rows` is null). */
   loading?: boolean;
+  /** A price request failed: say what is missing and offer `onRetry` instead of placeholders. */
+  failed?: boolean;
+  onRetry?: () => void;
 }) {
   const [window, setWindow] = useState<MoverWindow>(readMoversWindow);
   const week = useMemo(() => (rows ? topMovers(rows, 7) : NONE), [rows]);
@@ -34,9 +39,25 @@ export function MoversPanel({
     return (
       <Panel title="Biggest movers" headingLevel={2}>
         <div aria-busy="true" data-testid="home-movers-skeleton">
-          <p className={styles.resumeMeta} role="status">
-            Movers need prices; retrying
-          </p>
+          {failed ? (
+            <Stack gap={3}>
+              <p className={styles.resumeMeta} role="status">
+                Movers need price data that has not loaded yet.
+              </p>
+              <button type="button" className={styles.moverRetry} onClick={onRetry}>
+                Try again
+              </button>
+            </Stack>
+          ) : (
+            // Three rows at the height of the real ones, so the rows arriving move nothing.
+            <ul className={styles.list} aria-hidden="true">
+              {[0, 1, 2].map((n) => (
+                <li key={n}>
+                  <Skeleton height="var(--v2-tap)" />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Panel>
     );
