@@ -343,7 +343,8 @@
   border: var(--v2-border-w) solid var(--v2-border);
   border-radius: var(--v2-radius-sm);
   color: var(--v2-fg-dim);
-  font-size: var(--v2-fs-tiny);
+  /* A screen showing the card large can raise the name: `--v2-art-name-size`. */
+  font-size: var(--v2-art-name-size, var(--v2-fs-tiny));
   text-align: center;
   padding: var(--v2-space-2);
   line-height: var(--v2-lh-tight);

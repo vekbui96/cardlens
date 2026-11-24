@@ -28,6 +28,20 @@
   font-size: var(--v2-fs-title);
 }
 
+.totalLabel {
+  font-size: var(--v2-fs-small);
+  color: var(--v2-fg-muted);
+}
+
+.noWrap {
+  white-space: nowrap;
+}
+
+/* The sheet's "Unpriced" / "Pricing…": muted-on-surface (above 4.5:1), not the dimmer absent colour. */
+.enlargedPrice[data-absent="true"] span {
+  color: var(--v2-fg-muted);
+}
+
 .unpriced {
   font-size: 14px; /* v2-tokens-allow: between small (13) and body (15), read across a table */
   color: var(--v2-warn);
@@ -211,6 +225,7 @@
 }
 
 .enlargedArt {
+  --v2-art-name-size: 14px; /* v2-tokens-allow: the face-down card's name, legible on the large card */
   width: 100%;
   /* Small enough that the whole sheet fits on a phone: scrolled content hides the top border under the handle. */
   max-width: calc(var(--v2-pocket) * 1.7);
