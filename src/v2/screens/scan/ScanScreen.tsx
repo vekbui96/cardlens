@@ -487,7 +487,7 @@ export function CardIndexError({
 }) {
   return (
     <ErrorNotice title="The card index could not load" onRetry={onRetry}>
-      {error}.{" "}
+      <span title={error}>The card list did not download. Check your connection and try again.</span>{" "}
       {engine === "server"
         ? "The server is the only recogniser, and there is nothing to fall back to if it stops answering."
         : "Nothing on this device can identify a card. Connect this device in Settings to use the server."}
