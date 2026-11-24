@@ -79,13 +79,17 @@ export function ShareHeader({ title, subtitle, updatedAt, aside }: ShareHeaderPr
           {subtitle}
           {updatedAt !== undefined ? (
             <>
-              {" · "}
               {/*
                 Its own clock, not the viewer's idea of now: a live share is
                 whatever the server last said, and saying "just now" about a
-                page that has been open for an hour is a lie.
+                page that has been open for an hour is a lie. The separator
+                sits inside the volatile span so a masked screenshot does not
+                end on a dangling "·".
               */}
-              <span data-snapshot="volatile">{formatUpdated(new Date(updatedAt).toISOString())}</span>
+              <span data-snapshot="volatile">
+                {" · "}
+                {formatUpdated(new Date(updatedAt).toISOString())}
+              </span>
             </>
           ) : null}
         </p>
