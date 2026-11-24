@@ -274,6 +274,16 @@ test.describe("set cards @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("set-cards-error.png");
   });
 
+  test("a set while the catalog is still answering", async ({ page }) => {
+    // `sim=slow` holds the catalog for two seconds: long enough to look at, and
+    // the screenshot of the placeholder block alone does not depend on it ending.
+    await openV2(page, "/set/sv3/Obsidian%20Flames", { sim: "slow" });
+    const loading = page.locator('[aria-busy="true"]');
+    await expect(loading).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(loading).toHaveScreenshot("set-cards-loading.png", { timeout: 20000 });
+  });
+
   test("the v1 web set screen filter bar", async ({ page }) => {
     // The v1 web shell (`?v=1&ui=web`), which v2's screen does not cover: its
     // filter bar (rarity chips, Missing only, By value, Share) is what this shows.
