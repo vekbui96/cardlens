@@ -269,4 +269,10 @@ test.describe("binders @visual", () => {
     await stabiliseForSnapshot(page);
     await expect(page).toHaveScreenshot("shelf.png", { fullPage: true });
   });
+
+  test("the empty shelf explains itself", async ({ page }) => {
+    await openShelf(page, { seed: "empty" });
+    await stabiliseForSnapshot(page);
+    await expect(page).toHaveScreenshot("shelf-empty.png", { fullPage: true });
+  });
 });
