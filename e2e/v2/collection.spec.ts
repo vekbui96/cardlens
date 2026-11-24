@@ -414,6 +414,16 @@ test.describe("collection @visual", () => {
     await expect(page.getByRole("main")).toHaveScreenshot("collection-sets.png", { timeout: 20000 });
   });
 
+  test("the set list while the catalog is still answering", async ({ page }) => {
+    // `sim=slow` holds the catalog for two seconds: long enough to look at, and
+    // the screenshot of the placeholder block alone does not depend on it ending.
+    await openV2(page, "/collection", { sim: "slow" });
+    const loading = page.locator('[aria-busy="true"]');
+    await expect(loading).toBeVisible();
+    await stabiliseForSnapshot(page);
+    await expect(loading).toHaveScreenshot("collection-sets-loading.png", { timeout: 20000 });
+  });
+
   test("the value panel, with its movement over 7 and 30 days", async ({ page }) => {
     // Movement needs MIN_HOLDINGS (25) printings with Cardmarket averages: the
     // 24 above plus one more. EUR 1.10 against 1.00 (7 days) and 1.05 (30 days)
