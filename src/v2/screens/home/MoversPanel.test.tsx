@@ -69,11 +69,11 @@ describe("MoversPanel", () => {
     expect(b.container.innerHTML).toBe("");
   });
 
-  it("holds its place with placeholders while loading, then shows the rows", () => {
+  it("says why it is empty while prices are missing, then shows the rows", () => {
     const a = render(<MoversPanel rows={null} loading />);
     expect(screen.getByRole("heading", { name: "Biggest movers" })).toBeTruthy();
-    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(3);
-    expect(screen.getByText("Loading biggest movers")).toBeTruthy();
+    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(0);
+    expect(screen.getByText("Movers need prices; retrying")).toBeTruthy();
     a.unmount();
     render(<MoversPanel rows={rows} loading={false} />);
     expect(screen.queryByTestId("home-movers-skeleton")).toBeNull();
