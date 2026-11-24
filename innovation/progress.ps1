@@ -21,7 +21,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][int]$Issue,
-    [Parameter(Mandatory)][ValidateSet('approval', 'plan', 'branch', 'test', 'pr', 'ci', 'merge', 'deploy', 'verify', 'done')][string]$Stage,
+    [Parameter(Mandatory)][ValidateSet('approval', 'plan', 'branch', 'test', 'pr', 'ci', 'preview', 'merge', 'deploy', 'verify', 'done')][string]$Stage,
     [ValidateSet('running', 'ok', 'failed', 'skipped')][string]$Status = 'running',
     [string]$Detail = '',
     [ValidateSet('', 'deployed', 'failed', 'rolled-back', 'skipped')][string]$Outcome = ''
@@ -32,7 +32,7 @@ try {
     $runId = "$env:INNOVATION_LOOP_RUN_ID"
     if ($runId) { $script:LogFile = Join-Path $script:LoopHome "logs\run-$runId.progress.log" }
     $ok = Invoke-LoopProgress -LoopHome $script:LoopHome -RunId $runId -Repo $script:Repo -GhExe $script:GhExe -Issue $Issue -Stage $Stage `
-        -Status $Status -Detail $Detail -Outcome $Outcome -Stages @('approval', 'plan', 'branch', 'test', 'pr', 'ci', 'merge', 'deploy', 'verify', 'done') -Marker '<!-- innovation-loop -->'
+        -Status $Status -Detail $Detail -Outcome $Outcome -Stages @('approval', 'plan', 'branch', 'test', 'pr', 'ci', 'preview', 'merge', 'deploy', 'verify', 'done') -Marker '<!-- innovation-loop -->'
 } catch { $ok = $false; Write-Host "progress: $_" }
 if ($ok) { Write-Output "PROGRESS OK #$Issue $Stage $Status" } else { Write-Output "PROGRESS WARN #${Issue} ${Stage}: not updated (see the warning above); carry on with the build" }
 exit 0

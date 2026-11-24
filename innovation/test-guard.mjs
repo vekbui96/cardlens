@@ -824,6 +824,71 @@ const dryDeny = [
 ];
 const dryAllow = [ps(`gh issue view 150 -R vekbui96/cardlens --json title,body`)];
 
+// The preview QA session (MODE=QA_PREVIEW): QA's posture plus ONE script, preview-browse.ps1, against THIS session's
+// preview port only (INNOVATION_LOOP_CARDLENS_PREVIEW_PORT); never the live site, the API ports or another preview.
+const PV = "https://server-pc.tail0e4194.ts.net:8461";
+const qapEnv = {
+  ...env,
+  INNOVATION_LOOP_CARDLENS_MODE: "QA_PREVIEW",
+  INNOVATION_LOOP_CARDLENS_PREVIEW_PORT: "8461",
+  INNOVATION_LOOP_CARDLENS_DESIGN_SKILLS: "1",
+};
+const browse = (url, steps = `${W}\\steps-ac1.json`, out = `${A}\\qa\\20261124-090000-286-p1\\ac1`) =>
+  ps(`${S}\\preview-browse.ps1 -Url "${url}" -Steps "${steps}" -Out "${out}"`);
+const qapAllow = [
+  browse(`${PV}/?v=2&seed=collection#/collection`),
+  browse(`${PV}/`),
+  browse(`${PV}/?v=2#/wantlist`, `${W}\\steps-ac2.json`, `${A}\\qa\\20261124-090000-286-p1\\ac2`),
+  { tool_name: "Write", tool_input: { file_path: `${W}\\steps-ac1.json`, content: '{"steps":[]}' } },
+  { tool_name: "Read", tool_input: { file_path: `${A}\\qa\\20261124-090000-286-p1\\ac1\\390x844.png` } },
+  { tool_name: "WebFetch", tool_input: { url: `${PV}/` } },
+  ps(`Invoke-WebRequest ${PV}/preview.json -UseBasicParsing`),
+  ps(`${E} shot "${PV}/?v=2#/wantlist" --viewport 390x844 --out "${A}\\qa\\20261124-090000-286-p1\\ac1"`),
+  { tool_name: "WebFetch", tool_input: { url: "https://vekbui96.github.io/cardlens/#/wantlist" } },
+  ps(`git -C "${C}" diff origin/main...0123456789abcdef0123456789abcdef01234567 -- src/v2/x.tsx`),
+];
+const qapDeny = [
+  // the live site, the API, the hub, another preview slot, local services: never driven by the browser
+  browse("https://vekbui96.github.io/cardlens/#/wantlist"),
+  browse("https://server-pc.tail0e4194.ts.net/"),
+  browse("https://server-pc.tail0e4194.ts.net:8443/api/health"),
+  browse("https://server-pc.tail0e4194.ts.net:8444/"),
+  browse("https://server-pc.tail0e4194.ts.net:8460/"),
+  browse("https://server-pc.tail0e4194.ts.net:8462/"),
+  browse(`${PV}/api/collection`),
+  browse("http://127.0.0.1:8787/"),
+  browse("http://localhost:8461/"),
+  browse(`http://server-pc.tail0e4194.ts.net:8461/`),
+  // files only where the runner said
+  browse(`${PV}/`, `${C}\\steps.json`),
+  browse(`${PV}/`, `${W}\\steps.json`, `${C}\\shots`),
+  browse(`${PV}/`, `${W}\\steps.json`, `${A}\\ux\\x`),
+  ps(`${S}\\preview-browse.ps1 -Url "${PV}/" -Steps "${W}\\s.json" -Out "${A}\\qa\\x" -Extra 1`),
+  ps(`${S}\\preview-browse.ps1 -Url "${PV}/"`),
+  // the live API and the local server are out of bounds in this mode, even read-only
+  { tool_name: "WebFetch", tool_input: { url: "https://server-pc.tail0e4194.ts.net:8443/api/health" } },
+  { tool_name: "WebFetch", tool_input: { url: "https://server-pc.tail0e4194.ts.net:8460/" } },
+  { tool_name: "WebFetch", tool_input: { url: `${PV}/api/health` } },
+  ps(`Invoke-RestMethod https://server-pc.tail0e4194.ts.net:8443/api/catalog/sets`),
+  ps(`Invoke-RestMethod http://127.0.0.1:8787/api/health`),
+  ps(`Invoke-RestMethod -Method Post ${PV}/api/collection/merge`),
+  ps(`${E} shot "https://server-pc.tail0e4194.ts.net:8460/" --out "${A}\\qa\\x"`),
+  // everything QA may not do still holds
+  ps(`gh pr comment 289 -R vekbui96/cardlens --body-file "${W}\\c.md"`),
+  ps(`${S}\\merge-pr.ps1 -Pr 289 -Issue 286`),
+  ps(`node "${S}\\preview-browse.mjs" --url ${PV}/`),
+  ps(`npx playwright test`),
+  { tool_name: "Write", tool_input: { file_path: `${C}\\src\\app\\App.tsx`, content: "x" } },
+  {
+    tool_name: "Write",
+    tool_input: { file_path: `${HOME}\\state\\preview-qa-286.json`, content: '{"gate":"pass"}' },
+  },
+  ps(`git -C "${C}" push origin loop/286-x`),
+];
+// the browser is refused in every other mode, and in QA_PREVIEW without a preview port
+const qapOther = [browse(`${PV}/`)];
+const qapNoPort = { ...qapEnv, INNOVATION_LOOP_CARDLENS_PREVIEW_PORT: "" };
+const qapBadPort = { ...qapEnv, INNOVATION_LOOP_CARDLENS_PREVIEW_PORT: "8443" };
 let failures = 0;
 for (const [name, e, list, want] of [
   ["observe", observeEnv, observeAllow, 0],
@@ -851,6 +916,14 @@ for (const [name, e, list, want] of [
   ["store (full)", env, storeDeny, 2],
   ["store (intake)", intakeEnv, storeDeny, 2],
   ["memory", memoryEnv, memoryDeny, 2],
+  ["qa preview", qapEnv, qapAllow, 0],
+  ["qa preview", qapEnv, qapDeny, 2],
+  ["qa (post-deploy)", qaEnv, qapOther, 2],
+  ["build", buildEnv, qapOther, 2],
+  ["observe", observeEnv, qapOther, 2],
+  ["full", env, qapOther, 2],
+  ["qa preview (no port)", qapNoPort, qapOther, 2],
+  ["qa preview (bad port)", qapBadPort, [browse("https://server-pc.tail0e4194.ts.net:8443/")], 2],
 ]) {
   for (const c of list) {
     const r = run(c, e);
@@ -915,6 +988,6 @@ if (garbage.status !== 2) {
   console.log("FAIL: unparsable input must block");
 }
 console.log(
-  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill, ${observeAllow.length + observeDeny.length} observer, ${(qaUxAllow.length + qaUxDeny.length) * 2} qa/ux, ${pmAllow.length + pmDeny.length + dryAllow.length + dryDeny.length + 1} pm and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
+  `${allow.length} allow cases, ${deny.length} deny cases, ${reviewAllow.length + reviewDeny.length} review-mode, ${buildAllow.length + buildDeny.length} build-session and ${proposeAllow.length + proposeDeny.length} proposal-session, ${intakeAllow.length + intakeDeny.length} intake-session, ${storeDeny.length * 2} product-store, ${(designAllow.length + designDeny.length) * 2 + designOffDeny.length} design-skill, ${observeAllow.length + observeDeny.length} observer, ${(qaUxAllow.length + qaUxDeny.length) * 2} qa/ux, ${qapAllow.length + qapDeny.length + 7} qa-preview, ${pmAllow.length + pmDeny.length + dryAllow.length + dryDeny.length + 1} pm and ${memoryDeny.length} memory cases, ${failures} failure(s)`,
 );
 process.exit(failures ? 1 : 0);

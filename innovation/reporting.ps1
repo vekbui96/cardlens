@@ -676,7 +676,7 @@ function Publish-LoopRunData {
 $script:ProgressMarker = '<!-- innovation-loop:progress -->'
 $script:ProgressStages = [ordered]@{
     approval = 'Approval verified'; plan = 'Plan posted'; branch = 'Branch created'; test = 'Local build + tests'
-    pr = 'PR opened'; ci = 'CI checks'; merge = 'Merged'; deploy = 'Deploying'; verify = 'Verifying live'; done = 'Done'
+    pr = 'PR opened'; ci = 'CI checks'; preview = 'Preview + QA'; merge = 'Merged'; deploy = 'Deploying'; verify = 'Verifying live'; done = 'Done'
 }
 function Get-ProgressIcon {
     param([string]$Status)

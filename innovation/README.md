@@ -136,6 +136,52 @@ time; what does not fit waits in `cursors.qa.pending` for the next run (and make
   prompts.
 - With `qaUx` off, nothing of this runs.
 
+### PR previews: QA before the merge (`options.previewQa`)
+
+With `previewQa` on (it needs `qaUx`) QA moves in front of the merge and gets a real browser, on a copy of the PR
+that cannot touch anything live:
+
+- **Flow.** A build session that reaches `WAIT-CI PASS` on a PR with any user-facing file prints
+  `LOOP-PR-READY <issue> <pr> <sha>` and ends (LOOP.md section 3 step 9a). The runner builds that head in a fresh
+  git worktree under `<LOOP_HOME>\preview\work` (`preview.ps1`; node_modules linked from the loop clone when the
+  lockfile matches, else `npm ci`) by `preview-build.ps1` under the REDUCED token, with `VITE_USE_MOCKS=true`, no
+  companion or catalog URL, base `/`, and every other `VITE_` value and token stripped from the environment. It
+  deletes the source maps, scans the bundle for the tailnet name, 8443 / 8787 / 8200 / 8788 / 8446, `D:\services`
+  and the e2e token (one hit refuses the preview), copies it into a slot folder, removes the worktree and checks
+  the served `preview.json` names the head. It posts **`Preview: https://server-pc.tail0e4194.ts.net:<8460-8462>/`**
+  on the PR, in the issue's progress comment (stage "Preview + QA") and, for a via-policy build, in
+  `state\via-policy.json` as `issues[].preview` (`url`, `status` up | down, `pr`, `headSha`, `qa`, `upAt`,
+  `expiresAt`): the hub shows `issues[].preview.url` while `issues[].preview.status` is `up`.
+- **QA** (a `qa` session in guard mode `QA_PREVIEW`, LOOP.md section 14) drives the preview with
+  `preview-browse.ps1` (Playwright from the loop clone; goto / click / fill / press / waitFor / expectText / shot,
+  screenshots at 390x844 and 1440x900, sample data via `?seed=collection|numbered|binders|scan|trade|empty`). The
+  guard allows that script, WebFetch and impeccable only for THIS session's preview port; the live site's API,
+  the hub, other slots and local services are refused, and inside the browser every request but GET to the
+  preview origin and public image hosts is aborted. The runner validates the JSON, records the gate in
+  `state\preview-qa-<issue>.json` and posts the verdict on the PR.
+- **Gate.** pass / partial -> a new build session merges (merge-pr.ps1 refuses a user-facing merge of this run
+  until the gate allows it for the PR's exact head). A failed criterion or a regression -> ONE fix round (a new
+  session fixes, pushes, waits for CI, prints `LOOP-PR-READY` again), then a second failure is `loop:failed`
+  class `qa` with the PR left open. A `/hold` (or approval withdrawn) after the preview -> not merged, class
+  `held`. QA that cannot judge (no preview, no session, bad JSON) never blocks: the gate is `unverified`, the merge
+  goes on and the post-deploy QA on the live site runs as before. After a preview pass the live QA session is
+  skipped for that merge (the deploy's own live checks always run; UX still reviews the live site).
+- **Serving and cleanup.** No server process: Tailscale Serve maps `https://server-pc.tail0e4194.ts.net:8460-8462`
+  (tailnet only, never Funnel) to `<LOOP_HOME>\preview\slots\0..2` permanently, set once with
+  `preview-serve-setup.ps1 -Apply` (it never resets the serve config and checks that 443 / 8443 / 8444 are
+  unchanged; `-Remove` takes the three entries out). At most three previews; a PR reuses its slot. A preview is
+  torn down when its build ends (merged, failed or left open), and at every run start and end anything expired
+  (24 h), whose PR is closed or merged, or whose build crashed. `preview.ps1 -ShowSlots` lists the slots;
+  `preview.ps1 -CleanupSlots` tears down what is due (refused while a run holds the lock). This box resolves its
+  own tailnet name to the public Funnel addresses, so the loop reaches the slots on the tailnet IP (curl
+  `--resolve`, Chromium host rules); other tailnet devices just open the URL.
+- **Veto window.** Ve's via-policy veto window stays on the proposal (before any build is spent): a preview only
+  exists once the change is built, and building before the approval would change what the policy approves. A
+  `/hold` still stops the merge at any point up to it (check-approval runs again before the merge session and in
+  merge-pr).
+- Proof run: `run-loop.ps1 -DryRun -PreviewProof -PreviewPr <pr> -PreviewIssue <issue> [-PreviewPostTo <pr>]` runs
+  one preview + QA round for an existing loop PR and posts only to `-PreviewPostTo` (as an agent comment).
+
 ## How it works
 
 Once a day the `innovation-loop-cardlens` task runs `run-loop.ps1`. It does the shared setup once in
