@@ -300,84 +300,86 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
         </Stack>
       </Row>
 
-      <Panel
-        title="Printings"
-        headingLevel={2}
-        aside={
-          finishes.length > 0 ? (
-            <span className={styles.count}>
-              {heldHere} of {finishes.length} held
-            </span>
-          ) : null
-        }
-      >
-        <Stack gap={3}>
-          {printingsFailed ? (
-            <PrintingsFailure
-              retrying={printings.isFetching}
-              onRetry={() => void printings.refetch()}
-              haveFallback={finishes.length > 0}
-            />
-          ) : null}
+      <div className={styles.printings} data-testid="printings-section">
+        <Panel
+          title="Printings"
+          headingLevel={2}
+          aside={
+            finishes.length > 0 ? (
+              <span className={styles.count}>
+                {heldHere} of {finishes.length} held
+              </span>
+            ) : null
+          }
+        >
+          <Stack gap={3}>
+            {printingsFailed ? (
+              <PrintingsFailure
+                retrying={printings.isFetching}
+                onRetry={() => void printings.refetch()}
+                haveFallback={finishes.length > 0}
+              />
+            ) : null}
 
-          {printings.isLoading && !printingsFailed && finishes.length === 0 ? (
-            <LoadingPrintings />
-          ) : finishes.length === 0 ? (
-            <p className={styles.prose}>
-              Nothing vouches for this card&rsquo;s printings yet. Rather than offering a guess to mark —
-              which is how <code>normal</code> once got written onto holo-only cards — this list stays empty
-              until the printing data arrives.
-            </p>
-          ) : (
-            <>
-              {source === "pricing" ? (
-                <p className={styles.note}>
-                  From pricing data only. That never reports pattern foils — Poké Ball, Master Ball, energy —
-                  so a patterned reverse this card has may be missing from the list.
-                </p>
-              ) : null}
-              <Stack gap={2}>
-                {finishes.map((finish) => (
-                  <PrintingRow
-                    key={finish}
-                    finish={finish}
-                    owned={held.includes(finish)}
-                    price={priceOf(finish)}
-                    pricePending={printings.isLoading}
-                    onToggle={() => mark(finish)}
-                  />
-                ))}
-              </Stack>
-              {markResult?.kind === "failed" ? (
-                <ErrorNotice
-                  stillWorks="Nothing was changed: the printing is still as it was."
-                  onRetry={() => mark(markResult.finish)}
-                >
-                  {finishLabel(markResult.finish)} could not be saved on this device.
-                </ErrorNotice>
-              ) : null}
-              <p className={styles.confirm} role="status">
-                {markResult && markResult.kind !== "failed" ? (
-                  <>
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      aria-hidden="true"
-                    >
-                      <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" />
-                    </svg>
-                    {`${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`}
-                  </>
-                ) : null}
+            {printings.isLoading && !printingsFailed && finishes.length === 0 ? (
+              <LoadingPrintings />
+            ) : finishes.length === 0 ? (
+              <p className={styles.prose}>
+                Nothing vouches for this card&rsquo;s printings yet. Rather than offering a guess to mark —
+                which is how <code>normal</code> once got written onto holo-only cards — this list stays empty
+                until the printing data arrives.
               </p>
-            </>
-          )}
-        </Stack>
-      </Panel>
+            ) : (
+              <>
+                {source === "pricing" ? (
+                  <p className={styles.note}>
+                    From pricing data only. That never reports pattern foils — Poké Ball, Master Ball, energy
+                    — so a patterned reverse this card has may be missing from the list.
+                  </p>
+                ) : null}
+                <Stack gap={2}>
+                  {finishes.map((finish) => (
+                    <PrintingRow
+                      key={finish}
+                      finish={finish}
+                      owned={held.includes(finish)}
+                      price={priceOf(finish)}
+                      pricePending={printings.isLoading}
+                      onToggle={() => mark(finish)}
+                    />
+                  ))}
+                </Stack>
+                {markResult?.kind === "failed" ? (
+                  <ErrorNotice
+                    stillWorks="Nothing was changed: the printing is still as it was."
+                    onRetry={() => mark(markResult.finish)}
+                  >
+                    {finishLabel(markResult.finish)} could not be saved on this device.
+                  </ErrorNotice>
+                ) : null}
+                <p className={styles.confirm} role="status">
+                  {markResult && markResult.kind !== "failed" ? (
+                    <>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        aria-hidden="true"
+                      >
+                        <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" />
+                      </svg>
+                      {`${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`}
+                    </>
+                  ) : null}
+                </p>
+              </>
+            )}
+          </Stack>
+        </Panel>
+      </div>
     </Stack>
   );
 }
