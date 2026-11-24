@@ -289,12 +289,10 @@ function TierLine({
       <span className={styles.tierBar}>
         <Meter value={ratio ?? 0} label={`${set} ${word.toLowerCase()} set`} labelHidden />
       </span>
-      <span className={styles.tierCount}>{total === undefined ? owned : `${owned}/${total}`}</span>
-      {complete ? (
-        <span className={styles.tierDone} data-testid="tier-complete">
-          {word} complete
-        </span>
-      ) : null}
+      <span className={styles.tierCount}>
+        {total === undefined ? owned : `${owned}/${total}`}
+        {complete ? <span className={styles.tierDone}> complete</span> : null}
+      </span>
     </span>
   );
 }

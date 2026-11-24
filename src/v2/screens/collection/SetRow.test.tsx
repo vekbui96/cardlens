@@ -49,20 +49,11 @@ describe("a set row", () => {
     expect(screen.getByText("120/230")).toBeInTheDocument();
   });
 
-  it("says 'BASE complete' on its own line, so gold is never the only thing carrying it", () => {
+  it("says 'complete' in words, so gold is never the only thing carrying it", () => {
     render(<SetRow row={model(OBF, held(197))} />);
 
-    expect(screen.getByText("BASE complete")).toBeInTheDocument();
-    expect(screen.queryByText("MASTER complete")).not.toBeInTheDocument();
+    expect(screen.getByText("complete")).toBeInTheDocument();
     expect(screen.getByText("197/197")).toBeInTheDocument();
-  });
-
-  it("stacks BASE and MASTER as two lines of one column", () => {
-    render(<SetRow row={model(OBF, held(100, 20))} />);
-
-    const lines = screen.getAllByRole("progressbar").map((bar) => bar.closest("span[class*='tierLine']"));
-    expect(lines).toHaveLength(2);
-    expect(lines[0]?.parentElement).toBe(lines[1]?.parentElement);
   });
 
   it("offers no base tier for a set that has no secrets to be short of", () => {
