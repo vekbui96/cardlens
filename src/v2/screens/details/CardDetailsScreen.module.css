@@ -13,6 +13,23 @@
   max-width: calc(var(--v2-pocket-lg) * 2);
 }
 
+/*
+ * Phone: the art is capped at 336px tall (240px wide at 5:7) and centred, so the
+ * Printings heading and the first add button sit above the fold at 390x844.
+ */
+@media (max-width: 900px) /* v2-tokens-allow: the shell's phone/desktop breakpoint */ {
+  .hero > * {
+    max-width: calc(var(--v2-space-7) * 5);
+    margin-inline: auto;
+  }
+}
+
+/* Desktop: the printing rows stay close to their button, not 1360px apart. */
+.printings {
+  width: 100%;
+  max-width: calc(var(--v2-space-7) * 13);
+}
+
 .facts {
   flex: 1 1 0;
   min-width: 0;
