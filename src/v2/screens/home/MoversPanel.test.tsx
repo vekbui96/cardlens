@@ -85,7 +85,12 @@ describe("MoversPanel", () => {
     const retry = vi.fn();
     render(<MoversPanel rows={null} loading failed onRetry={retry} />);
     expect(screen.getByText("Movers need price data that has not loaded yet.")).toBeTruthy();
-    expect(screen.getByTestId("home-movers-skeleton").querySelectorAll("[data-skeleton]")).toHaveLength(0);
+    const block = screen.getByTestId("home-movers-failed");
+    expect(block.querySelectorAll("[data-skeleton]")).toHaveLength(0);
+    // Not busy any more: the status text and Try again are announced, and the block keeps the placeholders' height.
+    expect(block.getAttribute("aria-busy")).toBe("false");
+    expect(block.className).toMatch(/moversFailed/);
+    expect(screen.getByRole("status").textContent).toMatch(/Movers need price data/);
     const button = screen.getByRole("button", { name: "Try again" });
     expect(button.className).toMatch(/moverRetry/);
     fireEvent.click(button);

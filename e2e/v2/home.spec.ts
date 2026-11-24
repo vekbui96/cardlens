@@ -269,6 +269,32 @@ test.describe("home @visual", () => {
     await expect(page).toHaveScreenshot("home-movers-pending.png", { fullPage: true });
   });
 
+  test("movers: prices failed", async ({ page }) => {
+    await seedMovers(page);
+    // Every printings request fails: the panel says what is missing and offers Try again.
+    // Most sets fail; one never answers, so the rows stay unsettled while a request has failed
+    // (the state the panel shows instead of placeholders).
+    await page.route("**/api/printings/**", (route) => {
+      const setId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+      if (setId === "sv3") return new Promise<void>(() => {});
+      return route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"upstream"}' });
+    });
+    // A failed companion answer falls through to the direct TCGdex path: fail that too.
+    await page.route(/api\.tcgdex\.net/, (route) => route.abort("failed"));
+    await openV2(page, "/");
+    await expect(page.getByText("Movers need price data that has not loaded yet.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("button", { name: "Try again" }).last()).toBeVisible();
+    await stabiliseForSnapshot(page);
+    // The panel alone: a full-page capture resizes the viewport, which sends this
+    // state back to placeholders before the shot is taken.
+    const panel = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Biggest movers" }) });
+    await expect(panel).toHaveScreenshot("home-movers-failed.png");
+  });
+
   test("movers: 30 days selected", async ({ page }) => {
     await seedMovers(page);
     await page.addInitScript(() => localStorage.setItem("cardlens:v1:movers-window", "30"));
