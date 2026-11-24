@@ -21,9 +21,9 @@ import {
   Panel,
   Row,
   ScreenReaderOnly,
+  Skeleton,
   Stack,
   UNPRICED,
-  cx,
 } from "../../primitives/index.ts";
 import { screenToPath } from "../../../app/screenUrl.ts";
 import { recallScroll, rememberScroll } from "./scrollMemory.ts";
@@ -238,7 +238,26 @@ function Idle({
 /** Six placeholders, so the grid does not jump when the real tiles land. */
 const SKELETON = [0, 1, 2, 3, 4, 5];
 
+/**
+ * A fast answer should not flash grey tiles for a frame: the placeholders only
+ * appear if the catalog is still thinking after this long.
+ */
+export const SKELETON_DELAY_MS = 200;
+
+const NAME_LINE = "calc(1em * var(--v2-lh-tight))";
+const SMALL_LINE = "calc(var(--v2-fs-small) * var(--v2-lh-tight))";
+
+function useAfterDelay(ms: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setElapsed(true), ms);
+    return () => clearTimeout(id);
+  }, [ms]);
+  return elapsed;
+}
+
 function Searching({ query }: { query: string }) {
+  const showSkeleton = useAfterDelay(SKELETON_DELAY_MS);
   return (
     <Stack gap={3}>
       <h2 className={styles.heading}>Searching for “{query}”…</h2>
@@ -249,15 +268,18 @@ function Searching({ query }: { query: string }) {
       */}
       <div aria-busy="true" aria-live="polite">
         <ScreenReaderOnly>Searching the card catalog</ScreenReaderOnly>
-        <Grid min="pocket" gap={3}>
-          {SKELETON.map((i) => (
-            <div key={i} className={styles.skeleton}>
-              <div className={styles.skeletonArt} />
-              <div className={styles.skeletonLine} />
-              <div className={cx(styles.skeletonLine, styles.skeletonLineShort)} />
-            </div>
-          ))}
-        </Grid>
+        {showSkeleton ? (
+          <Grid min="pocket" gap={3}>
+            {SKELETON.map((i) => (
+              <div key={i} className={styles.skeleton}>
+                <Skeleton className={styles.skeletonArt} />
+                <Skeleton height={NAME_LINE} />
+                <Skeleton height={SMALL_LINE} className={styles.skeletonLineShort} />
+                <Skeleton height={SMALL_LINE} />
+              </div>
+            ))}
+          </Grid>
+        ) : null}
       </div>
     </Stack>
   );

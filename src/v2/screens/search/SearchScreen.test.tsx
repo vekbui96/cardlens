@@ -252,6 +252,32 @@ describe("retrying a failed search", () => {
   });
 });
 
+describe("the loading skeleton", () => {
+  it("appears only after a short delay, as shared Skeleton blocks, and is gone when results land", async () => {
+    let resolve: (cards: PokemonCardSummary[]) => void = () => {};
+    class DeferredProvider extends MockPokemonProvider {
+      override async searchCards(): Promise<PokemonCardSummary[]> {
+        return new Promise<PokemonCardSummary[]>((r) => (resolve = r));
+      }
+    }
+    const { container } = render(<SearchScreen query="charizard" />, {
+      wrapper: harness(new DeferredProvider()),
+    });
+
+    // Immediately: the one spoken sentence, but no grey tiles yet.
+    expect(await screen.findByText("Searching the card catalog")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-skeleton]")).toHaveLength(0);
+
+    await waitFor(() => expect(container.querySelectorAll("[data-skeleton]").length).toBeGreaterThan(0));
+    expect(container.querySelectorAll("[aria-busy='true'] [data-skeleton]").length).toBeGreaterThan(0);
+
+    const cards = await new MockPokemonProvider().searchCards("charizard");
+    resolve(cards);
+    expect(await screen.findByRole("heading", { name: /cards for “charizard”/i })).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-skeleton]")).toHaveLength(0);
+  });
+});
+
 describe("recent searches", () => {
   it("offers what was searched before, and running one issues one request", async () => {
     const repos = new Repositories();
