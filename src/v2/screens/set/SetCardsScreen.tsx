@@ -358,18 +358,24 @@ function Notices({
  */
 function PageSkeletons() {
   return (
-    <div className={styles.pages} aria-busy="true" aria-live="polite">
+    <div className={styles.loading} aria-busy="true" aria-live="polite">
       <ScreenReaderOnly>Loading the set&apos;s cards</ScreenReaderOnly>
-      {[1, 2].map((page) => (
-        <Panel key={page}>
-          <Skeleton className={styles.skeletonBar} />
-          <div className={styles.pocketGrid}>
-            {Array.from({ length: BINDER_PAGE_SIZE }, (_, i) => (
-              <Skeleton key={i} className={styles.skeletonPocket} />
-            ))}
-          </div>
-        </Panel>
-      ))}
+      {/* The same words for sighted readers; hidden from assistive tech so they are not read twice. */}
+      <p className={styles.loadingLine} aria-hidden="true">
+        Loading cards...
+      </p>
+      <div className={styles.pages}>
+        {[1, 2].map((page) => (
+          <Panel key={page}>
+            <Skeleton className={styles.skeletonBar} />
+            <div className={styles.pocketGrid}>
+              {Array.from({ length: BINDER_PAGE_SIZE }, (_, i) => (
+                <Skeleton key={i} className={styles.skeletonPocket} />
+              ))}
+            </div>
+          </Panel>
+        ))}
+      </div>
     </div>
   );
 }

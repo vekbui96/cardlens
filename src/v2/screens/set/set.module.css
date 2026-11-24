@@ -280,6 +280,17 @@
 
 /* --- Loading -------------------------------------------------------------- */
 
+.loading {
+  display: grid;
+  gap: var(--v2-space-3);
+}
+
+.loadingLine {
+  margin: var(--v2-space-0);
+  font-size: var(--v2-fs-body);
+  color: var(--v2-fg-muted);
+}
+
 .skeletonBar {
   height: var(--v2-space-5);
   max-width: 20ch;

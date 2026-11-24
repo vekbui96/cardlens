@@ -65,5 +65,7 @@ describe("SetCardsScreen while the set loads", () => {
     // Two pages of nine pockets, plus a title bar per page, all the shared primitive.
     expect(region!.querySelectorAll("[data-skeleton]")).toHaveLength(2 * (BINDER_PAGE_SIZE + 1));
     expect(screen.queryByRole("heading", { name: /Page 1/ })).toBeNull();
+    // Sighted readers get the same words as a visible line above the first page.
+    expect(screen.getByText("Loading cards...")).toBeInTheDocument();
   });
 });
