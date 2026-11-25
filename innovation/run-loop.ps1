@@ -922,7 +922,7 @@ function Use-DryStoreCopy {
 function Get-Coordination {
     param($Q, $Budget, [switch]$ReqSlices)
     $co = [pscustomobject]@{ Decision = $null; Head = ''; Base = ''; Seeded = $false; Files = @(); Changed = $null; DiffStat = @(); Rates = $null; Deltas = @()
-        Findings = @(); NewFindings = @(); Decisions = @(); NewDecisions = @(); NewResearch = 0; Workflows = [ordered]@{} }
+        Findings = @(); NewFindings = @(); Decisions = @(); NewDecisions = @(); NewResearch = 0; SteeringChanged = ''; Workflows = [ordered]@{} }
     try {
         $cur = Read-ProductCursors $script:StorePaths
         $co.Workflows = Read-Workflows (Join-Path $ScriptsDir 'workflows.json')
@@ -953,6 +953,20 @@ function Get-Coordination {
         $co.Decisions = @(Read-Decisions $script:StorePaths)
         $co.NewDecisions = @(Select-RecordsSince -Records $co.Decisions -SinceUtc $since | Where-Object { $_.kind -ne 'preference-reply' })
         $co.NewResearch = @(Select-RecordsSince -Records @(Read-JsonLines $script:IntelPaths.Research | Where-Object { $_.kind -eq 'answer' }) -SinceUtc $since).Count
+        # Ve's steering (FOCUS.md / PRODUCT.md) committed on main since the PM's last run is a PM input of its own
+        try {
+            if ($co.Head) {
+                $st = @()
+                foreach ($sf in 'innovation/FOCUS.md', 'innovation/PRODUCT.md') {
+                    $ct = "$((Invoke-Git -Repo $script:Clone -Arguments @('log', '-1', '--format=%ct', $co.Head, '--', $sf) -AllowFail -Quiet).Output)".Trim()
+                    if ($ct -match '^\d+$') {
+                        $cu = ConvertTo-IsoUtc ([DateTimeOffset]::FromUnixTimeSeconds([long]$ct).UtcDateTime)
+                        if ($since -and $cu -gt $since) { $st += "$(Split-Path $sf -Leaf) $cu" }
+                    }
+                }
+                $co.SteeringChanged = ($st -join ', ')
+            }
+        } catch { Write-Log "coordinator: steering change check failed ($_); ignored" 'WARN' }
         $ob = ''; $pb = ''
         if ($Budget -and $Budget.Verdict -eq 'hold') { $ob = $Budget.Reason; $pb = $Budget.Reason }
         else {
@@ -965,7 +979,7 @@ function Get-Coordination {
         $slots = $null; $slices = 0
         if ($Q) { $slots = $Q.slots; $slices = @($Q.slicesToOpen | Where-Object { $_ }).Count }
         $co.Decision = Get-CoordinatorDecision -Changed $co.Changed -Deltas $co.Deltas -NewFindings $co.NewFindings.Count -NewDecisions $co.NewDecisions.Count -NewResearch $co.NewResearch `
-            -Slots $slots -SlicesToOpen $slices -ObserveBlocked $ob -PmBlocked $pb
+            -Slots $slots -SlicesToOpen $slices -ObserveBlocked $ob -PmBlocked $pb -SteeringChanged $co.SteeringChanged
         Write-Log "coordinator: range $(if ($co.Base) { $co.Base.Substring(0, [math]::Min(9, $co.Base.Length)) })..$(if ($co.Head) { $co.Head.Substring(0, [math]::Min(9, $co.Head.Length)) })$(if ($co.Seeded) { ' (seeded: no lastObservedCommit yet, origin/main 24 hours ago)' }), $($co.Files.Count) changed file(s); observe=$($co.Decision.Observe) pmNow=$($co.Decision.PmNow) pmAfterObserve=$($co.Decision.PmAfterObserve)"
         foreach ($r in $co.Decision.Reasons) { Write-Log "coordinator: $r" }
         # nothing in this range for the Observer: move the commit cursor on (the metrics snapshot stays until observed)

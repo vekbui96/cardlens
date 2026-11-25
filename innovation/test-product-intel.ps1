@@ -58,6 +58,9 @@ $fnd = Get-CoordinatorDecision -Changed $none -NewFindings 2 -Slots $slots3
 Check ($fnd.PmNow -and -not $fnd.Observe -and $fnd.PhaseB) 'new findings, free slot -> PM (no Observer)'
 Check ((Get-CoordinatorDecision -Changed $none -NewDecisions 1 -Slots $slots3).PmNow) 'a new decision -> PM'
 Check ((Get-CoordinatorDecision -Changed $none -NewResearch 1 -Slots $slots3).PmNow) 'a new research answer -> PM'
+$stc = Get-CoordinatorDecision -Changed $none -Slots $slots3 -SteeringChanged 'FOCUS.md 2026-11-25T06:30:00Z'
+Check ($stc.PmNow -and -not $stc.Observe -and (($stc.Reasons -join ' ') -match "Ve's steering changed")) 'a FOCUS.md / PRODUCT.md commit since the PM last ran -> PM'
+Check (-not (Get-CoordinatorDecision -Changed $none -Slots $slots0 -SteeringChanged 'FOCUS.md x').PmNow) 'steering changed but no free slot: no PM'
 Check ((Get-CoordinatorDecision -Changed $none -SlicesToOpen 1 -Slots $slots3).PmNow) 'an approved slice to open -> PM'
 $full = Get-CoordinatorDecision -Changed $none -NewFindings 5 -NewDecisions 3 -Slots $slots0
 Check (-not $full.PmNow -and -not $full.PmAfterObserve -and -not $full.PhaseB -and ($full.Reasons -join ' ') -match 'no free proposal slot') 'slots full -> no PM, even with new findings'

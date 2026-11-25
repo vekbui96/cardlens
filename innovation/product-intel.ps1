@@ -143,12 +143,14 @@ function Format-MetricDelta {
 # -Changed: Get-ChangedWorkflows result ($null = the diff could not be read). -Deltas: Get-MetricDeltas.
 # -NewFindings / -NewDecisions / -NewResearch: counts since the PM's last run. -Slots: the queue's slots
 # (newThisRun, mayOpenSpec); -SlicesToOpen: approved specs' slices with no issue yet. -ObserveBlocked / -PmBlocked:
-# '' or why that session may not start (daily cap, plan budget, out of time).
+# '' or why that session may not start (daily cap, plan budget, out of time). -SteeringChanged: '' or which of Ve's
+# steering files (FOCUS.md / PRODUCT.md) has a commit on main since the PM's last run: a PM input of its own, so a
+# change of direction is acted on at the next run instead of waiting for an Observer finding.
 # Returns Observe (start the Observer now), PmNow (start the PM even without the Observer), PmAfterObserve (the PM may
 # still run if the Observer adds findings), PhaseB (any Phase B session), Reasons (log lines).
 function Get-CoordinatorDecision {
     param($Changed, [object[]]$Deltas = @(), [int]$NewFindings = 0, [int]$NewDecisions = 0, [int]$NewResearch = 0,
-        $Slots = $null, [int]$SlicesToOpen = 0, [string]$ObserveBlocked = '', [string]$PmBlocked = '')
+        $Slots = $null, [int]$SlicesToOpen = 0, [string]$ObserveBlocked = '', [string]$PmBlocked = '', [string]$SteeringChanged = '')
     $why = @()
     $wf = @(); if ($Changed -and $Changed.Map) { $wf = @($Changed.Map.Keys) }
     $moved = @($Deltas | Where-Object { $_ -and $_.Moved })
@@ -167,9 +169,10 @@ function Get-CoordinatorDecision {
     if ($NewDecisions -gt 0) { $inputs += "$NewDecisions new decision(s)" }
     if ($NewResearch -gt 0) { $inputs += "$NewResearch new research answer(s)" }
     if ($SlicesToOpen -gt 0) { $inputs += "$SlicesToOpen approved slice(s) to open" }
+    if ($SteeringChanged) { $inputs += "Ve's steering changed ($(ConvertTo-SafeLine $SteeringChanged 120))" }
     $slot = ($free -gt 0)
     if (-not $slot) { $why += "pm: no free proposal slot (newThisRun $free$(if ($spec) { ', spec allowed' }))" }
-    elseif ($inputs.Count -eq 0) { $why += 'pm: nothing new since its last run (no new findings, decisions, research or slices)' }
+    elseif ($inputs.Count -eq 0) { $why += 'pm: nothing new since its last run (no new findings, decisions, research, slices or steering)' }
     else { $why += "pm: $($inputs -join ', '); $free slot(s) free" }
     $pmNow = ($slot -and $inputs.Count -gt 0 -and -not $PmBlocked)
     $pmAfter = ($slot -and $observe -and -not $PmBlocked)
