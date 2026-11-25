@@ -15,6 +15,7 @@ import {
   Stack,
   UNPRICED,
 } from "../../primitives/index.ts";
+import type { AddEntry } from "./applyPlan.ts";
 import styles from "./addmany.module.css";
 
 export interface MissingLine {
@@ -34,10 +35,13 @@ export function PreviewSet({
   set,
   lines,
   onMissing,
+  onMatched,
 }: {
   set: PokemonSet;
   lines: readonly ParsedCardLine[];
   onMissing: (setId: string, lines: MissingLine[]) => void;
+  /** The printings the matched lines would add, for the screen's Add button. */
+  onMatched?: (setId: string, entries: AddEntry[]) => void;
 }) {
   const view = useSetView(set.id, set.name, { wantPrintings: true });
 
@@ -69,6 +73,24 @@ export function PreviewSet({
   useEffect(() => {
     onMissing(set.id, missing);
   }, [onMissing, set.id, missing]);
+
+  const entries = useMemo<AddEntry[]>(() => {
+    if (!ready) return [];
+    const out: AddEntry[] = [];
+    for (const l of matched) {
+      const card = byNumber.get(unpadded(l.number));
+      if (!card) continue;
+      const finish = l.finish ?? view.finishesFor(card.collectorNumber, card.variants)[0] ?? "normal";
+      out.push({ cardId: card.id, finish, setId: set.id, number: card.collectorNumber });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- finishesFor changes identity each render; the inputs below decide the result
+  }, [ready, matched, byNumber, set.id, view.allCards]);
+
+  useEffect(() => {
+    onMatched?.(set.id, entries);
+    return () => onMatched?.(set.id, []);
+  }, [onMatched, set.id, entries]);
 
   if (!ready && view.isError) {
     return (

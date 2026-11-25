@@ -4,6 +4,8 @@ import { parseCardList, type ParsedCardLine } from "../../../models/cardListPars
 import type { PokemonSet } from "../../../models/cards.ts";
 import { Panel, Stack } from "../../primitives/index.ts";
 import { PreviewSet, type MissingLine } from "./PreviewSet.tsx";
+import { useLibrary } from "../../../app/LibraryProvider.tsx";
+import { asOwned, planAdd, type AddEntry } from "./applyPlan.ts";
 import styles from "./addmany.module.css";
 
 /** Three tappable lines that teach the format. */
@@ -28,8 +30,8 @@ interface NotRecognised {
 /**
  * Add many cards, step one: paste a list and see what it would add.
  *
- * It only reads. Nothing is written to the collection from here yet, so there
- * is no add button; a later slice adds it. Each set in the list loads through
+ * "Add N cards" writes the matched lines through setOwnedMany; Undo reverses
+ * exactly what that add turned on. Each set in the list loads through
  * the Set screen's own data path, so a card here has the same name, image and
  * price as it has there, and a failed set says so on its own while the other
  * sets still show.
@@ -61,6 +63,40 @@ export function AddManyScreen() {
   const onMissing = useCallback((setId: string, lines: MissingLine[]) => {
     setMissing((prev) => (prev[setId] === lines ? prev : { ...prev, [setId]: lines }));
   }, []);
+
+  const { isOwnedFinish, setOwnedMany } = useLibrary();
+  const [matchedBySet, setMatchedBySet] = useState<Record<string, AddEntry[]>>({});
+  const onMatched = useCallback((setId: string, entries: AddEntry[]) => {
+    setMatchedBySet((prev) => {
+      const had = prev[setId];
+      if (entries.length === 0) {
+        if (!had) return prev;
+        const { [setId]: _gone, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [setId]: entries };
+    });
+  }, []);
+  const matchedEntries = useMemo(
+    () => groups.flatMap((g) => matchedBySet[g.set.id] ?? []),
+    [groups, matchedBySet],
+  );
+  const toAdd = useMemo(() => planAdd(matchedEntries, isOwnedFinish), [matchedEntries, isOwnedFinish]);
+  // Held in memory only: Undo reverses exactly the printings the last add turned on.
+  const [undo, setUndo] = useState<AddEntry[] | null>(null);
+  const [addedCount, setAddedCount] = useState(0);
+
+  const onAdd = () => {
+    if (toAdd.length === 0) return;
+    setOwnedMany(asOwned(toAdd, true));
+    setUndo(toAdd);
+    setAddedCount(toAdd.length);
+  };
+  const onUndo = () => {
+    if (!undo) return;
+    setOwnedMany(asOwned(undo, false));
+    setUndo(null);
+  };
 
   const notRecognised: NotRecognised[] = [
     ...parsed.lines.flatMap((l) => (l.ok ? [] : [{ line: l.line, raw: l.raw, reason: l.reason }])),
@@ -128,8 +164,38 @@ export function AddManyScreen() {
           ) : null}
 
           {groups.map((g) => (
-            <PreviewSet key={g.set.id} set={g.set} lines={g.lines} onMissing={onMissing} />
+            <PreviewSet
+              key={g.set.id}
+              set={g.set}
+              lines={g.lines}
+              onMissing={onMissing}
+              onMatched={onMatched}
+            />
           ))}
+
+          {matchedEntries.length > 0 ? (
+            <div className={styles.addBar}>
+              {toAdd.length > 0 ? (
+                <button type="button" className={styles.addButton} onClick={onAdd}>
+                  Add {plural(toAdd.length, "card", "cards")}
+                </button>
+              ) : undo === null ? (
+                <p className={styles.meta} data-testid="addmany-already">
+                  Everything matched is already in your collection.
+                </p>
+              ) : null}
+              {undo !== null ? (
+                <>
+                  <p className={styles.headline} role="status" data-testid="addmany-added">
+                    Added {plural(addedCount, "card", "cards")}
+                  </p>
+                  <button type="button" className={styles.undoButton} onClick={onUndo}>
+                    Undo
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           {notRecognised.length > 0 ? (
             <Panel

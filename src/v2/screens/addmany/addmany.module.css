@@ -12,6 +12,41 @@
   font-variant-numeric: tabular-nums;
 }
 
+.addBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--v2-space-3);
+}
+
+.addButton,
+.undoButton {
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  font-weight: var(--v2-fw-medium);
+  cursor: pointer;
+}
+
+.addButton {
+  background: var(--v2-fg);
+  color: var(--v2-surface-raised);
+}
+
+.undoButton {
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+}
+
+.addButton:focus-visible,
+.undoButton:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
 .meta {
   margin: var(--v2-space-0);
   color: var(--v2-fg-muted);
