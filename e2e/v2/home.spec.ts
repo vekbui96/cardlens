@@ -302,7 +302,7 @@ test.describe("home @visual", () => {
     // A failed companion answer falls through to the direct TCGdex path: fail that too.
     await page.route(/api\.tcgdex\.net/, (route) => route.abort("failed"));
     await openV2(page, "/");
-    await expect(page.getByText("Movers need price data that has not loaded yet.")).toBeVisible({
+    await expect(page.getByText("Try again, or wait a minute.")).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByRole("button", { name: "Try again" }).last()).toBeVisible();
