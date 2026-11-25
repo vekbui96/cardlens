@@ -19,8 +19,9 @@ collector apps, on the phone today (glasses paused).
 
 - **Primary: Ve**, a collector, on the glasses and the phone (desktop for sorting and binder work).
 - **Secondary:** people Ve shares binders and trade links with (view-only visitors of a share link).
-- **Open question: grow to other collectors? (undecided).** Until Ve answers here, proposals must not
-  assume multi-user growth (no accounts, onboarding, multi-tenant storage or public discovery).
+- **Grow to other collectors? No, not for now (decided by Ve 2026-11-25).** CardLens is for Ve only:
+  single user. Proposals must not assume multi-user growth: no accounts, multi-user onboarding,
+  multi-tenant storage, public discovery or social features.
 
 ## Jobs to be done, and where they happen
 

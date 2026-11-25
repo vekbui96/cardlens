@@ -58,12 +58,14 @@ live; the "Already live" line under each says what not to re-propose.
    or selling, each with its current price and its 7 / 30 day movement, a Home row when a watched card
    moves past a threshold Ve sets (shown in the app, never pushed), and a price history line on card
    details. Measure first: what per-card history the price source and server already keep; if per-card
-   history needs a server piece, that is slice 1 and needs Ve. Already live: movers strip and windows,
+   history needs a server piece, that is slice 1 and needs Ve. **Decided by Ve 2026-11-25: alerts stay
+   in-app only; no push or email alerts, do not propose them.** Already live: movers strip and windows,
    mover current price (#155).
 5. **Trade builder.** Pick cards from Ve's trade binder against the other collector's list, see both
-   sides' value and the balance as it changes, and share the trade as a read-only link; mark a trade done
-   and move the cards. Already live: trade share page and enlarged card sheet (#207 / #221 / #236 /
-   #282 / #295), binder showcase share (#191).
+   sides' value and the balance as it changes, and mark a trade done and move the cards. **Decided by Ve
+   2026-11-25: no trade share link (no new share type, no new `shares.json` row, no server change); at
+   most copy the trade as text or save it as an image, front end only.** Already live: trade share page
+   and enlarged card sheet (#207 / #221 / #236 / #282 / #295), binder showcase share (#191).
 
 After these, earlier queued ideas still count as features: faster shop mode for scan bursts (PRODUCT.md
 bet 3, scan UI only) and trade-link conversion (bet 4, measure first).
