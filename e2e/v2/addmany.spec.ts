@@ -20,9 +20,29 @@ test.describe("add many cards", () => {
     await expect(page.getByTestId("addmany-not-recognised")).toContainText("has no card number 999");
     await expect(page.getByTestId("addmany-matched")).toContainText("Charizard ex");
   });
+
+  test("Add N cards, then Undo", async ({ page }) => {
+    await openV2(page, "/addmany");
+    await page.getByLabel("Your card list").fill("sv3 125\nsv3 223 holo\nzzz 1");
+    await page.getByRole("button", { name: "Add 2 cards" }).click();
+    await expect(page.getByTestId("addmany-added")).toHaveText("Added 2 cards");
+    await expect(page.getByTestId("addmany-not-recognised")).toContainText("zzz 1");
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("button", { name: "Add 2 cards" })).toBeVisible();
+  });
 });
 
 test.describe("add many cards @visual", () => {
+  test("after adding: the confirmation with Undo", async ({ page }) => {
+    await openV2(page, "/addmany");
+    await page.getByLabel("Your card list").fill("sv3 125 x2\nsv3 223 holo\nzzz 1");
+    await page.getByRole("button", { name: "Add 2 cards" }).click();
+    await expect(page.getByTestId("addmany-added")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await stabiliseForSnapshot(page);
+    await expect(page.getByRole("main")).toHaveScreenshot("addmany-added.png", { timeout: 20000 });
+  });
+
   test("first run: the format hint and examples", async ({ page }) => {
     await openV2(page, "/addmany");
     await stabiliseForSnapshot(page);
