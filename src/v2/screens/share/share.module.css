@@ -20,12 +20,20 @@
   margin: var(--v2-space-0);
 }
 
-.total {
+/* On a phone the header wraps and this sits under the title: label and total share the left edge. */
+.totalStack {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--v2-space-1);
   font-size: var(--v2-fs-title);
+}
+
+/* Wide enough to sit beside the title: right-aligned, as before. */
+@media (min-width: 700px) /* v2-tokens-allow: no token can express a breakpoint */ {
+  .totalStack {
+    align-items: flex-end;
+  }
 }
 
 .totalLabel {

@@ -160,7 +160,7 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
         }
         updatedAt={updatedAt}
         aside={
-          <span className={styles.total}>
+          <span className={styles.totalStack}>
             <span className={styles.totalLabel}>Total value</span>
             <Money value={value.total} loading={value.isLoading} absentLabel={UNPRICED} />
           </span>
