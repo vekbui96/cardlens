@@ -6,7 +6,7 @@ import { finishLabel } from "../../../models/finishes.ts";
 import { formatPrice } from "../../../utils/format.ts";
 import { Card, CardArt, Money, Panel, ScreenReaderOnly, Skeleton, Stack } from "../../primitives/index.ts";
 import { EmptyStart } from "../home/EmptyStart.tsx";
-import { mostValuable, TOP_COUNT, valueBySet } from "./insights.ts";
+import { addedThisMonth, mostValuable, TOP_COUNT, valueBySet } from "./insights.ts";
 import styles from "./insights.module.css";
 
 const plural = (n: number, one: string, many: string): string =>
@@ -28,6 +28,11 @@ export function InsightsScreen() {
   const result = useMemo(() => (settled ? mostValuable(owned.rows) : null), [settled, owned.rows]);
 
   const sets = useMemo(() => (settled ? valueBySet(owned.rows) : null), [settled, owned.rows]);
+
+  const added = useMemo(
+    () => (settled ? addedThisMonth(owned.rows, Date.now()) : null),
+    [settled, owned.rows],
+  );
 
   if (collection.length === 0) {
     return (
@@ -53,6 +58,40 @@ export function InsightsScreen() {
           </p>
         ) : null}
       </header>
+
+      <Panel title="Added this month" headingLevel={2}>
+        {added === null ? (
+          <Skeleton height="var(--v2-tap)" />
+        ) : added.count === 0 ? (
+          <Stack gap={3}>
+            <p className={styles.meta} data-testid="insights-added-empty">
+              Nothing marked as owned this month yet.
+            </p>
+            <Card href={`#${screenToPath({ name: "sets" })}`} pad={3}>
+              <Stack gap={1}>
+                <span className={styles.name}>Browse sets</span>
+                <span className={styles.detail}>Pick a set and tick off what you have</span>
+              </Stack>
+            </Card>
+          </Stack>
+        ) : (
+          <Stack gap={1}>
+            <p className={styles.headline} data-testid="insights-added">
+              {plural(added.count, "card", "cards")} marked as owned this month
+              {added.count > added.unpriced ? (
+                <>
+                  , worth <Money value={added.worth} /> now
+                </>
+              ) : null}
+            </p>
+            {added.unpriced > 0 ? (
+              <p className={styles.meta} data-testid="insights-added-unpriced">
+                {added.unpriced} unpriced, left out of the worth
+              </p>
+            ) : null}
+          </Stack>
+        )}
+      </Panel>
 
       <Panel title="Most valuable cards" headingLevel={2}>
         {result === null ? (

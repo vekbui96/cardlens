@@ -82,6 +82,38 @@ export function valueBySet(rows: readonly OwnedPrintingRow[]): ValueBySet {
   };
 }
 
+export interface AddedThisMonth {
+  /** Printings last marked owned in the current calendar month. */
+  count: number;
+  /** Their current worth, USD. Unpriced printings are left out. */
+  worth: number;
+  /** Printings among them with no price; never valued. */
+  unpriced: number;
+}
+
+/**
+ * What was marked owned in the current calendar month (local time), from each
+ * row's `at`. A re-marked row carries a newer `at`, so this is "marked", not
+ * "first acquired". `rows` are live rows only (removals are tombstones the
+ * owned list already drops). Unpriced printings are counted, never valued.
+ */
+export function addedThisMonth(rows: readonly OwnedPrintingRow[], now: number): AddedThisMonth {
+  const d = new Date(now);
+  const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+  let count = 0;
+  let worth = 0;
+  let unpriced = 0;
+  for (const r of rows) {
+    if (!(r.at >= start && r.at < end)) continue;
+    count += 1;
+    const p = priceOf(r);
+    if (p > 0) worth += p;
+    else unpriced += 1;
+  }
+  return { count, worth, unpriced };
+}
+
 /**
  * The printings that carry the value of the collection.
  *

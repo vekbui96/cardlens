@@ -27,7 +27,8 @@ async function seedInsights(page: Page): Promise<void> {
     setId,
     finish,
     number,
-    at: 1_700_000_000_000 + i * 1000,
+    // The first row is old; the other two were marked this month.
+    at: i === 0 ? 1_700_000_000_000 : Date.now() - i * 1000,
   }));
   await page.addInitScript(([key, owned]) => localStorage.setItem(key as string, JSON.stringify(owned)), [
     COLLECTION_KEY,
@@ -68,6 +69,15 @@ test.describe("insights", () => {
     await expect(page.getByRole("heading", { name: "Value by set" })).toBeVisible();
     await expect(page.getByTestId("insights-top-sets")).toHaveText("Top 3 sets = 100% of the total value");
     await expect(page.getByTestId("insights-sets").getByRole("listitem")).toHaveCount(3);
+  });
+
+  test("shows what was marked as owned this month", async ({ page }) => {
+    await seedInsights(page);
+    await openV2(page, "/insights");
+    await expect(page.getByRole("heading", { name: "Added this month" })).toBeVisible();
+    await expect(page.getByTestId("insights-added")).toHaveText(
+      "2 cards marked as owned this month, worth $81.50 now",
+    );
   });
 
   test("a row opens the card", async ({ page }) => {
