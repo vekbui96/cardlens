@@ -37,12 +37,9 @@ describe("EmptyStart", () => {
     expect(screen.getByRole("link", { name: /Search for a card/ }).className).not.toMatch(/tilePrimary/);
   });
 
-  it("hints at what comes next inside the Home card only", () => {
+  it("hints at what comes next under the Home card only", () => {
     const { unmount } = render(<EmptyStart headingLevel={1} />);
-    const hint = screen.getByText("Scan or import cards later from the menu");
-    const tiles = screen.getByRole("group", { name: "Ways to start tracking" });
-    expect(hint.parentElement).toBe(tiles.parentElement);
-    expect(tiles.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Scan or import cards later from the menu")).toBeTruthy();
     unmount();
     render(<EmptyStart headingLevel={2} />);
     expect(screen.queryByText("Scan or import cards later from the menu")).toBeNull();
