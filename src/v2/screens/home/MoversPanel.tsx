@@ -5,7 +5,7 @@ import { topMovers, type Mover, type MoverWindow, type TopMovers } from "../../.
 import { readMoversWindow, storeMoversWindow } from "./moversWindow.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { formatChangeShort, formatUsd } from "../../../utils/format.ts";
-import { Card, Money, Panel, Skeleton, Stack, UNPRICED } from "../../primitives/index.ts";
+import { Card, ErrorNotice, Money, Panel, Skeleton, Stack, UNPRICED } from "../../primitives/index.ts";
 import styles from "./Home.module.css";
 
 /**
@@ -44,14 +44,9 @@ export function MoversPanel({
           data-testid={failed ? "home-movers-failed" : "home-movers-skeleton"}
         >
           {failed ? (
-            <Stack gap={3}>
-              <p className={styles.moversFailedText} role="status">
-                Movers need price data that has not loaded yet. Try again, or wait a minute.
-              </p>
-              <button type="button" className={styles.moverRetry} onClick={onRetry}>
-                Try again
-              </button>
-            </Stack>
+            <ErrorNotice onRetry={() => onRetry?.()}>
+              Movers need price data that has not loaded yet. Try again, or wait a minute.
+            </ErrorNotice>
           ) : (
             // Three rows at the height of the real ones, so the rows arriving move nothing.
             <ul className={styles.list} aria-hidden="true">
