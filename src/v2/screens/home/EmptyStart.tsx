@@ -63,11 +63,11 @@ export function EmptyStart({
             </Card>
             {extraActions}
           </div>
+          {headingLevel === 1 ? (
+            <p className={styles.emptyLater}>Scan or import cards later from the menu</p>
+          ) : null}
         </Stack>
       </Panel>
-      {headingLevel === 1 ? (
-        <p className={styles.emptyLater}>Scan or import cards later from the menu</p>
-      ) : null}
     </>
   );
 }
