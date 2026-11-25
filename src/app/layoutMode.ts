@@ -37,6 +37,34 @@ export function resolveLayoutMode(width: number, height: number, override?: stri
   return "web";
 }
 
+/**
+ * Below this on either side a viewport is not a screen anyone is reading: the
+ * glasses are 600x600 and the smallest phone is over 300px wide.
+ */
+const MIN_REAL_VIEWPORT_PX = 200;
+
+/**
+ * The mode after a resize, keeping the current one through a degenerate size.
+ *
+ * Chromium's full-page capture briefly resizes the window to 1x1. That is
+ * small AND square, so `resolveLayoutMode` called it the glasses, and the app
+ * swapped the whole web tree for the glasses one and back within a frame. The
+ * remount cancelled every in-flight query, so a rate-limited price request
+ * mid-retry lost its 429 and re-asked from scratch. Measured 2026-11-24 in the
+ * CI visual image: the v2 Home rate-limited snapshot flipped between two states
+ * for exactly this reason. No real display is 1px, so a size like that changes
+ * nothing.
+ */
+export function nextLayoutMode(
+  current: LayoutMode,
+  width: number,
+  height: number,
+  override?: string | null,
+): LayoutMode {
+  if (width < MIN_REAL_VIEWPORT_PX || height < MIN_REAL_VIEWPORT_PX) return current;
+  return resolveLayoutMode(width, height, override);
+}
+
 /** True when the device has a real pointer and scrollbar — phone or browser. */
 export function isWebMode(mode: LayoutMode): boolean {
   return mode === "web";
