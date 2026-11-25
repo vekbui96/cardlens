@@ -33,7 +33,7 @@ interface Destination {
  */
 const DESTINATIONS: readonly Destination[] = [
   // The Want list is opened from Home's progress panel, so Home stays current there.
-  { label: "Home", screen: { name: "home" }, also: ["wantlist"] },
+  { label: "Home", screen: { name: "home" }, also: ["wantlist", "insights"] },
   // Sets and Collection are one screen — see specs/02-collection.md. Both
   // names route here, so both must mark this entry current.
   { label: "Collection", screen: { name: "collection" }, also: ["sets", "set", "owned"] },

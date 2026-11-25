@@ -62,6 +62,9 @@ const Scan = lazyWithReload(() => import("./screens/scan/index.ts").then((m) => 
 const WantList = lazyWithReload(() =>
   import("./screens/wantlist/index.ts").then((m) => ({ default: m.WantListScreen })),
 );
+const Insights = lazyWithReload(() =>
+  import("./screens/insights/index.ts").then((m) => ({ default: m.InsightsScreen })),
+);
 /*
  * The three public pages. A visitor who opens one of these will usually never
  * open another screen in this app, so they are their own chunk — nobody
@@ -142,6 +145,8 @@ function render(screen: Screen) {
       return <CardDetails cardId={screen.cardId} {...(screen.summary ? { summary: screen.summary } : {})} />;
     case "wantlist":
       return <WantList />;
+    case "insights":
+      return <Insights />;
     case "workshop":
       return <Workshop />;
     default:

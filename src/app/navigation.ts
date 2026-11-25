@@ -48,6 +48,8 @@ export type Screen =
    * and priced. v1's router has no case for it and falls through to Home.
    */
   | { name: "wantlist" }
+  /** v2 only: which cards carry the value of the collection. v1 falls through to Home. */
+  | { name: "insights" }
   /**
    * v2 and development only: every primitive, in every state, against
    * fixtures. It is a screen rather than a separate entry point so that it

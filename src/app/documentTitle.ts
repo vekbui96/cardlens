@@ -28,6 +28,7 @@ const LABELS: Record<ScreenName, string> = {
   // A shared binder is a showcase to the visitor, trade binder or not.
   trade: "Showcase",
   wantlist: "Want list",
+  insights: "Insights",
   workshop: "Workshop",
 };
 
