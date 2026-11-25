@@ -252,7 +252,7 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
   const headlinePrice = headlineFinish === undefined ? undefined : priceOf(headlineFinish);
 
   return (
-    <Stack gap={5}>
+    <Stack gap={5} className={styles.page}>
       <Row gap={5} align="start" wrap>
         <div className={styles.hero}>
           <CardArt src={card.imageLarge ?? card.imageSmall} name={card.name} detail="hero" eager />
@@ -331,6 +331,24 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
               </p>
             ) : (
               <>
+                <p className={styles.confirm} role="status" data-testid="mark-confirmation">
+                  {markResult && markResult.kind !== "failed" ? (
+                    <>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        aria-hidden="true"
+                      >
+                        <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" />
+                      </svg>
+                      {`${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`}
+                    </>
+                  ) : null}
+                </p>
                 {source === "pricing" ? (
                   <p className={styles.note}>
                     From pricing data only. That never reports pattern foils — Poké Ball, Master Ball, energy
@@ -357,24 +375,6 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
                     {finishLabel(markResult.finish)} could not be saved on this device.
                   </ErrorNotice>
                 ) : null}
-                <p className={styles.confirm} role="status">
-                  {markResult && markResult.kind !== "failed" ? (
-                    <>
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="20"
-                        height="20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        aria-hidden="true"
-                      >
-                        <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" />
-                      </svg>
-                      {`${markResult.kind === "marked" ? "Marked as owned" : "Unmarked"}: ${finishLabel(markResult.finish)}.`}
-                    </>
-                  ) : null}
-                </p>
               </>
             )}
           </Stack>
