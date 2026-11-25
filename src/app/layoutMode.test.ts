@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLayoutMode } from "./layoutMode.ts";
+import { nextLayoutMode, resolveLayoutMode } from "./layoutMode.ts";
 
 describe("resolveLayoutMode", () => {
   it("treats the 600x600 device viewport as glasses", () => {
@@ -44,5 +44,22 @@ describe("resolveLayoutMode", () => {
 
   it("ignores an unknown override", () => {
     expect(resolveLayoutMode(1440, 900, "banana")).toBe("web");
+  });
+});
+
+describe("nextLayoutMode", () => {
+  it("keeps the current mode through Chromium's 1x1 full-page capture resize", () => {
+    // 1x1 is small and square, which resolveLayoutMode calls the glasses; a web
+    // session flipped to the glasses tree and back, remounting every screen.
+    expect(resolveLayoutMode(1, 1)).toBe("glasses");
+    expect(nextLayoutMode("web", 1, 1)).toBe("web");
+    expect(nextLayoutMode("glasses", 1, 1)).toBe("glasses");
+    expect(nextLayoutMode("web", 0, 0)).toBe("web");
+  });
+
+  it("still follows a real resize", () => {
+    expect(nextLayoutMode("web", 600, 600)).toBe("glasses");
+    expect(nextLayoutMode("glasses", 390, 844)).toBe("web");
+    expect(nextLayoutMode("web", 1440, 900, "preview")).toBe("preview");
   });
 });

@@ -24,6 +24,7 @@ CL_E2E_API_PORT=8887`. The default API port is 8787 — the LIVE `cardlens`
 - **Running checks: use the `cardlens-test-runner` agent** (Haiku). It runs
   `npm run verify` and, only when screens changed, e2e on the isolated ports, then
   returns a summary that labels failures KNOWN (on the list below) or NEW.
+- **A full-page screenshot resizes the window to 1x1 for a moment.** That read as the glasses (small and square) and remounted the whole app mid-test, cancelling in-flight queries; the v2 Home rate-limited snapshot flipped between two states because of it (2026-11-24). `nextLayoutMode` now ignores sizes under 200px. If a visual case shows a state its own assertion contradicts, suspect a remount during the shot.
 - Tombstone tests need plausible epoch timestamps — `deletedAt: 300` is 1970 and gets pruned as ancient before any assertion sees it.
 
 ## Known failures on SERVER-PC
