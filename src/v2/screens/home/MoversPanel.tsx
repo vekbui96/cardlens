@@ -45,8 +45,8 @@ export function MoversPanel({
         >
           {failed ? (
             <Stack gap={3}>
-              <p className={styles.resumeMeta} role="status">
-                Movers need price data that has not loaded yet.
+              <p className={styles.moversFailedText} role="status">
+                Movers need price data that has not loaded yet. Try again, or wait a minute.
               </p>
               <button type="button" className={styles.moverRetry} onClick={onRetry}>
                 Try again

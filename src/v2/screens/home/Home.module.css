@@ -413,6 +413,12 @@
   min-height: calc(3 * var(--v2-tap) + 2 * var(--v2-space-2));
 }
 
+.moversFailedText {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg);
+  font-size: var(--v2-fs-body);
+}
+
 .moverRetry {
   align-self: flex-start;
   min-height: var(--v2-tap);
