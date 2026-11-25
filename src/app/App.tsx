@@ -6,7 +6,12 @@ import { LibraryProvider } from "./LibraryProvider.tsx";
 import { TextEntryProvider } from "./TextEntryProvider.tsx";
 import { ScreenRouter } from "./ScreenRouter.tsx";
 import { GlassesFrame } from "../components/GlassesFrame.tsx";
-import { layoutOverrideFromLocation, resolveLayoutMode, type LayoutMode } from "./layoutMode.ts";
+import {
+  layoutOverrideFromLocation,
+  nextLayoutMode,
+  resolveLayoutMode,
+  type LayoutMode,
+} from "./layoutMode.ts";
 import { DevPanel } from "../components/dev/DevPanel.tsx";
 import { migrateStorage } from "../storage/versioned.ts";
 import { activeUiVersion } from "./uiVersion.ts";
@@ -49,7 +54,12 @@ function useLayoutMode(): LayoutMode {
 
   const [mode, setMode] = useState<LayoutMode>(read);
   useEffect(() => {
-    const onResize = () => setMode(read());
+    // Not `read()`: a resize keeps the current mode through a degenerate size
+    // (see `nextLayoutMode`) rather than remounting the app for one frame.
+    const onResize = () =>
+      setMode((current) =>
+        nextLayoutMode(current, window.innerWidth, window.innerHeight, layoutOverrideFromLocation()),
+      );
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     return () => {
