@@ -421,25 +421,32 @@ button.pocket:hover {
    and it share one row at 390px. */
 .iconButton {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--v2-space-0);
   min-width: var(--v2-tap);
-  padding: var(--v2-space-2);
+  padding: var(--v2-space-1) var(--v2-space-2);
+}
+
+.settingsLabel {
+  font-size: var(--v2-fs-tiny);
+  line-height: 1;
 }
 
 .pageActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--v2-space-1);
+  gap: var(--v2-space-2);
 }
 
 /* The page-actions row: tighter gap and side padding so five controls fit at 390px. */
 .pageActions .button {
-  padding-inline: var(--v2-space-2);
+  padding-inline: var(--v2-space-1);
 }
 
 .pageActions .iconButton {
-  padding-inline: var(--v2-space-2);
+  padding-inline: var(--v2-space-1);
 }
 
 .button:hover:not(:disabled) {
