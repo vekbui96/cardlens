@@ -192,6 +192,9 @@ export function ScanScreen() {
     return auto ? autoHint(hint) : "Tap Capture for each card.";
   })();
 
+  // The reason is said once, beside the disabled Start camera button.
+  const hideStatus = needsCardList && !live && !blocked && cards.state.status === "failed";
+
   return (
     <Stack gap={5}>
       <header>
@@ -242,9 +245,11 @@ export function ScanScreen() {
             title="Viewfinder"
             headingLevel={2}
             aside={
-              <Chip tone={engine === "server" && !blocked ? "accent" : "default"}>
-                {engine === "server" ? "Server" : needsCardList ? NEEDS_CARD_LIST : "On device"}
-              </Chip>
+              needsCardList ? undefined : (
+                <Chip tone={engine === "server" && !blocked ? "accent" : "default"}>
+                  {engine === "server" ? "Server" : "On device"}
+                </Chip>
+              )
             }
           >
             <Stack gap={3}>
@@ -304,9 +309,11 @@ export function ScanScreen() {
                 ) : null}
               </div>
 
-              <p className={styles.status} role="status">
-                {status}
-              </p>
+              {hideStatus ? null : (
+                <p className={styles.status} role="status">
+                  {status}
+                </p>
+              )}
               {engineNote ? <p className={styles.muted}>{engineNote}</p> : null}
               {engine === "server" && !hasToken && !blocked ? (
                 <p className={styles.muted}>Connect this device in Settings to use the server.</p>
@@ -340,7 +347,7 @@ export function ScanScreen() {
                 )}
               </Row>
 
-              <div className={styles.modeRow}>
+              <div className={cx(styles.modeRow, needsCardList && styles.modeRowDimmed)}>
                 <Chip
                   onPress={() => {
                     // Fresh state either way: a stale baseline from before the
@@ -348,8 +355,8 @@ export function ScanScreen() {
                     autoState.current = initialAutoState;
                     setAuto((on) => !on);
                   }}
-                  pressed={auto}
-                  tone={auto ? "accent" : "default"}
+                  pressed={auto && !needsCardList}
+                  tone={auto && !needsCardList ? "accent" : "default"}
                 >
                   Auto capture
                 </Chip>

@@ -57,8 +57,8 @@ describe("ScanScreen when the card index failed on a device with no server token
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("Reason: HTTP 500")).toBeInTheDocument();
 
-    // Chip beside the viewfinder, and the status line under the camera.
-    expect(screen.getAllByText("Needs the card list").length).toBeGreaterThanOrEqual(2);
+    // Said once, beside the disabled Start camera button.
+    expect(screen.getAllByText("Needs the card list")).toHaveLength(1);
     expect(screen.queryByText("Recognition runs on this device.")).toBeNull();
     expect(screen.queryByText("On device")).toBeNull();
   });
