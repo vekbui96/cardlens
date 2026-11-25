@@ -6,37 +6,95 @@ The loop reads this file and never writes it. Empty or missing = no steering.
 It weights what the loop proposes; it does not change what the loop may build (LOOP.md rules 7 and 8 still apply).
 -->
 
-## Direction (set 2026-11-19 by Ve; UI/UX lead added 2026-11-22)
+## Direction (set 2026-11-19 by Ve; growth features lead from 2026-11-24)
 
 Move CardLens toward the experience of the best collector apps (Rare Candy, Collectr, Dex): knowing what
-the collection is worth and how it is moving, finishing sets, and showing cards off, in a polished,
-fast phone UI. Match **capabilities**, never their branding, names, art or exact layouts. Single user
-(Ve) on the **web / phone** shell; no accounts, marketplace, payments or social network (see Avoid).
+the collection is worth and how it is moving, finishing sets, trading, and showing cards off, in a
+polished, fast phone UI. Match **capabilities**, never their branding, names, art or exact layouts. Single
+user (Ve) on the **web / phone** shell; no accounts, marketplace, payments or social network (see Avoid).
 
-## Order of work (set 2026-11-22 by Ve)
+**2026-11-24, Ve: "innovate more on features so the product can grow."** The UI/UX polish pass of
+2026-11-22 has done its job (about 60 polish items shipped between 11-22 and 11-25). New ideas now lead
+with **features that give a collector a new reason to open CardLens**, not more readability tweaks.
 
-1. **Approved work finishes first.** Approved proposals, approved specs and their slices (#166 slices
-   #175, #176, #181; the #191 showcase slices) and request children keep building ahead of anything new,
-   exactly as today. Do not propose anything that overlaps or reworks an approved, unbuilt slice.
-2. **New ideas are front-end UI/UX enhancements.** Every new proposal and spec enhances how the web /
-   phone UI looks, reads and feels: v2 screens, polish, interaction quality, motion with purpose,
-   empty / loading / error states, information hierarchy, consistency, accessibility, perceived speed.
-   New features are fine when the idea is mainly a UI/UX improvement to a screen Ve already uses.
+## Order of work (set 2026-11-22, updated 2026-11-24 by Ve)
+
+1. **Approved work finishes first.** Approved proposals, approved specs and their slices and request
+   children keep building ahead of anything new, exactly as today. Do not propose anything that
+   overlaps or reworks an approved, unbuilt slice.
+2. **New ideas are growth features.** Every new spec, and most new proposals, add a capability Ve does
+   not have today: something new to do, see or decide in CardLens. A feature with a good UI beats a
+   better UI on an existing feature.
+3. **Polish is capped: at most 1 in 5 new items** (count the open proposal queue plus this run's new
+   items) may be polish-only (spacing, labels, wording, tap targets, focus rings, skeleton tweaks, error
+   copy on a screen that already works). While 2 or more polish-only proposals are open, propose no more
+   polish. A run that finds no feature idea worth proposing proposes fewer items, not polish to fill
+   the slots. Accessibility bugs that block a task and real defects are not capped.
+
+## Feature specs wanted (set 2026-11-24, in this order)
+
+Write each as a spec (LOOP.md 5.7, 3-5 slices). Check open and closed issues first and build on what is
+live; the "Already live" line under each says what not to re-propose.
+
+1. **Collection insights.** A screen (or a Home section that leads to one) that answers "what is my
+   collection?": value and count by set, era, rarity and type; most valuable cards; how concentrated
+   the value is (top 10 cards = n% of the total); price coverage; what was added this month and what it
+   is worth now; gain or loss since a card was added where the add date is stored. Derived from data
+   already stored and the prices already fetched, so it should need no server or stored-data change.
+   Already live: Home total, value over time (#117), biggest movers (#102 / #121), since you last looked
+   (#110), per-set worth and Most valuable sort (#134), Biggest change sort (#129).
+2. **Set goals and a real want list.** Choose which sets Ve is chasing (and whether a set means the base
+   list or every printing / master set), see progress and cost to finish per goal, and mark single cards
+   as wanted outside owned sets (the chase card from a set Ve does not collect). Shopping view: the
+   wanted cards sorted by price with a running budget, copyable for a card show. Already live: derived
+   want list across owned sets (#142 / #146 / #147 / #150), set To finish cost (#136), Copy missing list
+   (#137), Closest to complete (#106 / #122).
+3. **Bulk add, import and full export.** Add many cards fast without the scanner: paste or type a list
+   ("SV3 125", set code + number, quantity, printing), a whole-set "I have 1-50" range, CSV import, with
+   a preview of what will be added and an undo. Full backup export of the collection and binders (CSV
+   and JSON) from the phone. Imports go through the existing add path; merge rules stay untouched.
+   Already live: Download CSV of owned cards (#138).
+4. **Price watch and card price history, in-app only.** A watch list of cards Ve is thinking of buying
+   or selling, each with its current price and its 7 / 30 day movement, a Home row when a watched card
+   moves past a threshold Ve sets (shown in the app, never pushed), and a price history line on card
+   details. Measure first: what per-card history the price source and server already keep; if per-card
+   history needs a server piece, that is slice 1 and needs Ve. Already live: movers strip and windows,
+   mover current price (#155).
+5. **Trade builder.** Pick cards from Ve's trade binder against the other collector's list, see both
+   sides' value and the balance as it changes, and share the trade as a read-only link; mark a trade done
+   and move the cards. Already live: trade share page and enlarged card sheet (#207 / #221 / #236 /
+   #282 / #295), binder showcase share (#191).
+
+After these, earlier queued ideas still count as features: faster shop mode for scan bursts (PRODUCT.md
+bet 3, scan UI only) and trade-link conversion (bet 4, measure first).
+
+## Server, stored data and approval (read before writing any spec)
+
+Ve's standing policy (`innovation/AUTONOMY.json`) auto-approves only Pages-only work outside the server,
+stored data and protected areas. Most growth features touch one of those, so:
+
+- **Anything that needs a server change or a new or changed stored data shape (collection, binders,
+  shares, a wishlist / watch list / goals, value or price snapshots, new storage keys, even
+  device-local ones) comes as a spec for Ve.** Say so plainly at the top of the spec: "Needs Ve:
+  <server / stored data>, because <reason>", and put that piece in the FIRST slice so the rest can flow.
+- Where it is honest, offer a derived-first design: slice 1 shows what can be computed from data that
+  already exists (Pages only), later slices add the stored or server part.
+- Never present a server or stored-data slice as Pages-only to get it auto-approved.
 
 ## Rules for every UI proposal
 
-- **Why** says, in one plain sentence, what Ve will notice on the phone (before -> after).
+- **Why** says, in one plain sentence, what Ve will notice on the phone (before -> after); for a feature,
+  what Ve can now do that he could not before.
 - **Evidence:** cite the Observer's finding(s) for that screen (loop-refs) and, with DESIGN_SKILLS on,
   one `shot` of the live target screen at 390x844 and, if useful, one `detect` on its files (LOOP.md
   section 9: at most two skill calls per proposal); quote what you saw, at what width.
 - **How it would be tested** lists the before and after screenshots for the PR (390px, plus 1440px when
   desktop layout changes).
-- **Lens and metric:** name "web UI/UX" alongside the closest listed lens.
+- **Lens and metric:** name the closest listed lens ("web UI/UX" for polish).
 - Web rules: focus ring off, 44px tap targets, no layout shift while prices load, partial success over
   blank, "unpriced" over invented numbers.
-- **v2 first** (Ve uses v2 most: `ui.v2` 11 vs `ui.v1` 6 over 30 days); v1 keeps working; closing a v2
-  parity gap (`docs/v2/specs/`) counts as UI work. Use the v2 tokens and primitives (ErrorNotice from
-  #174, the shared empty state from #165); no redesigns, no new visual language.
+- **v2 first** (Ve uses v2 most); v1 keeps working. Use the v2 tokens and primitives (ErrorNotice, the
+  shared empty state, Skeleton); new screens look like the existing v2 screens, no new visual language.
 
 ## Approve specs, not single ideas (set 2026-11-21 by Ve)
 
@@ -45,44 +103,27 @@ section 1 "Specs"), so one approval should unlock several builds.
 
 - **Default to a spec** (LOOP.md 5.7) for anything more than one small, self-contained change:
   multi-step work, anything touching several screens, anything needing new stored data or a server
-  piece. Single proposals are only for genuinely small polish or fixes: Size S, one screen, front end
-  only. Never a run of unlinked issues.
+  piece. Single proposals are for small features on one screen or the capped polish.
 - **Keep one spec waiting for Ve.** After any slices to open, if `slots.mayOpenSpec` is true and a slot
-  is free, the session's first new item is a spec whenever a worthwhile multi-step idea exists. The
-  LOOP.md limit stays: at most one unapproved spec at a time.
+  is free, the session's first new item is a spec from the list above. The LOOP.md limit stays: at most
+  one unapproved spec at a time.
 - **Write specs that flow without Ve:** 3-5 slices, each independently shippable, in build order, a
-  screen or two per slice. Put anything Manual / needs Ve in the FIRST slice(s) or name it plainly;
-  prefer a design with no Manual slice (derive from data already stored, or device-local storage).
-- **Done or approved already** (never re-propose): want list #142, first-run onboarding #153, v2
-  consistency #166, collector showcase #191. Check open and closed issues before any new spec.
-- **Next UI/UX specs, in this order:**
-  1. **Card details v2**: image first, a clear price / printing / owned hierarchy, marking a printing
-     from the details screen in one tap with immediate feedback, swipe or arrows to the next card.
-  2. **Loading and perceived speed**: skeletons shaped like the final layout on Home, My cards, Set and
-     Search; time to first useful number; optimistic marks that confirm or roll back visibly.
-  3. **Motion and feedback with purpose**: sheet and screen transitions, mark / unmark and copy
-     confirmations, progress changes; short, interruptible, off under `prefers-reduced-motion`.
-  4. **Accessibility and touch pass on v2**: contrast, labels for icon buttons, focus return from sheets,
-     thumb reach for primary actions, iOS safe areas, a screen or two per slice.
-  5. **Navigation and hierarchy**: the v2 shell, back behaviour, what each screen leads with, Home's
-     "what's next" rows that go somewhere.
+  screen or two per slice. Put anything Manual / needs Ve in the FIRST slice(s) and name it plainly.
+- **Done or approved already** (never re-propose): value over time #108, want list #142, first-run
+  onboarding #153, v2 consistency #166, collector showcase #191, card details v2 #203, loading and
+  perceived speed #243, Collection and Home polish #266.
 
 ## Priorities (in order, for new ideas)
 
-1. **Interaction quality and polish of v2 screens.** Tap feedback, one-tap paths for common jobs, clear
-   primary actions, nothing that looks unfinished at 390px.
-2. **Empty, loading and error states; perceived speed.** Every state explains itself and offers the next
-   step; skeletons instead of jumping numbers; lazy chunks where the first screen waits on them.
-3. **Information hierarchy and consistency.** One way to show a price, a percentage, an empty list, an
-   error; the most important number first; one-off styles removed.
-4. **Accessibility and touch ergonomics.** Contrast, labels, focus return, reduced motion, thumb reach,
-   safe areas.
-5. **Motion with purpose.** Only where it explains a change of state; never decoration.
-6. **Value, movement and Home follow-ups** as small UI improvements to what is live (total, movers,
-   value over time #108 / #117 / #110). Percent only, never mixing EUR into USD; floor out cheap cards.
-7. **Set completion and want list follow-ups** on the shipped want list screens (#146, #147, #150).
-8. **Binder and trade-binder UX** on phone / web, and robustness tests around sync, storage round-trips
-   and parsing (supporting work, not in place of the above).
+1. **Growth features from the list above** (insights, set goals and want list, bulk add / import /
+   export, price watch and history, trade builder).
+2. **Smaller features on live screens** that add a capability (a new sort, filter, total, shortcut or
+   link between screens that answers a collector's question).
+3. **Value, movement and set completion follow-ups** that add information, not only layout. Percent
+   only, never mixing EUR into USD; floor out cheap cards.
+4. **Binder and trade-binder features** on phone / web, and robustness tests around sync, storage
+   round-trips and parsing (supporting work).
+5. **Polish** (interaction quality, states, consistency, accessibility, motion), within the 1 in 5 cap.
 
 ## Avoid
 
