@@ -22,6 +22,66 @@ export interface MostValuable {
 const priceOf = (row: OwnedPrintingRow): number =>
   typeof row.price === "number" && Number.isFinite(row.price) && row.price > 0 ? row.price : 0;
 
+/** How many sets the top-sets share line covers. */
+export const TOP_SETS = 3;
+
+export interface SetValue {
+  setId: string;
+  setName: string;
+  /** Sum of the set's priced printings, USD. */
+  worth: number;
+  /** Share of the total priced value, whole percent. */
+  sharePct: number;
+  priced: number;
+  /** Printings in this set with no price; never valued. */
+  unpriced: number;
+}
+
+export interface ValueBySet {
+  sets: SetValue[];
+  /** The top sets' share of the total, whole percent. Null when nothing is priced. */
+  topShare: { count: number; pct: number } | null;
+  unpriced: number;
+}
+
+/**
+ * Where the value sits, set by set. Unpriced printings are counted against
+ * their set and left out of every sum (unknown, not zero); a set holding only
+ * unpriced cards is kept, last, so the count is visible. USD only.
+ */
+export function valueBySet(rows: readonly OwnedPrintingRow[]): ValueBySet {
+  const bySet = new Map<string, SetValue>();
+  let total = 0;
+  for (const r of rows) {
+    const entry = bySet.get(r.setId) ?? {
+      setId: r.setId,
+      setName: r.setName,
+      worth: 0,
+      sharePct: 0,
+      priced: 0,
+      unpriced: 0,
+    };
+    const p = priceOf(r);
+    if (p > 0) {
+      entry.worth += p;
+      entry.priced += 1;
+      total += p;
+    } else {
+      entry.unpriced += 1;
+    }
+    bySet.set(r.setId, entry);
+  }
+  const sets = [...bySet.values()].sort((a, b) => b.worth - a.worth || a.setId.localeCompare(b.setId));
+  for (const s of sets) s.sharePct = total > 0 ? Math.round((s.worth / total) * 100) : 0;
+  const top = sets.slice(0, TOP_SETS);
+  const topSum = top.reduce((sum, s) => sum + s.worth, 0);
+  return {
+    sets,
+    topShare: total > 0 ? { count: top.length, pct: Math.round((topSum / total) * 100) } : null,
+    unpriced: rows.length - sets.reduce((n, s) => n + s.priced, 0),
+  };
+}
+
 /**
  * The printings that carry the value of the collection.
  *

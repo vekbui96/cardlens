@@ -6,7 +6,7 @@ import { finishLabel } from "../../../models/finishes.ts";
 import { formatPrice } from "../../../utils/format.ts";
 import { Card, CardArt, Money, Panel, ScreenReaderOnly, Skeleton, Stack } from "../../primitives/index.ts";
 import { EmptyStart } from "../home/EmptyStart.tsx";
-import { mostValuable, TOP_COUNT } from "./insights.ts";
+import { mostValuable, TOP_COUNT, valueBySet } from "./insights.ts";
 import styles from "./insights.module.css";
 
 const plural = (n: number, one: string, many: string): string =>
@@ -26,6 +26,8 @@ export function InsightsScreen() {
   const owned = useOwnedCards({ backfill: false });
   const settled = owned.pricing === 0 && owned.pending === 0;
   const result = useMemo(() => (settled ? mostValuable(owned.rows) : null), [settled, owned.rows]);
+
+  const sets = useMemo(() => (settled ? valueBySet(owned.rows) : null), [settled, owned.rows]);
 
   if (collection.length === 0) {
     return (
@@ -67,7 +69,7 @@ export function InsightsScreen() {
         ) : result.top.length === 0 ? (
           <p className={styles.meta}>None of your cards has a price yet, so there is nothing to rank.</p>
         ) : (
-          <ol className={styles.list}>
+          <ol className={styles.list} data-testid="insights-top-list">
             {result.top.map(({ row, sharePct }, i) => (
               <li key={`${row.cardId}|${row.finish}`}>
                 <Card
@@ -95,6 +97,40 @@ export function InsightsScreen() {
               </li>
             ))}
           </ol>
+        )}
+      </Panel>
+
+      <Panel title="Value by set" headingLevel={2}>
+        {sets === null ? (
+          <Skeleton height="var(--v2-tap)" />
+        ) : sets.sets.length === 0 || sets.topShare === null ? (
+          <p className={styles.meta}>None of your cards has a price yet, so there is nothing to total.</p>
+        ) : (
+          <Stack gap={3}>
+            <p className={styles.headline} data-testid="insights-top-sets">
+              Top {sets.topShare.count} {sets.topShare.count === 1 ? "set" : "sets"} = {sets.topShare.pct}% of
+              the total value
+            </p>
+            <ol className={styles.setList} data-testid="insights-sets">
+              {sets.sets.map((s) => (
+                <li
+                  key={s.setId}
+                  className={styles.setRow}
+                  aria-label={`${s.setName}, ${formatPrice(s.worth)}, ${s.sharePct}% of the total${s.unpriced > 0 ? `, ${plural(s.unpriced, "card", "cards")} unpriced` : ""}`}
+                >
+                  <span className={styles.name}>{s.setName}</span>
+                  <span className={styles.figures}>
+                    <Money value={s.worth} />
+                    <span className={styles.detail}>{s.sharePct}%</span>
+                  </span>
+                  <span className={styles.bar} aria-hidden="true">
+                    <span className={styles.barFill} style={{ width: `${s.sharePct}%` }} />
+                  </span>
+                  {s.unpriced > 0 ? <span className={styles.detail}>{s.unpriced} unpriced</span> : null}
+                </li>
+              ))}
+            </ol>
+          </Stack>
         )}
       </Panel>
     </Stack>
