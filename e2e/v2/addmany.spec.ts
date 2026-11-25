@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
 
 /**
@@ -61,6 +61,14 @@ test.describe("add many cards: whole set and CSV", () => {
   });
 });
 
+/** The page is taller than the viewport now: drop focus and scroll to the top so the sticky header and focus ring cannot differ between runs. */
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    window.scrollTo(0, 0);
+  });
+}
+
 test.describe("add many cards @visual", () => {
   test("after adding: the confirmation with Undo", async ({ page }) => {
     await openV2(page, "/addmany");
@@ -69,6 +77,7 @@ test.describe("add many cards @visual", () => {
     await expect(page.getByTestId("addmany-added")).toBeVisible();
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
+    await settle(page);
     await expect(page.getByRole("main")).toHaveScreenshot("addmany-added.png", { timeout: 20000 });
   });
 
@@ -85,6 +94,7 @@ test.describe("add many cards @visual", () => {
     await expect(page.getByTestId("addmany-not-recognised")).toContainText("has no card number 999");
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
+    await settle(page);
     await expect(page.getByRole("main")).toHaveScreenshot("addmany-preview.png", { timeout: 20000 });
   });
 });
