@@ -76,11 +76,9 @@ interface ChipProps {
   onPress?: () => void;
   pressed?: boolean;
   label?: string;
-  /** Inert: aria-disabled, and a press does nothing (the button stays focusable). */
-  disabled?: boolean;
 }
 
-export function Chip({ children, tone = "default", onPress, pressed, label, disabled }: ChipProps) {
+export function Chip({ children, tone = "default", onPress, pressed, label }: ChipProps) {
   const cls = cx(
     styles.chip,
     tone === "accent" && styles.chipAccent,
@@ -93,8 +91,7 @@ export function Chip({ children, tone = "default", onPress, pressed, label, disa
       <button
         type="button"
         className={cx(cls, styles.chipButton)}
-        onClick={disabled ? undefined : onPress}
-        {...(disabled ? { "aria-disabled": true, "data-chip-disabled": "" } : {})}
+        onClick={onPress}
         {...(pressed === undefined ? {} : { "aria-pressed": pressed })}
         {...(label ? { "aria-label": label } : {})}
       >

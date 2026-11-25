@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   CatalogProvider,
@@ -69,19 +69,5 @@ describe("ScanScreen when the card index failed on a device with no server token
     const start = await screen.findByRole("button", { name: "Start camera" });
     expect(start).toHaveAttribute("aria-disabled", "true");
     expect(start.parentElement).toHaveTextContent("Needs the card list");
-  });
-
-  it("makes the dimmed Auto capture pill inert: aria-disabled, and a tap changes nothing", async () => {
-    render(<ScanScreen />, { wrapper: Wrapper });
-    await screen.findByRole("alert");
-    const pill = await screen.findByRole("button", { name: "Auto capture" });
-    expect(pill).toHaveAttribute("aria-disabled", "true");
-    expect(pill).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(pill);
-    fireEvent.click(pill);
-    fireEvent.click(pill);
-    // A hidden toggle would flip `auto` here; the pill must look and read the same.
-    expect(pill).toHaveAttribute("aria-pressed", "false");
-    expect(pill).toHaveAttribute("aria-disabled", "true");
   });
 });

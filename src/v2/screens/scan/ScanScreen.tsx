@@ -355,7 +355,6 @@ export function ScanScreen() {
                     autoState.current = initialAutoState;
                     setAuto((on) => !on);
                   }}
-                  disabled={needsCardList}
                   pressed={auto && !needsCardList}
                   tone={auto && !needsCardList ? "accent" : "default"}
                 >
