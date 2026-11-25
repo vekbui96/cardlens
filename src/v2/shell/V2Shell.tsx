@@ -36,7 +36,7 @@ const DESTINATIONS: readonly Destination[] = [
   { label: "Home", screen: { name: "home" }, also: ["wantlist", "insights"] },
   // Sets and Collection are one screen — see specs/02-collection.md. Both
   // names route here, so both must mark this entry current.
-  { label: "Collection", screen: { name: "collection" }, also: ["sets", "set", "owned"] },
+  { label: "Collection", screen: { name: "collection" }, also: ["sets", "set", "owned", "addmany"] },
   { label: "Search", screen: { name: "results", query: "" }, also: ["details"] },
   { label: "Scan", screen: { name: "scan" } },
   { label: "Binders", screen: { name: "binders" }, also: ["binder"] },

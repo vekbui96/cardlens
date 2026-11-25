@@ -141,6 +141,9 @@ export function track(event: MetricEvent, n = 1): void {
  * rather than being counted under a name the server would refuse.
  */
 export function trackScreen(name: ScreenName): void {
+  // Not counted yet: a new event name needs a server deploy (the shared vocabulary
+  // is a server file), which this preview-only screen does not justify.
+  if (name === "addmany") return;
   track(`screen.${name}`);
 }
 

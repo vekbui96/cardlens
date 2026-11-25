@@ -1,0 +1,151 @@
+/* Add many cards (v2 only, so nothing here can reach the glasses). */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.headline {
+  margin: var(--v2-space-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.meta {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+}
+
+.label {
+  font-weight: var(--v2-fw-medium);
+}
+
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: calc(var(--v2-tap) * 3);
+  padding: var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  resize: vertical;
+}
+
+.textarea:focus-visible,
+.example:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
+.example {
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-body);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.list,
+.missing {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20em), 1fr));
+  gap: var(--v2-space-2);
+}
+
+.missing {
+  grid-template-columns: 1fr;
+}
+
+.missingRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+}
+
+.raw {
+  font-weight: var(--v2-fw-medium);
+  overflow-wrap: anywhere;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--v2-space-3);
+  align-items: center;
+  min-height: var(--v2-tap);
+}
+
+.art {
+  display: block;
+  width: 2.6em;
+  flex: none;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A fixed slot, so a price arriving never shifts the row. */
+.price {
+  min-width: 5.5em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton {
+  height: var(--v2-space-7);
+  border-radius: var(--v2-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface) 25%,
+    var(--v2-surface-raised) 37%,
+    var(--v2-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: addManyShimmer var(--v2-dur-shimmer) var(--v2-ease) infinite;
+}
+
+@keyframes addManyShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
