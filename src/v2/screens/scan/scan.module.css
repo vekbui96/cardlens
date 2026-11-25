@@ -249,14 +249,22 @@
 /* Mode pills: scan-only override of the shared 11px chip. */
 .modeRow {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--v2-space-2);
+  flex-wrap: nowrap;
+  gap: var(--v2-space-1);
 }
 
 .modeRow > button {
   font-size: var(--v2-fs-pill);
   min-height: var(--v2-tap);
-  padding: var(--v2-space-1) var(--v2-space-3);
+  padding: var(--v2-space-1) var(--v2-space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+.modeRowDimmed {
+  opacity: 0.6;
 }
 
 .primary:disabled,
