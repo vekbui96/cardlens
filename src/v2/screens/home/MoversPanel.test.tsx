@@ -92,12 +92,12 @@ describe("MoversPanel", () => {
     // Not busy any more: the status text and Try again are announced, and the block keeps the placeholders' height.
     expect(block.getAttribute("aria-busy")).toBe("false");
     expect(block.className).toMatch(/moversFailed/);
-    const status = screen.getByRole("status");
-    expect(status.textContent).toMatch(/Movers need price data.*Try again, or wait a minute\./);
-    expect(status.className).toMatch(/moversFailedText/);
-    expect(status.className).not.toMatch(/resumeMeta/);
+    // The shared ErrorNotice: the message is an alert, the retry sits outside it.
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/Movers need price data.*Try again, or wait a minute\./);
+    expect(screen.queryByRole("status")).toBeNull();
     const button = screen.getByRole("button", { name: "Try again" });
-    expect(button.className).toMatch(/moverRetry/);
+    expect(alert.contains(button)).toBe(false);
     fireEvent.click(button);
     expect(retry).toHaveBeenCalledTimes(1);
   });
