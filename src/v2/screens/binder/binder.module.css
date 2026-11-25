@@ -417,6 +417,31 @@ button.pocket:hover {
   white-space: nowrap;
 }
 
+/* Compact icon-only button (Settings): a 44px square, so the four page actions
+   and it share one row at 390px. */
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--v2-tap);
+  padding: var(--v2-space-2);
+}
+
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-1);
+}
+
+/* The page-actions row: tighter gap and side padding so five controls fit at 390px. */
+.pageActions .button {
+  padding-inline: var(--v2-space-2);
+}
+
+.pageActions .iconButton {
+  padding-inline: var(--v2-space-2);
+}
+
 .button:hover:not(:disabled) {
   border-color: var(--v2-accent);
 }

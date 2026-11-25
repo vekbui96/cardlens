@@ -35,7 +35,7 @@ import {
 import { imageSlotSrc } from "../../../services/sync/binderImages.ts";
 import { BinderSpread } from "./BinderSpread.tsx";
 import { BinderPicker } from "./BinderPicker.tsx";
-import { BinderSettings } from "./BinderSettings.tsx";
+import { BinderSettings, BinderSettingsToggle, useBinderSettingsDisclosure } from "./BinderSettings.tsx";
 import { BinderShowcase } from "./BinderShowcase.tsx";
 import { SharePreview } from "./SharePreview.tsx";
 import { applyDrop, applyPlace } from "./binderEdits.ts";
@@ -82,6 +82,7 @@ export function BinderScreen({ binderId }: { binderId: string }) {
    * "a pocket is a pocket" exists to prevent. `RailHost` guarantees the zero.
    */
   const [railOpen, setRailOpen] = useState(false);
+  const settings = useBinderSettingsDisclosure();
   const wide = useWideLayout();
 
   /**
@@ -420,7 +421,7 @@ export function BinderScreen({ binderId }: { binderId: string }) {
       {/* Page actions only. Everything that configures the binder itself lives
           in Settings, because those are decided once and these are pressed
           constantly. */}
-      <Row gap={2} wrap>
+      <div className={styles.pageActions}>
         {/* First, because it is the one action here that is not editing. */}
         <button
           type="button"
@@ -471,6 +472,7 @@ export function BinderScreen({ binderId }: { binderId: string }) {
         >
           Remove page
         </button>
+        <BinderSettingsToggle open={settings.open} panelId={settings.panelId} onToggle={settings.toggle} />
         {wide ? (
           /* The rail's own handle cannot live IN the rail: a shut rail takes
              zero width, so there would be nothing to press. */
@@ -483,9 +485,9 @@ export function BinderScreen({ binderId }: { binderId: string }) {
             {railOpen ? "Hide cards" : "Cards"}
           </button>
         ) : null}
-      </Row>
+      </div>
 
-      <BinderSettings binder={binder} onSave={commit} />
+      <BinderSettings binder={binder} onSave={commit} open={settings.open} panelId={settings.panelId} />
 
       {wide ? (
         <RailHost open={railOpen} label="Cards" rail={railOpen ? picker : null}>

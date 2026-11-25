@@ -24,37 +24,79 @@ import styles from "./binder.module.css";
  * binder has to stay visible underneath while you do it. A dialog would cover
  * the thing being configured.
  */
+export function useBinderSettingsDisclosure() {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  return { open, panelId, toggle: () => setOpen((v) => !v) };
+}
+
+/**
+ * The disclosure button, split from the panel so the screen can seat it in the
+ * page-actions row (one row at 390px) as a compact 44px icon button. The
+ * visible word is gone, the accessible name stays "Settings".
+ */
+export function BinderSettingsToggle({
+  open,
+  panelId,
+  onToggle,
+}: {
+  open: boolean;
+  panelId: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cx(styles.button, styles.iconButton, open && styles.buttonOn)}
+      aria-label="Settings"
+      title="Settings"
+      aria-expanded={open}
+      aria-controls={panelId}
+      onClick={onToggle}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+        <circle cx="16" cy="7" r="2" />
+        <circle cx="8" cy="17" r="2" />
+      </svg>
+    </button>
+  );
+}
+
 export function BinderSettings({
   binder,
   onSave,
+  open,
+  panelId,
   headingLevel = 2,
 }: {
   binder: Binder;
   onSave: (binder: Binder) => void;
+  open: boolean;
+  panelId: string;
   headingLevel?: 2 | 3;
 }) {
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
-
   return (
     <Stack gap={2}>
-      <Row gap={2} wrap>
-        <button
-          type="button"
-          className={cx(styles.button, open && styles.buttonOn)}
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          Settings
-        </button>
-        {/* What is switched on, readable without opening the panel. Both change
+      {binder.forTrade || binder.showValue ? (
+        <Row gap={2} wrap>
+          {/* What is switched on, readable without opening the panel. Both change
             what the binder DOES, and a binder quietly still on offer is exactly
             the thing you want to notice from the outside. Gold AND a word —
             state this app cares about is never carried by colour alone. */}
-        {binder.forTrade ? <Chip tone="gold">For trade</Chip> : null}
-        {binder.showValue ? <Chip tone="gold">Priced in list</Chip> : null}
-      </Row>
+          {binder.forTrade ? <Chip tone="gold">For trade</Chip> : null}
+          {binder.showValue ? <Chip tone="gold">Priced in list</Chip> : null}
+        </Row>
+      ) : null}
 
       {open ? (
         <div id={panelId}>
