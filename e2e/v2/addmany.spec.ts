@@ -80,7 +80,10 @@ test.describe("add many cards @visual", () => {
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
     await settle(page);
-    await expect(page.getByRole("main")).toHaveScreenshot("addmany-added.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("addmany-added.png", {
+      timeout: 20000,
+      mask: [page.getByRole("group", { name: "How to fill the preview" })],
+    });
   });
 
   test("first run: the format hint and examples", async ({ page }) => {
@@ -97,6 +100,9 @@ test.describe("add many cards @visual", () => {
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
     await settle(page);
-    await expect(page.getByRole("main")).toHaveScreenshot("addmany-preview.png", { timeout: 20000 });
+    await expect(page.getByRole("main")).toHaveScreenshot("addmany-preview.png", {
+      timeout: 20000,
+      mask: [page.getByRole("group", { name: "How to fill the preview" })],
+    });
   });
 });
