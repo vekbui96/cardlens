@@ -63,6 +63,8 @@ test.describe("add many cards: whole set and CSV", () => {
 
 /** The page is taller than the viewport now: drop focus and scroll to the top so the sticky header and focus ring cannot differ between runs. */
 async function settle(page: Page): Promise<void> {
+  // Tall enough for the whole screen, so the capture needs no scrolling at all.
+  await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 1600 });
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur();
     window.scrollTo(0, 0);
