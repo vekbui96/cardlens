@@ -351,6 +351,15 @@ describe("settings", () => {
     expect(screen.getByRole("button", { name: "Add page" })).toBeInTheDocument();
   });
 
+  it("seats Settings as an icon button in the same row as the page actions", () => {
+    save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const toggle = screen.getByRole("button", { name: "Settings" });
+    expect(toggle.textContent).toBe("");
+    expect(toggle.parentElement).toBe(screen.getByRole("button", { name: "Add page" }).parentElement);
+  });
+
   it("shows what is switched on without opening the panel", async () => {
     // A binder quietly still on offer is exactly the thing worth noticing from
     // the outside — and it is a word, not just a colour.
