@@ -31,6 +31,21 @@ describe("EmptyStart", () => {
     );
   });
 
+  it("marks Browse sets as the primary way in, and Search as the secondary one", () => {
+    render(<EmptyStart headingLevel={1} />);
+    expect(screen.getByRole("link", { name: /Browse sets/ }).className).toMatch(/tilePrimary/);
+    expect(screen.getByRole("link", { name: /Search for a card/ }).className).not.toMatch(/tilePrimary/);
+  });
+
+  it("hints at what comes next under the Home card only", () => {
+    const { unmount } = render(<EmptyStart headingLevel={1} />);
+    expect(screen.getByText("Scan or import cards later from the menu")).toBeTruthy();
+    unmount();
+    render(<EmptyStart headingLevel={2} />);
+    expect(screen.queryByText("Scan or import cards later from the menu")).toBeNull();
+    expect(screen.getByRole("link", { name: /Browse sets/ }).className).not.toMatch(/tilePrimary/);
+  });
+
   it("explains that marking is saved on the device straight away", () => {
     render(<EmptyStart headingLevel={2} />);
     expect(screen.getByText(/Everything is saved on this device straight away/)).toBeTruthy();

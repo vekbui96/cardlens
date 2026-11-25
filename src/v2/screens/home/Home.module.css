@@ -505,6 +505,16 @@
   font-size: var(--v2-fs-small);
 }
 
+/* Only shown on desktop: see the 900px block below. */
+.emptyLater {
+  display: none;
+}
+
+.tilePrimary {
+  /* marker for the desktop-only filled look */
+  --tile-primary: 1;
+}
+
 /*
  * First-run card on a desktop window: copy and buttons 1360px apart read as
  * broken, so it is capped and centred (#288). Phone width is untouched.
@@ -520,6 +530,30 @@
   /* The card itself fills the capped wrapper and never grows past it (#293). */
   .emptyWrap > * {
     max-width: 100%;
+  }
+
+  /* Browse sets is the one filled first step on desktop (#306); phone is unchanged. */
+  .tile.tilePrimary:link,
+  .tile.tilePrimary:visited {
+    background: var(--v2-accent);
+    border-color: transparent;
+    color: var(--v2-on-accent);
+  }
+
+  .tile.tilePrimary:hover {
+    background: var(--v2-accent-strong);
+  }
+
+  .tilePrimary .actionHint {
+    color: var(--v2-on-accent);
+  }
+
+  .emptyLater {
+    display: block;
+    margin: var(--v2-space-3) var(--v2-space-0) var(--v2-space-0);
+    color: var(--v2-fg-muted);
+    font-size: var(--v2-fs-small);
+    text-align: left;
   }
 }
 

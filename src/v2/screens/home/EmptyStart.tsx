@@ -31,34 +31,43 @@ export function EmptyStart({
 }) {
   const Heading = headingLevel === 1 ? "h1" : "h2";
   return (
-    <Panel tone="raised" pad={5}>
-      <Stack gap={4}>
-        <Heading className={styles.emptyTitle}>Nothing tracked yet</Heading>
-        <p className={styles.emptyHint}>
-          Open a set and mark the printings you own, or search for a card you have. Everything is saved on
-          this device straight away — sync is optional and comes later.
-        </p>
-        {status ? (
-          <p role="status" className={styles.emptySyncLine}>
-            {status}
+    <>
+      <Panel tone="raised" pad={5}>
+        <Stack gap={4}>
+          <Heading className={styles.emptyTitle}>Nothing tracked yet</Heading>
+          <p className={styles.emptyHint}>
+            Open a set and mark the printings you own, or search for a card you have. Everything is saved on
+            this device straight away — sync is optional and comes later.
           </p>
-        ) : null}
-        <div className={styles.actions} role="group" aria-label="Ways to start tracking">
-          <Card href={`#${screenToPath({ name: "sets" })}`} className={styles.tile} pad={4}>
-            <Stack gap={1}>
-              <span className={styles.actionName}>Browse sets</span>
-              <span className={styles.actionHint}>Pick a set and tick off what you have</span>
-            </Stack>
-          </Card>
-          <Card href={`#${screenToPath({ name: "results", query: "" })}`} className={styles.tile} pad={4}>
-            <Stack gap={1}>
-              <span className={styles.actionName}>Search for a card</span>
-              <span className={styles.actionHint}>By name or collector number</span>
-            </Stack>
-          </Card>
-          {extraActions}
-        </div>
-      </Stack>
-    </Panel>
+          {status ? (
+            <p role="status" className={styles.emptySyncLine}>
+              {status}
+            </p>
+          ) : null}
+          <div className={styles.actions} role="group" aria-label="Ways to start tracking">
+            <Card
+              href={`#${screenToPath({ name: "sets" })}`}
+              className={headingLevel === 1 ? `${styles.tile} ${styles.tilePrimary}` : styles.tile}
+              pad={4}
+            >
+              <Stack gap={1}>
+                <span className={styles.actionName}>Browse sets</span>
+                <span className={styles.actionHint}>Pick a set and tick off what you have</span>
+              </Stack>
+            </Card>
+            <Card href={`#${screenToPath({ name: "results", query: "" })}`} className={styles.tile} pad={4}>
+              <Stack gap={1}>
+                <span className={styles.actionName}>Search for a card</span>
+                <span className={styles.actionHint}>By name or collector number</span>
+              </Stack>
+            </Card>
+            {extraActions}
+          </div>
+        </Stack>
+      </Panel>
+      {headingLevel === 1 ? (
+        <p className={styles.emptyLater}>Scan or import cards later from the menu</p>
+      ) : null}
+    </>
   );
 }
