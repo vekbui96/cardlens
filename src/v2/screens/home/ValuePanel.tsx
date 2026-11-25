@@ -106,6 +106,10 @@ export function ValuePanel({
             <Chip onPress={retry}>Try pricing again</Chip>
           </Row>
         ) : null}
+
+        <a className={styles.aside} href="#/insights">
+          Insights: most valuable cards
+        </a>
       </Stack>
     </Panel>
   );

@@ -1,0 +1,81 @@
+/* Insights (v2 only, so nothing here can reach the glasses). */
+
+.title {
+  font-size: var(--v2-fs-title);
+  font-weight: var(--v2-fw-bold);
+  line-height: var(--v2-lh-tight);
+  margin: var(--v2-space-0);
+}
+
+.meta {
+  margin: var(--v2-space-0);
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.headline {
+  margin: var(--v2-space-1) var(--v2-space-0) var(--v2-space-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20em), 1fr));
+  gap: var(--v2-space-2);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--v2-space-3);
+  align-items: center;
+  min-height: var(--v2-tap);
+}
+
+.rank {
+  min-width: 1.5em;
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.art {
+  display: block;
+  width: 2.6em;
+  flex: none;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: var(--v2-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A fixed slot, so a price arriving never shifts the row. */
+.figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 5.5em;
+  font-variant-numeric: tabular-nums;
+}
