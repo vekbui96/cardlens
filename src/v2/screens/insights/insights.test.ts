@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
-import { mostValuable } from "./insights.ts";
+import { mostValuable, valueBySet } from "./insights.ts";
 
-const row = (n: number, price?: number, finish = "normal"): OwnedPrintingRow => ({
-  cardId: `s1-${n}`,
-  setId: "s1",
-  setName: "Set One",
+const row = (n: number, price?: number, finish = "normal", setId = "s1"): OwnedPrintingRow => ({
+  cardId: `${setId}-${n}`,
+  setId,
+  setName: `Set ${setId}`,
   name: `Card ${n}`,
   collectorNumber: String(n),
   finish,
@@ -48,5 +48,45 @@ describe("mostValuable", () => {
   it("breaks price ties by collector number so the order is stable", () => {
     const { top } = mostValuable([row(10, 5), row(2, 5), row(1, 5)]);
     expect(top.map((t) => t.row.collectorNumber)).toEqual(["1", "2", "10"]);
+  });
+});
+
+describe("valueBySet", () => {
+  it("groups priced printings by set, biggest first, with whole-percent shares", () => {
+    const rows = [row(1, 60, "normal", "a"), row(2, 20, "normal", "a"), row(1, 20, "normal", "b")];
+    const { sets } = valueBySet(rows);
+    expect(sets.map((s) => [s.setId, s.worth, s.sharePct])).toEqual([
+      ["a", 80, 80],
+      ["b", 20, 20],
+    ]);
+  });
+
+  it("counts unpriced printings per set without valuing them", () => {
+    const rows = [row(1, 10, "normal", "a"), row(2, undefined, "normal", "a"), row(3, 0, "normal", "a")];
+    const { sets, unpriced } = valueBySet(rows);
+    expect(sets[0]).toMatchObject({ worth: 10, unpriced: 2, priced: 1 });
+    expect(unpriced).toBe(2);
+  });
+
+  it("keeps a set with only unpriced cards, at the end, with no share", () => {
+    const { sets } = valueBySet([row(1, 5, "normal", "a"), row(1, undefined, "normal", "z")]);
+    expect(sets.map((s) => s.setId)).toEqual(["a", "z"]);
+    expect(sets[1]).toMatchObject({ worth: 0, sharePct: 0, unpriced: 1 });
+  });
+
+  it("states the top three sets' share, and is 100% with one set", () => {
+    const rows = [10, 10, 10, 10].map((p, i) => row(1, p, "normal", `s${i}`));
+    expect(valueBySet(rows).topShare).toEqual({ count: 3, pct: 75 });
+    expect(valueBySet([row(1, 4, "normal", "a")]).topShare).toEqual({ count: 1, pct: 100 });
+  });
+
+  it("has no top share when nothing is priced", () => {
+    expect(valueBySet([row(1)]).topShare).toBeNull();
+    expect(valueBySet([]).sets).toEqual([]);
+  });
+
+  it("breaks worth ties by set id", () => {
+    const { sets } = valueBySet([row(1, 5, "normal", "b"), row(1, 5, "normal", "a")]);
+    expect(sets.map((s) => s.setId)).toEqual(["a", "b"]);
   });
 });

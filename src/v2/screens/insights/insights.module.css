@@ -71,6 +71,40 @@
   white-space: nowrap;
 }
 
+.setList {
+  list-style: none;
+  margin: var(--v2-space-0);
+  padding: var(--v2-space-0);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20em), 1fr));
+  gap: var(--v2-space-3);
+}
+
+.setRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--v2-space-3);
+  row-gap: var(--v2-space-1);
+  align-items: center;
+}
+
+.bar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 0.5em;
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-border);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  min-width: var(--v2-border-w);
+  border-radius: var(--v2-radius-pill);
+  background: var(--v2-accent);
+}
+
 /* A fixed slot, so a price arriving never shifts the row. */
 .figures {
   display: flex;

@@ -57,9 +57,17 @@ test.describe("insights", () => {
     await expect(page.getByTestId("insights-concentration")).toHaveText(
       "Top 3 cards = 100% of the total value",
     );
-    const items = page.getByRole("main").getByRole("listitem");
+    const items = page.getByTestId("insights-top-list").getByRole("listitem");
     await expect(items).toHaveCount(3);
     await expect(items.first()).toContainText("$80.00");
+  });
+
+  test("shows the value by set", async ({ page }) => {
+    await seedInsights(page);
+    await openV2(page, "/insights");
+    await expect(page.getByRole("heading", { name: "Value by set" })).toBeVisible();
+    await expect(page.getByTestId("insights-top-sets")).toHaveText("Top 3 sets = 100% of the total value");
+    await expect(page.getByTestId("insights-sets").getByRole("listitem")).toHaveCount(3);
   });
 
   test("a row opens the card", async ({ page }) => {
