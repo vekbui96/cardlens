@@ -511,9 +511,11 @@
   font-size: var(--v2-fs-small);
 }
 
-/* Only shown on desktop: see the 900px block below. */
+/* Last line of the first-run card, at every width. */
 .emptyLater {
-  display: none;
+  margin: 0;
+  color: var(--v2-fg-muted);
+  font-size: var(--v2-fs-small);
 }
 
 .tilePrimary {
@@ -552,14 +554,6 @@
 
   .tilePrimary .actionHint {
     color: var(--v2-on-accent);
-  }
-
-  .emptyLater {
-    display: block;
-    margin: var(--v2-space-3) var(--v2-space-0) var(--v2-space-0);
-    color: var(--v2-fg-muted);
-    font-size: var(--v2-fs-small);
-    text-align: left;
   }
 }
 
