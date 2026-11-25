@@ -25,6 +25,9 @@ describe("Trade share desktop layout (#304)", () => {
   it("centres and caps the cards section to 720px only above 900px", () => {
     const { wide, rest } = split();
     expect(wide).toMatch(/\.cardsSection\s*\{[^}]*max-width:\s*720px[^}]*margin-inline:\s*auto/);
+    // Without it the auto margins shrink the section to fit its content and the
+    // grid collapses to one stretched card (#304 review).
+    expect(wide).toMatch(/\.cardsSection\s*\{[^}]*width:\s*100%/);
     expect(rest).not.toMatch(/\.cardsSection\s*\{/);
   });
 

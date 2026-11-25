@@ -170,6 +170,8 @@
 /* On a wide window the grid sits in a centred reading column, not hard against the left edge. */
 @media (min-width: 901px) /* v2-tokens-allow: no token can express a breakpoint */ {
   .cardsSection {
+    /* width: 100%, or auto margins in the column shrink it to fit its content and the grid collapses to one stretched card. */
+    width: 100%;
     max-width: 720px; /* v2-tokens-allow: the centred share-page reading width */
     margin-inline: auto;
   }
