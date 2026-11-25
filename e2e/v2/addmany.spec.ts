@@ -32,6 +32,35 @@ test.describe("add many cards", () => {
   });
 });
 
+test.describe("add many cards: whole set and CSV", () => {
+  test("Whole set previews a range and flags numbers the set lacks", async ({ page }) => {
+    await openV2(page, "/addmany");
+    await page.getByRole("button", { name: "Whole set" }).click();
+    await page.getByLabel("Set", { exact: true }).selectOption("sv3");
+    await page.getByLabel("Card numbers").fill("124-126");
+    await expect(page.getByTestId("addmany-range-count")).toContainText("3 cards from Obsidian Flames");
+    await expect(page.getByTestId("addmany-matched")).toContainText("Charizard ex");
+    await expect(page.getByTestId("addmany-not-recognised")).toContainText("has no card number 124");
+  });
+
+  test("CSV file feeds the preview and lists unmatched rows", async ({ page }) => {
+    await openV2(page, "/addmany");
+    await page.getByRole("button", { name: "CSV file" }).click();
+    const csv = [
+      "name,set,number,finish,price",
+      "Charizard ex,Obsidian Flames,125,Holofoil,4.00",
+      "Nobody,Nowhere,1,Normal,",
+    ].join("\r\n");
+    await page
+      .getByLabel("Choose CSV file")
+      .setInputFiles({ name: "owned.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await expect(page.getByTestId("addmany-matched")).toContainText("Charizard ex");
+    await expect(page.getByTestId("addmany-not-recognised")).toContainText("No set named Nowhere");
+    await page.getByRole("button", { name: "Add 1 card" }).click();
+    await expect(page.getByTestId("addmany-added")).toHaveText("Added 1 card");
+  });
+});
+
 test.describe("add many cards @visual", () => {
   test("after adding: the confirmation with Undo", async ({ page }) => {
     await openV2(page, "/addmany");

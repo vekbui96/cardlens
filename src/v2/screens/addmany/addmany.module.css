@@ -96,6 +96,29 @@
   cursor: pointer;
 }
 
+.example[data-active="true"] {
+  background: var(--v2-fg);
+  color: var(--v2-surface-raised);
+}
+
+.field {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--v2-tap);
+  padding: var(--v2-space-1) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  border: var(--v2-border-w) solid var(--v2-border-strong);
+  background: var(--v2-surface-raised);
+  color: var(--v2-fg);
+  font: inherit;
+  font-size: var(--v2-fs-body);
+}
+
+.field:focus-visible {
+  outline: var(--v2-focus-ring);
+  outline-offset: var(--v2-focus-offset);
+}
+
 .list,
 .missing {
   list-style: none;
