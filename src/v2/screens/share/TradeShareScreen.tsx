@@ -175,57 +175,59 @@ export function BinderShowcaseView({ binder, updatedAt }: { binder: Binder; upda
           </p>
         </Panel>
       ) : (
-        <Panel title="The cards" headingLevel={2}>
-          <Stack gap={3}>
-            <Row gap={2} wrap justify="space-between">
-              <p className={styles.hint}>Tap a card to see it larger</p>
-              <div role="group" aria-label="Sort cards" className={styles.sortPills}>
-                <span className={styles.sortLabel} aria-hidden="true">
-                  Sort by
-                </span>
-                {SORTS.map((s) => (
-                  <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
-                    {s.label}
-                  </Chip>
-                ))}
-              </div>
-            </Row>
+        <div className={styles.cardsSection}>
+          <Panel title="The cards" headingLevel={2}>
+            <Stack gap={3}>
+              <Row gap={2} wrap justify="space-between">
+                <p className={styles.hint}>Tap a card to see it larger</p>
+                <div role="group" aria-label="Sort cards" className={styles.sortPills}>
+                  <span className={styles.sortLabel} aria-hidden="true">
+                    Sort by
+                  </span>
+                  {SORTS.map((s) => (
+                    <Chip key={s.key} onPress={() => setSort(s.key)} pressed={sort === s.key}>
+                      {s.label}
+                    </Chip>
+                  ))}
+                </div>
+              </Row>
 
-            <ul className={styles.showcaseGrid} aria-label="Cards in this binder">
-              {sorted.map((row, i) => (
-                <li key={rowKey(row)}>
-                  <button
-                    type="button"
-                    className={styles.showcaseCard}
-                    onClick={() => setOpen(rowKey(row))}
-                    ref={(el) => {
-                      if (el) tiles.current.set(rowKey(row), el);
-                      else tiles.current.delete(rowKey(row));
-                    }}
-                  >
-                    <CardArt
-                      src={row.slot.imageSmall}
-                      name={row.slot.name ?? ""}
-                      detail="pocket"
-                      decorative
-                      eager={i < 4}
-                    />
-                    <span className={styles.showcaseName}>{row.slot.name ?? "Card"}</span>
-                    {/* The address, which is how the two of you will name it. */}
-                    <span className={styles.showcaseMeta}>{rowMeta(row)}</span>
-                    <span className={styles.showcasePrice}>
-                      <Money
-                        value={value.priceFor(row.slot)}
-                        loading={value.isLoading}
-                        absentLabel={UNPRICED}
+              <ul className={styles.showcaseGrid} aria-label="Cards in this binder">
+                {sorted.map((row, i) => (
+                  <li key={rowKey(row)}>
+                    <button
+                      type="button"
+                      className={styles.showcaseCard}
+                      onClick={() => setOpen(rowKey(row))}
+                      ref={(el) => {
+                        if (el) tiles.current.set(rowKey(row), el);
+                        else tiles.current.delete(rowKey(row));
+                      }}
+                    >
+                      <CardArt
+                        src={row.slot.imageSmall}
+                        name={row.slot.name ?? ""}
+                        detail="pocket"
+                        decorative
+                        eager={i < 4}
                       />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Stack>
-        </Panel>
+                      <span className={styles.showcaseName}>{row.slot.name ?? "Card"}</span>
+                      {/* The address, which is how the two of you will name it. */}
+                      <span className={styles.showcaseMeta}>{rowMeta(row)}</span>
+                      <span className={styles.showcasePrice}>
+                        <Money
+                          value={value.priceFor(row.slot)}
+                          loading={value.isLoading}
+                          absentLabel={UNPRICED}
+                        />
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Stack>
+          </Panel>
+        </div>
       )}
 
       <Sheet open={enlarged !== null} onClose={() => setOpen(null)} label={enlarged?.slot.name ?? "Card"}>
