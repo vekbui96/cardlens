@@ -25,7 +25,13 @@ import {
   UNPRICED,
 } from "../../primitives/index.ts";
 import { printingsOf } from "./printings.ts";
-import { neighbours, readBrowseList, swipeStep, type BrowseEntry } from "./browseList.ts";
+import {
+  neighbours,
+  readBrowseList,
+  swipeStartsOnScroller,
+  swipeStep,
+  type BrowseEntry,
+} from "./browseList.ts";
 import styles from "./CardDetailsScreen.module.css";
 
 /**
@@ -97,7 +103,8 @@ export function CardDetailsScreen({ cardId, summary }: CardDetailsScreenProps) {
   const touch = useRef<{ x: number; y: number } | null>(null);
   const onTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const t = e.touches[0];
-    touch.current = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
+    const blocked = swipeStartsOnScroller(e.target, e.currentTarget);
+    touch.current = e.touches.length === 1 && t && !blocked ? { x: t.clientX, y: t.clientY } : null;
   };
   const onTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
     const start = touch.current;
