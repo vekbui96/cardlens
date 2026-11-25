@@ -338,7 +338,12 @@ function CardDetailsBody({ cardId, summary }: CardDetailsScreenProps) {
               </p>
             ) : (
               <>
-                <p className={styles.confirm} role="status" data-testid="mark-confirmation">
+                <p
+                  className={styles.confirm}
+                  role="status"
+                  data-live-region="mark-confirmation"
+                  data-testid="mark-confirmation"
+                >
                   {markResult && markResult.kind !== "failed" ? (
                     <>
                       <svg

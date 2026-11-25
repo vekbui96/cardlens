@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -151,6 +152,24 @@ describe("one tap, with feedback", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /^Normal Owned/ }));
     expect(await screen.findByRole("status")).toHaveTextContent("Unmarked: Normal.");
+  });
+
+  it("keeps the confirmation live region in the accessibility tree before any mark", async () => {
+    stubPrintings();
+    render(<CardDetailsScreen cardId={CARD_ID} />, { wrapper: harness() });
+
+    const normal = await screen.findByRole("button", { name: /^Normal/ });
+    const region = screen.getByTestId("mark-confirmation");
+    expect(region).toHaveAttribute("role", "status");
+    expect(region).toBeEmptyDOMElement();
+
+    await userEvent.click(normal);
+    expect(await screen.findByRole("status")).toHaveTextContent("Marked as owned");
+
+    const css = readFileSync("src/v2/screens/details/CardDetailsScreen.module.css", "utf8");
+    const rule = /\.confirm:empty\s*\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule?.[1]).not.toMatch(/display:\s*none/);
   });
 
   it("puts the confirmation above the printing rows, next to the Printings header", async () => {

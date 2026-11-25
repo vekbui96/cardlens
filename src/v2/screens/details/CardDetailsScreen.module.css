@@ -295,8 +295,16 @@
   font-weight: var(--v2-fw-medium);
 }
 
+/* Not display:none: that drops the live region from the accessibility tree,
+   so the first text inserted into it is often never announced. Visually
+   hidden instead, out of flow, so layout is the same as before. */
 .confirm:empty {
-  display: none;
+  position: absolute;
+  width: 1px; /* v2-tokens-allow: visually-hidden live region must be exactly 1px */
+  height: 1px; /* v2-tokens-allow: visually-hidden live region must be exactly 1px */
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .note {
