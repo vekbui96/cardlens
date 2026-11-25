@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CatalogProvider, RepositoriesProvider } from "../../../app/contexts.tsx";
@@ -360,6 +360,30 @@ describe("next and previous card", () => {
     expect(await screen.findByText(/1 of 2 · Search results/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous card" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next card" })).toBeEnabled();
+  });
+
+  it("steps on a sideways swipe over the page, but not one that starts in a scrollable region", async () => {
+    stubPrintings();
+    rememberBrowseList("Search results", [{ cardId: "sv3-125" }, { cardId: CARD_ID }]);
+    window.location.hash = `#/card/${CARD_ID}`;
+    render(<Routed initial={CARD_ID} />, { wrapper: harness(new Repositories(), true) });
+    await screen.findByText(/2 of 2 · Search results/);
+
+    const scroller = document.createElement("div");
+    scroller.style.overflowX = "auto";
+    const inner = document.createElement("span");
+    scroller.appendChild(inner);
+    screen.getByRole("navigation", { name: "Step through this list" }).parentElement!.appendChild(scroller);
+
+    // Finger moves right = previous card.
+    fireEvent.touchStart(inner, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchEnd(inner, { changedTouches: [{ clientX: 220, clientY: 100 }] });
+    expect(screen.getByTestId("route")).toHaveTextContent(CARD_ID);
+
+    const page = screen.getByText(/2 of 2 · Search results/);
+    fireEvent.touchStart(page, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.touchEnd(page, { changedTouches: [{ clientX: 220, clientY: 100 }] });
+    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("sv3-125"));
   });
 
   it("draws no controls for a card opened from outside a list", async () => {

@@ -120,6 +120,24 @@ export function neighbours(list: BrowseList | null, cardId: string): Neighbours 
   return result;
 }
 
+const SWIPE_BLOCKERS = "a,button,input,select,textarea,summary,[role=button],[data-no-swipe]";
+
+/**
+ * Whether a touch that began on `target` belongs to something else: a control,
+ * or a region the finger can scroll sideways (printings list, wide price table).
+ * Such a drag must not step to another card. Walks up to, not past, `boundary`.
+ */
+export function swipeStartsOnScroller(target: EventTarget | null, boundary: Element): boolean {
+  let el = target instanceof Element ? target : null;
+  while (el && el !== boundary) {
+    if (el.matches(SWIPE_BLOCKERS)) return true;
+    const x = getComputedStyle(el).overflowX;
+    if (x === "auto" || x === "scroll") return true;
+    el = el.parentElement;
+  }
+  return false;
+}
+
 /** A swipe has to be this long, in CSS pixels, to count. */
 export const SWIPE_MIN = 60;
 

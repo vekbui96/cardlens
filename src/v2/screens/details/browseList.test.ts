@@ -6,8 +6,29 @@ import {
   neighbours,
   readBrowseList,
   rememberBrowseList,
+  swipeStartsOnScroller,
   swipeStep,
 } from "./browseList.ts";
+
+describe("swipeStartsOnScroller", () => {
+  const build = (html: string) => {
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    return host;
+  };
+
+  it("is true inside an overflow-x scroller or on a control, false on plain content", () => {
+    const host = build(
+      `<div style="overflow-x:auto"><p id="a">x</p></div><button id="b"><i id="c"></i></button><div data-no-swipe><p id="d"></p></div><p id="e"></p>`,
+    );
+    const at = (id: string) => host.querySelector(`#${id}`)!;
+    expect(swipeStartsOnScroller(at("a"), host)).toBe(true);
+    expect(swipeStartsOnScroller(at("c"), host)).toBe(true);
+    expect(swipeStartsOnScroller(at("d"), host)).toBe(true);
+    expect(swipeStartsOnScroller(at("e"), host)).toBe(false);
+    expect(swipeStartsOnScroller(null, host)).toBe(false);
+  });
+});
 
 beforeEach(() => {
   sessionStorage.clear();
