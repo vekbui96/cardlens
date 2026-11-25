@@ -131,6 +131,13 @@ export function CollectionScreen() {
           >
             Insights
           </Tab>
+          <Tab
+            href={`#${screenToPath({ name: "addmany" })}`}
+            current={false}
+            onGo={() => push({ name: "addmany" })}
+          >
+            Add many cards
+          </Tab>
         </nav>
 
         {/*
