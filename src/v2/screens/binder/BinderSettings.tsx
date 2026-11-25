@@ -32,8 +32,9 @@ export function useBinderSettingsDisclosure() {
 
 /**
  * The disclosure button, split from the panel so the screen can seat it in the
- * page-actions row (one row at 390px) as a compact 44px icon button. The
- * visible word is gone, the accessible name stays "Settings".
+ * page-actions row (one row at 390px) as a compact 44px button: the glyph with
+ * a small visible "Settings" label under it. The accessible name stays
+ * "Settings" (aria-label), so the label is hidden from assistive tech.
  */
 export function BinderSettingsToggle({
   open,
@@ -51,7 +52,7 @@ export function BinderSettingsToggle({
       aria-label="Settings"
       title="Settings"
       aria-expanded={open}
-      aria-controls={panelId}
+      aria-controls={open ? panelId : undefined}
       onClick={onToggle}
     >
       <svg
@@ -68,6 +69,9 @@ export function BinderSettingsToggle({
         <circle cx="16" cy="7" r="2" />
         <circle cx="8" cy="17" r="2" />
       </svg>
+      <span className={styles.settingsLabel} aria-hidden="true">
+        Settings
+      </span>
     </button>
   );
 }

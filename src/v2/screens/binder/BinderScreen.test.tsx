@@ -351,13 +351,27 @@ describe("settings", () => {
     expect(screen.getByRole("button", { name: "Add page" })).toBeInTheDocument();
   });
 
-  it("seats Settings as an icon button in the same row as the page actions", () => {
+  it("seats Settings in the same row as the page actions, with a visible label", () => {
     save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
     render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
 
     const toggle = screen.getByRole("button", { name: "Settings" });
-    expect(toggle.textContent).toBe("");
+    expect(toggle.textContent).toBe("Settings");
     expect(toggle.parentElement).toBe(screen.getByRole("button", { name: "Add page" }).parentElement);
+  });
+
+  it("points aria-controls at the panel only while the panel exists", async () => {
+    save(emptyBinder(BINDER_ID, "Jolteon", "9", Date.now()));
+    const user = userEvent.setup();
+    render(<BinderScreen binderId={BINDER_ID} />, { wrapper: harness() });
+
+    const toggle = screen.getByRole("button", { name: "Settings" });
+    expect(toggle).not.toHaveAttribute("aria-controls");
+
+    await user.click(toggle);
+    const id = toggle.getAttribute("aria-controls");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id as string)).not.toBeNull();
   });
 
   it("shows what is switched on without opening the panel", async () => {
