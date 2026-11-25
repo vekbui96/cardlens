@@ -34,6 +34,7 @@ export const METRIC_SCREENS = [
   "binder",
   "trade",
   "wantlist",
+  "insights",
   "workshop",
 ] as const;
 

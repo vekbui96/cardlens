@@ -124,6 +124,13 @@ export function CollectionScreen() {
           >
             Want list
           </Tab>
+          <Tab
+            href={`#${screenToPath({ name: "insights" })}`}
+            current={false}
+            onGo={() => push({ name: "insights" })}
+          >
+            Insights
+          </Tab>
         </nav>
 
         {/*

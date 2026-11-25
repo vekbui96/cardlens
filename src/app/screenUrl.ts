@@ -60,6 +60,7 @@ const SIMPLE = new Set([
   "target",
   "binders",
   "wantlist",
+  "insights",
 ]);
 
 /**
