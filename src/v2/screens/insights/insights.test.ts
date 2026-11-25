@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
-import { mostValuable, valueBySet } from "./insights.ts";
+import { addedThisMonth, mostValuable, valueBySet } from "./insights.ts";
 
 const row = (n: number, price?: number, finish = "normal", setId = "s1"): OwnedPrintingRow => ({
   cardId: `${setId}-${n}`,
@@ -48,6 +48,38 @@ describe("mostValuable", () => {
   it("breaks price ties by collector number so the order is stable", () => {
     const { top } = mostValuable([row(10, 5), row(2, 5), row(1, 5)]);
     expect(top.map((t) => t.row.collectorNumber)).toEqual(["1", "2", "10"]);
+  });
+});
+
+describe("addedThisMonth", () => {
+  const now = new Date(2026, 10, 15, 12).getTime();
+  const at = (r: OwnedPrintingRow, when: number): OwnedPrintingRow => ({ ...r, at: when });
+
+  it("counts and values rows marked this month, not earlier ones", () => {
+    const rows = [
+      at(row(1, 10), new Date(2026, 10, 2).getTime()),
+      at(row(2, 5), new Date(2026, 9, 31, 23, 59).getTime()),
+      at(row(3, 7), new Date(2026, 10, 14).getTime()),
+    ];
+    expect(addedThisMonth(rows, now)).toEqual({ count: 2, worth: 17, unpriced: 0 });
+  });
+
+  it("counts unpriced rows separately and leaves them out of the worth", () => {
+    const t = new Date(2026, 10, 3).getTime();
+    const rows = [at(row(1, 10), t), at(row(2), t), at(row(3, 0), t)];
+    expect(addedThisMonth(rows, now)).toEqual({ count: 3, worth: 10, unpriced: 2 });
+  });
+
+  it("includes the first instant of the month and excludes the first of the next", () => {
+    const rows = [
+      at(row(1, 1), new Date(2026, 10, 1).getTime()),
+      at(row(2, 1), new Date(2026, 11, 1).getTime()),
+    ];
+    expect(addedThisMonth(rows, now).count).toBe(1);
+  });
+
+  it("is empty with no rows", () => {
+    expect(addedThisMonth([], now)).toEqual({ count: 0, worth: 0, unpriced: 0 });
   });
 });
 
