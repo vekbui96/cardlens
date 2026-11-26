@@ -149,6 +149,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-2);
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-2);
+}
+
 .total {
   margin: var(--v2-space-0);
   font-weight: var(--v2-fw-medium);

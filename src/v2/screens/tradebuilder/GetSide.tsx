@@ -3,6 +3,7 @@ import { useCatalogSearch } from "../../../hooks/useCatalogSearch.ts";
 import type { PokemonCardSummary } from "../../../models/cards.ts";
 import { CardArt, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
 import { sideTotal, type SideTotal } from "./balanceModel.ts";
+import type { TradeLine } from "./summaryText.ts";
 import styles from "./tradebuilder.module.css";
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
@@ -20,6 +21,8 @@ interface GetChoice {
 interface Props {
   /** Told the side's totals whenever they change, for the balance line. */
   onTotal?: (total: SideTotal) => void;
+  /** Told the chosen cards whenever they change, for the copy and image summary. */
+  onLines?: (lines: TradeLine[]) => void;
 }
 
 /**
@@ -27,7 +30,7 @@ interface Props {
  * what the side adds up to. Held in state only, so a reload clears it. Prices
  * are the catalog's market price (USD); a card without one is "Unpriced".
  */
-export function GetSide({ onTotal }: Props) {
+export function GetSide({ onTotal, onLines }: Props) {
   const [choices, setChoices] = useState<GetChoice[]>([]);
   const [text, setText] = useState("");
   // Typing does not search, submit does (the Search screen's rule).
@@ -45,6 +48,19 @@ export function GetSide({ onTotal }: Props) {
     [choices],
   );
   useEffect(() => onTotal?.(totals), [onTotal, totals]);
+  useEffect(
+    () =>
+      onLines?.(
+        choices.map((c) => ({
+          name: c.card.name,
+          setName: c.card.setName,
+          collectorNumber: c.card.collectorNumber,
+          qty: c.qty,
+          price: c.card.marketPrice,
+        })),
+      ),
+    [onLines, choices],
+  );
 
   const setQty = (id: string, qty: number) =>
     setChoices((all) =>

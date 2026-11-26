@@ -5,6 +5,8 @@ import { Money, Panel, Stack } from "../../primitives/index.ts";
 import { balance, type SideTotal } from "./balanceModel.ts";
 import { GetSide } from "./GetSide.tsx";
 import { GiveSide } from "./GiveSide.tsx";
+import type { TradeLine } from "./summaryText.ts";
+import { TradeActions } from "./TradeActions.tsx";
 import styles from "./tradebuilder.module.css";
 
 const NONE: SideTotal = { total: 0, cards: 0, unpriced: 0 };
@@ -18,15 +20,18 @@ export function TradeBuilderScreen() {
   const { rows, pending, pricing } = useOwnedCards({ backfill: false });
   const [give, setGive] = useState<SideTotal>(NONE);
   const [get, setGet] = useState<SideTotal>(NONE);
+  const [giveLines, setGiveLines] = useState<TradeLine[]>([]);
+  const [getLines, setGetLines] = useState<TradeLine[]>([]);
   return (
     <Stack gap={5}>
       <header>
         <h1 className={styles.title}>Trade</h1>
         <p className={styles.meta}>Work out a trade from the cards you own.</p>
       </header>
-      <GiveSide rows={rows} loading={pending + pricing} onTotal={setGive} />
-      <GetSide onTotal={setGet} />
+      <GiveSide rows={rows} loading={pending + pricing} onTotal={setGive} onLines={setGiveLines} />
+      <GetSide onTotal={setGet} onLines={setGetLines} />
       <BalanceLine give={give} get={get} />
+      <TradeActions give={giveLines} get={getLines} />
     </Stack>
   );
 }
