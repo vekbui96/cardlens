@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { SideTotal } from "./balanceModel.ts";
 import { finishLabel } from "../../../models/finishes.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { CardArt, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
@@ -24,18 +25,21 @@ interface Props {
   rows: readonly OwnedPrintingRow[];
   /** Sets whose names or prices are still on the way. */
   loading: number;
+  /** Told the side's totals whenever they change, for the balance line. */
+  onTotal?: (total: SideTotal) => void;
 }
 
 /**
  * The "I give" side: search the cards you own, tap one to add it, set how many,
  * and see what the side adds up to. Held in state only, so a reload clears it.
  */
-export function GiveSide({ rows, loading }: Props) {
+export function GiveSide({ rows, loading, onTotal }: Props) {
   const [choices, setChoices] = useState<GiveChoice[]>([]);
   const [query, setQuery] = useState("");
 
   const lines = useMemo(() => giveLines(choices, rows), [choices, rows]);
   const { total, cards, unpriced } = useMemo(() => giveTotal(lines), [lines]);
+  useEffect(() => onTotal?.({ total, cards, unpriced }), [onTotal, total, cards, unpriced]);
   const results = useMemo(() => {
     const chosen = new Set(choices.map((c) => giveKey(c.cardId, c.finish)));
     return matchRows(rows, query)
