@@ -183,3 +183,111 @@ function Find-ModulesInSourceMaps {
     }
     return @($hits)
 }
+
+# ---- the deploy check, decided BEFORE the merge ------------------------------------------------------
+# Merging is a Pages deploy, and deploy.ps1 only learns after the merge whether the session's deploy check
+# can work at all. When it cannot (no -ExpectString for a change that ships, a -NoVisibleString the rule
+# refuses, a string the new build does not contain), the merge is reverted on main: #145, #320 and #327
+# were working builds rolled back that way, and #294 merged a string the live check never found. So
+# test-gate.ps1 records the string it verified in the build (state\gate-build-<n>.json, tied to the exact
+# front-end content by the fingerprint below), and merge-pr.ps1 refuses to merge unless the deploy check
+# it is given would pass (Get-DeployCheckDecision). deploy.ps1 then uses the check merge-pr.ps1 recorded.
+
+# The paths whose content decides the served bundle (Test-FrontFile's set plus package.json and the lockfile).
+$script:FrontFingerprintPaths = @('src', 'public', 'index.html', 'vite.config.ts', 'package.json', 'package-lock.json')
+
+# -LsTree: lines of `git ls-tree <tree> -- <FrontFingerprintPaths>` ("<mode> <type> <sha>`t<path>").
+# Returns one string, "<path>=<sha>;..." sorted by path: equal strings mean equal front-end content.
+function Format-FrontFingerprint {
+    param([string[]]$LsTree = @())
+    $parts = @(@($LsTree) | Where-Object { $_ -and $_.Trim() } | ForEach-Object {
+            $t = "$_" -split "`t", 2
+            if ($t.Count -eq 2) {
+                $f = @($t[0].Trim() -split '\s+')
+                if ($f.Count -ge 3) { '{0}={1}' -f $t[1].Trim(), $f[2] }
+            }
+        } | Where-Object { $_ } | Sort-Object)
+    return ($parts -join ';')
+}
+
+# The front-end fingerprint of a commit or tree in -Repo (merge-pr.ps1: the PR head).
+function Get-FrontFingerprint {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Treeish)
+    $r = Invoke-Git -Repo $Repo -Arguments (@('ls-tree', $Treeish, '--') + $script:FrontFingerprintPaths) -Quiet
+    return (Format-FrontFingerprint -LsTree @($r.Output))
+}
+
+# The same fingerprint for the WORKING TREE of -Repo (test-gate.ps1: what was just built), committed or not.
+# A throwaway index (GIT_INDEX_FILE) keeps the clone's own index and files untouched.
+function Get-WorkingFrontFingerprint {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$TempIndex)
+    $saved = $env:GIT_INDEX_FILE
+    try {
+        if (Test-Path -LiteralPath $TempIndex) { Remove-Item -LiteralPath $TempIndex -Force }
+        $env:GIT_INDEX_FILE = $TempIndex
+        Invoke-Git -Repo $Repo -Arguments @('read-tree', 'HEAD') -Quiet | Out-Null
+        $present = @($script:FrontFingerprintPaths | Where-Object { Test-Path -LiteralPath (Join-Path $Repo $_) })
+        if ($present.Count -gt 0) { Invoke-Git -Repo $Repo -Arguments (@('add', '-A', '--') + $present) -Quiet | Out-Null }
+        $tree = Get-GitValue -Repo $Repo -Arguments @('write-tree')
+    } finally {
+        if ($null -eq $saved) { Remove-Item -LiteralPath 'env:GIT_INDEX_FILE' -ErrorAction SilentlyContinue } else { $env:GIT_INDEX_FILE = $saved }
+        Remove-Item -LiteralPath $TempIndex -Force -ErrorAction SilentlyContinue
+    }
+    return (Get-FrontFingerprint -Repo $Repo -Treeish $tree)
+}
+
+# One pass over the LIVE site's chunk graph (no waiting, no render): is -String served today? test-gate.ps1
+# refuses an -ExpectString the live build already contains: it cannot prove the new build is live, and the
+# rollback (which checks the string is gone again) would end in PRODUCTION NEEDS VE after reverting.
+# Returns Checked (the walk completed), Found, In, Why.
+function Test-StringServedNow {
+    param([Parameter(Mandatory)][string]$String)
+    try {
+        $page = Invoke-Http -Url (Get-CacheBustedUrl $script:SiteUrl)
+        $asset = Get-IndexAsset $page.Body
+        if ($page.Status -ne 200 -or -not $asset) { return [pscustomobject]@{ Checked = $false; Found = $false; In = ''; Why = "live index.html status=$($page.Status) entry=$asset" } }
+        $prefix = '/cardlens/assets/'
+        $roots = @(Get-IndexAssetSet $page.Body | ForEach-Object { $_.Substring($prefix.Length) })
+        $fetch = { param([string]$Name) Invoke-Http -Url ($script:SiteUrl + 'assets/' + $Name) }
+        $g = Find-InChunkGraph -Roots $roots -Fetch $fetch -ExpectString $String
+        if ($g.Found) { return [pscustomobject]@{ Checked = $true; Found = $true; In = $g.FoundIn; Why = "served today in $($g.FoundIn)" } }
+        if (@($g.Unreachable).Count -gt 0 -or $g.Capped) { return [pscustomobject]@{ Checked = $false; Found = $false; In = ''; Why = "live walk incomplete (unreachable $(@($g.Unreachable).Count), capped $($g.Capped))" } }
+        return [pscustomobject]@{ Checked = $true; Found = $false; In = ''; Why = "not served today ($(@($g.Files).Count) live files searched)" }
+    } catch {
+        return [pscustomobject]@{ Checked = $false; Found = $false; In = ''; Why = "live check error: $_" }
+    }
+}
+
+# merge-pr.ps1's pre-merge rule. Pure.
+#   -FrontFiles      the PR's files that ship (Test-FrontFile)
+#   -ExpectString / -NoVisibleString   what the session will pass to deploy.ps1
+#   -NoVisible       Get-NoVisibleStringDecision for the PR's diff (read only with -NoVisibleString)
+#   -GateRecord      state\gate-build-<n>.json written by test-gate.ps1, or $null
+#   -Fingerprint     Get-FrontFingerprint of the PR head
+# Returns Ok, Mode (none | expect | novisible), Why.
+function Get-DeployCheckDecision {
+    param([string[]]$FrontFiles = @(), [string]$ExpectString = '', [string]$NoVisibleString = '',
+          $NoVisible = $null, $GateRecord = $null, [string]$Fingerprint = '')
+    $mk = { param([bool]$Ok, [string]$Mode, [string]$Why) [pscustomobject]@{ Ok = $Ok; Mode = $Mode; Why = $Why } }
+    $front = @($FrontFiles | Where-Object { $_ })
+    if ($ExpectString -and $NoVisibleString) { return (& $mk $false '' 'pass -ExpectString or -NoVisibleString, not both') }
+    if ($front.Count -eq 0) { return (& $mk $true 'none' 'the PR changes no front-end file that ships: deploy.ps1 needs no string') }
+    $list = (@($front) | Select-Object -First 5) -join ', '
+    if ($NoVisibleString) {
+        if ($NoVisibleString.Trim().Length -lt 10) { return (& $mk $false 'novisible' '-NoVisibleString needs a reason (why the change has no visible string)') }
+        if ($null -eq $NoVisible) { return (& $mk $false 'novisible' 'the no-visible-string rule could not be evaluated (fail closed)') }
+        if (-not $NoVisible.Ok) { return (& $mk $false 'novisible' "-NoVisibleString would be refused by deploy.ps1: $($NoVisible.Why)") }
+        return (& $mk $true 'novisible' "no visible string: the PR only adds unreferenced src/ module(s) $(@($NoVisible.Added) -join ', ')")
+    }
+    if (-not $ExpectString) {
+        return (& $mk $false '' "the PR changes front-end files that ship ($list): pass the -ExpectString you will give deploy.ps1 (a string only the new build contains, verified by test-gate.ps1 -Step build -ExpectString on this code), or -NoVisibleString '<reason>' if it only adds src/ modules nothing imports yet")
+    }
+    $fix = "run test-gate.ps1 -Issue <n> -Step build -ExpectString '<string>' on the PR's final code, then call merge-pr.ps1 again with the same string"
+    if ($null -eq $GateRecord) { return (& $mk $false 'expect' "no test-gate build record for this issue: $fix") }
+    if ("$($GateRecord.expectString)" -cne $ExpectString) { return (& $mk $false 'expect' "test-gate verified a different string ('$($GateRecord.expectString)'): $fix") }
+    if (-not $Fingerprint -or "$($GateRecord.fingerprint)" -ne $Fingerprint) { return (& $mk $false 'expect' "the test-gate build that checked the string was of different front-end code than the PR head: $fix") }
+    if ($GateRecord.found -ne $true) { return (& $mk $false 'expect' "the string is not in the built dist\assets (*.js, *.css): choose a string your change adds to the build, then $fix") }
+    if ($GateRecord.servedNow -eq $true) { return (& $mk $false 'expect' "the live site already serves this string ($($GateRecord.servedIn)), so it cannot prove the new build is live: choose one only the new build contains, then $fix") }
+    $live = ' (the live site could not be checked)'; if ($GateRecord.servedNow -eq $false) { $live = ' and not served today' }
+    return (& $mk $true 'expect' "the string is in the build of this exact front-end code$live")
+}
