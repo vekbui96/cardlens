@@ -1900,7 +1900,7 @@ try {
     # itself has no schtasks / ScheduledTask rule and the guard blocks those words. Proposal and review
     # sessions get check-approval.ps1 only.
     $scriptsFor = @{
-        build   = @('check-approval', 'test-gate', 'update-snapshots', 'wait-ci', 'merge-pr', 'deploy', 'rollback', 'ci-rerun', 'progress')
+        build   = @('check-approval', 'test-gate', 'update-snapshots', 'wait-ci', 'merge-pr', 'deploy', 'rollback', 'ci-rerun', 'ci-diffs', 'progress')
         propose = @('check-approval')
         review  = @('check-approval')
         intake  = @('check-approval')

@@ -261,7 +261,11 @@ job keeps each one's context small: on 2026-11-16 one long session doing two bui
    (on 2026-11-16 a local run took 2.6 to 15 minutes, plus reruns when a flaky Target spec failed, and it
    duplicated what CI runs anyway on the PR head). On a CI failure it reads the log, fixes,
    pushes to the same branch and waits again, at most 3 rounds, then leaves the PR open with `loop:failed`;
-   a failure only in the known-flaky specs (bulk-mark timing, Target) may get one `ci-rerun.ps1` rerun. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
+   a failure only in the known-flaky specs (bulk-mark timing, Target) may get one `ci-rerun.ps1` rerun. A v2 Visual
+   Regression failure is read from CI's own images: `ci-diffs.ps1 -Pr -Issue -RunId` downloads only that run's
+   `visual-diffs` artifact into WORK (PNGs kept, everything else deleted; the guard still refuses `gh run download`),
+   and the guard lets the session Read / Grep its own saved tool results under `~\.claude\projects\<loop work
+dir>\<session>\tool-results\` (exact shape only). Before that, #356 spent three fix rounds blind. Merging deploys Pages; `deploy.ps1` then deploys the server if needed and verifies both, rolling
    everything back on failure. Success: `loop:deployed`, closed. Failure: `loop:failed`, comment, left open.
    After a success the runner may start the next build session for the next approved issue, up to four per
    run (`-MaxBuilds`, default 4), only if every build so far ended `loop:deployed` (a failure or rollback ends

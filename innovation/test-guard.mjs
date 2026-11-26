@@ -64,6 +64,30 @@ const allow = [
   ps(`gh pr checks 40 -R vekbui96/cardlens`),
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12 -WaitMinutes 9`),
   ps(`${S}\\ci-rerun.ps1 -Pr 40 -Issue 12 -RunId 123456789`),
+  // CI's visual-regression images: ci-diffs.ps1 fetches only the run's visual-diffs artifact into WORK (#356)
+  ps(`${S}\\ci-diffs.ps1 -Pr 40 -Issue 12 -RunId 123456789`),
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path: `${W}\\ci-diffs-12\\123456789\\v2-addmany-added-v2-phone\\addmany-added-diff.png`,
+    },
+  },
+  // a tool result Claude Code saved for this session (too large to show inline): Read / Grep it back
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\b97tmx0jd.txt",
+    },
+  },
+  {
+    tool_name: "Grep",
+    tool_input: {
+      pattern: "pixels",
+      path: "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\b97tmx0jd.txt",
+      output_mode: "content",
+    },
+  },
   // progress.ps1: the only way the session updates its live progress comment
   ps(`${S}\\progress.ps1 -Issue 12 -Stage approval -Status ok -Detail "approval verified"`),
   ps(`${S}\\progress.ps1 -Issue 12 -Stage ci -Detail "waiting for Playwright E2E (run 123)"`),
@@ -191,6 +215,55 @@ const deny = [
   ps(`gh run rerun 123 -R vekbui96/cardlens`),
   ps(`gh run watch 123 -R vekbui96/cardlens`),
   ps(`gh run download 123 -R vekbui96/cardlens`),
+  ps(`gh run download 123 -R vekbui96/cardlens -n visual-diffs -D "${W}\\d"`),
+  ps(`${C}\\innovation\\ci-diffs.ps1 -Pr 40 -Issue 12 -RunId 1`),
+  // ~\.claude stays closed apart from the exact saved-tool-result shape, and only for Read / Grep
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\memory\\MEMORY.md",
+    },
+  },
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\D--projects\\404b023e-e260-4f40-b063-fcf3f29b8c1b\\tool-results\\x.txt",
+    },
+  },
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\..\\..\\..\\..\\.credentials.json",
+    },
+  },
+  {
+    tool_name: "Read",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\b97tmx0jd.png",
+    },
+  },
+  {
+    tool_name: "Grep",
+    tool_input: {
+      pattern: "token",
+      path: "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results",
+    },
+  },
+  {
+    tool_name: "Write",
+    tool_input: {
+      file_path:
+        "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\b97tmx0jd.txt",
+      content: "x",
+    },
+  },
+  ps(
+    `Get-Content "C:\\Users\\Ve Bui\\.claude\\projects\\C--Users-Ve-Bui--innovation-loop-cardlens-work\\f22cbd4b-f1a1-4dec-816d-1adb1363b907\\tool-results\\b97tmx0jd.txt"`,
+  ),
   ps(`gh run delete 123 -R vekbui96/cardlens`),
   ps(`gh run view 123 -R vekbui96/cardlens --web`),
   ps(`gh run view 123 --log-failed`),
@@ -394,6 +467,7 @@ const reviewDeny = [
 const buildEnv = { ...env, INNOVATION_LOOP_CARDLENS_MODE: "BUILD" };
 const buildAllow = [
   ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(`${S}\\ci-diffs.ps1 -Pr 40 -Issue 12 -RunId 123456789`),
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
   ps(`${S}\\test-gate.ps1 -Issue 12 -Step all -ExpectString "Open binder"`),
   ps(`git -C "${C}" push -u origin loop/12-binder-hint`),
@@ -430,6 +504,7 @@ const proposeAllow = [
 ];
 const proposeDeny = [
   ps(`${S}\\wait-ci.ps1 -Pr 40`),
+  ps(`${S}\\ci-diffs.ps1 -Pr 40 -Issue 12 -RunId 123456789`),
   ps(`${S}\\test-gate.ps1 -Issue 12 -Step all`),
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
   ps(`${S}\\progress.ps1 -Issue 12 -Stage plan`),

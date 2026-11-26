@@ -153,11 +153,28 @@ const SECRET = [
   [/\.credentials|git\s+credential|cmdkey|Get-StoredCredential|vault/i, "credential stores"],
   [/\\users\\[^\\]+\\\.claude(\\|$)|~[\\/]\.claude([\\/]|$)/i, "Claude's own config and credentials"],
 ];
+const CLAUDE_DIR_RULE = SECRET[SECRET.length - 1][0];
 
-function checkNames(s, what) {
+// The one file under ~\.claude a session may READ: a tool result Claude Code saved for this loop's own
+// session because it was too large to show inline ("Output too large ... Full output saved to:
+// C:\Users\<u>\.claude\projects\<loop work dir>\<session uuid>\tool-results\<id>.txt"). It holds output
+// of a tool call the guard already allowed, so reading it back exposes nothing new; without it the session
+// could not read the CI log it had just fetched (#356). Exact shape only: the projects folder of the
+// loop's work dir, a session uuid, tool-results, one .txt/.json file. Read and Grep only, never a write,
+// never a shell command, never the rest of ~\.claude (credentials, settings, other projects).
+const OWN_TOOL_RESULT =
+  /^[a-z]:\\users\\[^\\]+\\\.claude\\projects\\[^\\]*innovation-loop-cardlens[^\\]*\\[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\tool-results\\[\w.-]+\.(txt|json)$/;
+function isOwnToolResult(p) {
+  const n = norm(p);
+  return !n.includes("..") && OWN_TOOL_RESULT.test(n);
+}
+
+function checkNames(s, what, opts = {}) {
   for (const [re, name] of NEVER) if (re.test(s)) block(`${what} references a never-touch item: ${name}`);
-  for (const [re, name] of SECRET)
+  for (const [re, name] of SECRET) {
+    if (opts.ownToolResult && re === CLAUDE_DIR_RULE) continue;
     if (re.test(s)) block(`${what} looks like it reads or prints a secret: ${name}`);
+  }
 }
 
 // D:\services: only the cardlens service logs may be read (by file tools or Get-Content/Select-String).
@@ -369,7 +386,7 @@ function checkPreviewBrowse(c) {
 // ---- file tools --------------------------------------------------------------------------------
 if (["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep"].includes(tool)) {
   const p = ti.file_path || ti.path || ti.notebook_path || "";
-  checkNames(p, `${tool} ${p}`);
+  checkNames(p, `${tool} ${p}`, { ownToolResult: ["Read", "Grep"].includes(tool) && isOwnToolResult(p) });
   if (ti.glob) checkNames(ti.glob, `${tool} glob`);
   checkServices(p, `${tool} ${p}`, ["Read", "Grep", "Glob"].includes(tool));
   if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(tool)) {
@@ -857,7 +874,7 @@ if (tool === "Bash" || tool === "PowerShell") {
         continue;
       }
       if (
-        !/\\(check-approval|test-gate|update-snapshots|wait-ci|merge-pr|deploy|rollback|ci-rerun|progress)\.ps1$/.test(
+        !/\\(check-approval|test-gate|update-snapshots|wait-ci|merge-pr|deploy|rollback|ci-rerun|ci-diffs|progress)\.ps1$/.test(
           f,
         )
       )
