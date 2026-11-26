@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
+import { openV2, stabiliseForSnapshot, stubNoPrintings } from "./pages/base.ts";
 
 /**
  * The binder builder, from `docs/v2/specs/05-binder.md`.
@@ -655,6 +655,8 @@ test.describe("binder @visual", () => {
      * Desktop only: on a phone this content is a `Sheet`, not a rail.
      */
     test.skip(test.info().project.name !== "v2-desktop", "the rail is the desktop layout");
+    // No live prices in the shot: the e2e server prices /api/printings from TCGdex (see stubNoPrintings).
+    await stubNoPrintings(page);
     await openBinder(page, "fx-empty");
     await page.getByRole("button", { name: "Pocket 1, empty" }).click();
     const rail = page.getByRole("complementary", { name: "Cards" });

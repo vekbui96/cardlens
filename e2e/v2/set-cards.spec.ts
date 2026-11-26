@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
+import { openV2, stabiliseForSnapshot, stubNoPrintings } from "./pages/base.ts";
 
 /**
  * Set cards — `docs/v2/specs/03-set-cards.md`.
@@ -266,6 +266,8 @@ test.describe("set cards @visual", () => {
 
   test("a set the catalog cannot reach", async ({ page }) => {
     // A mock-catalog set with the catalog failing: the screen's error state.
+    // No live prices in the shot: the e2e server prices /api/printings from TCGdex (see stubNoPrintings).
+    await stubNoPrintings(page);
     await openV2(page, "/set/sv3/Obsidian%20Flames", { sim: "fail" });
     await expect(page.getByRole("heading", { name: "The card catalog could not be reached" })).toBeVisible({
       timeout: 20000,
@@ -277,6 +279,8 @@ test.describe("set cards @visual", () => {
   test("a set while the catalog is still answering", async ({ page }) => {
     // `sim=slow` holds the catalog for two seconds: long enough to look at, and
     // the screenshot of the placeholder block alone does not depend on it ending.
+    // No live prices in the shot: the e2e server prices /api/printings from TCGdex (see stubNoPrintings).
+    await stubNoPrintings(page);
     await openV2(page, "/set/sv3/Obsidian%20Flames", { sim: "slow" });
     const loading = page.locator('[aria-busy="true"]');
     await expect(loading).toBeVisible();
