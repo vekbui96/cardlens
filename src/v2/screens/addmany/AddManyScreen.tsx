@@ -3,6 +3,8 @@ import { useSets } from "../../../hooks/useSets.ts";
 import { parseCardList, type ParsedCardLine } from "../../../models/cardListParse.ts";
 import type { PokemonSet } from "../../../models/cards.ts";
 import { Panel, Stack } from "../../primitives/index.ts";
+import { readOwnedCsv } from "../../../models/ownedCsvRead.ts";
+import { expandRange, rangeToLines } from "../../../models/setRange.ts";
 import { PreviewSet, type MissingLine } from "./PreviewSet.tsx";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { asOwned, planAdd, type AddEntry } from "./applyPlan.ts";
@@ -21,6 +23,13 @@ function findSet(sets: readonly PokemonSet[], typed: string): PokemonSet | undef
   );
 }
 
+type Mode = "list" | "set" | "csv";
+const MODES: readonly (readonly [Mode, string])[] = [
+  ["list", "Paste list"],
+  ["set", "Whole set"],
+  ["csv", "CSV file"],
+];
+
 interface NotRecognised {
   line: number;
   raw: string;
@@ -37,9 +46,38 @@ interface NotRecognised {
  * sets still show.
  */
 export function AddManyScreen() {
-  const [text, setText] = useState("");
+  const [mode, setMode] = useState<Mode>("list");
+  const [typed, setText] = useState("");
   const { data: sets, isLoading: setsLoading } = useSets();
+
+  // Whole set: a set and a range become `<set> <number>` lines.
+  const [rangeSetId, setRangeSetId] = useState("");
+  const [rangeText, setRangeText] = useState("1-50");
+  const range = useMemo(() => expandRange(rangeText), [rangeText]);
+  const rangeSet = sets?.find((s) => s.id === rangeSetId);
+
+  // CSV: the file's text, read into lines once the sets are known.
+  const [csv, setCsv] = useState<{ name: string; text: string } | null>(null);
+  const csvRead = useMemo(() => {
+    if (!csv || !sets) return null;
+    const byName = (name: string) => sets.find((s) => s.name.toLowerCase() === name.toLowerCase())?.id;
+    return readOwnedCsv(csv.text, byName);
+  }, [csv, sets]);
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setCsv({ name: file.name, text: await file.text() });
+  };
+
+  const text =
+    mode === "list"
+      ? typed
+      : mode === "set"
+        ? rangeSet && range.ok
+          ? rangeToLines(rangeSet.id, range.numbers)
+          : ""
+        : (csvRead?.text ?? "");
   const parsed = useMemo(() => parseCardList(text), [text]);
+  const csvProblems: NotRecognised[] = mode === "csv" ? (csvRead?.problems ?? []) : [];
 
   const { groups, unknownSet } = useMemo(() => {
     const bySet = new Map<string, { set: PokemonSet; lines: ParsedCardLine[] }>();
@@ -101,54 +139,135 @@ export function AddManyScreen() {
   const notRecognised: NotRecognised[] = [
     ...parsed.lines.flatMap((l) => (l.ok ? [] : [{ line: l.line, raw: l.raw, reason: l.reason }])),
     ...unknownSet,
+    ...csvProblems,
     ...groups.flatMap((g) => missing[g.set.id] ?? []),
   ].sort((a, b) => a.line - b.line);
 
   const lineCount = parsed.lines.length;
+  const showPreview = lineCount > 0 || csvProblems.length > 0;
 
   return (
     <Stack gap={5}>
       <header>
         <h1 className={styles.title}>Add many cards</h1>
-        <p className={styles.meta}>Paste a list, one card per line, and see what it would add.</p>
+        <p className={styles.meta}>
+          Paste a list, add a whole set or import a CSV, and see what it would add.
+        </p>
       </header>
 
-      <Stack gap={2}>
-        <label htmlFor="addmany-text" className={styles.label}>
-          Your card list
-        </label>
-        <textarea
-          id="addmany-text"
-          className={styles.textarea}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          placeholder={"SV3 125\nsv3 126 x2\nsv3 127 holo"}
-        />
-        <p className={styles.meta} data-testid="addmany-hint">
-          Each line is a set code, a card number, then optionally a quantity (x2) and a printing (normal,
-          reverse, holo, 1st). Tap an example to try it:
-        </p>
-        <div className={styles.examples} role="group" aria-label="Example lines">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example}
-              type="button"
-              className={styles.example}
-              onClick={() =>
-                setText((t) => (t.trim() === "" ? example : `${t.replace(/\s+$/, "")}\n${example}`))
-              }
-            >
-              {example}
-            </button>
-          ))}
-        </div>
-      </Stack>
+      <div className={styles.examples} role="group" aria-label="How to fill the preview">
+        {MODES.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={styles.example}
+            aria-pressed={mode === id}
+            data-active={mode === id ? "true" : undefined}
+            onClick={() => setMode(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {lineCount > 0 ? (
+      {mode === "set" ? (
+        <Stack gap={2}>
+          <label htmlFor="addmany-set" className={styles.label}>
+            Set
+          </label>
+          <select
+            id="addmany-set"
+            className={styles.field}
+            value={rangeSetId}
+            onChange={(e) => setRangeSetId(e.target.value)}
+          >
+            <option value="">{setsLoading ? "Loading sets…" : "Choose a set"}</option>
+            {(sets ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="addmany-range" className={styles.label}>
+            Card numbers
+          </label>
+          <input
+            id="addmany-range"
+            className={styles.field}
+            value={rangeText}
+            onChange={(e) => setRangeText(e.target.value)}
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="1-50"
+          />
+          <p className={styles.meta} data-testid="addmany-range-count">
+            {!range.ok
+              ? range.reason
+              : rangeSet
+                ? `${plural(range.numbers.length, "card", "cards")} from ${rangeSet.name}. Numbers the set does not have are listed under Not recognised.`
+                : "Choose a set to see its cards."}
+          </p>
+        </Stack>
+      ) : null}
+
+      {mode === "csv" ? (
+        <Stack gap={2}>
+          <label htmlFor="addmany-csv" className={styles.label}>
+            Choose CSV file
+          </label>
+          <input
+            id="addmany-csv"
+            type="file"
+            accept=".csv,text/csv"
+            className={styles.field}
+            onChange={(e) => void onFile(e.target.files?.[0])}
+          />
+          <p className={styles.meta} data-testid="addmany-csv-hint">
+            {csv
+              ? `${csv.name}: ${plural(csvRead?.rows ?? 0, "row", "rows")} read.`
+              : "Use a file from Download CSV of owned cards: name, set, number, finish, price. Prices come from the catalog; an unknown price shows unpriced."}
+          </p>
+        </Stack>
+      ) : null}
+
+      {mode === "list" ? (
+        <Stack gap={2}>
+          <label htmlFor="addmany-text" className={styles.label}>
+            Your card list
+          </label>
+          <textarea
+            id="addmany-text"
+            className={styles.textarea}
+            value={typed}
+            onChange={(e) => setText(e.target.value)}
+            rows={6}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            placeholder={"SV3 125\nsv3 126 x2\nsv3 127 holo"}
+          />
+          <p className={styles.meta} data-testid="addmany-hint">
+            Each line is a set code, a card number, then optionally a quantity (x2) and a printing (normal,
+            reverse, holo, 1st). Tap an example to try it:
+          </p>
+          <div className={styles.examples} role="group" aria-label="Example lines">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                className={styles.example}
+                onClick={() =>
+                  setText((t) => (t.trim() === "" ? example : `${t.replace(/\s+$/, "")}\n${example}`))
+                }
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </Stack>
+      ) : null}
+
+      {showPreview ? (
         <Stack gap={4}>
           <p className={styles.headline} data-testid="addmany-summary">
             {plural(lineCount, "line", "lines")} read
