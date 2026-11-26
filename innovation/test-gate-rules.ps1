@@ -267,6 +267,46 @@ foreach ($k in 'Engine', 'Search') {
 }
 Check ((Get-Content (Join-Path $PSScriptRoot 'LOOP.md') -Raw).Contains($script:DesignSkillPaths.Engine)) 'LOOP.md names the pinned engine path'
 
+# ---- CI red on main (wait-ci.ps1 MAIN-RED, run-loop.ps1 Phase A stop) ----------------------------------------
+function WRun { param([string]$Name = 'CI', [string]$Branch = 'main', [string]$Status = 'completed', [string]$Concl = 'success', [string]$At = '2026-11-24T21:58:00Z', [long]$Id = 1)
+    [pscustomobject]@{ name = $Name; head_branch = $Branch; status = $Status; conclusion = $Concl; created_at = $At; id = $Id; head_sha = '230ef72aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } }
+$runsM = @((WRun -Concl 'failure' -At '2026-11-24T21:58:00Z' -Id 10), (WRun -Concl 'cancelled' -At '2026-11-25T11:55:00Z' -Id 11), (WRun -Status 'in_progress' -Concl '' -At '2026-11-26T02:18:00Z' -Id 12),
+    (WRun -Name 'Deploy to GitHub Pages' -Concl 'success' -At '2026-11-26T02:19:00Z' -Id 13), (WRun -Branch 'loop/1-x' -Concl 'success' -At '2026-11-26T03:00:00Z' -Id 14))
+Check ((Select-LatestMainCiRun -Runs $runsM).id -eq 10) 'latest FINISHED main CI run: cancelled, running, other workflows and branches are skipped'
+Check ($null -eq (Select-LatestMainCiRun -Runs @((WRun -Concl 'cancelled')))) 'only cancelled runs: no verdict'
+Check ((Select-LatestMainCiRun -Runs @((WRun -Concl 'failure' -At '2026-11-24T21:58:00Z' -Id 10), (WRun -Concl 'success' -At '2026-11-25T00:09:00Z' -Id 20))).id -eq 20) 'a newer green run wins'
+$jobsRed = @((Job $verify), (Job 'Playwright E2E'), (Job 'v2 Visual Regression' 'completed' 'failure'), (Job 'Upload' 'completed' 'failure'))
+Check ((@(Get-RequiredFailedJobs -Jobs $jobsRed) -join ',') -eq 'v2 Visual Regression') 'required failed jobs only'
+Check (@(Get-RequiredFailedJobs -Jobs $all).Count -eq 0) 'all green: no failed job'
+$sepC = [string][char]0x203A; $rule = [string][char]0x2500 * 6
+$logHomePhone = "v2 Visual Regression`tRun visual specs`t2026-11-24T21:59:01.1Z   1) [v2-phone] $sepC e2e/v2/home.spec.ts:568:3 $sepC prices in flight @visual $sepC prices rate limited $rule"
+$logHomeDesk = "v2 Visual Regression`tRun visual specs`t2026-11-24T22:01:01.1Z ##[error]  1) [v2-desktop] $sepC e2e/v2/home.spec.ts:570:3 $sepC prices in flight @visual $sepC prices rate limited " +
+    "`nv2 Visual Regression`tRun visual specs`t2026-11-24T22:01:01.1Z xxF::error file=e2e/v2/home.spec.ts,title=[v2-desktop] $sepC e2e/v2/home.spec.ts:570:3 $sepC prices in flight @visual $sepC prices rate limited,line=602,col=24::  1) [v2-desktop] $sepC e2e/v2/home.spec.ts:570:3 $sepC prices in flight @visual $sepC prices rate limited $rule%0A    Error: expect(page).toHaveScreenshot(expected) failed%0A"
+$logAdd = "x`ty`t2026-11-25T23:16:34.2Z ##[error]  1) [v2-phone] $sepC e2e/v2/addmany.spec.ts:75:3 $sepC add many cards @visual $sepC after adding: the confirmation with Undo "
+$idHome = 'e2e/v2/home.spec.ts > prices in flight @visual > prices rate limited'
+Check ((@(Get-FailingTestIds -Log $logHomePhone) -join '|') -eq $idHome) "failing test id: project and line dropped, rule stripped ($(@(Get-FailingTestIds -Log $logHomePhone) -join '|'))"
+Check ((@(Get-FailingTestIds -Log $logHomeDesk) -join '|') -eq $idHome) 'the GitHub annotation line gives the same id (title cut at ,line= and %0A)'
+Check (@(Get-FailingTestIds -Log 'no tests here').Count -eq 0) 'no test lines: no ids'
+$vr = @('v2 Visual Regression')
+$d = Get-MainRedDecision -PrJobs $vr -MainJobs $vr -PrTests @(Get-FailingTestIds -Log $logHomeDesk) -MainTests @(Get-FailingTestIds -Log $logHomePhone)
+Check ($d.State -eq 'main-red') "#303 / #304: the same Home shot red on main (other width) -> main-red ($($d.Why))"
+$d = Get-MainRedDecision -PrJobs $vr -MainJobs $vr -PrTests @(Get-FailingTestIds -Log $logAdd) -MainTests @(Get-FailingTestIds -Log $logHomePhone)
+Check ($d.State -eq 'own') '#356: its own visual case while main fails another one -> own'
+$d = Get-MainRedDecision -PrJobs $vr -MainJobs $vr -PrTests @(Get-FailingTestIds -Log ($logAdd + "`n" + $logHomeDesk)) -MainTests @(Get-FailingTestIds -Log $logHomePhone)
+Check ($d.State -eq 'mixed' -and @($d.OnlyHere).Count -eq 1 -and "$($d.OnlyHere[0])" -match 'addmany') 'main''s failure plus one of its own -> mixed, only its own to fix'
+$d = Get-MainRedDecision -PrJobs @('Playwright E2E') -MainJobs $vr
+Check ($d.State -eq 'own') 'a different job red on main -> own'
+$d = Get-MainRedDecision -PrJobs $vr -MainJobs @()
+Check ($d.State -eq 'own') 'main green -> own'
+$d = Get-MainRedDecision -PrJobs $vr -MainJobs $vr
+Check ($d.State -eq 'main-red') 'same job, no test names on either side -> main-red'
+$d = Get-MainRedDecision -PrJobs @('Playwright E2E', 'v2 Visual Regression') -MainJobs $vr
+Check ($d.State -eq 'mixed') 'an extra failed job of its own -> mixed'
+$wc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'wait-ci.ps1'))
+Check ($wc.Contains('Get-MainRedDecision') -and $wc.Contains('MAIN-RED:')) 'wait-ci.ps1 labels a failure that main has too'
+$rl = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'run-loop.ps1'))
+Check ($rl.Contains('$mainRed = Get-MainCiRed') -and $rl.IndexOf('$mainRed = Get-MainCiRed') -lt $rl.IndexOf("Invoke-Session -Kind 'build'")) 'run-loop.ps1 checks main CI before starting a build session'
+
 if ($script:fail -gt 0) { Write-Host "TEST-GATE-RULES FAIL ($script:fail failed, $script:pass passed)"; exit 1 }
 Write-Host "TEST-GATE-RULES PASS ($script:pass checks)"
 exit 0

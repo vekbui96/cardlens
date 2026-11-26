@@ -490,6 +490,7 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      `gh run view <id> -R vekbui96/cardlens --log-failed` (the run id is in that output). When Claude Code
      answers "Output too large ... Full output saved to: <path>\tool-results\<id>.txt", Read or Grep that
      exact file (the guard allows your own saved tool results, nothing else under `.claude`).
+     If a `MAIN-RED` line is printed above the last line, read the first bullet below before anything else.
      **v2 Visual Regression failed: look at CI's images before changing anything.**
      `<SCRIPTS>\ci-diffs.ps1 -Pr <pr#> -Issue <n> -RunId <id>` downloads only that run's `visual-diffs`
      artifact into WORK and prints one `CI-DIFFS <case> <expected|actual|diff> <path>` line per image.
@@ -500,6 +501,14 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      and CI (a price, a date, a load race). Fix the cause (wait for the state, mask the volatile element
      with `[data-snapshot="volatile"]`, or make the fixture deterministic); do not just regenerate again.
      Then:
+     - **`MAIN-RED: ...` above the last line**: the same tests fail on main's latest CI run, so the failure is
+       not your change's (on 2026-11-24 a flaky Home shot red on main sank #303 and #304, classed `other`).
+       Spend no fix round on it and do not touch the other screen's test or baseline: go to Failure with
+       class `ci-infra` (a cause outside the change; the same code can be built again once main is green),
+       naming main's run from that line, and
+       leave the PR open. `MAIN-RED (partly): ...` means some failures are main's and some are yours: fix
+       only yours (the "only here" list); if after that only main's remain, it is `ci-infra` as above.
+       (The runner also starts no build while a required CI job is red on main.)
      - if the ONLY failure is in Playwright E2E and every failing spec is a known-flaky one unrelated to
        your diff (`e2e/bulk-mark.spec.ts`, the bulk-mark timing window; `e2e/v2/target-sealed.spec.ts`, the
        Target specs), you may ask for ONE rerun of that run's failed jobs:
@@ -508,8 +517,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
        round; say in the final comment that it happened and why.
      - otherwise fix it on the same `loop/<n>-<slug>` branch, re-run the local gate
        (`test-gate.ps1 -Step all`, plus `update-snapshots.ps1` if visuals changed), commit, push to the
-       same branch, and call wait-ci.ps1 again (it waits for the new head). A visual diff usually means
-       baselines need `update-snapshots.ps1`.
+       same branch, and call wait-ci.ps1 again (it waits for the new head). A visual diff in a shot your
+       change meant to alter needs `update-snapshots.ps1`; any other visual diff, read its CI images first
+       (`ci-diffs.ps1`, above).
        At most **3 CI fix rounds** per issue. If CI still fails after the third: comment a summary (what
        failed in each round and what you tried; failure class `tests`, or `ci-infra` only if every round
        failed for infrastructure reasons), add `loop:failed`, remove `loop:in-progress`, leave the PR
@@ -623,7 +633,8 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
     - outside the change (retried once automatically, unless the outcome is `rolled-back`):
       `ci-infra` (CI failed for infrastructure reasons: a runner/network/GitHub error, a required job
       cancelled or never created, so `WAIT-CI REFUSED` or `MERGE-PR REFUSED` on a skipped/cancelled/missing
-      job; never a test that failed on your diff), `ci-timeout` (`WAIT-CI TIMEOUT`, `MERGE-PR CI-TIMEOUT`),
+      job; or a `MAIN-RED:` line from wait-ci.ps1: the same failure is on main; never a test that failed
+      on your diff), `ci-timeout` (`WAIT-CI TIMEOUT`, `MERGE-PR CI-TIMEOUT`),
       `gap-refused` (`MERGE-PR REFUSED` for protected paths in the GAP commits, not the PR's own diff),
       `deploy-unavailable` (the elevated task, its lock or its selftest unavailable: merge-pr refusing on
       it, or `deploy.ps1` exit 1 before anything changed), `out-of-time` (step 9).
@@ -641,14 +652,17 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
 ## 4. Gates (summary)
 
 - Local: `test-gate.ps1 -Step all` PASS (install + browser, format, verify, Pages-style build with the
-  string in the chunks, or `-NoVisibleString` with its rule and source-map check); visual baselines regenerated and read when UI changed. No local e2e.
+  string in the built JS or CSS and not on the live site, or `-NoVisibleString` with its rule and source-map check); visual baselines regenerated and read when UI changed. No local e2e.
 - Screenshots: any change a person can see has before/after images (390px, plus 1440px when the desktop
   layout changed) from the v2 visual baselines in the PR body and the final comment; without them the
   plan fails.
 - CI (the e2e gate for every change): Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression
   all completed + success on the PR's exact head, waited for with ONE `wait-ci.ps1` call per head; at most
-  3 fix rounds; one rerun only for known-flaky specs via `ci-rerun.ps1`.
-- Merge: `merge-pr.ps1` (approval, protected paths, CI green on the exact head sha, `--match-head-commit`).
+  3 fix rounds; one rerun only for known-flaky specs via `ci-rerun.ps1`; a visual failure is read from CI's
+  images (`ci-diffs.ps1`); a failure that is also on main (`MAIN-RED`) gets no fix round (class `ci-infra`).
+- Merge: `merge-pr.ps1` (approval, protected paths, the deploy check decided before the merge: the
+  gate-verified `-ExpectString` or a valid `-NoVisibleString`, CI green on the exact head sha,
+  `--match-head-commit`).
 - Deploy: `deploy.ps1` exit 0 (server health with a stable pid when deployed; the Pages run of this sha;
   served bytes contain the string, or for `-NoVisibleString` git proves only unreferenced `src/` modules
   were added; the page renders).

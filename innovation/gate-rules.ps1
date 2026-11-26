@@ -1058,6 +1058,87 @@ function Format-WaitCiLine {
     }
 }
 
+# ---- CI red on main ------------------------------------------------------------------------------------
+# On 2026-11-23/24 v2 Visual Regression failed on main itself 7 times (a flaky Home "prices rate limited" shot,
+# fixed on main by 0a3704a). Every PR inherits a red main, so #303 and #304 were built, went red on a failure
+# that was not theirs, were classed `other` (no automatic retry) and died. Two rules:
+#   wait-ci.ps1   a PR failure that is the SAME failure as on main is labelled MAIN-RED: no fix round, class
+#                 ci-infra (Get-MainRedDecision)
+#   run-loop.ps1  no build session starts while a required CI job is red on main's latest finished CI run
+#                 (Select-LatestMainCiRun + Get-RequiredFailedJobs)
+
+# The latest finished CI run of main from GET repos/<r>/actions/runs?branch=main (workflow_runs): name CI,
+# completed, success or failure (a cancelled run, superseded by a newer push, says nothing). $null if none.
+function Select-LatestMainCiRun {
+    param([object[]]$Runs, [string]$Workflow = 'CI')
+    $c = @($Runs | Where-Object { $_ -and "$($_.name)" -eq $Workflow -and "$($_.head_branch)" -eq 'main' -and "$($_.status)" -eq 'completed' -and "$($_.conclusion)" -in @('success', 'failure') } |
+            Sort-Object { "$($_.created_at)" } -Descending)
+    if ($c.Count -eq 0) { return $null }
+    return $c[0]
+}
+
+# Names of the REQUIRED jobs ($CiRequiredJobs) that failed, from a jobs list (GET .../runs/<id>/jobs: name,
+# conclusion) or check runs.
+function Get-RequiredFailedJobs {
+    param([object[]]$Jobs, [object[]]$Required = $script:CiRequiredJobs)
+    $out = @()
+    foreach ($req in $Required) {
+        $hit = @($Jobs | Where-Object { $_ -and "$($_.name)" -match $req.Pattern -and "$($_.conclusion)" -in @('failure', 'timed_out') })
+        if ($hit.Count -gt 0) { $out += $req.Name }
+    }
+    return @($out)
+}
+
+# Failing Playwright tests in a `gh run view <id> --log-failed` text, as "<spec> > <title>" with the project and
+# the line:column dropped (the line differs between branches; a flaky test fails at phone width in one run and
+# at desktop width in the next), e.g. "e2e/v2/home.spec.ts > prices in flight @visual > prices rate limited".
+# The GitHub annotation line ("::error ...title=...,line=83,col=42::  1) ...%0A ...") yields the same id: the
+# title is cut at ",line=" and at the first encoded newline. Unique, sorted.
+function Get-FailingTestIds {
+    param([string]$Log)
+    $ids = @()
+    # Playwright separates the parts with U+203A (or '>' in some reporters); headers may end in a U+2500 rule
+    # (built from char codes: this file stays ASCII, which Windows PowerShell 5.1 reads without a BOM)
+    $sep = '\s+(?:' + [char]0x203A + '|>)\s+'
+    $rx = '\[([\w.-]+)\]' + $sep + '((?:e2e/)?[\w./-]+\.spec\.ts):\d+:\d+' + $sep + '(.+?)[\s' + [char]0x2500 + ']*$'
+    foreach ($l in ("$Log" -split "`r?`n")) {
+        $t = ($l -replace '\x1b\[[0-9;]*[A-Za-z]', '')
+        $m = [regex]::Match($t, $rx)
+        if (-not $m.Success) { continue }
+        $spec = $m.Groups[2].Value; if (-not $spec.StartsWith('e2e/')) { $spec = "e2e/$spec" }
+        $title = $m.Groups[3].Value
+        $title = ($title -split '%0A', 2)[0]
+        $title = ($title -replace ',line=\d+,col=\d+::.*$', '')
+        $title = ($title -replace $sep, ' > ' -replace ('[\s' + [char]0x2500 + ']+$'), '').Trim()
+        if ($title) { $ids += "$spec > $title" }
+    }
+    return @($ids | Sort-Object -Unique)
+}
+
+# Is a PR's CI failure the same one main has? -PrJobs / -MainJobs: names of the failed required jobs.
+# -PrTests / -MainTests: Get-FailingTestIds of each failed log. State:
+#   main-red  every failed PR job also fails on main, and every failing PR test also fails there (or no test
+#             could be parsed on either side): not caused by this change -> no fix round, class ci-infra
+#   mixed     some failures are main's, some only here (OnlyHere): fix only those
+#   own       nothing in common with main: an ordinary CI fix round
+function Get-MainRedDecision {
+    param([string[]]$PrJobs = @(), [string[]]$MainJobs = @(), [string[]]$PrTests = @(), [string[]]$MainTests = @())
+    $pj = @($PrJobs | Where-Object { $_ }); $mj = @($MainJobs | Where-Object { $_ })
+    $pt = @($PrTests | Where-Object { $_ }); $mt = @($MainTests | Where-Object { $_ })
+    $sharedJobs = @($pj | Where-Object { $mj -contains $_ })
+    $mk = { param([string]$S, [string[]]$Shared, [string[]]$Only, [string]$Why) [pscustomobject]@{ State = $S; Shared = @($Shared); OnlyHere = @($Only); Why = $Why } }
+    if ($pj.Count -eq 0 -or $sharedJobs.Count -eq 0) { return (& $mk 'own' @() @($pt) 'main is not red in the same job') }
+    $onlyJobs = @($pj | Where-Object { $mj -notcontains $_ })
+    if ($pt.Count -gt 0 -and $mt.Count -gt 0) {
+        $sharedT = @($pt | Where-Object { $mt -contains $_ }); $onlyT = @($pt | Where-Object { $mt -notcontains $_ })
+        if ($sharedT.Count -eq 0) { return (& $mk 'own' @() @($pt) "main is red in $($sharedJobs -join ', ') too, but on other tests") }
+        if ($onlyT.Count -eq 0 -and $onlyJobs.Count -eq 0) { return (& $mk 'main-red' $sharedT @() "the same tests fail on main: $($sharedT -join '; ')") }
+        return (& $mk 'mixed' $sharedT (@($onlyT) + @($onlyJobs)) "failing on main too: $($sharedT -join '; '); only here: $((@($onlyT) + @($onlyJobs)) -join '; ')")
+    }
+    if ($onlyJobs.Count -eq 0) { return (& $mk 'main-red' $sharedJobs @() "the same job fails on main ($($sharedJobs -join ', ')); no test names to compare") }
+    return (& $mk 'mixed' $sharedJobs $onlyJobs "failing on main too: $($sharedJobs -join ', '); only here: $($onlyJobs -join ', ')")
+}
+
 # Failure classes. The session writes the class of every build failure as a marker line in its final
 # failure comment (LOOP.md section 3, "Failure classes"); run-loop.ps1 writes timeout / max-turns /
 # max-budget / session-ended itself when the session stopped mid-build. Retryable = the cause was outside the change, so
