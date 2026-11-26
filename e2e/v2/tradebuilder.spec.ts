@@ -23,6 +23,17 @@ test.describe("trade builder", () => {
     await page.getByRole("button", { name: /^Remove / }).click();
     await expect(page.getByTestId("give-empty")).toBeVisible();
   });
+
+  test("adds a card to the get side and shows a balance", async ({ page }) => {
+    await openV2(page, "/tradebuilder");
+    await expect(page.getByTestId("get-empty")).toBeVisible();
+    const search = page.getByLabel("Add a card you would get");
+    await search.fill("charizard");
+    await search.press("Enter");
+    await page.getByRole("button", { name: /^Get / }).first().click();
+    await expect(page.getByTestId("get-total")).toContainText("1 card");
+    await expect(page.getByTestId("balance")).toBeVisible();
+  });
 });
 
 test.describe("trade builder @visual", () => {
@@ -42,11 +53,23 @@ test.describe("trade builder @visual", () => {
     }
     await search.fill("");
     await expect(page.getByTestId("give-list").locator("li")).toHaveCount(2);
+    const getSearch = page.getByLabel("Add a card you would get");
+    await getSearch.fill("charizard");
+    await getSearch.press("Enter");
+    await page.getByRole("button", { name: /^Get / }).first().click();
+    await expect(page.getByTestId("get-list").locator("li")).toHaveCount(1);
     await page.waitForLoadState("networkidle");
     await stabiliseForSnapshot(page);
     await expect(page.getByRole("main")).toHaveScreenshot("tradebuilder-two-cards.png", {
       timeout: 20000,
-      mask: [page.getByTestId("give-price"), page.getByTestId("give-total")],
+      mask: [
+        page.getByTestId("give-price"),
+        page.getByTestId("give-total"),
+        page.getByTestId("get-price"),
+        page.getByTestId("get-total"),
+        page.getByTestId("balance"),
+        page.getByTestId("balance-unpriced"),
+      ],
     });
   });
 });
