@@ -487,7 +487,19 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      code (`WAIT-CI TIMEOUT`, exit 4: go to Failure, class `ci-timeout`).
    - `WAIT-CI FAIL <sha7> ...; failed jobs: <names>` (exit 3): a CI fix round. The lines above it list the
      failed jobs and the tail of each failed run's log; read them first. Only if they are not enough, use
-     `gh run view <id> -R vekbui96/cardlens --log-failed` (the run id is in that output). Then:
+     `gh run view <id> -R vekbui96/cardlens --log-failed` (the run id is in that output). When Claude Code
+     answers "Output too large ... Full output saved to: <path>\tool-results\<id>.txt", Read or Grep that
+     exact file (the guard allows your own saved tool results, nothing else under `.claude`).
+     **v2 Visual Regression failed: look at CI's images before changing anything.**
+     `<SCRIPTS>\ci-diffs.ps1 -Pr <pr#> -Issue <n> -RunId <id>` downloads only that run's `visual-diffs`
+     artifact into WORK and prints one `CI-DIFFS <case> <expected|actual|diff> <path>` line per image.
+     Read the `-diff.png` of each failing case first (the differing pixels are red), then its expected
+     and actual images, and name in your fix round what differs (for example "the second row's price:
+     $0.37 in CI, unpriced in the baseline"). A difference that is the SAME in every CI retry and survives a
+     fresh `update-snapshots.ps1` is not a flake: it is data or timing that differs between the container
+     and CI (a price, a date, a load race). Fix the cause (wait for the state, mask the volatile element
+     with `[data-snapshot="volatile"]`, or make the fixture deterministic); do not just regenerate again.
+     Then:
      - if the ONLY failure is in Playwright E2E and every failing spec is a known-flaky one unrelated to
        your diff (`e2e/bulk-mark.spec.ts`, the bulk-mark timing window; `e2e/v2/target-sealed.spec.ts`, the
        Target specs), you may ask for ONE rerun of that run's failed jobs:
