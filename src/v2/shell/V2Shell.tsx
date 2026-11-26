@@ -39,7 +39,7 @@ const DESTINATIONS: readonly Destination[] = [
   { label: "Collection", screen: { name: "collection" }, also: ["sets", "set", "owned", "addmany"] },
   { label: "Search", screen: { name: "results", query: "" }, also: ["details"] },
   { label: "Scan", screen: { name: "scan" } },
-  { label: "Binders", screen: { name: "binders" }, also: ["binder"] },
+  { label: "Binders", screen: { name: "binders" }, also: ["binder", "tradebuilder"] },
   { label: "Sealed", screen: { name: "sealed" } },
   { label: "Target", screen: { name: "target" } },
 ];

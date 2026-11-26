@@ -17,6 +17,8 @@ const SCREENS: Screen[] = [
   { name: "workshop" },
   // v2's Want list, reached from Home's progress panel.
   { name: "wantlist" },
+  // The Trade builder, not the share visitor's `trade` page.
+  { name: "tradebuilder" },
 ];
 
 describe("screen <-> path", () => {

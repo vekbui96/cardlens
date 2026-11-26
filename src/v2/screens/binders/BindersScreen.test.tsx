@@ -220,6 +220,16 @@ describe("what a binder is worth", () => {
   });
 });
 
+describe("the Trade entry", () => {
+  it("is a link to the Trade builder on an empty shelf and on a full one", () => {
+    const { unmount } = render(<BindersScreen />, { wrapper: harness() });
+    expect(screen.getByRole("link", { name: "Trade" })).toHaveAttribute("href", "#/tradebuilder");
+    unmount();
+    renderSeeded(fullBinder());
+    expect(screen.getByRole("link", { name: "Trade" })).toHaveAttribute("href", "#/tradebuilder");
+  });
+});
+
 describe("an empty shelf", () => {
   it("is the create tile alone, with no summary to state", () => {
     // "0 binders · 0 cards" is a fact nobody needed stated twice, and the old

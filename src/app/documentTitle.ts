@@ -30,6 +30,7 @@ const LABELS: Record<ScreenName, string> = {
   wantlist: "Want list",
   insights: "Insights",
   addmany: "Add many cards",
+  tradebuilder: "Trade",
   workshop: "Workshop",
 };
 

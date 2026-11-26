@@ -52,6 +52,8 @@ export type Screen =
   | { name: "insights" }
   /** v2 only: paste a list of cards and preview what it would add. v1 falls through to Home. */
   | { name: "addmany" }
+  /** v2 only: work out a trade from your own cards. Not `trade`, the share visitor's page. */
+  | { name: "tradebuilder" }
   /**
    * v2 and development only: every primitive, in every state, against
    * fixtures. It is a screen rather than a separate entry point so that it

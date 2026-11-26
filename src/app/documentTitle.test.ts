@@ -17,6 +17,7 @@ describe("screenTitle", () => {
     expect(screenTitle("home")).toBe("Home · CardLens");
     expect(screenTitle("wantlist")).toBe("Want list · CardLens");
     expect(screenTitle("collection")).toBe("My cards · CardLens");
+    expect(screenTitle("tradebuilder")).toBe("Trade · CardLens");
   });
 
   it("names a shared binder for what a visitor sees: a showcase", () => {
