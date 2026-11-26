@@ -71,7 +71,34 @@ async function settle(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Answer the TCGdex-backed printings endpoint locally, with fixed prices.
+ *
+ * A line that names a printing ("sv3 223 holo") is priced from the printings
+ * index or not at all, and under mocks the e2e server builds that index live
+ * from TCGdex. So the price in these shots was whatever TCGdex said during the
+ * run: CI drew "$82.37" while a local container run drew "Unpriced", a 175px
+ * diff that no amount of regenerating could settle. 82.37 is what TCGdex
+ * reported when the baselines were drawn; it is pinned here, not fetched.
+ */
+async function stubPrintings(page: Page): Promise<void> {
+  await page.route("**/api/printings/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tcgdexSetId: "sv3",
+        byNumber: { "125": [{ type: "holo" }], "223": [{ type: "holo", price: 82.37 }] },
+      }),
+    }),
+  );
+}
+
 test.describe("add many cards @visual", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubPrintings(page);
+  });
+
   test("after adding: the confirmation with Undo", async ({ page }) => {
     await openV2(page, "/addmany");
     await page.getByLabel("Your card list").fill("sv3 125 x2\nsv3 223 holo\nzzz 1");
