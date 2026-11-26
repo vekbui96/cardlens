@@ -14,6 +14,9 @@
   - PASS: every required job is green on the head. Call merge-pr.ps1 next.
   - FAIL: a required job failed. Above the last line it prints the failed jobs and the tail of
     `gh run view <id> --log-failed` for each failed run, so a CI fix round needs no further gh calls.
+    When the same required job is also red on main's latest finished CI run, it compares the failing tests
+    (gate-rules.ps1 Get-MainRedDecision) and prints `MAIN-RED: ...` (the same failure as main: no fix round,
+    class ci-infra) or `MAIN-RED (partly): ...` (fix only what is not on main) above the last line.
   - REFUSED: a required job was skipped, cancelled or never appeared (merge-pr.ps1 would refuse it; this is
     not a test failure on the change).
   - PENDING (exit 5): this call's -CallMinutes ran out first (a foreground tool call is killed after 10
@@ -60,13 +63,38 @@ try {
             foreach ($f in $v.Failed) { Write-Output "  $f" }
             # one log per failed workflow run (a check run's html_url is .../actions/runs/<runId>/job/<jobId>)
             $runIds = @($v.Failed | ForEach-Object { [regex]::Match("$_", '/actions/runs/(\d+)').Groups[1].Value } | Where-Object { $_ } | Select-Object -Unique)
+            $prLogs = New-Object System.Collections.ArrayList
             foreach ($rid in $runIds) {
                 $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
                 $log = & $script:GhExe run view $rid -R $Repo --log-failed 2>&1 | ForEach-Object { "$_" }
                 $ErrorActionPreference = $prev
+                [void]$prLogs.Add(($log -join "`n"))
                 Write-Output "Run $rid (gh run view $rid -R $Repo --log-failed), tail:"
                 foreach ($l in (Get-CiLogTail -Log ($log -join "`n") -Lines $TailLines)) { Write-Output "  $l" }
             }
+            # Is it main's failure? Compared with main's latest finished CI run (gate-rules.ps1 Get-MainRedDecision).
+            # Fails open: if main cannot be read, the failure is treated as the PR's own, as before.
+            try {
+                $mainRuns = Get-GhJson @('api', "repos/$Repo/actions/runs?branch=main&per_page=30")
+                $mr = Select-LatestMainCiRun -Runs @($mainRuns.workflow_runs)
+                if ($mr -and "$($mr.conclusion)" -eq 'failure') {
+                    $mj = Get-GhJson @('api', "repos/$Repo/actions/runs/$($mr.id)/jobs?per_page=50")
+                    $mainFailed = @(Get-RequiredFailedJobs -Jobs @($mj.jobs))
+                    $prFailed = @(Get-RequiredFailedJobs -Jobs @($cr.check_runs))
+                    $mainTests = @(); $prTests = @(Get-FailingTestIds -Log ($prLogs -join "`n"))
+                    if (@($mainFailed | Where-Object { $prFailed -contains $_ }).Count -gt 0) {
+                        $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+                        $mlog = & $script:GhExe run view "$($mr.id)" -R $Repo --log-failed 2>&1 | ForEach-Object { "$_" }
+                        $ErrorActionPreference = $prev
+                        $mainTests = @(Get-FailingTestIds -Log ($mlog -join "`n"))
+                    }
+                    $md = Get-MainRedDecision -PrJobs $prFailed -MainJobs $mainFailed -PrTests $prTests -MainTests $mainTests
+                    $where = "main's CI run $($mr.id) on $("$($mr.head_sha)".Substring(0, 7))"
+                    Note "main red check: $($md.State): $($md.Why) ($where)"
+                    if ($md.State -eq 'main-red') { Write-Output "MAIN-RED: $($md.Why) ($where). Not caused by this change: spend no CI fix round on it; go to Failure with class ci-infra and leave the PR open." }
+                    elseif ($md.State -eq 'mixed') { Write-Output "MAIN-RED (partly): $($md.Why) ($where). Fix only the failures that are not on main." }
+                } else { Note "main red check: main's latest finished CI run is $(if ($mr) { "$($mr.conclusion) ($($mr.id))" } else { 'not found' })" }
+            } catch { Note "main red check failed (ignored): $_" }
             break
         }
         if ($waited -ge $TimeoutMinutes) { break }

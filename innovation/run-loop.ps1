@@ -529,6 +529,25 @@ function Get-MetricsDigestLines {
     return @(Format-MetricsDigest -Results $res)
 }
 
+# Is a required CI job red on main's latest finished CI run? '' when not (or when it cannot be read: fails open,
+# the PR's own CI gate still applies), else "<jobs> on <sha7>, run <id>". A build started on a red main inherits
+# the failure (#303 and #304 on 2026-11-24), so Phase A starts no build session meanwhile (gate-rules.ps1
+# Select-LatestMainCiRun / Get-RequiredFailedJobs).
+function Get-MainCiRed {
+    try {
+        $runs = Get-GhJson @('api', "repos/$($script:Repo)/actions/runs?branch=main&per_page=30")
+        $mr = Select-LatestMainCiRun -Runs @($runs.workflow_runs)
+        if (-not $mr -or "$($mr.conclusion)" -ne 'failure') { return '' }
+        $jobs = Get-GhJson @('api', "repos/$($script:Repo)/actions/runs/$($mr.id)/jobs?per_page=50")
+        $red = @(Get-RequiredFailedJobs -Jobs @($jobs.jobs))
+        if ($red.Count -eq 0) { return '' }
+        return "$($red -join ', ') on $("$($mr.head_sha)".Substring(0, 7)), run $($mr.id)"
+    } catch {
+        Write-Log "main CI check failed (ignored, builds go ahead): $_" 'WARN'
+        return ''
+    }
+}
+
 # The ops hub's plan-budget verdict, read now (the runner reads it, never claude; before every session, so a
 # verdict that changes mid-run is respected). Fails open: see gate-rules.ps1 Get-PlanBudgetVerdict.
 function Get-PlanBudget {
@@ -2011,6 +2030,11 @@ try {
             $isReq = ($dec.Start -and @(Get-RequestWork $q) -contains [int]$dec.Issue)
             if ($isReq) { $capD = Get-DailyCapDecision -Kind 'build' -Counts $null -Config $Cfg -Request } else { $capD = Get-DailyCap 'build' }
             if ($dec.Start -and -not $capD.Allowed) { $dec = [pscustomobject]@{ Start = $false; Issue = 0; Reason = "$($capD.Reason); approved issues stay approved and are built on a later day" } }
+            # CI red on main: the build's PR would inherit it and die on a failure that is not its own (#303, #304)
+            if ($dec.Start) {
+                $mainRed = Get-MainCiRed
+                if ($mainRed) { $dec = [pscustomobject]@{ Start = $false; Issue = 0; Reason = "CI is red on main ($mainRed); a new PR would inherit that failure, so approved work stays queued until main is green again" } }
+            }
             Write-Log "Phase A: $(if ($dec.Start) { 'starting' } else { 'stop:' }) $($dec.Reason)"
             if (-not $dec.Start) { [void]$runNotes.Add("Phase A stopped: $($dec.Reason)"); break }
             $n = $dec.Issue
