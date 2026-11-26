@@ -607,6 +607,15 @@ so the server deploy runs in the separate elevated task, which takes no argument
   `import.meta.glob` (else the deploy refuses and reverts), `test-gate.ps1` also checks the new modules are
   absent from the built source maps, and the live check is the same Pages-run / every-chunk / render check
   without a string. Any modified shipped front-end file keeps the string mandatory.
+  **Decided before the merge (2026-11-25).** `test-gate.ps1 -Step build -ExpectString` checks the string is in
+  the built JS or CSS and NOT already served by the live site, and records it with a fingerprint of the
+  front-end content it built (`state\gate-build-<n>.json`; `live-check.ps1` Get-WorkingFrontFingerprint).
+  `merge-pr.ps1 -ExpectString` / `-NoVisibleString` (step 3d, Get-DeployCheckDecision) refuses to merge a PR
+  that ships front-end files unless that record matches the PR head's front-end content and string, or the
+  no-visible-string rule holds on the PR's diff, and records the check with the merge; `deploy.ps1` uses the
+  recorded check. Before this, deploy.ps1 learned after the merge that its check could not work and
+  reverted main: #145, #320 and #327 were working builds rolled back that way, #294 merged a string the live
+  check never found.
 - **Server**, only when `server/`, a `tsconfig.node.json` shared file, `package.json` or the lockfile
   changed between the live HEAD and the merge: snapshot all of `D:\services\data` to
   `D:\services\backups\predeploy-<stamp>.zip` (newest 10 kept), record PREV, `git reset --hard <merge>` in

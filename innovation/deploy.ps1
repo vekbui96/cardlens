@@ -22,6 +22,8 @@
      deploy stops and reverts): the same Pages-run / every-chunk / render checks without a string
   4. on any failure: server rollback (elevated, if the server was deployed) + git revert of the merge on
      main (Pages then redeploys the old build) + verify the string is gone and the page renders
+  The string (or no-visible-string reason) merge-pr.ps1 verified before the merge (its step 3d, recorded with
+  the merge) is used when -ExpectString / -NoVisibleString are omitted or differ from it.
 
 .EXIT CODES
   0 deployed and verified | 1 precondition failed BEFORE anything changed (nothing to undo)
@@ -77,6 +79,18 @@ try {
     # session cannot write). Not a loop merge = not ours to deploy OR to revert, so this exits 1 untouched.
     $rec = Read-State "merge-$Issue"
     if (-not $rec -or "$($rec.mergeSha)" -ne $MergeSha) { Finish 1 "DEPLOY PRECONDITION $MergeSha is not the merge merge-pr.ps1 recorded for issue #$Issue (nothing changed)" }
+    # The deploy check merge-pr.ps1 verified BEFORE merging (its step 3d) is the one used: given nothing, or
+    # something different, deploy.ps1 takes the recorded check instead of finding out after the merge.
+    $recMode = "$($rec.deployCheck)"
+    if ($recMode -in @('expect', 'novisible')) {
+        $recExpect = "$($rec.expectString)"; $recNoVis = "$($rec.noVisibleString)"
+        if ($ExpectString -cne $recExpect -or $NoVisibleString -cne $recNoVis) {
+            if ($ExpectString -or $NoVisibleString) { Write-Log "the deploy check given (ExpectString '$ExpectString', NoVisibleString '$NoVisibleString') differs from the one merge-pr.ps1 verified before the merge; using the verified one" 'WARN' }
+            $ExpectString = $recExpect; $NoVisibleString = $recNoVis
+            $state.expectString = $ExpectString; $state.noVisibleString = $NoVisibleString
+        }
+        Write-Log "deploy check verified before the merge by merge-pr.ps1: $recMode (ExpectString '$ExpectString', NoVisibleString '$NoVisibleString')"
+    }
     Invoke-Git -Repo $script:Clone -Arguments @('fetch', 'origin', '--prune') | Out-Null
     $anc = Invoke-Git -Repo $script:Clone -Arguments @('merge-base', '--is-ancestor', $MergeSha, 'origin/main') -AllowFail -Quiet
     if ($anc.Code -ne 0) { Finish 1 "DEPLOY PRECONDITION $MergeSha is not on origin/main (nothing merged, nothing to undo)" }

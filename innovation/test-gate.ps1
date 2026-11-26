@@ -15,7 +15,10 @@
     unit     npm.cmd exec -- vitest run <-UnitFilter>        (quick iteration on one test file)
     build    npm.cmd run build with the Pages env set IN POWERSHELL (VITE_BASE=/cardlens/; never Git Bash,
              which mangles it into /Program Files/Git/cardlens/), then dist\index.html must reference
-             /cardlens/assets/index-*.js; with -ExpectString it must be in a built dist\assets\*.js.
+             /cardlens/assets/index-*.js; with -ExpectString it must be in a built dist\assets\*.js or *.css,
+             NOT already served by the live site (one pass over the live chunk graph), and the result is
+             recorded in state\gate-build-<issue>.json with the front-end content's fingerprint: merge-pr.ps1
+             merges only with a string this record verified for the PR head's exact front-end code.
              With -NoVisibleString "<reason>" instead (a change that only adds src/ modules nothing imports
              yet): the branch's diff against origin/main must pass live-check.ps1 Get-NoVisibleStringDecision
              (every front-end file new under src/, no shipped import.meta.glob) and none of the new modules
@@ -140,8 +143,30 @@ foreach ($s in $steps) {
                 if (-not $asset) { Fail 'dist\index.html does not reference /cardlens/assets/index-*.js (wrong VITE_BASE?)'; break }
                 Write-Log "built entry: $asset"
                 if ($ExpectString) {
-                    $hit = Select-String -Path (Join-Path $full 'dist\assets\*.js') -SimpleMatch -Pattern $ExpectString -List | Select-Object -First 1
-                    if (-not $hit) { Fail "ExpectString not found in any dist\assets\*.js" } else { Write-Log "ExpectString found in $(Split-Path $hit.Path -Leaf)" }
+                    # JS and CSS, like the live check (a layout-only change can be verified by a new CSS declaration
+                    # as it appears minified in dist\assets\*.css)
+                    $hit = Select-String -Path @((Join-Path $full 'dist\assets\*.js'), (Join-Path $full 'dist\assets\*.css')) -SimpleMatch -Pattern $ExpectString -List | Select-Object -First 1
+                    if (-not $hit) { Fail "ExpectString not found in any dist\assets\*.js or *.css" } else { Write-Log "ExpectString found in $(Split-Path $hit.Path -Leaf)" }
+                    # must be NEW: a string the live site already serves cannot prove the new build is live, and the
+                    # rollback (string gone again) would end in PRODUCTION NEEDS VE (live-check.ps1 Test-StringServedNow)
+                    $live = $null
+                    if ($hit) {
+                        $live = Test-StringServedNow -String $ExpectString
+                        if ($live.Found) { Fail "ExpectString is already served by the live site ($($live.In)): choose a string only the new build contains" }
+                        elseif ($live.Checked) { Write-Log "ExpectString is not served by the live site today: $($live.Why)" }
+                        else { Write-Log "could not check whether the live site already serves the ExpectString: $($live.Why)" 'WARN' }
+                    }
+                    # merge-pr.ps1 merges only with a string this record verified for the PR head's exact front-end content
+                    try {
+                        $fp = Get-WorkingFrontFingerprint -Repo $full -TempIndex (Join-Path $script:LoopHome "work\gate-index-$Issue")
+                        $servedNow = $null; $servedIn = ''
+                        if ($live -and $live.Checked) { $servedNow = [bool]$live.Found; $servedIn = "$($live.In)" }
+                        $foundIn = ''; if ($hit) { $foundIn = Split-Path $hit.Path -Leaf }
+                        Save-State "gate-build-$Issue" @{ issue = "$Issue"; expectString = $ExpectString; found = [bool]$hit; foundIn = $foundIn
+                            servedNow = $servedNow; servedIn = $servedIn; fingerprint = $fp
+                            head = (Get-GitValue -Repo $full -Arguments @('rev-parse', 'HEAD')); utc = [DateTime]::UtcNow.ToString('o') }
+                        Write-Log "recorded the deploy check for merge-pr.ps1 (state\gate-build-$Issue.json)"
+                    } catch { Fail "could not record the verified ExpectString for merge-pr.ps1: $_" }
                 }
                 if ($NoVisibleString) {
                     if ($ExpectString) { Fail 'pass -ExpectString or -NoVisibleString, not both'; break }

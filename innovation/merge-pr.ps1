@@ -26,6 +26,13 @@
   3c. preview QA (sessions.json options.previewQa): when the runner marked it required for this run and the PR is
      user-facing, the QA verdict on the PR's preview must be for this exact head and allow the merge (pass, partial,
      unverified); otherwise MERGE-PR REFUSED PREVIEW-QA: ... (print LOOP-PR-READY and end; not a failure)
+  3d. the deploy check, BEFORE merging (merge == Pages deploy): when the PR changes front-end files that ship,
+     -ExpectString or -NoVisibleString (the same one deploy.ps1 will get) is required and must pass now
+     (live-check.ps1 Get-DeployCheckDecision): an -ExpectString must have been found by test-gate.ps1 -Step build
+     in a build of the PR head's exact front-end content and not be served by the live site today; a
+     -NoVisibleString must pass the no-visible-string rule on the PR's diff. Otherwise MERGE-PR REFUSED
+     DEPLOY-CHECK: ... (nothing merged). The check is recorded with the merge; deploy.ps1 uses it.
+     (Until 2026-11-25 deploy.ps1 found this out after the merge and reverted main: #145, #320, #327.)
   4b. if the PR needs a server deploy: the elevated task's selftest
   5. gh pr merge --merge --match-head-commit <sha> --delete-branch; prints the merge commit sha
 
@@ -38,9 +45,14 @@ param(
     [Parameter(Mandatory)][int]$Pr,
     [Parameter(Mandatory)][int]$Issue,
     [int]$TimeoutMinutes = 50,
-    [ValidateRange(1, 9)][int]$WaitMinutes = 9
+    [ValidateRange(1, 9)][int]$WaitMinutes = 9,
+    # the deploy check deploy.ps1 will get (3d): a string only the new build contains, verified by test-gate.ps1
+    [string]$ExpectString = '',
+    # ...or, ONLY for a change that adds src/ modules nothing imports yet, why there is no visible string
+    [string]$NoVisibleString = ''
 )
 . "$PSScriptRoot\lib.ps1"
+. "$PSScriptRoot\live-check.ps1"      # Test-FrontFile, Get-NoVisibleStringDecision, Get-DeployCheckDecision (same rules as deploy.ps1)
 . "$PSScriptRoot\gate-rules.ps1"
 . "$PSScriptRoot\product-qa.ps1"      # Get-QaScope: is the PR user-facing (preview QA gate)
 . "$PSScriptRoot\preview-rules.ps1"   # Get-PreviewMergeGate
@@ -131,6 +143,20 @@ try {
         }
         Refuse $why
     }
+    # ---- 3d. the deploy check deploy.ps1 will run, decided BEFORE the merge (merge == Pages deploy) -------------
+    $frontFiles = @($ownNames | Where-Object { Test-FrontFile $_ } | Select-Object -Unique)
+    $nv = $null
+    if ($NoVisibleString -and $frontFiles.Count -gt 0) {
+        $ns = @((Invoke-Git -Repo $script:Clone -Arguments @('diff', '--name-status', '--no-renames', $base, $headSha) -Quiet).Output)
+        $gg = Invoke-Git -Repo $script:Clone -Arguments @('grep', '-l', '-F', 'import.meta.glob', $headSha, '--', 'src') -AllowFail -Quiet
+        if ($gg.Code -gt 1) { Refuse "DEPLOY-CHECK: git grep for import.meta.glob failed (exit $($gg.Code))" }
+        $globs = @($gg.Output | Where-Object { $_ } | ForEach-Object { "$_" -replace '^[0-9a-f]{40}:', '' })
+        $nv = Get-NoVisibleStringDecision -NameStatus $ns -GlobFiles $globs
+    }
+    $fp = ''; if ($ExpectString -and $frontFiles.Count -gt 0) { $fp = Get-FrontFingerprint -Repo $script:Clone -Treeish $headSha }
+    $dc = Get-DeployCheckDecision -FrontFiles $frontFiles -ExpectString $ExpectString -NoVisibleString $NoVisibleString -NoVisible $nv -GateRecord (Read-State "gate-build-$Issue") -Fingerprint $fp
+    Write-Log "deploy check: ok=$($dc.Ok) mode=$($dc.Mode) ($($dc.Why))"
+    if (-not $dc.Ok) { Refuse "DEPLOY-CHECK: $($dc.Why)" }
     # ---- 3c. preview QA (options.previewQa): the runner built this head as a mock-data preview and QA drove it
     # before the merge. A record of THIS run (state\preview-qa-<n>.json, written by the runner; sessions cannot write
     # state\) makes the gate required; a user-facing PR then merges only when the QA verdict for its exact head allows
@@ -184,7 +210,10 @@ try {
         if ($m.merged -and $m.merge_commit_sha) { $mergeSha = $m.merge_commit_sha } else { Start-Sleep -Seconds 3 }
     }
     if (-not $mergeSha) { throw 'merge reported success but no merge commit sha was found' }
-    Save-State "merge-$Issue" @{ issue = $Issue; pr = $Pr; headSha = $headSha; mergeSha = $mergeSha; mergedUtc = [DateTime]::UtcNow.ToString('o') }
+    $dcExpect = ''; $dcNoVisible = ''
+    if ($dc.Mode -eq 'expect') { $dcExpect = $ExpectString } elseif ($dc.Mode -eq 'novisible') { $dcNoVisible = $NoVisibleString }
+    Save-State "merge-$Issue" @{ issue = $Issue; pr = $Pr; headSha = $headSha; mergeSha = $mergeSha; mergedUtc = [DateTime]::UtcNow.ToString('o')
+        deployCheck = $dc.Mode; expectString = $dcExpect; noVisibleString = $dcNoVisible }
     Write-Log "merged PR #$Pr as $mergeSha"
     if ($gapServerCommits.Count -gt 0) {
         # say it on the issue in code, not only via the session: Ve's merged server work goes live with this deploy

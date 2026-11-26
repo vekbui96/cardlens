@@ -153,6 +153,70 @@ Check ($dp.Contains('if ($frontFiles.Count -gt 0 -and $ExpectString) { $notSig =
 $tg = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'test-gate.ps1'))
 Check ($tg.Contains('Get-NoVisibleStringDecision') -and $tg.Contains('Find-ModulesInSourceMaps')) 'test-gate.ps1 checks the same rule plus the source maps'
 
+# ---- the deploy check decided before the merge (Test-StringServedNow, fingerprint, Get-DeployCheckDecision) ----
+$sn = Test-StringServedNow -String 'Biggest movers'
+Check ($sn.Checked -and $sn.Found -and $sn.In -eq 'MoversPanel-MMMMMM11.js') "a string the live site serves (nested chunk) is found ($($sn.Why))"
+$sn = Test-StringServedNow -String 'Whole set'
+Check ($sn.Checked -and -not $sn.Found) "a new string is not served today ($($sn.Why))"
+$site['index-HOME0011.js'] = @{ Status = 200; Body = 'import"./Gone-GGGGGG11.js";' }
+$sn = Test-StringServedNow -String 'Whole set'
+Check (-not $sn.Checked -and -not $sn.Found) 'an incomplete live walk is reported as not checked (never as "not served")'
+$site['index-HOME0011.js'] = @{ Status = 200; Body = 'import"./V2App-AAAAAA11.js";import{P}from"./MoversPanel-MMMMMM11.js";' }
+
+$lsA = @("040000 tree 1111111111111111111111111111111111111111${T}src", "100644 blob 2222222222222222222222222222222222222222${T}index.html", "100644 blob 3333333333333333333333333333333333333333${T}package-lock.json")
+$lsB = @($lsA[2], $lsA[0], $lsA[1])
+$fpA = Format-FrontFingerprint -LsTree $lsA
+Check ($fpA -eq 'index.html=2222222222222222222222222222222222222222;package-lock.json=3333333333333333333333333333333333333333;src=1111111111111111111111111111111111111111') "fingerprint is path=sha sorted ($fpA)"
+Check ((Format-FrontFingerprint -LsTree $lsB) -eq $fpA) 'fingerprint does not depend on ls-tree order'
+Check ((Format-FrontFingerprint -LsTree @("040000 tree 9999999999999999999999999999999999999999${T}src", $lsA[1], $lsA[2])) -ne $fpA) 'a changed src tree changes the fingerprint'
+Check ((Format-FrontFingerprint -LsTree @()) -eq '') 'no front-end paths: empty fingerprint'
+$mg = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'merge-pr.ps1'))
+Check ($mg.Contains('Get-FrontFingerprint') -and $tg.Contains('Get-WorkingFrontFingerprint')) 'merge-pr.ps1 fingerprints the PR head and test-gate.ps1 the built working tree'
+
+$front = @('src/v2/screens/home/Home.tsx')
+$rec = [pscustomobject]@{ expectString = 'Whole set'; found = $true; servedNow = $false; servedIn = ''; fingerprint = $fpA }
+$d = Get-DeployCheckDecision -FrontFiles @()
+Check ($d.Ok -and $d.Mode -eq 'none') 'no shipped front-end file: no string needed'
+$d = Get-DeployCheckDecision -FrontFiles $front
+Check (-not $d.Ok -and $d.Why -match 'pass the -ExpectString') "#320 / #327: a shipped change with neither string is refused BEFORE the merge ($($d.Why))"
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'a' -NoVisibleString 'because reasons'
+Check (-not $d.Ok -and $d.Why -match 'not both') 'both given: refused'
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Whole set' -GateRecord $rec -Fingerprint $fpA
+Check ($d.Ok -and $d.Mode -eq 'expect') "verified string for the same front-end content: ok ($($d.Why))"
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Whole set' -GateRecord $null -Fingerprint $fpA
+Check (-not $d.Ok -and $d.Why -match 'no test-gate build record') 'no gate record: refused'
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'whole set' -GateRecord $rec -Fingerprint $fpA
+Check (-not $d.Ok -and $d.Why -match 'different string') 'a different string (case counts) than the gate verified: refused'
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Whole set' -GateRecord $rec -Fingerprint 'src=other'
+Check (-not $d.Ok -and $d.Why -match 'different front-end code') 'the gate built other front-end code than the PR head: refused'
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Whole set' -GateRecord $rec -Fingerprint ''
+Check (-not $d.Ok) 'no fingerprint of the PR head: refused (fail closed)'
+$recNF = [pscustomobject]@{ expectString = 'BASE complete'; found = $false; servedNow = $null; servedIn = ''; fingerprint = $fpA }
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'BASE complete' -GateRecord $recNF -Fingerprint $fpA
+Check (-not $d.Ok -and $d.Why -match 'not in the built') 'a string the build does not contain is refused before the merge'
+$recLive = [pscustomobject]@{ expectString = 'Scan or import'; found = $true; servedNow = $true; servedIn = 'index-HOME.js'; fingerprint = $fpA }
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Scan or import' -GateRecord $recLive -Fingerprint $fpA
+Check (-not $d.Ok -and $d.Why -match 'already serves') 'a string the live site already serves is refused (it proves nothing and breaks the rollback check)'
+$recUnk = [pscustomobject]@{ expectString = 'Whole set'; found = $true; servedNow = $null; servedIn = ''; fingerprint = $fpA }
+$d = Get-DeployCheckDecision -FrontFiles $front -ExpectString 'Whole set' -GateRecord $recUnk -Fingerprint $fpA
+Check ($d.Ok -and $d.Why -match 'could not be checked') 'live site unreachable during the gate: allowed, and said so'
+$nvOk = Get-NoVisibleStringDecision -NameStatus @("A${T}src/lib/x.ts")
+$nvBad = Get-NoVisibleStringDecision -NameStatus @("M${T}src/v2/screens/home/Home.module.css")
+$d = Get-DeployCheckDecision -FrontFiles @('src/lib/x.ts') -NoVisibleString 'model for a later slice' -NoVisible $nvOk
+Check ($d.Ok -and $d.Mode -eq 'novisible') '#145: an unreferenced new module with -NoVisibleString passes before the merge'
+$d = Get-DeployCheckDecision -FrontFiles @('src/v2/screens/home/Home.module.css') -NoVisibleString 'layout only, no new text' -NoVisible $nvBad
+Check (-not $d.Ok -and $d.Why -match 'would be refused by deploy.ps1') '#320: -NoVisibleString on a modified shipped file is refused before the merge'
+$d = Get-DeployCheckDecision -FrontFiles @('src/lib/x.ts') -NoVisibleString 'short' -NoVisible $nvOk
+Check (-not $d.Ok) '-NoVisibleString without a real reason: refused'
+$d = Get-DeployCheckDecision -FrontFiles @('src/lib/x.ts') -NoVisibleString 'model for a later slice' -NoVisible $null
+Check (-not $d.Ok) '-NoVisibleString with no rule result: refused (fail closed)'
+# wiring: merge-pr decides before CI and the merge and records it; deploy.ps1 takes the recorded check
+Check ($mg.Contains('Get-DeployCheckDecision') -and $mg.IndexOf('Get-DeployCheckDecision') -lt $mg.IndexOf("'pr', 'merge'")) 'merge-pr.ps1 decides the deploy check before it merges'
+Check ($mg.IndexOf('Get-DeployCheckDecision') -lt $mg.IndexOf('# ---- 4. CI on the exact head sha')) 'merge-pr.ps1 decides the deploy check before waiting for CI'
+Check ($mg.Contains('deployCheck = $dc.Mode')) 'merge-pr.ps1 records the verified check with the merge'
+Check ($dp.Contains('$rec.deployCheck') -and $dp.IndexOf('$rec.deployCheck') -lt $dp.IndexOf('Get-NoVisibleStringDecision -NameStatus')) 'deploy.ps1 takes the recorded check before applying its own rules'
+Check ($tg.Contains("'dist\assets\*.css'") -and $tg.Contains('Test-StringServedNow') -and $tg.Contains('"gate-build-$Issue"')) 'test-gate.ps1 searches CSS too, refuses a string already served, and records the check'
+
 # ---- wiring: every caller loads live-check.ps1 after lib.ps1, and it wins over the lib.ps1 copy ----------
 foreach ($f in 'deploy.ps1', 'rollback.ps1') {
     $t = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))

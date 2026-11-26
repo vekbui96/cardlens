@@ -373,7 +373,11 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    will change; approach; the test that must fail before the fix; the test plan; deploy targets (Pages
    only, or Pages + server, naming the server-relevant files); a change-specific string that only the new
    front-end build will contain (new UI copy is best; it is how the deploy is verified in the served
-   chunks), or, ONLY when the change adds new `src/` modules that nothing imports yet (a model or utility
+   chunks; it must NOT already be on the live site). A change with no new copy (layout, CSS, behaviour)
+   still ships, so it still needs one: a literal the change adds to the built JS or CSS, e.g. a new CSS
+   declaration as it appears minified in `dist\assets\*.css` (`max-width:720px`), a new `aria-label` or
+   a new `data-*` value. `test-gate.ps1 -Step build -ExpectString` checks the build has it and the live site
+   does not, and merge-pr.ps1 refuses to merge without that check. Or, ONLY when the change adds new `src/` modules that nothing imports yet (a model or utility
    for a later slice, plus its tests) and modifies no shipped front-end file, "no visible string: <reason>"
    (then use `-NoVisibleString "<reason>"` below instead of `-ExpectString`); data risk (does any stored shape, whitelist or merge rule change? if yes, stop: rule 8);
    screenshots (for a visible change: which screen(s), which existing `@visual` baselines will show it at
@@ -430,7 +434,11 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    - `<SCRIPTS>\test-gate.ps1 -Issue <n> -Step all -ExpectString "<string>"`: npm ci + the Playwright
      browser, Prettier (`format`, enforced by CI), `npm run verify` (format:check, typecheck, lint, check:v2,
      ~1,250 unit tests), and a Pages-style build whose `index.html` must reference
-     `/cardlens/assets/index-*.js` and whose chunks must contain the string. Last line `TEST-GATE PASS`.
+     `/cardlens/assets/index-*.js` and whose chunks (JS or CSS) must contain the string, which the live site
+     must not serve yet. Last line `TEST-GATE PASS`. The gate records the verified string together with the
+     exact front-end content it built (`state\gate-build-<n>.json`); merge-pr.ps1 merges only with that
+     string and only when the PR head has that same content, so run the gate (`-Step all` or `-Step build`)
+     again with the string after any later change to the front-end code, including a CI fix round.
      A change with no visible string (plan step 5) runs `-NoVisibleString "<reason>"` instead of
      `-ExpectString`: the gate then requires that every front-end file in your diff against origin/main is
      NEW under `src/` (no modified, deleted or renamed one, nothing in `public/`, `index.html` or
@@ -497,7 +505,10 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
        (progress done `failed`, Synopsis + Details, `LOOP-ISSUE-END <n> failed`).
    - `WAIT-CI REFUSED ...` (exit 1): a required job was skipped, cancelled or never appeared: not a test
      failure. Go to Failure (class `ci-infra`; no rollback needed; leave the PR open).
-     **Merge:** `<SCRIPTS>\merge-pr.ps1 -Pr <pr#> -Issue <n>` in the FOREGROUND (tool timeout 600000). It
+     **Merge:** `<SCRIPTS>\merge-pr.ps1 -Pr <pr#> -Issue <n> -ExpectString "<string>"` (the same string as
+     the gate and the deploy; `-NoVisibleString "<reason>"` instead for a no-visible-string change; neither
+     only when the PR changes no front-end file that ships) in the FOREGROUND (tool timeout 600000). A
+     session started with `NEXT: merge` takes the string from its Plan comment. It
      re-checks approval, the PR's branch/author, protected paths (the PR's own diff may touch none; in the
      commits already on main that the live server lacks, only protected paths the server RUNS refuse: card
      index, shared sync rules, Target bot, `.env`; `innovation/**`, `.github/**`, docs, e2e and client-only
@@ -505,7 +516,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      `MERGE-PR GAP-SERVER <sha> <subject>` lines the ones whose server changes go live with this merge's
      server deploy: put both in the `merge` progress detail and your final comment; merge-pr itself also
      notes GAP-SERVER commits on the issue after merging. A GAP-SERVER line makes this a server deploy even
-     for a front-end change), CORS/Target/`D:\services`/`VITE_` secret lines, then CI on the PR's exact head
+     for a front-end change), CORS/Target/`D:\services`/`VITE_` secret lines, the deploy check (the string
+     was found by the gate in a build of exactly this PR head's front-end code and is not on the live site,
+     or `-NoVisibleString` passes its rule on the PR's diff), then CI on the PR's exact head
      again (Typecheck/Lint/Unit/Build, Playwright E2E and v2 Visual Regression all completed + success;
      after a WAIT-CI PASS this is immediate). It checks the elevated task (server changes only) and merges
      with `--match-head-commit`.
@@ -515,6 +528,12 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    - `MERGE-PR REFUSED PREVIEW-QA: ...`: the preview QA gate (step 9a) has not passed on this head, or its look
      window still runs. Not a failure: do what it says (print `LOOP-PR-READY` and end, the fix round, or end the
      session for a look window: the runner merges after it).
+   - `MERGE-PR REFUSED DEPLOY-CHECK: ...`: nothing was merged, and it is not a failure yet. The deploy could
+     not have been verified (this is what used to merge and then revert main: #145, #320, #327). Do what it
+     says: run `test-gate.ps1 -Step build -ExpectString "<string>"` on the PR's final code, or choose a
+     string the change really adds to the built JS or CSS (plan step 5), then call merge-pr.ps1 again with
+     it. Only if the change adds nothing checkable to the build, go to Failure (class `other`; no rollback
+     needed; leave the PR open) and say so.
    - `MERGE-PR REFUSED ...` or `CI-TIMEOUT` (exit 4): nothing was merged. Go to Failure (no rollback
      needed; leave the PR open).
 
@@ -544,7 +563,8 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
     in the BACKGROUND (omit `-ExpectString` only if the merge changes no front-end source; for a change
     with no visible string pass the same `-NoVisibleString "<reason>"` as the gate instead: deploy.ps1
     re-checks the rule from git, refuses and reverts if it does not hold, and verifies by this sha's Pages
-    run, every served chunk and the render). Progress
+    run, every served chunk and the render; the check merge-pr.ps1 verified before the merge is what
+    deploy.ps1 uses, even if you pass something else). Progress
     `deploy` (running: "server: snapshot + restart" or "Pages only") with heartbeats from its log, then
     `verify` (running) once its log shows the live checks (Pages run, served chunks, render). It deploys the
     server through the elevated task when needed (data snapshot, reset, `npm ci` if the lockfile changed,

@@ -20,6 +20,10 @@ const allow = [
   ps(`${S}\\test-gate.ps1 -Issue 12 -Step all -ExpectString "Open binder"`),
   ps(`${S}\\test-gate.ps1 -Issue 12 -Step unit -UnitFilter src/models/binderLayout.test.ts`),
   ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12`),
+  // the deploy check decided before the merge (merge-pr.ps1 step 3d)
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12 -ExpectString "Open binder"`),
+  ps(`${S}\\merge-pr.ps1 -Pr 40 -Issue 12 -NoVisibleString "model for a later slice"`),
+  ps(`${S}\\test-gate.ps1 -Issue 12 -Step build -ExpectString "max-width:720px"`),
   ps(
     `${S}\\deploy.ps1 -Issue 12 -MergeSha 0123456789abcdef0123456789abcdef01234567 -ExpectString "Open binder"`,
   ),
