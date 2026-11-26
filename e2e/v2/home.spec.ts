@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
+import { openV2, stabiliseForSnapshot, stubNoPrintings } from "./pages/base.ts";
 
 /**
  * Home, from `docs/v2/specs/01-home.md`.
@@ -407,6 +407,8 @@ test.describe("home @visual", () => {
         }),
       );
     });
+    // No live prices in the shot: the e2e server prices /api/printings from TCGdex (see stubNoPrintings).
+    await stubNoPrintings(page);
     await openV2(page, "/", { seed: "numbered" });
     await expect(page.getByRole("heading", { name: "Closest to complete" })).toBeVisible();
     await expect(page.getByRole("main")).toContainText("to go");
@@ -427,6 +429,8 @@ test.describe("home @visual", () => {
         JSON.stringify({ all: { value: sets, storedAt: Date.now() } }),
       );
     });
+    // No live prices in the shot: the e2e server prices /api/printings from TCGdex (see stubNoPrintings).
+    await stubNoPrintings(page);
     await openV2(page, "/", { seed: "numbered" });
     await expect(page.getByRole("heading", { name: "Your collection", level: 1 })).toBeVisible();
     const link = page.getByRole("link", { name: "1 complete: see the Completed group" });

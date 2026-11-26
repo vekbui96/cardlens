@@ -66,6 +66,75 @@ async function stubImages(page: Page): Promise<void> {
 }
 
 /**
+ * Live upstream data must never reach a visual shot.
+ *
+ * Under mocks the e2e server still answers `/api/printings`, `/api/sealed`,
+ * `/api/set-information` and `/api/catalog/*` from the real price and card
+ * sources, and a request to a third-party host that is not an image goes to the
+ * open internet. A shot that depends on either is a coin toss between machines:
+ * #356's "after adding" case priced a row live from TCGdex, so CI rendered
+ * $82.37 where the local container rendered "Unpriced", and three CI fix rounds
+ * went into a 175-pixel difference nobody could see.
+ *
+ * So every response is watched from `openV2` on: one for those paths, or for a
+ * non-image third-party request, that came from a real server (Playwright gives
+ * a `serverAddr` only for responses that were not fulfilled by a `page.route`
+ * stub) is recorded, and `stabiliseForSnapshot` fails the shot with the list.
+ * The fix is a `page.route` stub with fixed data, as `collection.spec.ts` and
+ * `addmany.spec.ts` do for `/api/printings`.
+ */
+const UPSTREAM_BACKED = /^\/api\/(printings|sealed|set-information|catalog)(\/|$)/;
+const liveData = new WeakMap<Page, Set<string>>();
+
+function watchLiveData(page: Page): void {
+  if (liveData.has(page)) return;
+  const seen = new Set<string>();
+  liveData.set(page, seen);
+  page.on("response", (response) => {
+    let url: URL;
+    try {
+      url = new URL(response.url());
+    } catch {
+      return;
+    }
+    if (!/^https?:$/.test(url.protocol)) return;
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    const live = local ? UPSTREAM_BACKED.test(url.pathname) : response.request().resourceType() !== "image";
+    if (!live) return;
+    void response
+      .serverAddr()
+      .then((addr) => {
+        if (addr) seen.add(`${url.host}${url.pathname}`);
+      })
+      .catch(() => undefined);
+  });
+}
+
+/**
+ * Answer every `/api/printings/:setId` with a set that has no printings.
+ *
+ * For a shot whose subject is not prices (a progress line, an error state, a
+ * placeholder): it renders the same on every machine, "unpriced" where a price
+ * would be. A spec that wants prices on screen stubs its own fixed ones, as
+ * `collection.spec.ts` does. Register it before `openV2`.
+ */
+export async function stubNoPrintings(page: Page): Promise<void> {
+  await page.route("**/api/printings/**", (route) => {
+    const setId = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ tcgdexSetId: setId, byNumber: {} }),
+    });
+  });
+}
+
+/** The live upstream requests a page made since `openV2` (see `watchLiveData`). */
+export function liveDataRequests(page: Page): string[] {
+  return [...(liveData.get(page) ?? [])].sort();
+}
+
+/**
  * Open a v2 screen by its hash route.
  *
  * `?v=2` pins the version rather than relying on stored state, so a spec cannot
@@ -74,6 +143,7 @@ async function stubImages(page: Page): Promise<void> {
  * thing.
  */
 export async function openV2(page: Page, route = "/", options: OpenOptions = {}): Promise<V2Shell> {
+  watchLiveData(page);
   if (options.realImages !== true) await stubImages(page);
   const params = new URLSearchParams({ v: "2" });
   if (options.seed) params.set("seed", options.seed);
@@ -178,4 +248,10 @@ export async function stabiliseForSnapshot(page: Page): Promise<void> {
   });
 
   await page.waitForLoadState("networkidle");
+
+  // live upstream data in the shot: stub it (see `watchLiveData`)
+  expect(
+    liveDataRequests(page),
+    "this visual shot used live upstream data; stub these requests with page.route and fixed data",
+  ).toEqual([]);
 }
