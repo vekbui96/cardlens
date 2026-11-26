@@ -76,9 +76,11 @@ interface ChipProps {
   onPress?: () => void;
   pressed?: boolean;
   label?: string;
+  /** A button that cannot be pressed right now (only with `onPress`). */
+  disabled?: boolean;
 }
 
-export function Chip({ children, tone = "default", onPress, pressed, label }: ChipProps) {
+export function Chip({ children, tone = "default", onPress, pressed, label, disabled }: ChipProps) {
   const cls = cx(
     styles.chip,
     tone === "accent" && styles.chipAccent,
@@ -92,6 +94,7 @@ export function Chip({ children, tone = "default", onPress, pressed, label }: Ch
         type="button"
         className={cx(cls, styles.chipButton)}
         onClick={onPress}
+        disabled={disabled}
         {...(pressed === undefined ? {} : { "aria-pressed": pressed })}
         {...(label ? { "aria-label": label } : {})}
       >

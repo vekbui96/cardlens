@@ -455,6 +455,11 @@
   font-weight: var(--v2-fw-medium);
 }
 
+.chipButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .chipButton:focus-visible {
   outline: var(--v2-focus-ring);
   outline-offset: var(--v2-focus-offset);

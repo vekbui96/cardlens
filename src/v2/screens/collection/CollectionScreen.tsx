@@ -6,6 +6,7 @@ import { screenToPath } from "../../../app/screenUrl.ts";
 import { useSets } from "../../../hooks/useSets.ts";
 import { syncLine } from "../../../features/collection/syncLine.ts";
 import { Row, Stack, cx, failedOrRetrying } from "../../primitives/index.ts";
+import { BackupSection } from "./BackupSection.tsx";
 import { OwnedView } from "./OwnedView.tsx";
 import { SetsView } from "./SetsView.tsx";
 import { ValuePanel } from "./ValuePanel.tsx";
@@ -164,7 +165,10 @@ export function CollectionScreen() {
       <ValuePanel />
 
       {mode === "owned" ? (
-        <OwnedView />
+        <>
+          <OwnedView />
+          <BackupSection />
+        </>
       ) : (
         <SetsView
           groups={groups}
