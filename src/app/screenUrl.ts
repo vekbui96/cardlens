@@ -62,6 +62,7 @@ const SIMPLE = new Set([
   "wantlist",
   "insights",
   "addmany",
+  "tradebuilder",
 ]);
 
 /**

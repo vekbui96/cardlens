@@ -68,6 +68,9 @@ const Insights = lazyWithReload(() =>
 const AddMany = lazyWithReload(() =>
   import("./screens/addmany/index.ts").then((m) => ({ default: m.AddManyScreen })),
 );
+const TradeBuilder = lazyWithReload(() =>
+  import("./screens/tradebuilder/index.ts").then((m) => ({ default: m.TradeBuilderScreen })),
+);
 /*
  * The three public pages. A visitor who opens one of these will usually never
  * open another screen in this app, so they are their own chunk — nobody
@@ -152,6 +155,8 @@ function render(screen: Screen) {
       return <Insights />;
     case "addmany":
       return <AddMany />;
+    case "tradebuilder":
+      return <TradeBuilder />;
     case "workshop":
       return <Workshop />;
     default:

@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useNavigation } from "../../../app/NavigationProvider.tsx";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import { useBindersValue } from "../../../hooks/useBindersValue.ts";
 import { emptyBinder, type BinderFormat, type BinderSlot } from "../../../models/binderLayout.ts";
 import { Grid, Stack } from "../../primitives/index.ts";
@@ -64,6 +65,18 @@ export function BindersScreen() {
             binders · 0 cards" is a fact nobody needed stated twice — the create
             tile below already says the shelf is empty. */}
         {binders.length > 0 ? <p className={styles.summary}>{shelfSummary(binders)}</p> : null}
+        {/* A real link, so a modified click still opens a new tab. */}
+        <a
+          className={styles.tradeLink}
+          href={`#${screenToPath({ name: "tradebuilder" })}`}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            push({ name: "tradebuilder" });
+          }}
+        >
+          Trade
+        </a>
       </Stack>
 
       {/*
