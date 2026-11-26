@@ -17,7 +17,11 @@ user (Ve) on the **web / phone** shell; no accounts, marketplace, payments or so
 2026-11-22 has done its job (about 60 polish items shipped between 11-22 and 11-25). New ideas now lead
 with **features that give a collector a new reason to open CardLens**, not more readability tweaks.
 
-## Order of work (set 2026-11-22, updated 2026-11-24 by Ve)
+**2026-11-25, Ve: fewer, bigger, meaningful features.** The recent output has not felt impactful: too
+many thin slices and tweaks, and several approved specs half-built at once. So: no polish, one spec in
+flight, and specs of 2-3 bigger slices (rules 3-5 below).
+
+## Order of work (set 2026-11-22, updated 2026-11-25 by Ve)
 
 1. **Approved work finishes first.** Approved proposals, approved specs and their slices and request
    children keep building ahead of anything new, exactly as today. Do not propose anything that
@@ -25,23 +29,36 @@ with **features that give a collector a new reason to open CardLens**, not more 
 2. **New ideas are growth features.** Every new spec, and most new proposals, add a capability Ve does
    not have today: something new to do, see or decide in CardLens. A feature with a good UI beats a
    better UI on an existing feature.
-3. **Polish is capped: at most 1 in 5 new items** (count the open proposal queue plus this run's new
-   items) may be polish-only (spacing, labels, wording, tap targets, focus rings, skeleton tweaks, error
-   copy on a screen that already works). While 2 or more polish-only proposals are open, propose no more
-   polish. A run that finds no feature idea worth proposing proposes fewer items, not polish to fill
-   the slots. Accessibility bugs that block a task and real defects are not capped.
+3. **No polish for now (set 2026-11-25 by Ve; replaces the 1 in 5 cap).** Propose no polish-only items
+   (spacing, labels, wording, tap targets, focus rings, skeleton tweaks, error copy on a screen that
+   already works), not even bundled. The only exceptions are real defects (something is broken or
+   wrong) and accessibility bugs that block a task; say which one it is in **Why**. A run that finds no
+   feature idea worth proposing proposes fewer items, not polish to fill the slots.
+4. **One spec in flight (set 2026-11-25 by Ve).** Fewer, bigger, meaningful features: open no new spec
+   while an approved spec still has a slice that is not deployed or closed. A failed slice of an
+   approved spec (`loop:failed`) is resolved first, by Ve (rebuild, re-scope or close); until then no
+   new spec is opened. Opening the remaining slices of an already approved spec (`slicesToOpen`) is
+   not a new spec and goes ahead as usual.
+5. **Bigger slices (set 2026-11-25 by Ve).** A spec has **2-3 slices**, each **Size M**: a whole,
+   usable piece of the feature that Ve notices on its own, not a thin S step. Do not split one screen's
+   feature across several S slices. Mark a slice `size:small` only when it really is Size S.
 
 ## Feature specs wanted (set 2026-11-24, in this order)
 
-Write each as a spec (LOOP.md 5.7, 3-5 slices). Check open and closed issues first and build on what is
-live; the "Already live" line under each says what not to re-propose.
+Write each as a spec (LOOP.md 5.7, 2-3 Size M slices, see "Bigger slices" above). Check open and closed
+issues first and build on what is live; the "Already live" line under each says what not to re-propose.
 
-1. **Collection insights.** A screen (or a Home section that leads to one) that answers "what is my
-   collection?": value and count by set, era, rarity and type; most valuable cards; how concentrated
-   the value is (top 10 cards = n% of the total); price coverage; what was added this month and what it
-   is worth now; gain or loss since a card was added where the add date is stored. Derived from data
-   already stored and the prices already fetched, so it should need no server or stored-data change.
-   Already live: Home total, value over time (#117), biggest movers (#102 / #121), since you last looked
+1. **Collection insights, without rarity or type.** A screen (or a Home section that leads to one) that
+   answers "what is my collection?": value and count by set; most valuable cards; how concentrated the
+   value is (top 10 cards = n% of the total); price coverage; what was added this month and what it is
+   worth now. Derived from data already stored and the prices already fetched. **Decided by Ve
+   2026-11-25: Insights ships without the rarity / type breakdown** (#338 closed). The collection rows
+   carry no rarity or type (`/api/catalog/names` returns only name, number and image), so a breakdown by
+   rarity, type or era needs a **server field**: that is a possible future server-backed feature (a
+   spec for Ve with the server piece as slice 1), not part of Insights. Gain or loss since added needs
+   an add-time price, which is not stored (#341): new stored data, so not part of Insights either.
+   Already live: Insights screen with Most valuable cards (#336), value by set (#337), added this month
+   (#340), Home total, value over time (#117), biggest movers (#102 / #121), since you last looked
    (#110), per-set worth and Most valuable sort (#134), Biggest change sort (#129).
 2. **Set goals and a real want list.** Choose which sets Ve is chasing (and whether a set means the base
    list or every printing / master set), see progress and cost to finish per goal, and mark single cards
@@ -105,12 +122,13 @@ section 1 "Specs"), so one approval should unlock several builds.
 
 - **Default to a spec** (LOOP.md 5.7) for anything more than one small, self-contained change:
   multi-step work, anything touching several screens, anything needing new stored data or a server
-  piece. Single proposals are for small features on one screen or the capped polish.
-- **Keep one spec waiting for Ve.** After any slices to open, if `slots.mayOpenSpec` is true and a slot
-  is free, the session's first new item is a spec from the list above. The LOOP.md limit stays: at most
-  one unapproved spec at a time.
-- **Write specs that flow without Ve:** 3-5 slices, each independently shippable, in build order, a
-  screen or two per slice. Put anything Manual / needs Ve in the FIRST slice(s) and name it plainly.
+  piece. Single proposals are for small features on one screen.
+- **A new spec only when the last one is done** ("One spec in flight" above). After any slices to open,
+  if `slots.mayOpenSpec` is true, a slot is free AND no approved spec has a slice that is still open
+  (awaiting review, approved, Manual / needs Ve or failed), the session's first new item is a spec from
+  the list above. The LOOP.md limit stays: at most one unapproved spec at a time.
+- **Write specs that flow without Ve:** 2-3 Size M slices, each independently shippable, in build
+  order. Put anything Manual / needs Ve in the FIRST slice and name it plainly.
 - **Done or approved already** (never re-propose): value over time #108, want list #142, first-run
   onboarding #153, v2 consistency #166, collector showcase #191, card details v2 #203, loading and
   perceived speed #243, Collection and Home polish #266.
@@ -125,7 +143,8 @@ section 1 "Specs"), so one approval should unlock several builds.
    only, never mixing EUR into USD; floor out cheap cards.
 4. **Binder and trade-binder features** on phone / web, and robustness tests around sync, storage
    round-trips and parsing (supporting work).
-5. **Polish** (interaction quality, states, consistency, accessibility, motion), within the 1 in 5 cap.
+5. **Polish: none for now** (see "No polish for now" above); only real defects and accessibility bugs
+   that block a task.
 
 ## Avoid
 
