@@ -756,6 +756,24 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
      refuses a build when none of the files a proposal names is on main.
    - **Not a duplicate:** no open issue and no issue closed in the last 30 days in KNOWN_ISSUES (titles, and
      `gh issue view` when a title is close) covers it.
+   - **The cause is on main (every fix, defect or polish item):** find the exact rule or line that causes
+     the problem on current main and quote it in **Why** as `path:line` plus the code (for example
+     "`.muted` in `src/v2/screens/scan/scan.module.css:120` sets `white-space: nowrap`"). An Observer
+     finding, a screenshot or an older issue is a lead, not proof. If you cannot find the cause, the problem
+     is not where you think: drop the idea, or propose only after reproducing it (the viewport, the state
+     and what you saw). Since 2026-11-16, 14 builds were refused because the claimed cause was not on main
+     or was already fixed (#208 eight times, #313, #312, #330, #271, #216).
+   - **The data it needs exists (every feature and every spec slice):** name each field or endpoint the
+     change reads and where it comes from on main (for example "rarity: not on `OwnedPrintingRow` in
+     `src/models/ownedSort.ts`; `/api/catalog/names` returns name, number and image only"). If a field is
+     not in what the client already loads or stores, the change needs a server field or new stored data:
+     say "Needs Ve: server" (or stored data), put that piece first, and never call it Pages only. #338
+     promised a rarity and type breakdown the rows do not carry; #341 needed a price at the time of adding
+     that is not stored.
+   - **It can be shown and verified:** a visible change must show in a state the `@visual` fixtures
+     reach (#332: the set code renders only with a set logo, and the test catalog has none, so no screenshot
+     could show it), and it must add something checkable to the build for the deploy check (new copy, a new
+     CSS declaration or attribute: section 3 step 5).
 
    **Bundle small polish of one screen.** When you have 2 or 3 Size S, Pages-only, in-scope polish ideas for the
    SAME workflow (`innovation/workflows.json`) or screen, open them as ONE proposal (title
@@ -774,7 +792,9 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    <!-- innovation-loop -->
    ## What
    ## Why
-   (with any measurement behind it: usage metrics counts when available, timings, upstream numbers)
+   (with any measurement behind it: usage metrics counts when available, timings, upstream numbers; for a
+   fix, the cause on main as `path:line` and the code; for a feature, the data it reads and where it comes
+   from: step 6)
    ## Lens and metric
    Lens(es): <glasses interaction designer | collector / domain expert | performance and reliability |
    data integrity guardian | scanner / recognition analyst>. Metric: <the PRODUCT.md metric it moves, the
@@ -824,9 +844,11 @@ checks, plan, branch, gates, PR, merge and deploy. Then you end (section 6).
    Data risk, upstream / cost risk, glasses legibility; what this spec deliberately does not do; any part
    that needs rule-8 work (that slice is marked Manual / needs Ve).
    ## Slices
-   1. **<slice title>**: what it ships and what it proves on its own (Size S or M, Pages only / + server).
+   1. **<slice title>**: what it ships and what it proves on its own (Size S or M, Pages only / + server;
+      the data it reads and where it comes from on main, step 6).
    2. **<slice title>**: ...
-   (3 to 5 slices, in build order; each independently shippable and sized like a normal proposal.)
+   (2 to 5 slices, in build order; each independently shippable and sized like a normal proposal. FOCUS.md
+   says how many and how big Ve wants them; prefer fewer, bigger slices that Ve notices on their own.)
    ```
 
    Nothing in a spec is built until Ve approves it. Once approved, each slice the loop opens is built on
@@ -1090,7 +1112,10 @@ applies, with these changes:
    top opportunities. **Every issue you open cites what it acts on:** its body's LAST line is
    `<!-- loop-refs: f-0123abcd d-0123456789 -->` with at least one id from OPEN_FINDINGS or RECENT_DECISIONS
    (a slice cites `spec-<n>`, its spec's approval: SLICE_REFS). The guard refuses `gh issue create` without a
-   known id. Its Why names the finding(s) or decision(s) in words too. Labels as today: `loop:proposal`,
+   known id. Its Why names the finding(s) or decision(s) in words too. A finding is where to look, not proof:
+   section 5 step 6 still applies in full (the cause on main as `path:line`, the data each feature or slice
+   reads and where it comes from, a state the fixtures can show); a finding whose cause you cannot find on
+   main is marked `parked` with that reason, not proposed. Labels as today: `loop:proposal`,
    `loop:spec`, `size:small`, `test-only`; nothing else.
 4. **Optional:** one `focusSuggestion` (a FOCUS.md edit you would suggest to Ve, one or two sentences; it goes
    into Ve's digest and is never applied; you never edit FOCUS.md) and at most one `researchQuestion` (a question
