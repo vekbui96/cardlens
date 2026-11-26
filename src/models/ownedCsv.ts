@@ -6,7 +6,7 @@ import type { OwnedPrintingRow } from "./ownedSort.ts";
  * A cell that starts with = + - @ (or a tab / CR) is prefixed with an apostrophe
  * so a spreadsheet shows it as text instead of running it as a formula.
  */
-function cell(value: string): string {
+export function cell(value: string): string {
   const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
