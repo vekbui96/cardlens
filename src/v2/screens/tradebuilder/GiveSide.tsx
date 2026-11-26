@@ -13,6 +13,7 @@ import {
   setChoiceQty,
   type GiveChoice,
 } from "./giveModel.ts";
+import type { TradeLine } from "./summaryText.ts";
 import styles from "./tradebuilder.module.css";
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
@@ -27,19 +28,34 @@ interface Props {
   loading: number;
   /** Told the side's totals whenever they change, for the balance line. */
   onTotal?: (total: SideTotal) => void;
+  /** Told the chosen cards whenever they change, for the copy and image summary. */
+  onLines?: (lines: TradeLine[]) => void;
 }
 
 /**
  * The "I give" side: search the cards you own, tap one to add it, set how many,
  * and see what the side adds up to. Held in state only, so a reload clears it.
  */
-export function GiveSide({ rows, loading, onTotal }: Props) {
+export function GiveSide({ rows, loading, onTotal, onLines }: Props) {
   const [choices, setChoices] = useState<GiveChoice[]>([]);
   const [query, setQuery] = useState("");
 
   const lines = useMemo(() => giveLines(choices, rows), [choices, rows]);
   const { total, cards, unpriced } = useMemo(() => giveTotal(lines), [lines]);
   useEffect(() => onTotal?.({ total, cards, unpriced }), [onTotal, total, cards, unpriced]);
+  useEffect(
+    () =>
+      onLines?.(
+        lines.map((l) => ({
+          name: l.row.name,
+          setName: l.row.setName,
+          collectorNumber: l.row.collectorNumber,
+          qty: l.qty,
+          price: l.row.price,
+        })),
+      ),
+    [onLines, lines],
+  );
   const results = useMemo(() => {
     const chosen = new Set(choices.map((c) => giveKey(c.cardId, c.finish)));
     return matchRows(rows, query)
