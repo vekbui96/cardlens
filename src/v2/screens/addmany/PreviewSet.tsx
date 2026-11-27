@@ -74,18 +74,42 @@ export function PreviewSet({
     onMissing(set.id, missing);
   }, [onMissing, set.id, missing]);
 
+  // Unit price per matched line, "" when unpriced. A string key so prices arriving
+  // later rebuild the entries without depending on the view's changing functions.
+  const priceKey = !ready
+    ? ""
+    : matched
+        .map((l) => {
+          const card = byNumber.get(unpadded(l.number));
+          if (!card) return "";
+          const finish = l.finish ?? view.finishesFor(card.collectorNumber, card.variants)[0] ?? "normal";
+          const unit = l.finish
+            ? view.priceFor(card.collectorNumber, finish)
+            : (view.headlinePriceFor(card) ?? view.priceFor(card.collectorNumber, finish));
+          return unit === undefined ? "" : String(unit);
+        })
+        .join("|");
+
   const entries = useMemo<AddEntry[]>(() => {
     if (!ready) return [];
     const out: AddEntry[] = [];
-    for (const l of matched) {
+    const prices = priceKey.split("|");
+    matched.forEach((l, i) => {
       const card = byNumber.get(unpadded(l.number));
-      if (!card) continue;
+      if (!card) return;
       const finish = l.finish ?? view.finishesFor(card.collectorNumber, card.variants)[0] ?? "normal";
-      out.push({ cardId: card.id, finish, setId: set.id, number: card.collectorNumber });
-    }
+      const price = prices[i] ? Number(prices[i]) : undefined;
+      out.push({
+        cardId: card.id,
+        finish,
+        setId: set.id,
+        number: card.collectorNumber,
+        ...(price !== undefined && Number.isFinite(price) ? { price } : {}),
+      });
+    });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- finishesFor changes identity each render; the inputs below decide the result
-  }, [ready, matched, byNumber, set.id, view.allCards]);
+  }, [ready, matched, byNumber, set.id, view.allCards, priceKey]);
 
   useEffect(() => {
     onMatched?.(set.id, entries);
