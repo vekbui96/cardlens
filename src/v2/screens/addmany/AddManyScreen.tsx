@@ -7,7 +7,7 @@ import { readOwnedCsv } from "../../../models/ownedCsvRead.ts";
 import { expandRange, rangeToLines } from "../../../models/setRange.ts";
 import { PreviewSet, type MissingLine } from "./PreviewSet.tsx";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
-import { asOwned, planAdd, type AddEntry } from "./applyPlan.ts";
+import { asOwned, planAdd, summarisePreview, type AddEntry } from "./applyPlan.ts";
 import styles from "./addmany.module.css";
 
 /** Three tappable lines that teach the format. */
@@ -143,8 +143,7 @@ export function AddManyScreen() {
     ...groups.flatMap((g) => missing[g.set.id] ?? []),
   ].sort((a, b) => a.line - b.line);
 
-  const lineCount = parsed.lines.length;
-  const showPreview = lineCount > 0 || csvProblems.length > 0;
+  const showPreview = parsed.lines.length > 0 || csvProblems.length > 0;
 
   return (
     <Stack gap={5}>
@@ -270,7 +269,7 @@ export function AddManyScreen() {
       {showPreview ? (
         <Stack gap={4}>
           <p className={styles.headline} data-testid="addmany-summary">
-            {plural(lineCount, "line", "lines")} read
+            {summarisePreview(matchedEntries, toAdd, notRecognised.length)}
             {parsed.duplicates.length > 0
               ? ` · ${plural(parsed.duplicates.length, "card appears", "cards appear")} more than once (${parsed.duplicates.join(", ")})`
               : ""}

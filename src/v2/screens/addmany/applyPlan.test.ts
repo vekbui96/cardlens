@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asOwned, planAdd, type AddEntry } from "./applyPlan.ts";
+import { asOwned, planAdd, summarisePreview, type AddEntry } from "./applyPlan.ts";
 
 const e = (n: string, finish: AddEntry["finish"] = "normal"): AddEntry => ({
   cardId: `sv3-${n}`,
@@ -23,6 +23,27 @@ function fakeCollection(start: string[]) {
     },
   };
 }
+
+describe("summarisePreview", () => {
+  const p = (n: string, price?: number): AddEntry => ({ ...e(n), ...(price === undefined ? {} : { price }) });
+  const none = () => false;
+
+  it("counts cards to add, their value and the lines not recognised", () => {
+    const list = [p("125", 90.1), p("126", 9.49)];
+    expect(summarisePreview(list, planAdd(list, none), 3)).toBe("2 cards to add · $99.59 · 3 not recognised");
+  });
+
+  it("leaves an unpriced card out of the sum and says so", () => {
+    const list = [p("125", 90.1), p("126")];
+    expect(summarisePreview(list, planAdd(list, none), 0)).toBe("2 cards to add · $90.10 · 1 unpriced");
+  });
+
+  it("shows no value when nothing is priced, and counts owned cards apart", () => {
+    const list = [p("125"), p("126", 5)];
+    const owned = (id: string) => id === "sv3-126";
+    expect(summarisePreview(list, planAdd(list, owned), 0)).toBe("1 card to add · 1 already owned");
+  });
+});
 
 describe("planAdd", () => {
   it("add then Undo returns the collection to its starting state", () => {
