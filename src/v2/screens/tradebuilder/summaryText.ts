@@ -1,3 +1,4 @@
+import type { AddEntry } from "../addmany/applyPlan.ts";
 import { balance, sideTotal } from "./balanceModel.ts";
 
 /** One card on a side of the trade, as the screen holds it. */
@@ -8,6 +9,8 @@ export interface TradeLine {
   qty: number;
   /** USD market price; absent or 0 means unpriced. */
   price: number | undefined;
+  /** The printing this line stands for, so "Mark trade done" can move it. */
+  entry?: AddEntry;
 }
 
 const usd = (n: number): string => `$${n.toFixed(2)}`;

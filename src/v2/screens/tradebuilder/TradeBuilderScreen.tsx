@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLibrary } from "../../../app/LibraryProvider.tsx";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { formatPct } from "../../../models/movement.ts";
 import { Money, Panel, Stack } from "../../primitives/index.ts";
@@ -7,6 +8,7 @@ import { GetSide } from "./GetSide.tsx";
 import { GiveSide } from "./GiveSide.tsx";
 import type { TradeLine } from "./summaryText.ts";
 import { TradeActions } from "./TradeActions.tsx";
+import { TradeDone } from "./TradeDone.tsx";
 import styles from "./tradebuilder.module.css";
 
 const NONE: SideTotal = { total: 0, cards: 0, unpriced: 0 };
@@ -22,16 +24,32 @@ export function TradeBuilderScreen() {
   const [get, setGet] = useState<SideTotal>(NONE);
   const [giveLines, setGiveLines] = useState<TradeLine[]>([]);
   const [getLines, setGetLines] = useState<TradeLine[]>([]);
+  const { isOwnedFinish, setOwnedMany } = useLibrary();
+  // Bumped when a trade is marked done: remounting the sides clears them.
+  const [sides, setSides] = useState(0);
   return (
     <Stack gap={5}>
       <header>
         <h1 className={styles.title}>Trade</h1>
         <p className={styles.meta}>Work out a trade from the cards you own.</p>
       </header>
-      <GiveSide rows={rows} loading={pending + pricing} onTotal={setGive} onLines={setGiveLines} />
-      <GetSide onTotal={setGet} onLines={setGetLines} />
+      <GiveSide
+        key={`give${sides}`}
+        rows={rows}
+        loading={pending + pricing}
+        onTotal={setGive}
+        onLines={setGiveLines}
+      />
+      <GetSide key={`get${sides}`} onTotal={setGet} onLines={setGetLines} />
       <BalanceLine give={give} get={get} />
       <TradeActions give={giveLines} get={getLines} />
+      <TradeDone
+        give={giveLines}
+        get={getLines}
+        isOwnedFinish={isOwnedFinish}
+        setOwnedMany={setOwnedMany}
+        onApplied={() => setSides((n) => n + 1)}
+      />
     </Stack>
   );
 }
