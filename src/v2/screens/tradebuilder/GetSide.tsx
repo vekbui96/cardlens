@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useCatalogSearch } from "../../../hooks/useCatalogSearch.ts";
-import type { PokemonCardSummary } from "../../../models/cards.ts";
+import { availableFinishes, type PokemonCardSummary } from "../../../models/cards.ts";
+import { setIdFromCardId } from "../../../utils/cardId.ts";
 import { CardArt, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
 import { sideTotal, type SideTotal } from "./balanceModel.ts";
 import type { TradeLine } from "./summaryText.ts";
@@ -57,6 +58,12 @@ export function GetSide({ onTotal, onLines }: Props) {
           collectorNumber: c.card.collectorNumber,
           qty: c.qty,
           price: c.card.marketPrice,
+          entry: {
+            cardId: c.card.id,
+            finish: availableFinishes(c.card.variants)[0] ?? "normal",
+            setId: setIdFromCardId(c.card.id),
+            number: c.card.collectorNumber,
+          },
         })),
       ),
     [onLines, choices],

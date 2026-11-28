@@ -52,6 +52,12 @@ export function GiveSide({ rows, loading, onTotal, onLines }: Props) {
           collectorNumber: l.row.collectorNumber,
           qty: l.qty,
           price: l.row.price,
+          entry: {
+            cardId: l.row.cardId,
+            finish: l.row.finish,
+            setId: l.row.setId,
+            number: l.row.collectorNumber,
+          },
         })),
       ),
     [onLines, lines],
