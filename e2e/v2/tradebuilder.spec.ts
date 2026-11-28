@@ -9,7 +9,7 @@ import { openV2, stabiliseForSnapshot } from "./pages/base.ts";
 test.describe("trade builder", () => {
   test("opens from Binders and starts with an explanation", async ({ page }) => {
     await openV2(page, "/binders");
-    await page.getByRole("link", { name: "Trade" }).click();
+    await page.getByRole("link", { name: "Trade builder" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Trade" })).toBeVisible();
     await expect(page).toHaveTitle("Trade · CardLens");
     await expect(page.getByLabel("Add a card you would give")).toBeVisible();

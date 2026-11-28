@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLibrary } from "../../../app/LibraryProvider.tsx";
+import { useNavigation } from "../../../app/NavigationProvider.tsx";
 import { useOwnedCards } from "../../../hooks/useOwnedCards.ts";
 import { formatPct } from "../../../models/movement.ts";
 import { Money, Panel, Stack } from "../../primitives/index.ts";
@@ -25,6 +26,7 @@ export function TradeBuilderScreen() {
   const [giveLines, setGiveLines] = useState<TradeLine[]>([]);
   const [getLines, setGetLines] = useState<TradeLine[]>([]);
   const { isOwnedFinish, setOwnedMany } = useLibrary();
+  const { push } = useNavigation();
   // Bumped when a trade is marked done: remounting the sides clears them.
   const [sides, setSides] = useState(0);
   return (
@@ -39,6 +41,7 @@ export function TradeBuilderScreen() {
         loading={pending + pricing}
         onTotal={setGive}
         onLines={setGiveLines}
+        onAddCards={() => push({ name: "addmany" })}
       />
       <GetSide key={`get${sides}`} onTotal={setGet} onLines={setGetLines} />
       <BalanceLine give={give} get={get} />

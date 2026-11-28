@@ -75,7 +75,7 @@ export function BindersScreen() {
             push({ name: "tradebuilder" });
           }}
         >
-          Trade
+          Trade builder
         </a>
       </Stack>
 
