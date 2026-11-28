@@ -223,10 +223,10 @@ describe("what a binder is worth", () => {
 describe("the Trade entry", () => {
   it("is a link to the Trade builder on an empty shelf and on a full one", () => {
     const { unmount } = render(<BindersScreen />, { wrapper: harness() });
-    expect(screen.getByRole("link", { name: "Trade" })).toHaveAttribute("href", "#/tradebuilder");
+    expect(screen.getByRole("link", { name: "Trade builder" })).toHaveAttribute("href", "#/tradebuilder");
     unmount();
     renderSeeded(fullBinder());
-    expect(screen.getByRole("link", { name: "Trade" })).toHaveAttribute("href", "#/tradebuilder");
+    expect(screen.getByRole("link", { name: "Trade builder" })).toHaveAttribute("href", "#/tradebuilder");
   });
 });
 

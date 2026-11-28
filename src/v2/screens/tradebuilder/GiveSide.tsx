@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SideTotal } from "./balanceModel.ts";
+import { screenToPath } from "../../../app/screenUrl.ts";
 import { finishLabel } from "../../../models/finishes.ts";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
 import { CardArt, Money, Panel, Stack, UNPRICED } from "../../primitives/index.ts";
@@ -30,13 +31,15 @@ interface Props {
   onTotal?: (total: SideTotal) => void;
   /** Told the chosen cards whenever they change, for the copy and image summary. */
   onLines?: (lines: TradeLine[]) => void;
+  /** Opens Add many cards, from the empty-collection link. */
+  onAddCards?: () => void;
 }
 
 /**
  * The "I give" side: search the cards you own, tap one to add it, set how many,
  * and see what the side adds up to. Held in state only, so a reload clears it.
  */
-export function GiveSide({ rows, loading, onTotal, onLines }: Props) {
+export function GiveSide({ rows, loading, onTotal, onLines, onAddCards }: Props) {
   const [choices, setChoices] = useState<GiveChoice[]>([]);
   const [query, setQuery] = useState("");
 
@@ -95,9 +98,23 @@ export function GiveSide({ rows, loading, onTotal, onLines }: Props) {
         </div>
 
         {rows.length === 0 && loading === 0 ? (
-          <p className={styles.meta}>
-            You do not own any cards yet. Mark cards as owned and they show up here.
-          </p>
+          <>
+            <p className={styles.meta}>
+              You do not own any cards yet. Mark cards as owned and they show up here.
+            </p>
+            {/* A real link, so a modified click still opens a new tab. */}
+            <a
+              className={styles.nextStep}
+              href={`#${screenToPath({ name: "addmany" })}`}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                onAddCards?.();
+              }}
+            >
+              Add cards you own
+            </a>
+          </>
         ) : null}
         {query.trim() !== "" && results.length === 0 && loading === 0 ? (
           <p className={styles.meta}>No card you own matches that.</p>

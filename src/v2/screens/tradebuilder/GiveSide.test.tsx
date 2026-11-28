@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OwnedPrintingRow } from "../../../models/ownedSort.ts";
@@ -23,6 +23,24 @@ describe("the give side", () => {
     expect(screen.getByTestId("give-empty")).toHaveTextContent(/works out what a trade is worth/);
     expect(screen.getByLabelText("Add a card you would give")).toBeInTheDocument();
     expect(screen.queryByTestId("give-total")).not.toBeInTheDocument();
+  });
+
+  it("offers a link to Add many cards when nothing is owned", async () => {
+    const user = userEvent.setup();
+    const onAddCards = vi.fn();
+    render(<GiveSide rows={[]} loading={0} onAddCards={onAddCards} />);
+    const link = screen.getByRole("link", { name: "Add cards you own" });
+    expect(link).toHaveAttribute("href", "#/addmany");
+    await user.click(link);
+    expect(onAddCards).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no such link while cards are owned or still loading", () => {
+    const { unmount } = render(<GiveSide rows={rows} loading={0} />);
+    expect(screen.queryByRole("link", { name: "Add cards you own" })).not.toBeInTheDocument();
+    unmount();
+    render(<GiveSide rows={[]} loading={1} />);
+    expect(screen.queryByRole("link", { name: "Add cards you own" })).not.toBeInTheDocument();
   });
 
   it("adds a card by search and totals it", async () => {
